@@ -2,7 +2,6 @@ package config
 
 import (
     "os"
-    "path/filepath"
     "gopkg.in/yaml.v3"
 )
 
@@ -31,6 +30,7 @@ func LoadGroveConfig() (*GroveConfig, error) {
     return &config, nil
 }
 
+
 func findConfigFile() (string, error) {
     // Start from current directory and walk up
     dir, err := os.Getwd()
@@ -38,20 +38,5 @@ func findConfigFile() (string, error) {
         return "", err
     }
     
-    for {
-        configPath := filepath.Join(dir, "grove.yml")
-        if _, err := os.Stat(configPath); err == nil {
-            return configPath, nil
-        }
-        
-        parent := filepath.Dir(dir)
-        if parent == dir {
-            // Reached root directory
-            break
-        }
-        dir = parent
-    }
-    
-    // Config file not found, return empty (not an error)
-    return "", nil
+    return FindConfigFile(dir)
 }

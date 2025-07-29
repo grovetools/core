@@ -7,7 +7,7 @@ Grove Core is the shared library for the Grove ecosystem, providing standardized
 This is a library package and should be imported by other Grove tools:
 
 ```go
-import "github.com/yourorg/grove-core/cli"
+import "github.com/mattsolo1/grove-core/cli"  // When used as external library
 ```
 
 ## Key Features

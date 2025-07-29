@@ -1,0 +1,30 @@
+# Start from a standard base image with Node.js
+FROM node:18-alpine
+
+# Install essential tools.
+# - curl/jq: For making HTTP requests to the MCP server to control services.
+# - bash: A more feature-rich shell for the agent's direct filesystem operations.
+RUN apk add --no-cache curl jq bash
+
+# Create a standard user for Claude (use existing node group)
+RUN adduser -u 1001 -G node -s /bin/bash -D claude
+
+# Create Claude's home directory with proper permissions
+RUN mkdir -p /home/claude-sandbox/.claude && \
+    chown -R claude:node /home/claude-sandbox
+
+# Install the claude-code CLI via npm.
+RUN npm install -g @anthropic-ai/claude-code@latest
+
+# Copy the entrypoint script
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Set the entrypoint to handle dynamic working directory
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Switch to claude user
+USER claude
+
+# Default command that keeps the container running
+CMD ["tail", "-f", "/dev/null"]
