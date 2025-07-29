@@ -16,7 +16,7 @@ const hookScriptTemplate = `#!/bin/sh
 GROVE_BIN="{{.GroveBinary}}"
 
 # Check if Grove is installed
-if ! command -v "$GROVE_BIN"github.com/mattsolo1/grove-core/dev/null 2>&1; then
+if ! command -v "$GROVE_BIN"dev/null 2>&1; then
     echo "Grove not found. Skipping {{.HookName}} hook."
     exit 0
 fi
@@ -49,7 +49,7 @@ const preCommitHookTemplate = `#!/bin/sh
 GROVE_BIN="{{.GroveBinary}}"
 
 # Check if Grove is installed
-if ! command -v "$GROVE_BIN"github.com/mattsolo1/grove-core/dev/null 2>&1; then
+if ! command -v "$GROVE_BIN"dev/null 2>&1; then
     exit 0
 fi
 

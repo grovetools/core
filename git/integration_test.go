@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// TODO: Update when testutil is available in grove-core
-	// "github.com/mattsolo1/grove-core/testutil"
+	// "testutil"
 )
 
 // Temporary helper functions until testutil is available

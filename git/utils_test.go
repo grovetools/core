@@ -68,11 +68,11 @@ func TestGetRepoInfo(t *testing.T) {
 	cmd.Dir = tmpDir
 	require.NoError(t, cmd.Run())
 
-	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd = exec.Command("git", "github.com/mattsolo1/grove-core/config", "user.email", "test@example.com")
 	cmd.Dir = tmpDir
 	require.NoError(t, cmd.Run())
 
-	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd = exec.Command("git", "github.com/mattsolo1/grove-core/config", "user.name", "Test User")
 	cmd.Dir = tmpDir
 	require.NoError(t, cmd.Run())
 

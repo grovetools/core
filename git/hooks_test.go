@@ -66,7 +66,7 @@ func TestHookManager_PreserveExistingHooks(t *testing.T) {
 
 	// Create existing hook
 	existingHook := filepath.Join(gitDir, "post-checkout")
-	existingContent := "github.com/mattsolo1/grove-core/bin/sh\necho 'existing hook'"
+	existingContent := "bin/sh\necho 'existing hook'"
 	require.NoError(t, os.WriteFile(existingHook, []byte(existingContent), 0755))
 
 	manager := NewHookManager("grove")

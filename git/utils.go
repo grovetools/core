@@ -66,8 +66,8 @@ func extractRepoName(url string) string {
 	}
 
 	// Handle HTTPS URLs
-	if strings.Contains(url, "github.com/mattsolo1/grove-core/") {
-		parts := strings.Split(url, "github.com/mattsolo1/grove-core/")
+	if strings.Contains(url, "github.com/") {
+		parts := strings.Split(url, "github.com/")
 		if len(parts) >= 2 {
 			url = parts[1]
 		}

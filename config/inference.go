@@ -234,7 +234,7 @@ func extractRepoName(url string) string {
 	url = strings.TrimSuffix(url, ".git")
 
 	// Handle different URL formats
-	if strings.Contains(url, "github.com/mattsolo1/grove-core/") {
+	if strings.Contains(url, "") {
 		// HTTPS URLs: https://github.com/user/repo
 		parts := strings.Split(url, "/")
 		if len(parts) > 0 {

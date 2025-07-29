@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// TODO: Update when testutil is available in grove-core
-	// "github.com/mattsolo1/grove-core/testutil"
+	// "testutil"
 )
 
 // TODO: Re-enable this test when testutil package is available in grove-core
@@ -54,11 +54,11 @@ func initGitRepoForTest(t *testing.T, dir string) {
 	require.NoError(t, cmd.Run())
 
 	// Configure git user
-	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd = exec.Command("git", "github.com/mattsolo1/grove-core/config", "user.name", "Test User")
 	cmd.Dir = dir
 	require.NoError(t, cmd.Run())
 
-	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd = exec.Command("git", "github.com/mattsolo1/grove-core/config", "user.email", "test@example.com")
 	cmd.Dir = dir
 	require.NoError(t, cmd.Run())
 
