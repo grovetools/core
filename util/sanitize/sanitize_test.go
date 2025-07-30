@@ -1,6 +1,9 @@
 package sanitize
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestForDockerLabel(t *testing.T) {
 	tests := []struct {
@@ -135,5 +138,67 @@ func TestForEnvironmentKey(t *testing.T) {
 				t.Errorf("ForEnvironmentKey(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestUTF8(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected string
+	}{
+		{
+			name:     "valid UTF-8",
+			input:    []byte("Hello, 世界! 🌍"),
+			expected: "Hello, 世界! 🌍",
+		},
+		{
+			name:     "invalid UTF-8 byte",
+			input:    []byte{0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xcf}, // "Hello " + invalid byte
+			expected: "Hello �",
+		},
+		{
+			name:     "mixed valid and invalid",
+			input:    []byte("Valid text " + string([]byte{0xff, 0xfe}) + " more text"),
+			expected: "Valid text �� more text",
+		},
+		{
+			name:     "invalid continuation byte at position 447171",
+			input:    append(bytes.Repeat([]byte("a"), 447171), 0xcf), // Simulating the exact error
+			expected: string(bytes.Repeat([]byte("a"), 447171)) + "�",
+		},
+		{
+			name:     "empty input",
+			input:    []byte{},
+			expected: "",
+		},
+		{
+			name:     "all invalid bytes",
+			input:    []byte{0xff, 0xfe, 0xfd},
+			expected: "���",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UTF8(tt.input)
+			if result != tt.expected {
+				t.Errorf("UTF8() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func BenchmarkUTF8Valid(b *testing.B) {
+	data := []byte("This is valid UTF-8 text with some unicode: 世界 🌍")
+	for i := 0; i < b.N; i++ {
+		_ = UTF8(data)
+	}
+}
+
+func BenchmarkUTF8Invalid(b *testing.B) {
+	data := append([]byte("This has invalid bytes: "), 0xff, 0xfe, 0xcf)
+	for i := 0; i < b.N; i++ {
+		_ = UTF8(data)
 	}
 }

@@ -3,6 +3,7 @@ package sanitize
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -176,4 +177,34 @@ func ForFilename(s string) string {
 		s = s[:50]
 	}
 	return s
+}
+
+// UTF8 takes a byte slice and returns a string with invalid UTF-8 sequences replaced.
+// Invalid sequences are replaced with the Unicode replacement character (�).
+// This is useful when reading files that may contain mixed encodings or corrupted data.
+func UTF8(data []byte) string {
+	if utf8.Valid(data) {
+		// Fast path: if data is already valid UTF-8, just convert to string
+		return string(data)
+	}
+
+	// Slow path: replace invalid sequences
+	var builder strings.Builder
+	builder.Grow(len(data)) // Pre-allocate to avoid reallocations
+
+	i := 0
+	for i < len(data) {
+		r, size := utf8.DecodeRune(data[i:])
+		if r == utf8.RuneError && size == 1 {
+			// Invalid UTF-8 sequence, replace with replacement character
+			builder.WriteRune('\uFFFD') // Unicode replacement character
+			i++
+		} else {
+			// Valid rune, write it
+			builder.WriteRune(r)
+			i += size
+		}
+	}
+
+	return builder.String()
 }
