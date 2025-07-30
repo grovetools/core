@@ -54,7 +54,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		return nil, err
 	}
 
-	logger.WithField("path", projectPath).Info("Loading project configuration")
+	logger.WithField("path", projectPath).Debug("Loading project configuration")
 
 	// Start with an empty config
 	var finalConfig *Config
@@ -63,7 +63,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	globalPath := getXDGConfigPath()
 	if globalPath != "" {
 		if _, err := os.Stat(globalPath); err == nil {
-			logger.WithField("path", globalPath).Info("Loading global configuration")
+			logger.WithField("path", globalPath).Debug("Loading global configuration")
 			// Load global config without validation/defaults (raw load)
 			globalData, err := os.ReadFile(globalPath)
 			if err == nil {
@@ -97,7 +97,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	if finalConfig == nil {
 		finalConfig = &projectConfig
 	} else {
-		logger.Info("Merging project configuration over global configuration")
+		logger.Debug("Merging project configuration over global configuration")
 		finalConfig = mergeConfigs(finalConfig, &projectConfig)
 	}
 
@@ -112,7 +112,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 
 	for _, overridePath := range overrideFiles {
 		if _, err := os.Stat(overridePath); err == nil {
-			logger.WithField("path", overridePath).Info("Loading local override configuration")
+			logger.WithField("path", overridePath).Debug("Loading local override configuration")
 			
 			overrideData, err := os.ReadFile(overridePath)
 			if err != nil {
@@ -151,7 +151,16 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "semantic validation failed")
 	}
 
-	logger.Info("Configuration loaded and validated successfully")
+	logger.Debug("Configuration loaded and validated successfully")
+	
+	// Log the merged config at debug level
+	if logger.IsLevelEnabled(logrus.DebugLevel) {
+		configData, err := yaml.Marshal(finalConfig)
+		if err == nil {
+			logger.Debugf("Merged configuration:\n%s", string(configData))
+		}
+	}
+	
 	return finalConfig, nil
 }
 
