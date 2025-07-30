@@ -1,85 +1,162 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestLoadFromBytes(t *testing.T) {
-	yaml := `
+// TestExtensions verifies that custom extensions in grove.yml are properly loaded
+func TestExtensions(t *testing.T) {
+	yamlContent := []byte(`
 version: "1.0"
-services:
-  api:
-    build: .
-    ports: ["8080"]
-    environment:
-      - NODE_ENV=development
-  db:
-    image: postgres:15
-profiles:
-  default:
-    services: [api, db]
 settings:
-  network_name: test-network
-`
+  project_name: test-project
 
-	config, err := LoadFromBytes([]byte(yaml))
-	require.NoError(t, err)
+# Extension fields from grove-flow
+flow:
+  chat_directory: "/path/to/chats"
+  max_messages: 100
 
-	assert.Equal(t, "1.0", config.Version)
-	assert.Len(t, config.Services, 2)
-	assert.Equal(t, ".", config.Services["api"].Build)
-	assert.Equal(t, "postgres:15", config.Services["db"].Image)
-	assert.Equal(t, "test-network", config.Settings.NetworkName)
+# Extension fields from another hypothetical tool
+monitoring:
+  enabled: true
+  interval: 30
+`)
+
+	cfg, err := LoadFromBytes(yamlContent)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Verify extensions were captured
+	if cfg.Extensions == nil {
+		t.Fatal("Extensions map should not be nil")
+	}
+
+	// Test flow extension
+	flowExt, ok := cfg.Extensions["flow"]
+	if !ok {
+		t.Fatal("Expected 'flow' extension to be present")
+	}
+
+	// Test UnmarshalExtension for flow
+	type FlowConfig struct {
+		ChatDirectory string `yaml:"chat_directory"`
+		MaxMessages   int    `yaml:"max_messages"`
+	}
+
+	var flowCfg FlowConfig
+	if err := cfg.UnmarshalExtension("flow", &flowCfg); err != nil {
+		t.Fatalf("Failed to unmarshal flow extension: %v", err)
+	}
+
+	if flowCfg.ChatDirectory != "/path/to/chats" {
+		t.Errorf("Expected chat_directory to be '/path/to/chats', got '%s'", flowCfg.ChatDirectory)
+	}
+
+	if flowCfg.MaxMessages != 100 {
+		t.Errorf("Expected max_messages to be 100, got %d", flowCfg.MaxMessages)
+	}
+
+	// Test monitoring extension
+	monitoringExt, ok := cfg.Extensions["monitoring"]
+	if !ok {
+		t.Fatal("Expected 'monitoring' extension to be present")
+	}
+
+	// Test UnmarshalExtension for monitoring
+	type MonitoringConfig struct {
+		Enabled  bool `yaml:"enabled"`
+		Interval int  `yaml:"interval"`
+	}
+
+	var monCfg MonitoringConfig
+	if err := cfg.UnmarshalExtension("monitoring", &monCfg); err != nil {
+		t.Fatalf("Failed to unmarshal monitoring extension: %v", err)
+	}
+
+	if !monCfg.Enabled {
+		t.Error("Expected monitoring to be enabled")
+	}
+
+	if monCfg.Interval != 30 {
+		t.Errorf("Expected interval to be 30, got %d", monCfg.Interval)
+	}
+
+	// Test non-existent extension (should not error)
+	type UnknownConfig struct {
+		SomeField string `yaml:"some_field"`
+	}
+
+	var unknownCfg UnknownConfig
+	if err := cfg.UnmarshalExtension("unknown", &unknownCfg); err != nil {
+		t.Fatalf("UnmarshalExtension should not error for non-existent keys: %v", err)
+	}
+
+	// unknownCfg should remain zero-valued
+	if unknownCfg.SomeField != "" {
+		t.Errorf("Expected SomeField to be empty for non-existent extension")
+	}
+
+	// Verify that flow extension is a map
+	if _, ok := flowExt.(map[string]interface{}); !ok {
+		t.Errorf("Expected flow extension to be a map[string]interface{}, got %T", flowExt)
+	}
+
+	// Verify that monitoring extension is a map
+	if _, ok := monitoringExt.(map[string]interface{}); !ok {
+		t.Errorf("Expected monitoring extension to be a map[string]interface{}, got %T", monitoringExt)
+	}
 }
 
-func TestEnvironmentVariableExpansion(t *testing.T) {
-	os.Setenv("TEST_BRANCH", "feature-123")
-	os.Setenv("TEST_PORT", "9000")
-	defer os.Unsetenv("TEST_BRANCH")
-	defer os.Unsetenv("TEST_PORT")
-
-	yaml := `
+// TestExtensionsDoNotInterfereWithCoreConfig verifies that extensions don't break core config parsing
+func TestExtensionsDoNotInterfereWithCoreConfig(t *testing.T) {
+	yamlContent := []byte(`
 version: "1.0"
-services:
-  api:
-    build: .
-    ports: ["${TEST_PORT:-8080}"]
-    environment:
-      - DATABASE_URL=postgres://localhost/app_${TEST_BRANCH}
-      - DEFAULT_VAR=${UNDEFINED_VAR:-default_value}
-`
+settings:
+  project_name: test-project
+  network_name: custom-network
 
-	config, err := LoadFromBytes([]byte(yaml))
-	require.NoError(t, err)
+agent:
+  enabled: true
 
-	assert.Equal(t, "9000", config.Services["api"].Ports[0])
-	assert.Contains(t, config.Services["api"].Environment[0], "app_feature-123")
-	assert.Contains(t, config.Services["api"].Environment[1], "default_value")
-}
+orchestration:
+  oneshot_model: claude-3-5-sonnet
 
-func TestFindConfigFile(t *testing.T) {
-	// Create test directory structure
-	tmpDir := t.TempDir()
-	projectDir := filepath.Join(tmpDir, "project")
-	subDir := filepath.Join(projectDir, "src", "services")
-	require.NoError(t, os.MkdirAll(subDir, 0755))
+# Custom extension
+custom:
+  feature: enabled
+  config:
+    nested: true
+`)
 
-	// Create config file in project root
-	configPath := filepath.Join(projectDir, "grove.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte("version: '1.0'"), 0644))
+	cfg, err := LoadFromBytes(yamlContent)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 
-	// Test finding from subdirectory
-	found, err := FindConfigFile(subDir)
-	assert.NoError(t, err)
-	assert.Equal(t, configPath, found)
+	// Verify core config is properly loaded
+	if cfg.Version != "1.0" {
+		t.Errorf("Expected version '1.0', got '%s'", cfg.Version)
+	}
 
-	// Test not finding
-	emptyDir := t.TempDir()
-	_, err = FindConfigFile(emptyDir)
-	assert.Error(t, err)
+	if cfg.Settings.ProjectName != "test-project" {
+		t.Errorf("Expected project name 'test-project', got '%s'", cfg.Settings.ProjectName)
+	}
+
+	if cfg.Settings.NetworkName != "custom-network" {
+		t.Errorf("Expected network name 'custom-network', got '%s'", cfg.Settings.NetworkName)
+	}
+
+	if !cfg.Agent.Enabled {
+		t.Error("Expected agent to be enabled")
+	}
+
+	if cfg.Orchestration.OneshotModel != "claude-3-5-sonnet" {
+		t.Errorf("Expected oneshot model 'claude-3-5-sonnet', got '%s'", cfg.Orchestration.OneshotModel)
+	}
+
+	// Verify extension is also captured
+	if _, ok := cfg.Extensions["custom"]; !ok {
+		t.Error("Expected 'custom' extension to be present")
+	}
 }

@@ -30,6 +30,7 @@ func GenerateSchema() *JSONSchema {
 		Type:        "object",
 		Title:       "Grove Configuration Schema",
 		Description: "Schema for grove.yml configuration files",
+		AdditionalProperties: true, // Allow extensions for grove ecosystem tools
 		Properties: map[string]*JSONSchema{
 			"version": {
 				Type:        "string",

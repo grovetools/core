@@ -1,15 +1,25 @@
 package config
 
+import (
+	"fmt"
+	"github.com/mitchellh/mapstructure"
+)
+
 // Config represents the grove.yml configuration
 type Config struct {
-	Version       string                    `yaml:"version"`
-	Networks      map[string]NetworkConfig  `yaml:"networks"`
-	Services      map[string]ServiceConfig  `yaml:"services"`
-	Volumes       map[string]VolumeConfig   `yaml:"volumes"`
-	Profiles      map[string]ProfileConfig  `yaml:"profiles"`
-	Agent         AgentConfig               `yaml:"agent,omitempty"`
-	Settings      Settings                  `yaml:"settings"`
-	Orchestration OrchestrationConfig       `yaml:"orchestration,omitempty"`
+	Version       string                   `yaml:"version"`
+	Networks      map[string]NetworkConfig `yaml:"networks"`
+	Services      map[string]ServiceConfig `yaml:"services"`
+	Volumes       map[string]VolumeConfig  `yaml:"volumes"`
+	Profiles      map[string]ProfileConfig `yaml:"profiles"`
+	Agent         AgentConfig              `yaml:"agent,omitempty"`
+	Settings      Settings                 `yaml:"settings"`
+	Orchestration OrchestrationConfig      `yaml:"orchestration,omitempty"`
+
+	// Extensions captures all other top-level keys for extensibility.
+	// This allows other tools in the Grove ecosystem to define their
+	// own configuration sections in grove.yml.
+	Extensions map[string]interface{} `yaml:",inline"`
 }
 
 type NetworkConfig struct {
@@ -102,4 +112,39 @@ func (c *Config) SetDefaults() {
 	if c.Settings.McpPort == 0 {
 		c.Settings.McpPort = 1667
 	}
+}
+
+// UnmarshalExtension decodes a specific extension's configuration from the
+// loaded grove.yml into the provided target struct. The target must be a pointer.
+// This provides a type-safe way for extensions to access their
+// custom configuration sections.
+//
+// Example:
+//
+//	var flowCfg myapp.FlowConfig
+//	err := coreCfg.UnmarshalExtension("flow", &flowCfg)
+func (c *Config) UnmarshalExtension(key string, target interface{}) error {
+	extensionConfig, ok := c.Extensions[key]
+	if !ok {
+		// It's not an error if the key doesn't exist.
+		// The target struct will simply remain zero-valued.
+		return nil
+	}
+
+	// Use mapstructure to decode the generic map[string]interface{}
+	// into the strongly-typed target struct. We configure it to use
+	// `yaml` tags for consistency.
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:  target,
+		TagName: "yaml",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create mapstructure decoder: %w", err)
+	}
+
+	if err := decoder.Decode(extensionConfig); err != nil {
+		return fmt.Errorf("failed to decode extension config for '%s': %w", key, err)
+	}
+
+	return nil
 }
