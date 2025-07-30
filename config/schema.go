@@ -235,20 +235,6 @@ func GenerateSchema() *JSONSchema {
 					},
 				},
 			},
-			"orchestration": {
-				Type:        "object",
-				Description: "Orchestration settings for jobs",
-				Properties: map[string]*JSONSchema{
-					"oneshot_model": {
-						Type:        "string",
-						Description: "Default model for oneshot jobs",
-					},
-					"target_agent_container": {
-						Type:        "string",
-						Description: "Target container name for agent jobs",
-					},
-				},
-			},
 		},
 	}
 }

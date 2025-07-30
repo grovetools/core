@@ -14,7 +14,6 @@ type Config struct {
 	Profiles      map[string]ProfileConfig `yaml:"profiles"`
 	Agent         AgentConfig              `yaml:"agent,omitempty"`
 	Settings      Settings                 `yaml:"settings"`
-	Orchestration OrchestrationConfig      `yaml:"orchestration,omitempty"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	// This allows other tools in the Grove ecosystem to define their
@@ -70,14 +69,6 @@ type Settings struct {
 	AutoInference  *bool  `yaml:"auto_inference,omitempty"`
 	Concurrency    int    `yaml:"concurrency,omitempty"`
 	McpPort        int    `yaml:"mcp_port,omitempty"`
-}
-
-// OrchestrationConfig defines settings for orchestration jobs
-type OrchestrationConfig struct {
-	OneshotModel         string `yaml:"oneshot_model"`
-	TargetAgentContainer string `yaml:"target_agent_container,omitempty"`
-	PlansDirectory       string `yaml:"plans_directory,omitempty"`
-	MaxConsecutiveSteps  int    `yaml:"max_consecutive_steps,omitempty"`
 }
 
 // SetDefaults sets default values for configuration
