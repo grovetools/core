@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mattsolo1/grove-core/errors"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +26,133 @@ func Load(path string) (*Config, error) {
 	}
 
 	return LoadFromBytes(data)
+}
+
+// LoadDefault finds and loads the configuration with hierarchical merging:
+// 1. Global config (~/.config/grove/grove.yml) - base layer
+// 2. Project config (grove.yml) - overrides global
+// 3. Local override (grove.override.yml) - overrides all
+func LoadDefault() (*Config, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to get current directory")
+	}
+	
+	return LoadFrom(cwd)
+}
+
+// LoadFrom loads configuration with hierarchical merging starting from the given directory
+func LoadFrom(startDir string) (*Config, error) {
+	return LoadFromWithLogger(startDir, logrus.New())
+}
+
+// LoadFromWithLogger loads configuration with hierarchical merging and logging
+func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error) {
+	// Find project config file first (it's required)
+	projectPath, err := FindConfigFile(startDir)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.WithField("path", projectPath).Info("Loading project configuration")
+
+	// Start with an empty config
+	var finalConfig *Config
+
+	// 1. Load global config if it exists (optional)
+	globalPath := getXDGConfigPath()
+	if globalPath != "" {
+		if _, err := os.Stat(globalPath); err == nil {
+			logger.WithField("path", globalPath).Info("Loading global configuration")
+			// Load global config without validation/defaults (raw load)
+			globalData, err := os.ReadFile(globalPath)
+			if err == nil {
+				expanded := expandEnvVars(string(globalData))
+				var globalConfig Config
+				if err := yaml.Unmarshal([]byte(expanded), &globalConfig); err == nil {
+					finalConfig = &globalConfig
+				} else {
+					logger.WithError(err).Warn("Failed to parse global configuration, continuing without it")
+				}
+			} else {
+				logger.WithError(err).Warn("Failed to read global configuration, continuing without it")
+			}
+		}
+	}
+
+	// 2. Load and merge project config (required) - also without defaults/validation
+	projectData, err := os.ReadFile(projectPath)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").
+			WithDetail("path", projectPath)
+	}
+	
+	expanded := expandEnvVars(string(projectData))
+	var projectConfig Config
+	if err := yaml.Unmarshal([]byte(expanded), &projectConfig); err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").
+			WithDetail("path", projectPath)
+	}
+	
+	if finalConfig == nil {
+		finalConfig = &projectConfig
+	} else {
+		logger.Info("Merging project configuration over global configuration")
+		finalConfig = mergeConfigs(finalConfig, &projectConfig)
+	}
+
+	// 3. Load and merge override files if they exist (optional)
+	projectDir := filepath.Dir(projectPath)
+	overrideFiles := []string{
+		filepath.Join(projectDir, "grove.override.yml"),
+		filepath.Join(projectDir, "grove.override.yaml"),
+		filepath.Join(projectDir, ".grove.override.yml"),
+		filepath.Join(projectDir, ".grove.override.yaml"),
+	}
+
+	for _, overridePath := range overrideFiles {
+		if _, err := os.Stat(overridePath); err == nil {
+			logger.WithField("path", overridePath).Info("Loading local override configuration")
+			
+			overrideData, err := os.ReadFile(overridePath)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to read override file, skipping")
+				continue
+			}
+
+			// Expand environment variables
+			expanded := expandEnvVars(string(overrideData))
+
+			var overrideConfig Config
+			if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err != nil {
+				logger.WithError(err).Warn("Failed to parse override file, skipping")
+				continue
+			}
+
+			finalConfig = mergeConfigs(finalConfig, &overrideConfig)
+		}
+	}
+
+	// Set defaults and validate
+	finalConfig.SetDefaults()
+
+	// Apply smart inference (enabled by default)
+	if finalConfig.Settings.AutoInference == nil || *finalConfig.Settings.AutoInference {
+		finalConfig.InferDefaults()
+	}
+
+	// Validate configuration
+	if err := finalConfig.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Additional semantic validation
+	if err := finalConfig.ValidateSemantics(); err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "semantic validation failed")
+	}
+
+	logger.Info("Configuration loaded and validated successfully")
+	return finalConfig, nil
 }
 
 // LoadFromBytes parses configuration from byte array

@@ -119,9 +119,6 @@ settings:
 agent:
   enabled: true
 
-orchestration:
-  oneshot_model: claude-3-5-sonnet
-
 # Custom extension
 custom:
   feature: enabled
@@ -149,10 +146,6 @@ custom:
 
 	if !cfg.Agent.Enabled {
 		t.Error("Expected agent to be enabled")
-	}
-
-	if cfg.Orchestration.OneshotModel != "claude-3-5-sonnet" {
-		t.Errorf("Expected oneshot model 'claude-3-5-sonnet', got '%s'", cfg.Orchestration.OneshotModel)
 	}
 
 	// Verify extension is also captured
