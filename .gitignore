@@ -1,2 +1,4 @@
 # Library package - no binaries
 bin/
+.grove
+.grove-worktrees
