@@ -53,8 +53,36 @@ func BuildCustomAgentImage(ctx context.Context, dockerClient docker.Client) erro
 	
 	fmt.Printf("🔨 Building custom agent image from %s...\n", dockerfilePath)
 	
+	// Find the monorepo root to locate the binary
+	repoRoot, err := findGroveEcosystemRoot()
+	if err != nil {
+		return fmt.Errorf("could not find grove monorepo root to locate canopy binary: %w", err)
+	}
+	
+	// Define the source and destination paths
+	canopyBinaryName := "canopy-aarch64" // Target the aarch64 binary
+	sourceBinaryPath := filepath.Join(repoRoot, "grove-canopy", "bin", canopyBinaryName)
+	buildContextPath := filepath.Dir(dockerfilePath)
+	destBinaryPath := filepath.Join(buildContextPath, "canopy") // Destination inside the build context
+	
+	// Copy the binary into the build context
+	fmt.Printf("➡️  Copying canopy binary to build context...\n")
+	binaryBytes, err := os.ReadFile(sourceBinaryPath)
+	if err != nil {
+		return fmt.Errorf("failed to read canopy binary at '%s'. Please ensure it's built (e.g., 'make build-canopy'): %w", sourceBinaryPath, err)
+	}
+	
+	if err := os.WriteFile(destBinaryPath, binaryBytes, 0755); err != nil {
+		return fmt.Errorf("failed to copy canopy binary to build context: %w", err)
+	}
+	
+	// Defer cleanup of the copied binary
+	defer func() {
+		fmt.Printf("⬅️  Cleaning up temporary canopy binary from build context...\n")
+		os.Remove(destBinaryPath)
+	}()
+	
 	// Build the custom image using the Docker client
-	buildContextPath := filepath.Dir(dockerfilePath) // Use config dir as build context
 	if err := dockerClient.BuildImage(ctx, buildContextPath, dockerfilePath, CustomAgentImageName); err != nil {
 		return fmt.Errorf("failed to build custom agent image: %w", err)
 	}
@@ -217,6 +245,14 @@ RUN apk add --no-cache \
 # COPY .vimrc /root/.vimrc
 # COPY .tmux.conf /root/.tmux.conf
 
+# Add custom binaries
+# If you have pre-compiled binaries, you can copy them into the image.
+# Example for adding the 'canopy' CLI:
+#
+# USER root
+# COPY canopy /usr/local/bin/canopy
+# RUN chmod +x /usr/local/bin/canopy
+
 # Switch back to the claude user (required for --dangerously-skip-permissions)
 USER claude
 
@@ -228,4 +264,39 @@ USER claude
 	}
 	
 	return dockerfilePath, nil
+}
+
+// findGroveEcosystemRoot attempts to find the Grove ecosystem repository root directory
+func findGroveEcosystemRoot() (string, error) {
+	// Start from current directory and walk up
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	
+	for {
+		// Check if this is the Grove ecosystem root (has grove-canopy, grove-core, etc. as subdirectories)
+		if _, err := os.Stat(filepath.Join(dir, "grove-canopy")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "grove-core")); err == nil {
+				return dir, nil
+			}
+		}
+		
+		// Check if we've reached the root
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	
+	// If not found from current directory, check the specific known location
+	knownPath := "/Users/solom4/Code/grove-ecosystem"
+	if _, err := os.Stat(filepath.Join(knownPath, "grove-canopy")); err == nil {
+		if _, err := os.Stat(filepath.Join(knownPath, "grove-core")); err == nil {
+			return knownPath, nil
+		}
+	}
+	
+	return "", fmt.Errorf("Grove ecosystem repository root not found")
 }
