@@ -51,13 +51,14 @@ type ProfileConfig struct {
 
 // AgentConfig defines the configuration for the built-in Grove agent
 type AgentConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	Image        string   `yaml:"image"`
-	LogsPath     string   `yaml:"logs_path"`
-	ExtraVolumes []string `yaml:"extra_volumes"`
-	NotesDir     string   `yaml:"notes_dir,omitempty"`
-	Args         []string `yaml:"args"`
-	OutputFormat string   `yaml:"output_format"` // text (default), json, or stream-json
+	Enabled                  bool     `yaml:"enabled"`
+	Image                    string   `yaml:"image"`
+	LogsPath                 string   `yaml:"logs_path"`
+	ExtraVolumes             []string `yaml:"extra_volumes"`
+	NotesDir                 string   `yaml:"notes_dir,omitempty"`
+	Args                     []string `yaml:"args"`
+	OutputFormat             string   `yaml:"output_format"` // text (default), json, or stream-json
+	MountWorkspaceAtHostPath bool     `yaml:"mount_workspace_at_host_path,omitempty"`
 }
 
 type Settings struct {

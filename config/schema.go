@@ -233,6 +233,10 @@ func GenerateSchema() *JSONSchema {
 						Type:        "string",
 						Description: "Notes directory to mount for agent to read/write",
 					},
+					"mount_workspace_at_host_path": {
+						Type:        "boolean",
+						Description: "Mount the host's git repository root to the same path inside the container. Useful for local Go module development.",
+					},
 				},
 			},
 		},
