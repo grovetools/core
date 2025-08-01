@@ -69,6 +69,7 @@ type Settings struct {
 	AutoInference  *bool  `yaml:"auto_inference,omitempty"`
 	Concurrency    int    `yaml:"concurrency,omitempty"`
 	McpPort        int    `yaml:"mcp_port,omitempty"`
+	CanopyPort     int    `yaml:"canopy_port,omitempty"`
 }
 
 // SetDefaults sets default values for configuration
@@ -102,6 +103,9 @@ func (c *Config) SetDefaults() {
 	// Set Settings defaults
 	if c.Settings.McpPort == 0 {
 		c.Settings.McpPort = 1667
+	}
+	if c.Settings.CanopyPort == 0 {
+		c.Settings.CanopyPort = 8888
 	}
 }
 
