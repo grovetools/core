@@ -227,6 +227,9 @@ func mergeAgent(base, override AgentConfig) AgentConfig {
 	if override.OutputFormat != "" {
 		result.OutputFormat = override.OutputFormat
 	}
+	if override.MountWorkspaceAtHostPath {
+		result.MountWorkspaceAtHostPath = override.MountWorkspaceAtHostPath
+	}
 
 	return result
 }
