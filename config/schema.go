@@ -237,6 +237,10 @@ func GenerateSchema() *JSONSchema {
 						Type:        "boolean",
 						Description: "Mount the host's git repository root to the same path inside the container. Useful for local Go module development.",
 					},
+					"use_superproject_root": {
+						Type:        "boolean",
+						Description: "Use the superproject (parent repository) root when in a git submodule. Useful for monorepo development.",
+					},
 				},
 			},
 		},

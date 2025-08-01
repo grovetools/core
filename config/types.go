@@ -59,6 +59,7 @@ type AgentConfig struct {
 	Args                     []string `yaml:"args"`
 	OutputFormat             string   `yaml:"output_format"` // text (default), json, or stream-json
 	MountWorkspaceAtHostPath bool     `yaml:"mount_workspace_at_host_path,omitempty"`
+	UseSuperprojectRoot      bool     `yaml:"use_superproject_root,omitempty"`
 }
 
 type Settings struct {

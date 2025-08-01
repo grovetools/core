@@ -230,6 +230,9 @@ func mergeAgent(base, override AgentConfig) AgentConfig {
 	if override.MountWorkspaceAtHostPath {
 		result.MountWorkspaceAtHostPath = override.MountWorkspaceAtHostPath
 	}
+	if override.UseSuperprojectRoot {
+		result.UseSuperprojectRoot = override.UseSuperprojectRoot
+	}
 
 	return result
 }

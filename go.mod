@@ -1,6 +1,6 @@
 module github.com/mattsolo1/grove-core
 
-go 1.24.4
+go 1.23
 
 require (
 	github.com/docker/docker v28.3.2+incompatible

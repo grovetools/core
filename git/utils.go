@@ -111,3 +111,26 @@ func GetGitRoot(dir string) (string, error) {
 
 	return strings.TrimSpace(string(output)), nil
 }
+
+// GetSuperprojectRoot returns the root directory of the superproject if in a submodule
+func GetSuperprojectRoot(dir string) (string, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-parse", "--show-superproject-working-tree")
+	if err != nil {
+		return "", fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = dir
+	output, err := execCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("get superproject root: %w", err)
+	}
+
+	superprojectRoot := strings.TrimSpace(string(output))
+	if superprojectRoot == "" {
+		// Not in a submodule, return regular git root
+		return GetGitRoot(dir)
+	}
+	
+	return superprojectRoot, nil
+}
