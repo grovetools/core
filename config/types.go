@@ -14,6 +14,7 @@ type Config struct {
 	Profiles      map[string]ProfileConfig `yaml:"profiles"`
 	Agent         AgentConfig              `yaml:"agent,omitempty"`
 	Settings      Settings                 `yaml:"settings"`
+	Workspaces    []string                 `yaml:"workspaces,omitempty"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	// This allows other tools in the Grove ecosystem to define their
