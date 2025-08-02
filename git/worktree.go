@@ -193,15 +193,21 @@ func (m *WorktreeManager) GetWorktreeRoot(ctx context.Context, path string) (str
 
 // GetOrPrepareWorktree gets an existing worktree or creates a new one
 // This method is used by orchestration executors to ensure a consistent worktree setup
-func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, gitRoot, worktreeName, branchPrefix string) (string, error) {
+func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, worktreeName, branchPrefix string) (string, error) {
 	if worktreeName == "" {
 		return "", fmt.Errorf("worktree name cannot be empty")
 	}
 
 	// Define standardized paths
-	worktreesBaseDir := filepath.Join(gitRoot, ".grove-worktrees")
+	worktreesBaseDir := filepath.Join(basePath, ".grove-worktrees")
 	worktreePath := filepath.Join(worktreesBaseDir, worktreeName)
 	branchName := fmt.Sprintf("%s/%s", branchPrefix, worktreeName)
+
+	// Need to find the git root for worktree operations
+	gitRoot, err := GetGitRoot(basePath)
+	if err != nil {
+		return "", fmt.Errorf("get git root: %w", err)
+	}
 
 	// Check if worktree already exists
 	worktrees, err := m.ListWorktrees(ctx, gitRoot)
