@@ -1,6 +1,6 @@
 # Makefile for grove-core (library package)
 
-.PHONY: all build test clean fmt vet lint
+.PHONY: all build test clean fmt vet lint run check dev build-all help
 
 # Build all packages (no binary for library)
 all: build
@@ -47,4 +47,3 @@ help:
 	@echo "  make vet     - Run go vet"
 	@echo "  make lint    - Run linter (requires golangci-lint)"
 	@echo "  make check   - Run all checks (fmt, vet, lint, test)"
-	@echo "  make help    - Show this help"
