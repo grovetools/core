@@ -46,5 +46,3 @@ require (
 	golang.org/x/time v0.12.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
-
-replace github.com/fsnotify/fsevents => ./internal/fsevents-stub
