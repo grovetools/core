@@ -26,7 +26,7 @@ func TestAgentConfigDefaults(t *testing.T) {
 			},
 			expected: AgentConfig{
 				Enabled:  true,
-				Image:    "ghcr.io/grovepm/grove-agent:v0.1.0",
+				Image:    "ghcr.io/mattsolo1/grove-agent:v0.1.0",
 				LogsPath: "~/.claude/projects",
 			},
 		},

@@ -36,7 +36,7 @@ agent:
   enabled: true`,
 			want: AgentConfig{
 				Enabled:  true,
-				Image:    "ghcr.io/grovepm/grove-agent:v0.1.0",
+				Image:    "ghcr.io/mattsolo1/grove-agent:v0.1.0",
 				LogsPath: "~/.claude/projects",
 			},
 		},
@@ -76,7 +76,7 @@ agent:
   extra_volumes: []`,
 			want: AgentConfig{
 				Enabled:      true,
-				Image:        "ghcr.io/grovepm/grove-agent:v0.1.0",
+				Image:        "ghcr.io/mattsolo1/grove-agent:v0.1.0",
 				LogsPath:     "~/.claude/projects",
 				ExtraVolumes: []string{},
 			},
@@ -194,7 +194,7 @@ func TestAgentConfigDefaultsExtended(t *testing.T) {
 			},
 			expected: AgentConfig{
 				Enabled:  true,
-				Image:    "ghcr.io/grovepm/grove-agent:v0.1.0",
+				Image:    "ghcr.io/mattsolo1/grove-agent:v0.1.0",
 				LogsPath: "~/.claude/projects",
 			},
 		},
@@ -218,7 +218,7 @@ func TestAgentConfigDefaultsExtended(t *testing.T) {
 			},
 			expected: AgentConfig{
 				Enabled:  true,
-				Image:    "ghcr.io/grovepm/grove-agent:v0.1.0",
+				Image:    "ghcr.io/mattsolo1/grove-agent:v0.1.0",
 				LogsPath: "/custom/logs",
 			},
 		},

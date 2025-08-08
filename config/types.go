@@ -96,7 +96,7 @@ func (c *Config) SetDefaults() {
 	if c.Agent.Enabled {
 		if c.Agent.Image == "" {
 			// Default to v0.1.0 for now - this should be injected from CLI
-			c.Agent.Image = "ghcr.io/grovepm/grove-agent:v0.1.0"
+			c.Agent.Image = "ghcr.io/mattsolo1/grove-agent:v0.1.0"
 		}
 		if c.Agent.LogsPath == "" {
 			c.Agent.LogsPath = "~/.claude/projects"
