@@ -1,3 +1,9 @@
+## v0.2.10 (2025-08-12)
+
+### Features
+
+* add canopy models to pkg
+
 ## v0.2.9 (2025-08-08)
 
 ### Chores
