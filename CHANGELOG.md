@@ -1,3 +1,13 @@
+## v0.2.11 (2025-08-15)
+
+### Features
+
+* support flow jobs in Session model
+
+### Bug Fixes
+
+* use claude as home dir in agent docker image
+
 ## v0.2.10 (2025-08-12)
 
 ### Features
