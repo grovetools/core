@@ -7,10 +7,11 @@ import (
 	"time"
 )
 
-// Session represents a complete Claude session with all metadata
+// Session represents a complete Claude session or a grove-flow job
 type Session struct {
 	// Core fields
 	ID               string     `json:"id" db:"id"`
+	Type             string     `json:"type" db:"type"` // "claude_session" or "oneshot_job"
 	PID              int        `json:"pid" db:"pid"`
 	Repo             string     `json:"repo" db:"repo"`
 	Branch           string     `json:"branch" db:"branch"`
@@ -21,6 +22,12 @@ type Session struct {
 	StartedAt        time.Time  `json:"started_at" db:"started_at"`
 	EndedAt          *time.Time `json:"ended_at,omitempty" db:"ended_at"`
 	LastActivity     time.Time  `json:"last_activity" db:"last_activity"`
+
+	// Grove Flow Job specific fields
+	PlanName      string `json:"plan_name,omitempty" db:"plan_name"`
+	PlanDirectory string `json:"plan_directory,omitempty" db:"plan_directory"`
+	JobTitle      string `json:"job_title,omitempty" db:"job_title"`
+	JobFilePath   string `json:"job_file_path,omitempty" db:"job_file_path"`
 
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`
