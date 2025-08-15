@@ -6,12 +6,12 @@ FROM node:18-alpine
 # - bash: A more feature-rich shell for the agent's direct filesystem operations.
 RUN apk add --no-cache curl jq bash
 
-# Create a standard user for Claude (use existing node group)
-RUN adduser -u 1001 -G node -s /bin/bash -D claude
+# Create a standard user for Claude with proper home directory
+RUN adduser -u 1001 -G node -s /bin/bash -D -h /home/claude claude
 
-# Create Claude's home directory with proper permissions
-RUN mkdir -p /home/claude-sandbox/.claude && \
-    chown -R claude:node /home/claude-sandbox
+# Create Claude's config directory with proper permissions
+RUN mkdir -p /home/claude/.claude && \
+    chown -R claude:node /home/claude
 
 # Install the claude-code CLI via npm.
 RUN npm install -g @anthropic-ai/claude-code@latest
