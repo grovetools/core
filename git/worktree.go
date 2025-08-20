@@ -201,7 +201,12 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 	// Define standardized paths
 	worktreesBaseDir := filepath.Join(basePath, ".grove-worktrees")
 	worktreePath := filepath.Join(worktreesBaseDir, worktreeName)
-	branchName := fmt.Sprintf("%s/%s", branchPrefix, worktreeName)
+	var branchName string
+	if branchPrefix != "" {
+		branchName = fmt.Sprintf("%s/%s", branchPrefix, worktreeName)
+	} else {
+		branchName = worktreeName
+	}
 
 	// Need to find the git root for worktree operations
 	gitRoot, err := GetGitRoot(basePath)
