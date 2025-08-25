@@ -1,3 +1,9 @@
+## v0.2.12 (2025-08-25)
+
+### Bug Fixes
+
+* checks if branchPrefix is empty before constructing the branch name, avoiding the creation of branch names with leading slashes
+
 ## v0.2.11 (2025-08-15)
 
 ### Features
