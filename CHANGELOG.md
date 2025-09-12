@@ -1,3 +1,9 @@
+## v0.2.13 (2025-09-12)
+
+### Code Refactoring
+
+* remove Docker dependencies from grove-core
+
 ## v0.2.12 (2025-08-25)
 
 ### Bug Fixes
