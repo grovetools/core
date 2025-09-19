@@ -2,6 +2,8 @@ package tmux
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -86,4 +88,31 @@ func (c *Client) GetSessionPath(ctx context.Context, sessionName string) (string
 		return "", err
 	}
 	return strings.TrimSpace(output), nil
+}
+
+// GetCursorPosition returns the 1-based row and column of the cursor in the specified session's active pane.
+func (c *Client) GetCursorPosition(ctx context.Context, sessionName string) (row int, col int, err error) {
+	// target-pane format is {session}:. which targets the active pane
+	targetPane := sessionName + ":."
+	
+	// Get cursor position using tmux display-message with cursor_y and cursor_x format
+	output, err := c.run(ctx, "display-message", "-p", "-t", targetPane, "#{cursor_y},#{cursor_x}")
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get cursor position from tmux: %w", err)
+	}
+
+	parts := strings.Split(strings.TrimSpace(output), ",")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected output from tmux for cursor position: %s", output)
+	}
+
+	y, errY := strconv.Atoi(parts[0])
+	x, errX := strconv.Atoi(parts[1])
+
+	if errY != nil || errX != nil {
+		return 0, 0, fmt.Errorf("failed to parse cursor coordinates from output '%s'", output)
+	}
+
+	// Tmux provides 0-indexed coordinates, so convert to 1-based for the API
+	return y + 1, x + 1, nil
 }
