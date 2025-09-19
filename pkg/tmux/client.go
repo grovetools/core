@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/mattsolo1/grove-core/command"
 )
@@ -32,7 +33,8 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	execCmd := cmd.Exec()
 	output, err := execCmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("tmux command failed: %w, output: %s", err, string(output))
+		cmdStr := "tmux " + strings.Join(args, " ")
+		return string(output), fmt.Errorf("tmux command failed: `%s`: %w, output: %s", cmdStr, err, string(output))
 	}
 
 	return string(output), nil
