@@ -5,18 +5,73 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/version"
 	"github.com/sirupsen/logrus"
 )
 
 var (
 	loggers   = make(map[string]*logrus.Entry)
 	loggersMu sync.Mutex
+	initOnce  sync.Once
 )
+
+// VersionFields represents the fields logged when a Grove binary starts
+type VersionFields struct {
+	Branch    string `json:"branch" verbosity:"3"`
+	Commit    string `json:"commit" verbosity:"3"`
+	Binary    string `json:"binary" verbosity:"3"`
+	Version   string `json:"version" verbosity:"0"`
+	Platform  string `json:"platform" verbosity:"3"`
+	GoVersion string `json:"goVersion" verbosity:"3"`
+	BuildDate string `json:"buildDate" verbosity:"1"`
+	Compiler  string `json:"compiler" verbosity:"3"`
+}
+
+// StructToLogrusFields converts a struct with verbosity tags to logrus.Fields
+// including a _verbosity metadata field that maps field names to verbosity levels
+func StructToLogrusFields(v interface{}) logrus.Fields {
+	fields := logrus.Fields{}
+	verbosityMap := make(map[string]int)
+
+	val := reflect.ValueOf(v)
+	typ := reflect.TypeOf(v)
+
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		value := val.Field(i)
+
+		// Get JSON tag for field name
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" {
+			continue
+		}
+
+		// Get verbosity tag for verbosity level
+		verbosityTag := field.Tag.Get("verbosity")
+		verbosityLevel := 0
+		if verbosityTag != "" {
+			if level, err := strconv.Atoi(verbosityTag); err == nil {
+				verbosityLevel = level
+			}
+		}
+
+		// Add field to logrus fields
+		fields[jsonTag] = value.Interface()
+		verbosityMap[jsonTag] = verbosityLevel
+	}
+
+	// Add verbosity metadata
+	fields["_verbosity"] = verbosityMap
+
+	return fields
+}
 
 // NewLogger creates and returns a pre-configured logger for a specific component.
 // It uses a singleton pattern per component to avoid re-initializing.
@@ -72,49 +127,43 @@ func NewLogger(component string) *logrus.Entry {
 		logger.SetFormatter(&TextFormatter{Config: logCfg.Format})
 	}
 
-	// Configure Output Sinks
-	var writers []io.Writer
-	
 	// Configure File Sink
-	var logFilePath string
-	if logCfg.File.Enabled && logCfg.File.Path != "" {
-		// Use explicitly configured path
-		logFilePath = expandPath(logCfg.File.Path)
-	} else {
-		// Default to .grove/logs/<component>-<date>.log in the current working directory
-		// This keeps logs with the project rather than centralizing them
-		cwd, err := os.Getwd()
-		if err == nil {
-			// Create date-based log file name
-			now := time.Now()
-			dateStr := now.Format("2006-01-02")
-			logFilePath = filepath.Join(cwd, ".grove", "logs", fmt.Sprintf("%s-%s.log", component, dateStr))
+	if logCfg.File.Enabled {
+		var logFilePath string
+		if logCfg.File.Path != "" {
+			// Use explicitly configured path
+			logFilePath = expandPath(logCfg.File.Path)
 		} else {
-			// Fallback to home directory if we can't get working directory
-			home, homeErr := os.UserHomeDir()
-			if homeErr == nil {
+			// Default to .grove/logs/workspace-<date>.log in the current working directory
+			cwd, err := os.Getwd()
+			if err == nil {
 				now := time.Now()
 				dateStr := now.Format("2006-01-02")
-				logFilePath = filepath.Join(home, ".grove", "logs", fmt.Sprintf("%s-%s.log", component, dateStr))
+				logFilePath = filepath.Join(cwd, ".grove", "logs", fmt.Sprintf("workspace-%s.log", dateStr))
 			}
 		}
-	}
-	
-	// Create and open the log file
-	if logFilePath != "" {
-		dir := filepath.Dir(logFilePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			// Don't warn about default log dir creation failures
-			if logCfg.File.Enabled {
+
+		if logFilePath != "" {
+			dir := filepath.Dir(logFilePath)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
 				logger.Warnf("Failed to create log directory %s: %v", dir, err)
-			}
-		} else {
-			file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-			if err == nil {
-				writers = append(writers, file)
 			} else {
-				// Only warn if explicitly configured
-				if logCfg.File.Enabled {
+				// Use a file writer that is safe for concurrent writes
+				file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+				if err == nil {
+					var fileFormatter logrus.Formatter
+					if logCfg.File.Format == "json" {
+						fileFormatter = &logrus.JSONFormatter{}
+					} else {
+						// Default to a simple text formatter for files if not JSON
+						fileFormatter = &TextFormatter{Config: FormatConfig{DisableTimestamp: false}}
+					}
+					logger.AddHook(&FileHook{
+						Writer:    file,
+						LogLevels: logrus.AllLevels,
+						Formatter: fileFormatter,
+					})
+				} else {
 					logger.Warnf("Failed to open log file %s: %v", logFilePath, err)
 				}
 			}
@@ -134,37 +183,81 @@ func NewLogger(component string) *logrus.Entry {
 	case "never":
 		shouldLogToStderr = false
 	case "auto":
-		// "auto" mode: log to stderr if debug is enabled, or if not in an interactive terminal
 		isDebug := os.Getenv("GROVE_DEBUG") == "1" || logger.GetLevel() == logrus.DebugLevel
 		isInteractive := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
-		// Only show structured logs to stderr if:
-		// 1. Debug mode is enabled, OR
-		// 2. We're NOT in an interactive terminal (e.g., output is piped or in CI)
-		// This suppresses structured logs in normal interactive use
 		if isDebug || !isInteractive {
 			shouldLogToStderr = true
 		}
 	}
 
 	if shouldLogToStderr {
-		writers = append(writers, os.Stderr)
+		logger.SetOutput(os.Stderr)
+	} else {
+		logger.SetOutput(io.Discard)
 	}
 
-	// Configure the output based on the number of writers
-	if len(writers) == 0 {
-		// No writers configured - this is intentional in auto mode for interactive terminals
-		// Use io.Discard to suppress all output rather than defaulting to stderr
-		logger.SetOutput(io.Discard)
-	} else if len(writers) == 1 {
-		logger.SetOutput(writers[0])
-	} else {
-		mw := io.MultiWriter(writers...)
-		logger.SetOutput(mw)
-	}
+	// Log version information once on first logger initialization
+	initOnce.Do(func() {
+		info := version.GetInfo()
+
+		// Get binary name for more useful logging
+		binaryName := "unknown"
+		if len(os.Args) > 0 {
+			binaryName = filepath.Base(os.Args[0])
+		}
+
+		// Use grove-<binary> as component for clearer identification
+		componentName := fmt.Sprintf("grove-%s", binaryName)
+
+		// Create version fields struct with verbosity tags
+		versionFields := VersionFields{
+			Branch:    info.Branch,
+			Commit:    info.Commit,
+			Binary:    binaryName,
+			Version:   info.Version,
+			Platform:  info.Platform,
+			GoVersion: info.GoVersion,
+			BuildDate: info.BuildDate,
+			Compiler:  info.Compiler,
+		}
+
+		// Convert struct to logrus fields with verbosity metadata
+		fields := StructToLogrusFields(versionFields)
+		fields["component"] = componentName
+
+		logger.WithFields(fields).Info("Grove binary started")
+	})
 
 	entry := logger.WithField("component", component)
 	loggers[component] = entry
 	return entry
+}
+
+// FileHook is a logrus hook for writing logs to a file with a specific formatter.
+// It includes a mutex to handle concurrent writes from different tool processes.
+type FileHook struct {
+	Writer    io.Writer
+	LogLevels []logrus.Level
+	Formatter logrus.Formatter
+	mu        sync.Mutex
+}
+
+// Fire is called by logrus when a log entry is created.
+func (hook *FileHook) Fire(entry *logrus.Entry) error {
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	line, err := hook.Formatter.Format(entry)
+	if err != nil {
+		return err
+	}
+	_, err = hook.Writer.Write(line)
+	return err
+}
+
+// Levels returns the log levels that this hook will fire for.
+func (hook *FileHook) Levels() []logrus.Level {
+	return hook.LogLevels
 }
 
 // expandPath expands tilde in file paths
@@ -177,3 +270,4 @@ func expandPath(path string) string {
 	}
 	return path
 }
+

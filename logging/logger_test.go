@@ -3,6 +3,7 @@ package logging
 import (
 	"bytes"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -85,6 +86,30 @@ func TestTextFormatter(t *testing.T) {
 			},
 			want:    []string{"[WARN]", "warning message"},
 			notWant: []string{"[test-component]"},
+		},
+		{
+			name:   "caller information with function name",
+			config: FormatConfig{},
+			entry: func() *logrus.Entry {
+				logger := logrus.New()
+				logger.SetReportCaller(true)
+				entry := &logrus.Entry{
+					Logger:  logger,
+					Level:   logrus.InfoLevel,
+					Message: "test message with caller",
+					Data: logrus.Fields{
+						"component": "test-component",
+					},
+					Caller: &runtime.Frame{
+						File:     "/path/to/file.go",
+						Line:     42,
+						Function: "github.com/example/package.TestFunction",
+					},
+				}
+				return entry
+			}(),
+			want:    []string{"[INFO]", "[test-component]", "test message with caller", "[file.go:42 package.TestFunction]"},
+			notWant: []string{},
 		},
 	}
 

@@ -10,6 +10,8 @@ A centralized, structured logging package for the Grove ecosystem based on `logr
 - **Component Tagging**: Each log entry is automatically tagged with its source component
 - **Flexible Formatting**: Support for text, simple, and JSON output formats
 - **Environment Variable Overrides**: Override configuration via environment variables
+- **Version Information**: Automatically logs binary version info on first logger initialization
+- **Enhanced Caller Info**: Includes file, line, and function name when enabled
 
 ## Usage
 
@@ -41,7 +43,7 @@ Add a `logging` section to your `grove.yml`:
 ```yaml
 logging:
   level: info              # debug, info, warn, error
-  report_caller: false     # Include file:line in logs
+  report_caller: false     # Include file:line:function in logs
   file:
     enabled: true
     path: ~/.grove/logs/grove.log
@@ -54,13 +56,26 @@ logging:
 ### Environment Variable Overrides
 
 - `GROVE_LOG_LEVEL`: Set the minimum log level (debug, info, warn, error)
-- `GROVE_LOG_CALLER`: Set to "true" to include file and line information
+- `GROVE_LOG_CALLER`: Set to "true" to include file, line, and function information
+
+### Version Information Logging
+
+The first time any logger is created in an application, version information is automatically logged. This includes build version, commit hash, branch, build date, Go version, and platform details:
+
+```
+2024-03-21 15:04:05 [INFO] [grove-init] Grove logging initialized version=v1.2.3 commit=abc123 branch=main buildDate=2024-03-21T14:00:00Z goVersion=go1.21.0 platform=darwin/arm64
+```
 
 ### Output Format Examples
 
 **Default format:**
 ```
 2024-03-21 15:04:05 [INFO] [grove-flow] Starting job execution job_id=123
+```
+
+**With caller information enabled:**
+```
+2024-03-21 15:04:05 [INFO] [grove-flow] [flow.go:42 flow.Execute] Starting job execution job_id=123
 ```
 
 **Simple format:**

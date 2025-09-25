@@ -19,9 +19,10 @@ type Config struct {
 
 // FileSinkConfig configures the file logging sink.
 type FileSinkConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool   `yaml:"enabled"`
 	// Path is the full path to the log file.
-	Path string `yaml:"path"`
+	Path   string `yaml:"path"`
+	Format string `yaml:"format,omitempty"` // "text" (default) or "json"
 }
 
 // FormatConfig controls the log output format.

@@ -36,9 +36,10 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	}
 
 	if entry.HasCaller() {
-		// Show only filename and line number for brevity
+		// Show filename, line number, and function name for enhanced debugging
 		fileName := filepath.Base(entry.Caller.File)
-		b.WriteString(fmt.Sprintf(" [%s:%d]", fileName, entry.Caller.Line))
+		funcName := filepath.Base(entry.Caller.Function)
+		b.WriteString(fmt.Sprintf(" [%s:%d %s]", fileName, entry.Caller.Line, funcName))
 	}
 
 	b.WriteString(" ")
