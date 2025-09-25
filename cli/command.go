@@ -6,6 +6,7 @@ import (
     "github.com/spf13/cobra"
     "github.com/sirupsen/logrus"
     "github.com/mattsolo1/grove-core/config"
+    "github.com/mattsolo1/grove-core/logging"
 )
 
 // CommandOptions holds common options for Grove commands
@@ -32,7 +33,11 @@ func NewStandardCommand(use, short string) *cobra.Command {
 
 // GetLogger creates a logger based on command flags
 func GetLogger(cmd *cobra.Command) *logrus.Logger {
-    logger := logrus.New()
+    // Use grove-core logging which is already configured
+    // This returns a logrus.Entry, we need to get the underlying logger
+    entry := logging.NewLogger("grove-cli")
+    logger := entry.Logger
+    
     verbose, _ := cmd.Flags().GetBool("verbose")
     if verbose {
         logger.SetLevel(logrus.DebugLevel)
