@@ -22,7 +22,13 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		b.WriteString(" ")
 	}
 
-	level := strings.ToUpper(entry.Level.String())
+	// Map logrus level strings to shorter versions for consistency
+	levelStr := entry.Level.String()
+	switch levelStr {
+	case "warning":
+		levelStr = "warn"
+	}
+	level := strings.ToUpper(levelStr)
 	b.WriteString(fmt.Sprintf("[%s]", level))
 
 	if component, ok := entry.Data["component"]; ok && !f.Config.DisableComponent {

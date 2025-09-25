@@ -32,4 +32,7 @@ type FormatConfig struct {
 	DisableTimestamp bool `yaml:"disable_timestamp"`
 	// DisableComponent disables the component name from the "default" and "simple" formats.
 	DisableComponent bool `yaml:"disable_component"`
+	// StructuredToStderr controls when structured logs are sent to stderr.
+	// Can be "auto" (default), "always", or "never".
+	StructuredToStderr string `yaml:"structured_to_stderr"`
 }
