@@ -17,29 +17,31 @@ type PrettyLogger struct {
 
 // PrettyStyles contains lipgloss styles for different log types
 type PrettyStyles struct {
-	Success lipgloss.Style
-	Info    lipgloss.Style
-	Warning lipgloss.Style
-	Error   lipgloss.Style
-	Icon    lipgloss.Style
-	Key     lipgloss.Style
-	Value   lipgloss.Style
-	Path    lipgloss.Style
-	Code    lipgloss.Style
+	Success   lipgloss.Style
+	Info      lipgloss.Style
+	Warning   lipgloss.Style
+	Error     lipgloss.Style
+	Icon      lipgloss.Style
+	Key       lipgloss.Style
+	Value     lipgloss.Style
+	Path      lipgloss.Style
+	Code      lipgloss.Style
+	Component lipgloss.Style
 }
 
 // DefaultPrettyStyles returns the default styling for pretty logs
 func DefaultPrettyStyles() PrettyStyles {
 	return PrettyStyles{
-		Success: lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true),  // Green
-		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color("12")),              // Blue
-		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),              // Yellow
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),    // Red
-		Icon:    lipgloss.NewStyle(),
-		Key:     lipgloss.NewStyle().Foreground(lipgloss.Color("8")),               // Gray
-		Value:   lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true),  // Cyan
-		Path:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Italic(true), // Dark cyan
-		Code:    lipgloss.NewStyle().Foreground(lipgloss.Color("5")),               // Magenta
+		Success:   lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true),  // Green
+		Info:      lipgloss.NewStyle().Foreground(lipgloss.Color("12")),              // Blue
+		Warning:   lipgloss.NewStyle().Foreground(lipgloss.Color("11")),              // Yellow
+		Error:     lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),    // Red
+		Icon:      lipgloss.NewStyle(),
+		Key:       lipgloss.NewStyle().Foreground(lipgloss.Color("8")),               // Gray
+		Value:     lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true),  // Cyan
+		Path:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Italic(true), // Dark cyan
+		Code:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")),               // Magenta
+		Component: lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Background(lipgloss.Color("235")), // Magenta with dark background
 	}
 }
 
