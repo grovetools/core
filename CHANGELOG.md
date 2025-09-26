@@ -1,3 +1,65 @@
+## v0.3.0 (2025-09-26)
+
+This release introduces a major overhaul of the logging system across the Grove ecosystem. A new centralized logging package provides configurable, structured logging with support for both console and file outputs (5d3178d). This is complemented by a pretty logging wrapper that enables simultaneous user-friendly terminal output and machine-readable file logging (721fcca, fc3a772). Logging has been enhanced to support commands like `grove logs` with improved caller information, version metadata, and JSON file output capabilities (fe09ca4). As part of this effort, CLI logging was updated to use this new core system (4d23dcd), and terminal output now features magenta highlighting for component names for better readability (064a845).
+
+Another significant addition is a new, centralized tmux client package designed for programmatic session management (09372bf). This client includes utilities for consistent session naming, improved error handling (0150b36), and the ability to query the cursor position to support advanced TUI testing (e711670).
+
+To improve developer experience and standardization, a reusable `docs` command has been added, allowing any Grove tool to easily serve its documentation in a standard JSON format (a5ba628). Finally, a new GitHub Action workflow has been implemented to automate the release process (297490b).
+
+### Features
+
+* Add GitHub Action workflow for automated releases (297490b)
+* Add magenta highlighting for component names in terminal output (064a845)
+* Enhance logging with structured file output and improved caller info (fe09ca4)
+* Add a pretty logging wrapper for simultaneous structured and user-friendly console output (721fcca)
+* Add a centralized, configurable logging package for the Grove ecosystem (5d3178d)
+* Add a reusable 'docs' command for standardized JSON documentation output (a5ba628)
+* Add GetCursorPosition method to the tmux client for TUI testing (e711670)
+* Add centralized tmux utilities and improve error handling (0150b36)
+* Add a comprehensive, centralized client package for managing tmux sessions (09372bf)
+
+### Bug Fixes
+
+* Improve CLI logging to use the new centralized structured logging system (4d23dcd)
+
+### Code Refactoring
+
+* Decouple pretty and structured logging with intelligent terminal output control (fc3a772)
+
+### Chores
+
+* Update .gitignore to track CLAUDE.md and ignore go.work files (6964d36)
+
+### File Changes
+
+```
+ .github/workflows/release.yml |  39 ++++++
+ .gitignore                    |   7 ++
+ cli/command.go                |   7 +-
+ cli/docs.go                   |  22 ++++
+ examples/logging-demo/main.go |  62 ++++++++++
+ go.mod                        |  14 +++
+ go.sum                        |  34 ++++++
+ logging/README.md             | 156 ++++++++++++++++++++++++
+ logging/config.go             |  39 ++++++
+ logging/example_test.go       |  69 +++++++++++
+ logging/formatter.go          |  60 ++++++++++
+ logging/logger.go             | 273 ++++++++++++++++++++++++++++++++++++++++++
+ logging/logger_test.go        | 210 ++++++++++++++++++++++++++++++++
+ logging/pretty.go             | 130 ++++++++++++++++++++
+ pkg/tmux/client.go            |  41 +++++++
+ pkg/tmux/doc.go               |  30 +++++
+ pkg/tmux/launch.go            |  79 ++++++++++++
+ pkg/tmux/launch_test.go       | 159 ++++++++++++++++++++++++
+ pkg/tmux/monitor.go           |  26 ++++
+ pkg/tmux/monitor_test.go      | 137 +++++++++++++++++++++
+ pkg/tmux/session.go           | 118 ++++++++++++++++++
+ pkg/tmux/session_test.go      | 127 ++++++++++++++++++++
+ pkg/tmux/types.go             |  14 +++
+ pkg/tmux/util.go              |  40 +++++++
+ 24 files changed, 1892 insertions(+), 1 deletion(-)
+```
+
 ## v0.2.13 (2025-09-12)
 
 ### Code Refactoring
