@@ -1,6 +1,8 @@
-`grove-core` is the foundational Go library for the Grove ecosystem, providing a standardized toolkit for building consistent and interoperable command-line developer tools. It offers a collection of shared packages that handle common concerns such as CLI structure, configuration, logging, and error handling.
+# Overview
 
-The primary purpose of `grove-core` is to enforce consistency and reduce boilerplate code across all tools within the Grove suite. By providing a common foundation, it ensures that developers and users have a predictable experience, whether they are interacting with a project management tool or a code generation utility.
+`grove-core` is the foundational Go library for the Grove ecosystem. It provides a collection of shared packages for building consistent and interoperable command-line developer tools. Its purpose is to enforce consistency and reduce boilerplate across the suite of modular, binary-based tools that Grove promotes.
+
+The philosophy of the Grove ecosystem is that a collection of small, focused, and swappable CLI tools for orchestrating AI-coding. These tools benefit a common module for configuration, logging, git, worktree, and file operations. 
 
 ## Key Features
 
@@ -18,6 +20,3 @@ The library is organized into several key packages, each addressing a specific a
 
 *   **`pkg/tmux`**: A client for programmatically creating and managing `tmux` sessions. This is used by Grove tools to orchestrate complex development environments with multiple panes and pre-configured commands.
 
-## Target Audience
-
-`grove-core` is intended for developers building Go-based command-line tools that are part of the Grove ecosystem. It provides the essential building blocks to ensure that new tools integrate smoothly and maintain a consistent operational model with existing ones.
