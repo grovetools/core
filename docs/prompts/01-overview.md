@@ -1,13 +1,39 @@
-# Documentation Task: Overview
+Generate a comprehensive overview for grove-core that enumerates all the capabilities it provides.
 
-You are an expert technical writer documenting `grove-core`, a shared Go library for the Grove ecosystem.
+## Requirements
+Create a single-page overview that thoroughly documents what grove-core provides to the Grove ecosystem:
 
-## Task
-Based on your analysis of the codebase, write a clear, engaging overview that:
-- Explains that `grove-core` is the foundational library for building standardized, robust CLI tools.
-- Highlights its key features: A CLI framework (`cli`), hierarchical configuration management via `grove.yml` (`config`), structured logging (`logging`), custom error handling (`errors`), and utilities for Git (`git`) and tmux (`pkg/tmux`).
-- Describes the problem it solves: enforcing consistency, reducing boilerplate, and providing shared functionality across a suite of developer tools.
-- Identifies the target audience: Developers building tools within the Grove ecosystem.
+1. **High-level description**: What grove-core is and its purpose as the foundational Go library
+2. **Complete enumeration of packages and features**: List ALL packages and their purposes
+3. **Key capabilities provided**:
+   - CLI framework (Cobra integration)
+   - Configuration management (grove.yml)
+   - Logging infrastructure
+   - Error handling patterns
+   - File system utilities
+   - Process management
+   - Workspace detection
+   - Binary linking/management
+   - Testing utilities
+4. **Ecosystem role**: How every Grove tool depends on grove-core
+5. **Installation**: Include brief installation instructions at the bottom
+
+## Installation Format
+Include this condensed installation section at the bottom:
+
+### Installation
+
+Grove-core is a Go library. Add it to your project:
+```bash
+go get github.com/mattsolo1/grove-core
+```
+
+Import in your Go code:
+```go
+import "github.com/mattsolo1/grove-core/cli"
+```
+
+See the [Grove Development Guide](https://github.com/mattsolo1/grove-meta/blob/main/docs/02-installation.md#building-from-source) for development setup.
 
 ## Context
-The main `README.md` provides a good starting point. The library's purpose is to be imported by other Go projects to build command-line applications.
+Grove-core provides the foundational patterns and utilities that enable consistency, reduce boilerplate, and provide shared functionality across all Grove ecosystem tools.

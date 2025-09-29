@@ -16,38 +16,3 @@ sections:
     prompt: prompts/01-overview.md
     output: 01-overview.md
     order: 1
-  - name: getting-started
-    title: Getting Started
-    prompt: prompts/02-getting-started.md
-    output: 02-getting-started.md
-    order: 2
-  - name: core-concepts
-    title: Core Concepts
-    prompt: prompts/03-core-concepts.md
-    output: 03-core-concepts.md
-    order: 3
-  - name: configuration-reference
-    title: Configuration Reference
-    prompt: prompts/04-configuration-reference.md
-    output: 04-configuration-reference.md
-    order: 4
-  - name: api-reference
-    title: API Reference
-    prompt: prompts/05-api-reference.md
-    output: 05-api-reference.md
-    order: 5
-  - name: usage-patterns
-    title: Usage Patterns & Examples
-    prompt: prompts/06-usage-patterns.md
-    output: 06-usage-patterns.md
-    order: 6
-  - name: best-practices
-    title: Best Practices
-    prompt: prompts/07-best-practices.md
-    output: 07-best-practices.md
-    order: 7
-  - name: contributing
-    title: Contributing
-    prompt: prompts/08-contributing.md
-    output: 08-contributing.md
-    order: 8
