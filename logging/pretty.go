@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/groveorg/grove-core/tui/theme"
 )
 
 // PrettyLogger provides pretty formatted console output
@@ -29,19 +30,20 @@ type PrettyStyles struct {
 	Component lipgloss.Style
 }
 
-// DefaultPrettyStyles returns the default styling for pretty logs
+// DefaultPrettyStyles returns the default styling for pretty logs using Grove theme
 func DefaultPrettyStyles() PrettyStyles {
+	t := theme.DefaultTheme
 	return PrettyStyles{
-		Success:   lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true),  // Green
-		Info:      lipgloss.NewStyle().Foreground(lipgloss.Color("12")),              // Blue
-		Warning:   lipgloss.NewStyle().Foreground(lipgloss.Color("11")),              // Yellow
-		Error:     lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),    // Red
+		Success:   t.Success,
+		Info:      t.Info,
+		Warning:   t.Warning,
+		Error:     t.Error,
 		Icon:      lipgloss.NewStyle(),
-		Key:       lipgloss.NewStyle().Foreground(lipgloss.Color("8")),               // Gray
-		Value:     lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true),  // Cyan
-		Path:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Italic(true), // Dark cyan
-		Code:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")),               // Magenta
-		Component: lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Background(lipgloss.Color("235")), // Magenta with dark background
+		Key:       t.Muted,
+		Value:     t.Bold,
+		Path:      lipgloss.NewStyle().Foreground(theme.Cyan).Italic(true),
+		Code:      t.Code,
+		Component: t.Accent.Background(theme.SubtleBackground),
 	}
 }
 
@@ -127,4 +129,80 @@ func (p *PrettyLogger) Divider() {
 // Blank prints a blank line
 func (p *PrettyLogger) Blank() {
 	fmt.Fprintln(p.writer)
+}
+
+// Section prints a section header with the Grove theme
+func (p *PrettyLogger) Section(title string) {
+	fmt.Fprintf(p.writer, "\n%s %s\n\n",
+		theme.DefaultTheme.Header.Render(theme.IconTree),
+		theme.DefaultTheme.Header.Render(title))
+}
+
+// Progress logs a progress message
+func (p *PrettyLogger) Progress(message string) {
+	fmt.Fprintf(p.writer, "%s %s\n",
+		p.styles.Info.Render(theme.IconRunning),
+		p.styles.Info.Render(message))
+}
+
+// KeyValue logs multiple key-value pairs
+func (p *PrettyLogger) KeyValues(pairs map[string]interface{}) {
+	for key, value := range pairs {
+		p.Field(key, value)
+	}
+}
+
+// List logs a list of items
+func (p *PrettyLogger) List(items []string) {
+	for _, item := range items {
+		fmt.Fprintf(p.writer, "  %s %s\n",
+			theme.DefaultTheme.Highlight.Render(theme.IconBullet),
+			item)
+	}
+}
+
+// Box prints content in a styled box
+func (p *PrettyLogger) Box(title, content string) {
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Border).
+		Padding(1, 2).
+		Width(60)
+
+	if title != "" {
+		fmt.Fprintf(p.writer, "%s\n", theme.DefaultTheme.Header.Render(title))
+	}
+	fmt.Fprintf(p.writer, "%s\n", boxStyle.Render(content))
+}
+
+// Status logs a status with an appropriate icon
+func (p *PrettyLogger) Status(status, message string) {
+	var icon string
+	var style lipgloss.Style
+
+	switch status {
+	case "success":
+		icon = theme.IconSuccess
+		style = p.styles.Success
+	case "error":
+		icon = theme.IconError
+		style = p.styles.Error
+	case "warning":
+		icon = theme.IconWarning
+		style = p.styles.Warning
+	case "info":
+		icon = theme.IconInfo
+		style = p.styles.Info
+	case "pending":
+		icon = theme.IconPending
+		style = p.styles.Warning
+	case "running":
+		icon = theme.IconRunning
+		style = p.styles.Info
+	default:
+		icon = theme.IconBullet
+		style = lipgloss.NewStyle()
+	}
+
+	fmt.Fprintf(p.writer, "%s %s\n", style.Render(icon), style.Render(message))
 }
