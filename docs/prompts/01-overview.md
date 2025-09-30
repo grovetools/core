@@ -16,7 +16,8 @@ Create a single-page overview that thoroughly documents what grove-core provides
    - Binary linking/management
    - Testing utilities
 4. **Ecosystem role**: How every Grove tool depends on grove-core
-5. **Installation**: Include brief installation instructions at the bottom
+5. **How it works**: Provide a more technical description and exactly what happens under the hood
+6. **Installation**: Include brief installation instructions at the bottom
 
 ## Installation Format
 Include this condensed installation section at the bottom:
