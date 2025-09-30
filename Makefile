@@ -1,6 +1,6 @@
 # Makefile for grove-core (library package)
 
-.PHONY: all build test clean fmt vet lint run check dev build-all help
+.PHONY: all build test clean fmt vet lint run check dev build-all generate-docs help
 
 # Build all packages (no binary for library)
 all: build
@@ -37,6 +37,11 @@ lint:
 # Run all checks
 check: fmt vet lint test
 
+# Generate documentation
+generate-docs:
+	@echo "Generating documentation..."
+	@docgen sync-readme
+
 # Show available targets
 help:
 	@echo "Available targets:"
@@ -47,3 +52,4 @@ help:
 	@echo "  make vet     - Run go vet"
 	@echo "  make lint    - Run linter (requires golangci-lint)"
 	@echo "  make check   - Run all checks (fmt, vet, lint, test)"
+	@echo "  make generate-docs     - Generate documentation using docgen"
