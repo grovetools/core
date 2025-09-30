@@ -26,8 +26,45 @@ var (
 	VerySubtleBackground = lipgloss.Color("#0d0d0d") // Barely visible, just a hint above pure black
 )
 
+// Colors struct holds all the color constants for easy access
+type Colors struct {
+	Green               lipgloss.Color
+	Yellow              lipgloss.Color
+	Red                 lipgloss.Color
+	Orange              lipgloss.Color
+	Cyan                lipgloss.Color
+	Brown               lipgloss.Color
+	LightText           lipgloss.Color
+	MutedText           lipgloss.Color
+	DarkText            lipgloss.Color
+	Border              lipgloss.Color
+	SelectedBackground  lipgloss.Color
+	SubtleBackground    lipgloss.Color
+	VerySubtleBackground lipgloss.Color
+}
+
+// DefaultColors provides easy access to all theme colors
+var DefaultColors = Colors{
+	Green:               Green,
+	Yellow:              Yellow,
+	Red:                 Red,
+	Orange:              Orange,
+	Cyan:                Cyan,
+	Brown:               Brown,
+	LightText:           LightText,
+	MutedText:           MutedText,
+	DarkText:            DarkText,
+	Border:              Border,
+	SelectedBackground:  SelectedBackground,
+	SubtleBackground:    SubtleBackground,
+	VerySubtleBackground: VerySubtleBackground,
+}
+
 // Theme holds all the pre-configured styles for the Grove ecosystem
 type Theme struct {
+	// Colors provides access to the color palette
+	Colors Colors
+
 	// Headers and titles
 	Header lipgloss.Style
 	Title  lipgloss.Style
@@ -66,6 +103,9 @@ type Theme struct {
 // NewTheme creates a new Theme with the default Grove styling
 func NewTheme() *Theme {
 	return &Theme{
+		// Colors
+		Colors: DefaultColors,
+
 		// Headers and titles
 		Header: lipgloss.NewStyle().
 			Foreground(Green).
