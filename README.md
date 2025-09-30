@@ -1,5 +1,7 @@
 <!-- DOCGEN:OVERVIEW:START -->
 
+# Grove Core
+
 `grove-core` is the foundational Go library for the Grove ecosystem. It provides a shared set of packages, patterns, and utilities that ensure consistency and reduce boilerplate code across all Grove command-line tools.
 
 ## Provided Packages and Features
@@ -88,6 +90,6 @@ See the [Grove Development Guide](https://github.com/mattsolo1/grove-meta/blob/m
 <!-- DOCGEN:TOC:START -->
 
 See the [documentation](docs/) for detailed usage instructions:
-- [Overview](docs/01-overview.md) - `grove-core` is the foundational Go library for the Grove ecosystem. It provi...
+- [Overview](docs/01-overview.md)
 
 <!-- DOCGEN:TOC:END -->
