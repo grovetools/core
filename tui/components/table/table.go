@@ -3,7 +3,7 @@ package table
 import (
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
-	"github.com/groveorg/grove-core/tui/theme"
+	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
 // NewStyledTable creates a new lipgloss table with Grove's default styling
@@ -16,15 +16,16 @@ func NewStyledTable() *ltable.Table {
 		BorderStyle(lipgloss.NewStyle().Foreground(theme.Border)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == 0 {
-				// Header row
-				return t.TableHeader
+				// Header row with padding
+				return t.TableHeader.Padding(0, 1)
 			}
-			// Regular rows
+			// Regular rows with subtle alternating background
+			baseStyle := lipgloss.NewStyle().Padding(0, 1)
 			if row%2 == 0 {
-				// Subtle alternating row colors for better readability
-				return t.TableRow.Background(theme.SubtleBackground)
+				// Very subtle alternating background that won't interfere with text colors
+				return baseStyle.Background(theme.VerySubtleBackground)
 			}
-			return t.TableRow
+			return baseStyle
 		})
 
 	return table
@@ -47,7 +48,7 @@ func DefaultOptions() Options {
 		Bordered:       true,
 		HeaderStyle:    theme.DefaultTheme.TableHeader,
 		RowStyle:       theme.DefaultTheme.TableRow,
-		AlternateRows:  true,
+		AlternateRows:  true, // Subtle alternating with VerySubtleBackground
 		Theme:          theme.DefaultTheme,
 	}
 }
@@ -79,7 +80,7 @@ func NewStyledTableWithOptions(opts Options) *ltable.Table {
 
 		// Add alternating row colors if enabled
 		if opts.AlternateRows && row%2 == 0 {
-			style = style.Background(theme.SubtleBackground)
+			style = style.Background(theme.VerySubtleBackground)
 		}
 
 		// Highlight row numbers if enabled
@@ -177,7 +178,7 @@ func (b *Builder) Build() *ltable.Table {
 		style := b.options.RowStyle
 
 		if b.options.AlternateRows && row%2 == 0 {
-			style = style.Background(theme.SubtleBackground)
+			style = style.Background(theme.VerySubtleBackground)
 		}
 
 		if b.options.ShowRowNumbers && col == 0 {
@@ -243,7 +244,7 @@ func SelectableTable(headers []string, rows [][]string, selectedIndex int) strin
 
 		// Regular row
 		if row%2 == 0 {
-			return t.TableRow.Background(theme.SubtleBackground)
+			return t.TableRow.Background(theme.VerySubtleBackground)
 		}
 		return t.TableRow
 	})

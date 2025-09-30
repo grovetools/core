@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/groveorg/grove-core/tui/keymap"
-	"github.com/groveorg/grove-core/tui/theme"
+	"github.com/mattsolo1/grove-core/tui/keymap"
+	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
 // Model represents an embeddable help component

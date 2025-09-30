@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/groveorg/grove-core/tui/theme"
+	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
 // RenderHeader creates a consistent header for TUIs
@@ -24,8 +24,6 @@ func RenderHeader(title string, subtitle ...string) string {
 
 // RenderFooter creates a consistent footer for TUIs
 func RenderFooter(content string, width int) string {
-	t := theme.DefaultTheme
-
 	footerStyle := lipgloss.NewStyle().
 		Foreground(theme.MutedText).
 		Width(width).
@@ -62,8 +60,6 @@ func RenderBreadcrumb(items ...string) string {
 
 // RenderStatusBar creates a status bar with multiple sections
 func RenderStatusBar(left, center, right string, width int) string {
-	t := theme.DefaultTheme
-
 	// Calculate space for each section
 	totalContent := len(stripANSI(left)) + len(stripANSI(center)) + len(stripANSI(right))
 	if totalContent >= width {
@@ -217,8 +213,6 @@ func RenderSpinner(frame int) string {
 
 // RenderTabs creates a tab bar
 func RenderTabs(tabs []string, activeIndex int) string {
-	t := theme.DefaultTheme
-
 	if len(tabs) == 0 {
 		return ""
 	}

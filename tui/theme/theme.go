@@ -23,6 +23,7 @@ var (
 	Border             = lipgloss.Color("#4C566A")
 	SelectedBackground = lipgloss.Color("#434C5E")
 	SubtleBackground   = lipgloss.Color("#3B4252")
+	VerySubtleBackground = lipgloss.Color("#0d0d0d") // Barely visible, just a hint above pure black
 )
 
 // Theme holds all the pre-configured styles for the Grove ecosystem
