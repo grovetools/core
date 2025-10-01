@@ -4,17 +4,7 @@ Generate a comprehensive overview for grove-core that enumerates all the capabil
 Create a single-page overview that thoroughly documents what grove-core provides to the Grove ecosystem:
 
 1. **High-level description**: What grove-core is and its purpose as the foundational Go library
-2. **Complete enumeration of packages and features**: List ALL packages and their purposes
-3. **Key capabilities provided**:
-   - CLI framework (Cobra integration)
-   - Configuration management (grove.yml)
-   - Logging infrastructure
-   - Error handling patterns
-   - File system utilities
-   - Process management
-   - Workspace detection
-   - Binary linking/management
-   - Testing utilities
+2. **Complete enumeration of packages**: List packages and their purposes; use a normal text heading (not code block for name)
 4. **Ecosystem role**: How every Grove tool depends on grove-core
 5. **How it works**: Provide a more technical description and exactly what happens under the hood
 6. **Installation**: Include brief installation instructions at the bottom
