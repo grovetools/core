@@ -19,6 +19,7 @@ type Model struct {
 	Height     int
 	Theme      *theme.Theme
 	CustomHelp [][]key.Binding // Additional custom key bindings to display
+	Title      string      // Title for the full help view
 }
 
 // New creates a new help model with default settings
@@ -47,22 +48,26 @@ func (m Model) View() string {
 	}
 
 	var helpGroups [][]key.Binding
+	var shortHelpGroup []key.Binding
 
 	// Extract keybindings based on the type of Keys
 	switch k := m.Keys.(type) {
 	case keymap.Base:
-		if m.ShowAll {
-			helpGroups = k.FullHelp()
-		} else {
-			helpGroups = [][]key.Binding{k.ShortHelp()}
-		}
+		helpGroups = k.FullHelp()
+		shortHelpGroup = k.ShortHelp()
+	case interface {
+		FullHelp() [][]key.Binding
+		ShortHelp() []key.Binding
+	}:
+		helpGroups = k.FullHelp()
+		shortHelpGroup = k.ShortHelp()
 	case interface{ FullHelp() [][]key.Binding }:
-		if m.ShowAll {
-			helpGroups = k.FullHelp()
-		}
+		helpGroups = k.FullHelp()
 	case interface{ ShortHelp() []key.Binding }:
-		if !m.ShowAll {
-			helpGroups = [][]key.Binding{k.ShortHelp()}
+		shortHelpGroup = k.ShortHelp()
+		// If only short help is provided, use it for the full view as well
+		if len(helpGroups) == 0 {
+			helpGroups = [][]key.Binding{shortHelpGroup}
 		}
 	}
 
@@ -71,77 +76,130 @@ func (m Model) View() string {
 		helpGroups = append(helpGroups, m.CustomHelp...)
 	}
 
-	if len(helpGroups) == 0 {
+	if m.ShowAll {
+		return m.viewFull(helpGroups)
+	}
+	return m.viewShort(shortHelpGroup)
+}
+
+// viewShort renders the compact, single-line help view.
+func (m Model) viewShort(group []key.Binding) string {
+	if len(group) == 0 {
 		return ""
 	}
 
-	// Build the help content
-	var sections []string
+	var pairs []string
+	for _, binding := range group {
+		if !binding.Enabled() {
+			continue
+		}
+		keys := binding.Help().Key
+		desc := binding.Help().Desc
+		if keys != "" && desc != "" {
+			pair := fmt.Sprintf("%s %s %s",
+				m.Theme.Highlight.Render(keys),
+				m.Theme.Muted.Render("•"),
+				m.Theme.Muted.Render(desc),
+			)
+			pairs = append(pairs, pair)
+		}
+	}
 
-	for _, group := range helpGroups {
+	if len(pairs) == 0 {
+		return ""
+	}
+
+	// Default help prompt
+	helpPrompt := m.Theme.Muted.Render("Press ") +
+		m.Theme.Highlight.Render("?") +
+		m.Theme.Muted.Render(" for help")
+
+	return helpPrompt + " • " + strings.Join(pairs, " • ")
+}
+
+// viewFull renders the full, multi-column, centered help dialog.
+func (m Model) viewFull(groups [][]key.Binding) string {
+	if len(groups) == 0 {
+		return ""
+	}
+
+	// Styles
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.DefaultColors.Border).
+		Padding(1, 2).
+		Width(80). // Max width for the help box
+		Align(lipgloss.Center)
+
+	titleText := m.Title
+	if titleText == "" {
+		titleText = "Help"
+	}
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(m.Theme.Info.GetForeground()).
+		MarginBottom(1)
+
+	columnStyle := lipgloss.NewStyle().
+		Width(38). // Width for each column
+		Align(lipgloss.Left)
+
+	keyStyle := m.Theme.Highlight
+	descStyle := m.Theme.Muted
+	sectionTitleStyle := lipgloss.NewStyle().Bold(true).MarginTop(1)
+
+	// Build columns from key binding groups
+	var renderedColumns []string
+	for _, group := range groups {
 		if len(group) == 0 {
 			continue
 		}
 
-		var pairs []string
+		var columnLines []string
 		for _, binding := range group {
 			if !binding.Enabled() {
 				continue
 			}
 
-			keys := binding.Help().Key
+			key := binding.Help().Key
 			desc := binding.Help().Desc
 
-			if keys != "" && desc != "" {
-				// Format: "key • description"
+			if key == "" && desc != "" { // This is a section title
+				if len(columnLines) > 0 {
+					columnLines = append(columnLines, "") // Add space before section
+				}
+				columnLines = append(columnLines, sectionTitleStyle.Render(desc))
+			} else if key != "" && desc != "" {
 				pair := fmt.Sprintf("%s %s %s",
-					m.Theme.Highlight.Render(keys),
-					m.Theme.Muted.Render("•"),
-					m.Theme.Muted.Render(desc),
+					keyStyle.Render(key),
+					descStyle.Render("•"),
+					descStyle.Render(desc),
 				)
-				pairs = append(pairs, pair)
+				columnLines = append(columnLines, pair)
 			}
 		}
 
-		if len(pairs) > 0 {
-			sections = append(sections, strings.Join(pairs, "  "))
+		// Join lines, render column, and add to list of columns
+		if len(columnLines) > 0 {
+			renderedColumn := columnStyle.Render(strings.Join(columnLines, "\n"))
+			renderedColumns = append(renderedColumns, renderedColumn)
 		}
 	}
 
-	if len(sections) == 0 {
-		return ""
-	}
+	// Join columns horizontally
+	columns := lipgloss.JoinHorizontal(lipgloss.Top, renderedColumns...)
 
-	// Join all sections with line breaks
-	content := strings.Join(sections, "\n")
+	// Combine title and content
+	title := titleStyle.Render(titleText)
+	fullContent := lipgloss.JoinVertical(lipgloss.Center, title, columns)
 
-	// Create a box for the help content
-	helpBox := m.Theme.Box.
-		Width(m.Width - 4).
-		BorderForeground(theme.Border)
-
-	if !m.ShowAll {
-		// Short help - single line
-		helpLine := m.Theme.Muted.Render("Press ") +
-			m.Theme.Highlight.Render("?") +
-			m.Theme.Muted.Render(" for help • ") +
-			sections[0]
-		return helpLine
-	}
-
-	// Full help - boxed multi-line
-	title := m.Theme.Header.Render(" Help ")
-	helpBox = helpBox.BorderTop(true).
-		BorderLeft(true).
-		BorderRight(true).
-		BorderBottom(true)
-
-	// Add title to the box
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		helpBox.Render(content),
-	)
+	// Render in a box and center on screen
+	dialog := boxStyle.Render(fullContent)
+	return lipgloss.NewStyle().
+		Width(m.Width).
+		Height(m.Height).
+		Align(lipgloss.Center, lipgloss.Center).
+		Render(dialog)
 }
 
 // Toggle toggles between showing all help and short help
@@ -201,6 +259,12 @@ func (b *Builder) WithSize(width, height int) *Builder {
 // WithCustomHelp adds custom help bindings
 func (b *Builder) WithCustomHelp(customHelp [][]key.Binding) *Builder {
 	b.model.CustomHelp = customHelp
+	return b
+}
+
+// WithTitle sets the title for the full help view dialog
+func (b *Builder) WithTitle(title string) *Builder {
+	b.model.Title = title
 	return b
 }
 
