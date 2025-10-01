@@ -1,1 +1,26 @@
-{}
+{
+  "sections": {
+    "overview": {
+      "title": "Overview",
+      "content": "`grove-core` is the foundational Go library for the Grove ecosystem. It provides a shared set of packages and utilities that ensure consistency and reduce boilerplate code across all Grove command-line tools.",
+      "subsections": [
+        {
+          "title": "Packages and Features",
+          "content": "### cli\nA package for building command-line interfaces using the Cobra library.\n*   **Command Creation**: Provides `NewStandardCommand` to create a command with flags like `--verbose`, `--json`, and `--config`.\n*   **Configuration \u0026 Logging**: Initializes configuration from files and sets up a logger based on command-line flags.\n*   **Error Handling**: Includes a structured error handler to present messages for common issues.\n*   **Version Commands**: A `NewVersionCommand` constructor for creating commands that display build information.\n*   **Documentation Endpoint**: A `NewDocsCommand` helper to expose tool documentation as a JSON object.\n\n### config\nA system for managing `grove.yml` configuration files.\n*   **Hierarchical Loading**: Merges configuration from global (`~/.config/grove`), project (`grove.yml`), and local override (`grove.override.yml`) files.\n*   **Schema and Validation**: Defines the `grove.yml` structure and validates configurations against a JSON schema and semantic rules, such as checking for port conflicts.\n*   **Extensibility**: Allows other Grove tools to define and access their own top-level sections within `grove.yml` via an `Extensions` map.\n*   **Environment Variable Expansion**: Supports `${VAR}` syntax in configuration files.\n\n### logging\nA centralized logging infrastructure built on Logrus.\n*   **Component-Based Logging**: `NewLogger(\"component-name\")` creates a logger that automatically tags messages with the component's name.\n*   **Configuration-Driven**: Log level, format (text or JSON), and file output are configured in `grove.yml`.\n*   **Custom Formatting**: Includes a custom text formatter.\n*   **Structured Logging**: Supports structured logging with fields for machine-readable output.\n\n### command\nA package for executing external commands.\n*   **Command Building**: A `SafeBuilder` validates command arguments against pre-defined patterns (e.g., filenames, Git references) to mitigate command injection risks.\n*   **Context and Timeouts**: Integrates with Go's `context` package to manage command timeouts and cancellation.\n\n### git\nA package for interacting with Git repositories.\n*   **Worktree Management**: A `WorktreeManager` to create, list, and remove Git worktrees for isolated development environments.\n*   **Repository Information**: Functions to get the current branch, repository root, remote URL, and detailed status (`ahead`/`behind` counts, dirty state).\n*   **Hook Management**: An interface for installing and uninstalling Git hooks (`post-checkout`, `pre-commit`).\n*   **Environment Variables**: Gathers Git context (repo name, branch, commit) and makes it available as environment variables.\n\n### pkg/tmux\nA Go client for managing tmux sessions.\n*   **Session Management**: Functions to create, check for existence, kill, and list tmux sessions.\n*   **Pane and Window Control**: APIs to launch layouts with multiple panes, send commands, and capture pane content.\n*   **Monitoring**: A function to block execution until a specified tmux session is closed.\n\n### pkg/models\nA collection of shared data structures used across multiple Grove tools, particularly for orchestration services. This ensures data consistency for concepts like sessions, events, tool executions, transcripts, and notifications.\n\n### Other Utilities\n*   **`conventional`**: Tools for parsing Conventional Commit messages and generating changelogs.\n*   **`util/sanitize`**: Functions for sanitizing strings for use as Docker labels, domain names, filenames, and environment variable keys.\n*   **`testutil`**: Helper functions for writing integration tests, including utilities for initializing Git repositories and managing Docker resources.\n*   **`version`**: A mechanism for embedding build information (version, commit, build date) into binaries at compile time via linker flags."
+        },
+        {
+          "title": "Role in the Grove Ecosystem",
+          "content": "`grove-core` is a dependency for all executable tools in the Grove ecosystem, including `grove-meta`, `grove-context`, `grove-flow`, and `grove-docgen`. This dependency ensures that all tools share a consistent approach to:\n*   Command-line interaction and flag parsing.\n*   Configuration file loading and validation.\n*   Logging output and structure.\n*   Error reporting and handling.\n\nBy providing this common foundation, `grove-core` accelerates the development of new tools and maintains a cohesive user experience."
+        },
+        {
+          "title": "Installation",
+          "content": "Grove-core is a Go library. Add it to your project:\n\nImport in your Go code:\n\nSee the [Grove Development Guide](https://github.com/mattsolo1/grove-meta/blob/main/docs/02-installation.md#building-from-source) for development setup.",
+          "code_blocks": [
+            "go get github.com/mattsolo1/grove-core",
+            "import \"github.com/mattsolo1/grove-core/cli\""
+          ]
+        }
+      ]
+    }
+  }
+}
