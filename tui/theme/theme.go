@@ -4,59 +4,65 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Nature-inspired color palette for Grove
+// Kanagawa Dragon
 var (
-	// Primary colors - Earthy and nature-themed
-	Green  = lipgloss.Color("#A3BE8C") // Success, Up-to-date
-	Yellow = lipgloss.Color("#EBCB8B") // Warning, Pending
-	Red    = lipgloss.Color("#BF616A") // Error, Failed
-	Orange = lipgloss.Color("#D08770") // Highlight, Accent
-	Cyan   = lipgloss.Color("#88C0D0") // Info, Links
-	Brown  = lipgloss.Color("#8B7355") // Earth tone
+	// Primary colors
+	Green  = lipgloss.Color("#98BB6C") // springGreen: Success
+	Yellow = lipgloss.Color("#FF9E3B") // roninYellow: Warning
+	Red    = lipgloss.Color("#FF5D62") // peachRed: Error
+	Orange = lipgloss.Color("#FFA066") // surimiOrange: Highlight
+	Cyan   = lipgloss.Color("#7E9CD8") // crystalBlue: Info, Links
+	Blue   = lipgloss.Color("#7FB4CA") // springBlue
+	Violet = lipgloss.Color("#957FB8") // oniViolet: Accent
+	Pink   = lipgloss.Color("#D27E99") // sakuraPink
 
 	// Text colors
-	LightText = lipgloss.Color("#ECEFF4") // Primary text
-	MutedText = lipgloss.Color("#6272A4") // Faint text, help
-	DarkText  = lipgloss.Color("#2E3440") // Dark text for light backgrounds
+	LightText = lipgloss.Color("#DCD7BA") // fujiWhite: Primary text
+	MutedText = lipgloss.Color("#727169") // fujiGray: Faint text, help
+	DarkText  = lipgloss.Color("#1D1C19") // dragonBlack2
 
 	// Background colors
-	Border             = lipgloss.Color("#4C566A")
-	SelectedBackground = lipgloss.Color("#434C5E")
-	SubtleBackground   = lipgloss.Color("#3B4252")
-	VerySubtleBackground = lipgloss.Color("#0d0d0d") // Barely visible, just a hint above pure black
+	Border               = lipgloss.Color("#363646") // sumiInk5
+	SelectedBackground   = lipgloss.Color("#223249") // waveBlue1
+	SubtleBackground     = lipgloss.Color("#1F1F28") // sumiInk3
+	VerySubtleBackground = lipgloss.Color("#181820") // sumiInk1
 )
 
 // Colors struct holds all the color constants for easy access
 type Colors struct {
-	Green               lipgloss.Color
-	Yellow              lipgloss.Color
-	Red                 lipgloss.Color
-	Orange              lipgloss.Color
-	Cyan                lipgloss.Color
-	Brown               lipgloss.Color
-	LightText           lipgloss.Color
-	MutedText           lipgloss.Color
-	DarkText            lipgloss.Color
-	Border              lipgloss.Color
-	SelectedBackground  lipgloss.Color
-	SubtleBackground    lipgloss.Color
+	Green                lipgloss.Color
+	Yellow               lipgloss.Color
+	Red                  lipgloss.Color
+	Orange               lipgloss.Color
+	Cyan                 lipgloss.Color
+	Blue                 lipgloss.Color
+	Violet               lipgloss.Color
+	Pink                 lipgloss.Color
+	LightText            lipgloss.Color
+	MutedText            lipgloss.Color
+	DarkText             lipgloss.Color
+	Border               lipgloss.Color
+	SelectedBackground   lipgloss.Color
+	SubtleBackground     lipgloss.Color
 	VerySubtleBackground lipgloss.Color
 }
 
 // DefaultColors provides easy access to all theme colors
 var DefaultColors = Colors{
-	Green:               Green,
-	Yellow:              Yellow,
-	Red:                 Red,
-	Orange:              Orange,
-	Cyan:                Cyan,
-	Brown:               Brown,
-	LightText:           LightText,
-	MutedText:           MutedText,
-	DarkText:            DarkText,
-	Border:              Border,
-	SelectedBackground:  SelectedBackground,
-	SubtleBackground:    SubtleBackground,
+	Green:                Green,
+	Yellow:               Yellow,
+	Red:                  Red,
+	Orange:               Orange,
+	Cyan:                 Cyan,
+	Blue:                 Blue,
+	Violet:               Violet,
+	Pink:                 Pink,
+	LightText:            LightText,
+	MutedText:            MutedText,
+	DarkText:             DarkText,
+	Border:               Border,
+	SelectedBackground:   SelectedBackground,
+	SubtleBackground:     SubtleBackground,
 	VerySubtleBackground: VerySubtleBackground,
 }
 
@@ -110,6 +116,7 @@ func NewTheme() *Theme {
 		Header: lipgloss.NewStyle().
 			Foreground(Green).
 			Bold(true).
+			MarginTop(1).
 			MarginBottom(1),
 
 		Title: lipgloss.NewStyle().
@@ -197,7 +204,7 @@ func NewTheme() *Theme {
 			Bold(true),
 
 		Accent: lipgloss.NewStyle().
-			Foreground(Brown).
+			Foreground(Violet).
 			Bold(true),
 	}
 }
@@ -260,3 +267,4 @@ func RenderStatus(status, text string) string {
 func RenderBox(content string) string {
 	return DefaultTheme.Box.Render(content)
 }
+
