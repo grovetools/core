@@ -96,14 +96,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 
 	// Check if this is a workspace config (has no workspaces field) and look for ecosystem config
 	ecosystemPath := ""
-	// Check if the proxy extension has workspaces - if not, this is a workspace config
-	hasWorkspaces := false
-	if proxyExt, ok := projectConfig.Extensions["proxy"].(map[string]interface{}); ok {
-		if workspaces, ok := proxyExt["workspaces"].([]interface{}); ok && len(workspaces) > 0 {
-			hasWorkspaces = true
-		}
-	}
-	if !hasWorkspaces {
+	if len(projectConfig.Workspaces) == 0 {
 		// This appears to be a workspace config, look for ecosystem config
 		ecosystemPath = findEcosystemConfig(filepath.Dir(projectPath))
 		if ecosystemPath != "" {

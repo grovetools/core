@@ -1,6 +1,6 @@
 package models
 
-// RepoHookConfig represents the structure of .canopy.yaml
+// RepoHookConfig represents the structure of .grove-hooks.yaml
 type RepoHookConfig struct {
 	Hooks struct {
 		OnStop []HookCommand `yaml:"on_stop"`

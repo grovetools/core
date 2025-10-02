@@ -7,8 +7,9 @@ import (
 
 // Config represents the grove.yml configuration
 type Config struct {
-	Version string      `yaml:"version"`
-	Agent   AgentConfig `yaml:"agent,omitempty"`
+	Version    string      `yaml:"version"`
+	Agent      AgentConfig `yaml:"agent,omitempty"`
+	Workspaces []string    `yaml:"workspaces,omitempty"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	// This allows other tools in the Grove ecosystem to define their
