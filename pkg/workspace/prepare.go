@@ -30,8 +30,21 @@ func Prepare(ctx context.Context, opts PrepareOptions) (string, error) {
 	groveDir := filepath.Join(worktreePath, ".grove")
 	os.MkdirAll(groveDir, 0755)
 	markerPath := filepath.Join(groveDir, "workspace")
-	markerContent := fmt.Sprintf("branch: %s\nplan: %s\ncreated_at: %s\n",
-		opts.BranchName, opts.PlanName, time.Now().UTC().Format(time.RFC3339))
+	
+	// Determine if this is an ecosystem worktree
+	isEcosystem := len(opts.Repos) > 0
+	
+	markerContent := fmt.Sprintf("branch: %s\nplan: %s\ncreated_at: %s\necosystem: %t\n",
+		opts.BranchName, opts.PlanName, time.Now().UTC().Format(time.RFC3339), isEcosystem)
+	
+	// Add repos list for ecosystem worktrees
+	if isEcosystem {
+		markerContent += "repos:\n"
+		for _, repo := range opts.Repos {
+			markerContent += fmt.Sprintf("  - %s\n", repo)
+		}
+	}
+	
 	os.WriteFile(markerPath, []byte(markerContent), 0644)
 
 	return worktreePath, nil
