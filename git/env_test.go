@@ -17,8 +17,8 @@ func TestGetEnvironmentVars(t *testing.T) {
 	testutil.InitGitRepo(t, tmpDir)
 
 	// Set git config
-	testutil.RunGitCommand(t, tmpDir, "github.com/mattsolo1/grove-core/config", "user.name", "Test User")
-	testutil.RunGitCommand(t, tmpDir, "github.com/mattsolo1/grove-core/config", "user.email", "test@example.com")
+	testutil.RunGitCommand(t, tmpDir, "config", "user.name", "Test User")
+	testutil.RunGitCommand(t, tmpDir, "config", "user.email", "test@example.com")
 
 	vars, err := GetEnvironmentVars(tmpDir)
 	require.NoError(t, err)

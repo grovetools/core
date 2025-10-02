@@ -39,13 +39,13 @@ func InitGitRepo(t *testing.T, dir string) {
 	}
 
 	// Configure git user
-	cmd = exec.Command("git", "github.com/mattsolo1/grove-core/config", "user.name", "Test User")
+	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to configure git user.name: %v", err)
 	}
 
-	cmd = exec.Command("git", "github.com/mattsolo1/grove-core/config", "user.email", "test@example.com")
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to configure git user.email: %v", err)
