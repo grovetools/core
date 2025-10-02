@@ -96,7 +96,14 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 
 	// Check if this is a workspace config (has no workspaces field) and look for ecosystem config
 	ecosystemPath := ""
-	if len(projectConfig.Workspaces) == 0 {
+	// Check if the proxy extension has workspaces - if not, this is a workspace config
+	hasWorkspaces := false
+	if proxyExt, ok := projectConfig.Extensions["proxy"].(map[string]interface{}); ok {
+		if workspaces, ok := proxyExt["workspaces"].([]interface{}); ok && len(workspaces) > 0 {
+			hasWorkspaces = true
+		}
+	}
+	if !hasWorkspaces {
 		// This appears to be a workspace config, look for ecosystem config
 		ecosystemPath = findEcosystemConfig(filepath.Dir(projectPath))
 		if ecosystemPath != "" {
@@ -161,23 +168,8 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 	}
 
-	// Set defaults and validate
+	// Set defaults
 	finalConfig.SetDefaults()
-
-	// Apply smart inference (enabled by default)
-	if finalConfig.Settings.AutoInference == nil || *finalConfig.Settings.AutoInference {
-		finalConfig.InferDefaults()
-	}
-
-	// Validate configuration
-	if err := finalConfig.Validate(); err != nil {
-		return nil, err
-	}
-
-	// Additional semantic validation
-	if err := finalConfig.ValidateSemantics(); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "semantic validation failed")
-	}
 
 	logger.Debug("Configuration loaded and validated successfully")
 	
@@ -214,21 +206,6 @@ func LoadFromBytes(data []byte) (*Config, error) {
 
 	// Set defaults
 	config.SetDefaults()
-
-	// Apply smart inference (enabled by default)
-	if config.Settings.AutoInference == nil || *config.Settings.AutoInference {
-		config.InferDefaults()
-	}
-
-	// Validate configuration
-	if err := config.Validate(); err != nil {
-		return nil, err // Already returns structured error from validation
-	}
-
-	// Additional semantic validation
-	if err := config.ValidateSemantics(); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "semantic validation failed")
-	}
 
 	return &config, nil
 }
@@ -348,14 +325,17 @@ func findEcosystemConfig(startDir string) string {
 		for _, name := range configNames {
 			path := filepath.Join(dir, name)
 			if info, err := os.Stat(path); err == nil && !info.IsDir() {
-				// Check if this config has workspaces field
+				// Check if this config has workspaces field in the proxy extension
 				data, err := os.ReadFile(path)
 				if err == nil {
 					expanded := expandEnvVars(string(data))
 					var cfg Config
 					if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
-						if len(cfg.Workspaces) > 0 {
-							return path
+						// Check if the proxy extension has workspaces
+						if proxyExt, ok := cfg.Extensions["proxy"].(map[string]interface{}); ok {
+							if workspaces, ok := proxyExt["workspaces"].([]interface{}); ok && len(workspaces) > 0 {
+								return path
+							}
 						}
 					}
 				}
@@ -471,17 +451,8 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		finalConfig = mergeConfigs(finalConfig, override.Config)
 	}
 
-	// Set defaults and validate the final merged config
+	// Set defaults for the final merged config
 	finalConfig.SetDefaults()
-	if finalConfig.Settings.AutoInference == nil || *finalConfig.Settings.AutoInference {
-		finalConfig.InferDefaults()
-	}
-	if err := finalConfig.Validate(); err != nil {
-		return nil, err
-	}
-	if err := finalConfig.ValidateSemantics(); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "semantic validation failed")
-	}
 
 	layeredConfig.Final = finalConfig
 

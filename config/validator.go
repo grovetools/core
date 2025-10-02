@@ -35,13 +35,8 @@ func (v *SchemaValidator) Validate(configData interface{}) error {
 	// Transform capitalized field names to lowercase
 	transformed := make(map[string]interface{})
 	fieldMapping := map[string]string{
-		"Version":  "version",
-		"Networks": "networks",
-		"Services": "services",
-		"Volumes":  "volumes",
-		"Profiles": "profiles",
-		"Agent":    "agent",
-		"Settings": "settings",
+		"Version": "version",
+		"Agent":   "agent",
 	}
 
 	for key, value := range data {
@@ -50,11 +45,6 @@ func (v *SchemaValidator) Validate(configData interface{}) error {
 		} else {
 			transformed[key] = value
 		}
-	}
-
-	// Remove empty maps that are marshaled as null
-	if services, ok := transformed["services"]; ok && services == nil {
-		delete(transformed, "services")
 	}
 
 	// Validate against schema
@@ -218,106 +208,3 @@ func (v *SchemaValidator) equal(a, b interface{}) bool {
 	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
 }
 
-// ValidateSemantics performs semantic validation beyond schema
-func (c *Config) ValidateSemantics() error {
-	// Check for circular dependencies
-	if err := c.checkCircularDependencies(); err != nil {
-		return err
-	}
-
-	// Check for port conflicts
-	if err := c.checkPortConflicts(); err != nil {
-		return err
-	}
-
-	// Validate service references
-	if err := c.validateServiceReferences(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// checkCircularDependencies checks for circular service dependencies
-func (c *Config) checkCircularDependencies() error {
-	// Build dependency graph
-	visited := make(map[string]bool)
-	recStack := make(map[string]bool)
-
-	var hasCycle func(string) bool
-	hasCycle = func(service string) bool {
-		visited[service] = true
-		recStack[service] = true
-
-		if svc, ok := c.Services[service]; ok {
-			for _, dep := range svc.DependsOn {
-				if !visited[dep] {
-					if hasCycle(dep) {
-						return true
-					}
-				} else if recStack[dep] {
-					return true
-				}
-			}
-		}
-
-		recStack[service] = false
-		return false
-	}
-
-	for service := range c.Services {
-		if !visited[service] {
-			if hasCycle(service) {
-				return fmt.Errorf("circular dependency detected involving service: %s", service)
-			}
-		}
-	}
-
-	return nil
-}
-
-// checkPortConflicts checks for port binding conflicts
-func (c *Config) checkPortConflicts() error {
-	portMap := make(map[string]string) // port -> service name
-
-	for name, service := range c.Services {
-		for _, portMapping := range service.Ports {
-			// Extract host port from mapping (e.g., "8080:80" -> "8080")
-			parts := strings.Split(portMapping, ":")
-			if len(parts) < 2 {
-				continue
-			}
-
-			hostPort := parts[0]
-			if existingService, exists := portMap[hostPort]; exists {
-				return fmt.Errorf("port %s is used by both '%s' and '%s'", hostPort, existingService, name)
-			}
-			portMap[hostPort] = name
-		}
-	}
-
-	return nil
-}
-
-// validateServiceReferences validates that all service references exist
-func (c *Config) validateServiceReferences() error {
-	// Check depends_on references
-	for name, service := range c.Services {
-		for _, dep := range service.DependsOn {
-			if _, exists := c.Services[dep]; !exists {
-				return fmt.Errorf("service '%s' depends on non-existent service '%s'", name, dep)
-			}
-		}
-	}
-
-	// Check profile references
-	for profileName, profile := range c.Profiles {
-		for _, serviceName := range profile.Services {
-			if _, exists := c.Services[serviceName]; !exists {
-				return fmt.Errorf("profile '%s' references non-existent service '%s'", profileName, serviceName)
-			}
-		}
-	}
-
-	return nil
-}
