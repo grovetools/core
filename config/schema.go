@@ -37,56 +37,6 @@ func GenerateSchema() *JSONSchema {
 				Description: "Configuration version (e.g., '1.0')",
 				Pattern:     "^(\\d+\\.\\d+)?$", // Allow empty string
 			},
-			"agent": {
-				Type:        "object",
-				Description: "Grove agent configuration",
-				Properties: map[string]*JSONSchema{
-					"enabled": {
-						Type:        "boolean",
-						Description: "Enable the Grove agent",
-					},
-					"image": {
-						Type:        "string",
-						Description: "Docker image for the agent",
-					},
-					"logs_path": {
-						Type:        "string",
-						Description: "Path to mount for Claude project logs",
-					},
-					"extra_volumes": {
-						Type:        "array",
-						Description: "Additional volume mounts",
-						Items: &JSONSchema{
-							Type:    "string",
-							Pattern: "^[^:]+:[^:]+$",
-						},
-					},
-					"args": {
-						Type:        "array",
-						Description: "Additional arguments for claude command",
-						Items: &JSONSchema{
-							Type: "string",
-						},
-					},
-					"output_format": {
-						Type:        "string",
-						Description: "Output format for piped input: text (default), json, or stream-json",
-						Enum:        []interface{}{"text", "json", "stream-json"},
-					},
-					"notes_dir": {
-						Type:        "string",
-						Description: "Notes directory to mount for agent to read/write",
-					},
-					"mount_workspace_at_host_path": {
-						Type:        "boolean",
-						Description: "Mount the host's git repository root to the same path inside the container. Useful for local Go module development.",
-					},
-					"use_superproject_root": {
-						Type:        "boolean",
-						Description: "Use the superproject (parent repository) root when in a git submodule. Useful for monorepo development.",
-					},
-				},
-			},
 		},
 	}
 }

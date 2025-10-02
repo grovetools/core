@@ -7,9 +7,8 @@ import (
 
 // Config represents the grove.yml configuration
 type Config struct {
-	Version    string      `yaml:"version"`
-	Agent      AgentConfig `yaml:"agent,omitempty"`
-	Workspaces []string    `yaml:"workspaces,omitempty"`
+	Version    string   `yaml:"version"`
+	Workspaces []string `yaml:"workspaces,omitempty"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	// This allows other tools in the Grove ecosystem to define their
@@ -17,34 +16,10 @@ type Config struct {
 	Extensions map[string]interface{} `yaml:",inline"`
 }
 
-// AgentConfig defines the configuration for the built-in Grove agent
-type AgentConfig struct {
-	Enabled                  bool     `yaml:"enabled"`
-	Image                    string   `yaml:"image"`
-	LogsPath                 string   `yaml:"logs_path"`
-	ExtraVolumes             []string `yaml:"extra_volumes"`
-	NotesDir                 string   `yaml:"notes_dir,omitempty"`
-	Args                     []string `yaml:"args"`
-	OutputFormat             string   `yaml:"output_format"` // text (default), json, or stream-json
-	MountWorkspaceAtHostPath bool     `yaml:"mount_workspace_at_host_path,omitempty"`
-	UseSuperprojectRoot      bool     `yaml:"use_superproject_root,omitempty"`
-}
-
 // SetDefaults sets default values for configuration
 func (c *Config) SetDefaults() {
 	if c.Version == "" {
 		c.Version = "1.0"
-	}
-
-	// Set Agent defaults
-	if c.Agent.Enabled {
-		if c.Agent.Image == "" {
-			// Default to v0.1.0 for now - this should be injected from CLI
-			c.Agent.Image = "ghcr.io/mattsolo1/grove-agent:v0.1.0"
-		}
-		if c.Agent.LogsPath == "" {
-			c.Agent.LogsPath = "~/.claude/projects"
-		}
 	}
 }
 

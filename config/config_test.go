@@ -116,9 +116,6 @@ settings:
   project_name: test-project
   network_name: custom-network
 
-agent:
-  enabled: true
-
 # Custom extension
 custom:
   feature: enabled
@@ -136,19 +133,30 @@ custom:
 		t.Errorf("Expected version '1.0', got '%s'", cfg.Version)
 	}
 
-	if cfg.Settings.ProjectName != "test-project" {
-		t.Errorf("Expected project name 'test-project', got '%s'", cfg.Settings.ProjectName)
+	// Verify settings extension is captured
+	if _, ok := cfg.Extensions["settings"]; !ok {
+		t.Error("Expected 'settings' extension to be present")
 	}
 
-	if cfg.Settings.NetworkName != "custom-network" {
-		t.Errorf("Expected network name 'custom-network', got '%s'", cfg.Settings.NetworkName)
+	// Unmarshal and verify settings
+	type SettingsConfig struct {
+		ProjectName string `yaml:"project_name"`
+		NetworkName string `yaml:"network_name"`
+	}
+	var settings SettingsConfig
+	if err := cfg.UnmarshalExtension("settings", &settings); err != nil {
+		t.Fatalf("Failed to unmarshal settings extension: %v", err)
 	}
 
-	if !cfg.Agent.Enabled {
-		t.Error("Expected agent to be enabled")
+	if settings.ProjectName != "test-project" {
+		t.Errorf("Expected project name 'test-project', got '%s'", settings.ProjectName)
 	}
 
-	// Verify extension is also captured
+	if settings.NetworkName != "custom-network" {
+		t.Errorf("Expected network name 'custom-network', got '%s'", settings.NetworkName)
+	}
+
+	// Verify custom extension is also captured
 	if _, ok := cfg.Extensions["custom"]; !ok {
 		t.Error("Expected 'custom' extension to be present")
 	}

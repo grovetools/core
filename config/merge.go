@@ -57,9 +57,6 @@ func mergeConfigs(base, override *Config) *Config {
 		result.Version = override.Version
 	}
 
-	// Merge agent
-	result.Agent = mergeAgent(result.Agent, override.Agent)
-
 	// Merge extensions
 	if override.Extensions != nil {
 		if result.Extensions == nil {
@@ -89,38 +86,4 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 
 	return &result
-}
-
-func mergeAgent(base, override AgentConfig) AgentConfig {
-	result := base
-
-	if override.Enabled {
-		result.Enabled = override.Enabled
-	}
-	if override.Image != "" {
-		result.Image = override.Image
-	}
-	if override.LogsPath != "" {
-		result.LogsPath = override.LogsPath
-	}
-	if len(override.ExtraVolumes) > 0 {
-		result.ExtraVolumes = override.ExtraVolumes
-	}
-	if override.NotesDir != "" {
-		result.NotesDir = override.NotesDir
-	}
-	if len(override.Args) > 0 {
-		result.Args = override.Args
-	}
-	if override.OutputFormat != "" {
-		result.OutputFormat = override.OutputFormat
-	}
-	if override.MountWorkspaceAtHostPath {
-		result.MountWorkspaceAtHostPath = override.MountWorkspaceAtHostPath
-	}
-	if override.UseSuperprojectRoot {
-		result.UseSuperprojectRoot = override.UseSuperprojectRoot
-	}
-
-	return result
 }
