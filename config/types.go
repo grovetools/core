@@ -146,3 +146,31 @@ func (c *Config) UnmarshalExtension(key string, target interface{}) error {
 
 	return nil
 }
+
+// ConfigSource identifies the origin of a configuration value.
+type ConfigSource string
+
+const (
+	SourceDefault   ConfigSource = "default"
+	SourceGlobal    ConfigSource = "global"
+	SourceProject   ConfigSource = "project"
+	SourceOverride  ConfigSource = "override"
+	SourceUnknown   ConfigSource = "unknown"
+)
+
+// OverrideSource holds a raw configuration from an override file and its path.
+type OverrideSource struct {
+	Path   string
+	Config *Config
+}
+
+// LayeredConfig holds the raw configuration from each source file,
+// as well as the final merged configuration, for analysis purposes.
+type LayeredConfig struct {
+	Default   *Config          // Config with only default values applied.
+	Global    *Config          // Raw config from the global file.
+	Project   *Config          // Raw config from the project file.
+	Overrides []OverrideSource // Raw configs from override files, in order of application.
+	Final     *Config          // The fully merged and validated config.
+	FilePaths map[ConfigSource]string // Maps sources to their file paths.
+}
