@@ -273,3 +273,155 @@ func TestServiceMerging(t *testing.T) {
 		t.Errorf("Expected new label 'new' to be 'label', got '%s'", result.Labels["new"])
 	}
 }
+
+// TestEcosystemConfigFallback tests that workspace configs inherit from ecosystem configs
+func TestEcosystemConfigFallback(t *testing.T) {
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+
+	// Set HOME to avoid loading global config
+	origHome := os.Getenv("HOME")
+	origXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() {
+		os.Setenv("HOME", origHome)
+		os.Setenv("XDG_CONFIG_HOME", origXDG)
+	}()
+	os.Setenv("HOME", tmpDir)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	// Create ecosystem directory
+	ecosystemDir := filepath.Join(tmpDir, "ecosystem")
+	if err := os.MkdirAll(ecosystemDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create ecosystem config (has workspaces field)
+	ecosystemConfig := `
+version: "1.0"
+workspaces:
+  - "workspace-*"
+
+settings:
+  project_name: ecosystem-project
+  network_name: ecosystem-network
+  mcp_port: 4000
+
+gemini:
+  model: gemini-1.5-flash-latest
+  max_tokens: 1000
+`
+	if err := os.WriteFile(filepath.Join(ecosystemDir, "grove.yml"), []byte(ecosystemConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create workspace directory
+	workspaceDir := filepath.Join(ecosystemDir, "workspace-app")
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create workspace config (no workspaces field)
+	workspaceConfig := `
+name: my-app
+description: My application
+
+settings:
+  project_name: my-app
+  mcp_port: 5000
+
+gemini:
+  model: gemini-1.5-pro-latest
+`
+	if err := os.WriteFile(filepath.Join(workspaceDir, "grove.yml"), []byte(workspaceConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load configuration from workspace directory
+	cfg, err := LoadFrom(workspaceDir)
+	if err != nil {
+		t.Fatalf("Failed to load config with ecosystem fallback: %v", err)
+	}
+
+	// Test that workspace settings override ecosystem settings
+	if cfg.Settings.ProjectName != "my-app" {
+		t.Errorf("Expected project_name 'my-app' from workspace, got '%s'", cfg.Settings.ProjectName)
+	}
+
+	if cfg.Settings.McpPort != 5000 {
+		t.Errorf("Expected mcp_port 5000 from workspace, got %d", cfg.Settings.McpPort)
+	}
+
+	// Test that ecosystem settings are inherited when not in workspace
+	if cfg.Settings.NetworkName != "ecosystem-network" {
+		t.Errorf("Expected network_name 'ecosystem-network' from ecosystem, got '%s'", cfg.Settings.NetworkName)
+	}
+
+	// Test extension merging from ecosystem
+	var geminiCfg struct {
+		Model     string `yaml:"model"`
+		MaxTokens int    `yaml:"max_tokens"`
+	}
+	if err := cfg.UnmarshalExtension("gemini", &geminiCfg); err != nil {
+		t.Fatalf("Failed to unmarshal gemini extension: %v", err)
+	}
+
+	// Model should be overridden by workspace
+	if geminiCfg.Model != "gemini-1.5-pro-latest" {
+		t.Errorf("Expected model 'gemini-1.5-pro-latest' from workspace, got '%s'", geminiCfg.Model)
+	}
+
+	// MaxTokens should come from ecosystem (not in workspace)
+	if geminiCfg.MaxTokens != 1000 {
+		t.Errorf("Expected max_tokens 1000 from ecosystem, got %d", geminiCfg.MaxTokens)
+	}
+}
+
+// TestNoEcosystemFallback tests that ecosystem configs work standalone without fallback
+func TestNoEcosystemFallback(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+
+	// Set HOME to avoid loading global config
+	origHome := os.Getenv("HOME")
+	origXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() {
+		os.Setenv("HOME", origHome)
+		os.Setenv("XDG_CONFIG_HOME", origXDG)
+	}()
+	os.Setenv("HOME", tmpDir)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	// Create ecosystem config (has workspaces field)
+	ecosystemConfig := `
+version: "1.0"
+workspaces:
+  - "workspace-*"
+
+settings:
+  project_name: ecosystem-only
+  mcp_port: 3000
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "grove.yml"), []byte(ecosystemConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load configuration from ecosystem directory
+	cfg, err := LoadFrom(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to load ecosystem config: %v", err)
+	}
+
+	// Test that ecosystem config is loaded properly
+	if cfg.Settings.ProjectName != "ecosystem-only" {
+		t.Errorf("Expected project_name 'ecosystem-only', got '%s'", cfg.Settings.ProjectName)
+	}
+
+	if cfg.Settings.McpPort != 3000 {
+		t.Errorf("Expected mcp_port 3000, got %d", cfg.Settings.McpPort)
+	}
+
+	// Should have workspaces field
+	if len(cfg.Workspaces) != 1 || cfg.Workspaces[0] != "workspace-*" {
+		t.Errorf("Expected workspaces ['workspace-*'], got %v", cfg.Workspaces)
+	}
+}

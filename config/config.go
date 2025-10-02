@@ -86,14 +86,42 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").
 			WithDetail("path", projectPath)
 	}
-	
+
 	expanded := expandEnvVars(string(projectData))
 	var projectConfig Config
 	if err := yaml.Unmarshal([]byte(expanded), &projectConfig); err != nil {
 		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").
 			WithDetail("path", projectPath)
 	}
-	
+
+	// Check if this is a workspace config (has no workspaces field) and look for ecosystem config
+	ecosystemPath := ""
+	if len(projectConfig.Workspaces) == 0 {
+		// This appears to be a workspace config, look for ecosystem config
+		ecosystemPath = findEcosystemConfig(filepath.Dir(projectPath))
+		if ecosystemPath != "" {
+			logger.WithField("path", ecosystemPath).Debug("Loading ecosystem configuration")
+			ecosystemData, err := os.ReadFile(ecosystemPath)
+			if err == nil {
+				expandedEco := expandEnvVars(string(ecosystemData))
+				var ecosystemConfig Config
+				if err := yaml.Unmarshal([]byte(expandedEco), &ecosystemConfig); err == nil {
+					// Merge ecosystem config after global but before project
+					if finalConfig == nil {
+						finalConfig = &ecosystemConfig
+					} else {
+						logger.Debug("Merging ecosystem configuration over global configuration")
+						finalConfig = mergeConfigs(finalConfig, &ecosystemConfig)
+					}
+				} else {
+					logger.WithError(err).Warn("Failed to parse ecosystem configuration, continuing without it")
+				}
+			} else {
+				logger.WithError(err).Warn("Failed to read ecosystem configuration, continuing without it")
+			}
+		}
+	}
+
 	if finalConfig == nil {
 		finalConfig = &projectConfig
 	} else {
@@ -296,11 +324,166 @@ func getXDGConfigPath() string {
 	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
 		return filepath.Join(xdgConfig, "grove", "grove.yml")
 	}
-	
+
 	// Fall back to ~/.config
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		return filepath.Join(homeDir, ".config", "grove", "grove.yml")
 	}
-	
+
 	return ""
+}
+
+// findEcosystemConfig searches upward from the given directory for a grove.yml
+// that has a 'workspaces' field (indicating it's an ecosystem config)
+func findEcosystemConfig(startDir string) string {
+	configNames := []string{
+		"grove.yml",
+		"grove.yaml",
+		".grove.yml",
+		".grove.yaml",
+	}
+
+	dir := filepath.Dir(startDir) // Start from parent of workspace
+	for {
+		for _, name := range configNames {
+			path := filepath.Join(dir, name)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				// Check if this config has workspaces field
+				data, err := os.ReadFile(path)
+				if err == nil {
+					expanded := expandEnvVars(string(data))
+					var cfg Config
+					if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
+						if len(cfg.Workspaces) > 0 {
+							return path
+						}
+					}
+				}
+			}
+		}
+
+		// Move to parent directory
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return ""
+}
+
+// LoadLayered finds and loads all configuration layers (global, project, overrides)
+// without merging them, for analysis purposes. It also computes the final merged config.
+func LoadLayered(startDir string) (*LayeredConfig, error) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.WarnLevel) // Suppress debug logs for this loader
+
+	layeredConfig := &LayeredConfig{
+		Overrides: make([]OverrideSource, 0),
+		FilePaths: make(map[ConfigSource]string),
+	}
+
+	// 1. Determine Default layer
+	defaultCfg := &Config{}
+	defaultCfg.SetDefaults()
+	// We don't run InferDefaults here as it depends on project structure which we haven't analyzed yet.
+	// It will be part of the final merged config.
+	layeredConfig.Default = defaultCfg
+
+	// 2. Load Global layer (optional)
+	globalPath := getXDGConfigPath()
+	if globalPath != "" {
+		if _, err := os.Stat(globalPath); err == nil {
+			globalData, err := os.ReadFile(globalPath)
+			if err == nil {
+				expanded := expandEnvVars(string(globalData))
+				var globalConfig Config
+				if err := yaml.Unmarshal([]byte(expanded), &globalConfig); err == nil {
+					layeredConfig.Global = &globalConfig
+					layeredConfig.FilePaths[SourceGlobal] = globalPath
+				}
+			}
+		}
+	}
+
+	// 3. Load Project layer (required)
+	projectPath, err := FindConfigFile(startDir)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to find project config file")
+	}
+	projectData, err := os.ReadFile(projectPath)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").WithDetail("path", projectPath)
+	}
+	expandedProject := expandEnvVars(string(projectData))
+	var projectConfig Config
+	if err := yaml.Unmarshal([]byte(expandedProject), &projectConfig); err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
+	}
+	layeredConfig.Project = &projectConfig
+	layeredConfig.FilePaths[SourceProject] = projectPath
+
+	// 4. Load Override layers (optional)
+	projectDir := filepath.Dir(projectPath)
+	overrideFiles := []string{
+		filepath.Join(projectDir, "grove.override.yml"),
+		filepath.Join(projectDir, "grove.override.yaml"),
+		filepath.Join(projectDir, ".grove.override.yml"),
+		filepath.Join(projectDir, ".grove.override.yaml"),
+		// This also includes the previously named .grove-work.yml/.yaml
+		filepath.Join(projectDir, ".grove-work.yml"),
+		filepath.Join(projectDir, ".grove-work.yaml"),
+	}
+	for _, overridePath := range overrideFiles {
+		if _, err := os.Stat(overridePath); err == nil {
+			overrideData, err := os.ReadFile(overridePath)
+			if err != nil {
+				continue // Skip unreadable override files
+			}
+			expandedOverride := expandEnvVars(string(overrideData))
+			var overrideConfig Config
+			if err := yaml.Unmarshal([]byte(expandedOverride), &overrideConfig); err == nil {
+				layeredConfig.Overrides = append(layeredConfig.Overrides, OverrideSource{
+					Path:   overridePath,
+					Config: &overrideConfig,
+				})
+			}
+		}
+	}
+
+	// 5. Compute Final merged config
+	// This logic is duplicated from LoadFrom, but necessary to build the final config for analysis.
+	finalConfig := &Config{}
+
+	// Start with global if it exists
+	if layeredConfig.Global != nil {
+		finalConfig = layeredConfig.Global
+	}
+
+	// Merge project config
+	if layeredConfig.Project != nil {
+		finalConfig = mergeConfigs(finalConfig, layeredConfig.Project)
+	}
+
+	// Merge overrides
+	for _, override := range layeredConfig.Overrides {
+		finalConfig = mergeConfigs(finalConfig, override.Config)
+	}
+
+	// Set defaults and validate the final merged config
+	finalConfig.SetDefaults()
+	if finalConfig.Settings.AutoInference == nil || *finalConfig.Settings.AutoInference {
+		finalConfig.InferDefaults()
+	}
+	if err := finalConfig.Validate(); err != nil {
+		return nil, err
+	}
+	if err := finalConfig.ValidateSemantics(); err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "semantic validation failed")
+	}
+
+	layeredConfig.Final = finalConfig
+
+	return layeredConfig, nil
 }

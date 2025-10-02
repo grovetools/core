@@ -12,7 +12,8 @@ A package for building command-line interfaces using the Cobra library.
 
 ### config
 A system for managing `grove.yml` configuration files.
-*   **Hierarchical Loading**: Merges configuration from global (`~/.config/grove/grove.yml`), project (`grove.yml`), and local override (`grove.override.yml`) files.
+*   **Hierarchical Loading**: Merges configuration from global (`~/.config/grove/grove.yml`), ecosystem (`grove.yml` with `workspaces`), workspace (`grove.yml`), and local override (`grove.override.yml`) files.
+*   **Ecosystem Fallback**: When loading a workspace config, automatically searches upward for an ecosystem config (identified by the presence of a `workspaces` field) and merges it into the hierarchy.
 *   **Local Override Files**: Supports `grove.override.yml` (or `.grove.override.yml` for hidden files) for local, uncommitted configuration overrides (e.g., API keys, environment-specific settings). These files should be added to `.gitignore` to prevent accidental commits of secrets.
 *   **Schema and Validation**: Defines the `grove.yml` structure and validates configurations against a JSON schema and semantic rules, such as checking for port conflicts.
 *   **Extensibility**: Allows other Grove tools to define and access their own top-level sections within `grove.yml` via an `Extensions` map.
