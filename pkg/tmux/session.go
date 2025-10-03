@@ -26,7 +26,9 @@ func (c *Client) KillSession(ctx context.Context, sessionName string) error {
 }
 
 func (c *Client) CapturePane(ctx context.Context, target string) (string, error) {
-	output, err := c.run(ctx, "capture-pane", "-p", "-t", target)
+	// Use -e flag to preserve ANSI escape codes (colors, formatting, etc.)
+	// Use -p flag to print to stdout
+	output, err := c.run(ctx, "capture-pane", "-e", "-p", "-t", target)
 	if err != nil {
 		return "", err
 	}
