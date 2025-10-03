@@ -1,6 +1,8 @@
 package table
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
 	"github.com/mattsolo1/grove-core/tui/theme"
@@ -223,6 +225,7 @@ func StatusTable(items [][]string) string {
 }
 
 // SelectableTable creates a table suitable for selection interfaces
+// The selection indicator (▶) is rendered on the right side of the table, outside the border
 func SelectableTable(headers []string, rows [][]string, selectedIndex int) string {
 	t := theme.DefaultTheme
 	table := ltable.New().
@@ -231,22 +234,25 @@ func SelectableTable(headers []string, rows [][]string, selectedIndex int) strin
 		Headers(headers...)
 
 	// Apply styling with selection highlight
+	// IMPORTANT: In lipgloss table StyleFunc, when headers are set via .Headers(),
+	// they are styled SEPARATELY and row indices in StyleFunc start at 0 for DATA rows only!
+	// So: row 0 = first data row, row 1 = second data row, etc.
 	table = table.StyleFunc(func(row, col int) lipgloss.Style {
-		if row == 0 {
-			// Header
-			return t.TableHeader
+		// row 0 = first data row, row 1 = second data row, etc.
+		// selectedIndex is 0-based: 0 = first task, 1 = second task, etc.
+		// So we need: row == selectedIndex
+		if row == selectedIndex {
+			// Apply selected style. .Copy() prevents modifying the base theme style.
+			return t.Selected.Copy()
 		}
 
-		// Check if this is the selected row (row-1 because headers are row 0)
-		if row-1 == selectedIndex {
-			return t.Selected
+		// Regular data rows
+		style := t.TableRow.Copy()
+		// Apply alternating background for even data rows (2nd, 4th, etc.)
+		if row%2 == 1 {
+			style = style.Background(theme.VerySubtleBackground)
 		}
-
-		// Regular row
-		if row%2 == 0 {
-			return t.TableRow.Background(theme.VerySubtleBackground)
-		}
-		return t.TableRow
+		return style
 	})
 
 	// Add rows
@@ -254,5 +260,32 @@ func SelectableTable(headers []string, rows [][]string, selectedIndex int) strin
 		table = table.Row(r...)
 	}
 
-	return table.String()
+	// Render the table and add selection indicator on the right
+	tableStr := table.String()
+	lines := strings.Split(tableStr, "\n")
+
+	// Calculate which line the selected row is on
+	// Line 0: top border
+	// Line 1: header row
+	// Line 2: separator line after header
+	// Line 3+: data rows (first data row is at index 3)
+	selectedLineIndex := 3 + selectedIndex
+
+	// Add the indicator to each line
+	result := ""
+	for i, line := range lines {
+		result += line
+		// Add the indicator only on the selected row's line
+		if i == selectedLineIndex {
+			result += " ◀"
+		}
+		result += "\n"
+	}
+
+	// Remove the trailing newline to match original behavior
+	if len(result) > 0 && result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+
+	return result
 }
