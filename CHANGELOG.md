@@ -1,3 +1,5 @@
+## v0.4.1-nightly.516efdf (2025-10-03)
+
 ## v0.4.0 (2025-10-01)
 
 This release introduces a centralized TUI toolkit to create a consistent look and feel across all Grove command-line tools. The new `tui` package includes a foundational theme system based on the Kanagawa Dragon color palette (cccf82e, 45a4811), a standardized keymap with vim-style navigation (aec0078), and reusable components for rendering help menus (d71c14f), tables, and other UI elements (a8dc6e1). As part of this effort, existing help menus have been refactored to use the new centralized component, reducing code duplication and improving consistency.
