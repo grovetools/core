@@ -5,10 +5,34 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
+// GrovesConfig defines the configuration for a single search path.
+type GrovesConfig struct {
+	Path        string `yaml:"path"`
+	Enabled     bool   `yaml:"enabled"`
+	Description string `yaml:"description,omitempty"`
+}
+
+// ExplicitProject defines a specific project to include regardless of discovery.
+type ExplicitProject struct {
+	Path        string `yaml:"path"`
+	Name        string `yaml:"name,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	Enabled     bool   `yaml:"enabled"`
+}
+
 // Config represents the grove.yml configuration
 type Config struct {
+	Name       string   `yaml:"name,omitempty"`
 	Version    string   `yaml:"version"`
 	Workspaces []string `yaml:"workspaces,omitempty"`
+
+	// Groves defines the root directories to search for projects and ecosystems.
+	// This is typically set in the global ~/.config/grove/grove.yml file.
+	Groves map[string]GrovesConfig `yaml:"groves,omitempty"`
+
+	// ExplicitProjects defines specific projects to include without discovery.
+	// Useful for including individual directories that don't fit the grove model.
+	ExplicitProjects []ExplicitProject `yaml:"explicit_projects,omitempty"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	// This allows other tools in the Grove ecosystem to define their
