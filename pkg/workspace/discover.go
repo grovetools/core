@@ -107,7 +107,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					if _, statErr := os.Stat(parentGroveYml); statErr == nil {
 						parentCfg, loadErr := config.Load(parentGroveYml)
 						if loadErr == nil && len(parentCfg.Workspaces) > 0 {
-							// Parent is an ecosystem - treat each worktree as a single project
+							// Parent is an ecosystem - treat each worktree as a project
 							if entries, readErr := os.ReadDir(path); readErr == nil {
 								for _, entry := range entries {
 									if entry.IsDir() {
@@ -129,8 +129,9 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 									}
 								}
 							}
-							// Skip descending into ecosystem worktrees to avoid discovering submodules
-							return filepath.SkipDir
+							// Continue descending into ecosystem worktrees to discover repos/submodules within them
+							// This allows focusing on an ecosystem worktree to show all its contained repos
+							return nil
 						}
 					}
 					// If not an ecosystem's .grove-worktrees, continue normally
@@ -332,12 +333,31 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	// 5. Final pass to link Projects to their parent Ecosystems.
+	// First build a list of all potential ecosystem paths (ecosystems + ecosystem worktrees)
+	ecosystemPaths := make([]string, 0, len(result.Ecosystems)+len(result.Projects))
+	for _, eco := range result.Ecosystems {
+		ecosystemPaths = append(ecosystemPaths, eco.Path)
+	}
+	// Also include ecosystem worktrees (projects that have a ParentEcosystemPath set)
+	for _, proj := range result.Projects {
+		if proj.ParentEcosystemPath != "" {
+			ecosystemPaths = append(ecosystemPaths, proj.Path)
+		}
+	}
+
+	// Now link each project to its closest parent ecosystem
 	for i := range result.Projects {
-		for _, eco := range result.Ecosystems {
-			if strings.HasPrefix(result.Projects[i].Path, eco.Path+string(filepath.Separator)) {
-				result.Projects[i].ParentEcosystemPath = eco.Path
-				break
+		// Find the most specific (longest) matching ecosystem path
+		var bestMatch string
+		for _, ecoPath := range ecosystemPaths {
+			if strings.HasPrefix(result.Projects[i].Path, ecoPath+string(filepath.Separator)) {
+				if len(ecoPath) > len(bestMatch) {
+					bestMatch = ecoPath
+				}
 			}
+		}
+		if bestMatch != "" {
+			result.Projects[i].ParentEcosystemPath = bestMatch
 		}
 	}
 
