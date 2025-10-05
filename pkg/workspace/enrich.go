@@ -31,14 +31,45 @@ type claudeSessionRaw struct {
 	StateDurationSeconds int    `json:"state_duration_seconds"`
 }
 
+// EnrichmentOptions controls which data to fetch and for which projects
+type EnrichmentOptions struct {
+	// FetchClaudeSessions controls whether to fetch Claude session data
+	FetchClaudeSessions bool
+
+	// FetchGitStatus controls whether to fetch Git status
+	FetchGitStatus bool
+
+	// GitStatusPaths limits Git status fetching to specific paths
+	// If nil or empty, fetches for all projects
+	GitStatusPaths map[string]bool
+}
+
+// DefaultEnrichmentOptions returns options that fetch everything for all projects
+func DefaultEnrichmentOptions() *EnrichmentOptions {
+	return &EnrichmentOptions{
+		FetchClaudeSessions: true,
+		FetchGitStatus:      true,
+		GitStatusPaths:      nil, // nil means all projects
+	}
+}
+
 // EnrichProjects updates ProjectInfo items in-place with Git and Claude session data.
 // This function fetches runtime state concurrently and efficiently.
-func EnrichProjects(ctx context.Context, projects []*ProjectInfo) error {
-	// Fetch Claude sessions once
-	claudeSessionMap, err := fetchClaudeSessionMap()
-	if err != nil {
-		// Non-fatal - just log and continue without Claude session enrichment
-		// In production, consider using a logger
+// Use options to control what data is fetched and for which projects.
+func EnrichProjects(ctx context.Context, projects []*ProjectInfo, opts *EnrichmentOptions) error {
+	if opts == nil {
+		opts = DefaultEnrichmentOptions()
+	}
+
+	// Fetch Claude sessions once if requested
+	var claudeSessionMap map[string]*ClaudeSessionInfo
+	if opts.FetchClaudeSessions {
+		var err error
+		claudeSessionMap, err = fetchClaudeSessionMap()
+		if err != nil {
+			// Non-fatal - just log and continue without Claude session enrichment
+			// In production, consider using a logger
+		}
 	}
 
 	// Create a wait group for concurrent Git status fetching
@@ -50,21 +81,30 @@ func EnrichProjects(ctx context.Context, projects []*ProjectInfo) error {
 		project := projects[i]
 
 		// Attach Claude session info if available
-		if session, ok := claudeSessionMap[project.Path]; ok {
-			project.ClaudeSession = session
+		if claudeSessionMap != nil {
+			if session, ok := claudeSessionMap[project.Path]; ok {
+				project.ClaudeSession = session
+			}
 		}
 
-		// Fetch Git status concurrently
-		wg.Add(1)
-		go func(p *ProjectInfo) {
-			defer wg.Done()
-			semaphore <- struct{}{}        // Acquire semaphore
-			defer func() { <-semaphore }() // Release semaphore
+		// Fetch Git status concurrently if requested
+		if opts.FetchGitStatus {
+			// Check if this project should have Git status fetched
+			shouldFetch := opts.GitStatusPaths == nil || opts.GitStatusPaths[project.Path]
 
-			if extStatus, err := fetchGitStatusForPath(p.Path); err == nil {
-				p.GitStatus = extStatus
+			if shouldFetch {
+				wg.Add(1)
+				go func(p *ProjectInfo) {
+					defer wg.Done()
+					semaphore <- struct{}{}        // Acquire semaphore
+					defer func() { <-semaphore }() // Release semaphore
+
+					if extStatus, err := fetchGitStatusForPath(p.Path); err == nil {
+						p.GitStatus = extStatus
+					}
+				}(project)
 			}
-		}(project)
+		}
 	}
 
 	// Wait for all git status fetches to complete
