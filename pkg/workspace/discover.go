@@ -141,9 +141,10 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 				// Check for grove.yml to classify the directory
 				groveYmlPath := filepath.Join(path, "grove.yml")
 				if _, statErr := os.Stat(groveYmlPath); statErr == nil {
-					// Skip re-processing directories inside .grove-worktrees
-					// These have already been classified as worktree workspaces by their parent project
-					if strings.Contains(path, ".grove-worktrees") {
+					// Skip re-processing only if this is a direct child of .grove-worktrees
+					// (the worktree directory itself, which was already classified above)
+					// But DO process subdirectories within worktrees (submodules, nested repos)
+					if filepath.Base(filepath.Dir(path)) == ".grove-worktrees" {
 						return nil
 					}
 
