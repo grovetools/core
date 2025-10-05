@@ -227,6 +227,16 @@ func StatusTable(items [][]string) string {
 // SelectableTable creates a table suitable for selection interfaces
 // The selection indicator (▶) is rendered on the right side of the table, outside the border
 func SelectableTable(headers []string, rows [][]string, selectedIndex int) string {
+	return SelectableTableWithOptions(headers, rows, selectedIndex, SelectableTableOptions{})
+}
+
+// SelectableTableOptions provides configuration for SelectableTable
+type SelectableTableOptions struct {
+	HighlightColumn int // Column index to highlight (0-based), -1 for no highlight
+}
+
+// SelectableTableWithOptions creates a table with custom highlighting options
+func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex int, opts SelectableTableOptions) string {
 	t := theme.DefaultTheme
 	table := ltable.New().
 		Border(lipgloss.RoundedBorder()).
@@ -243,11 +253,22 @@ func SelectableTable(headers []string, rows [][]string, selectedIndex int) strin
 		// So we need: row == selectedIndex
 		if row == selectedIndex {
 			// Apply selected style. .Copy() prevents modifying the base theme style.
-			return t.Selected.Copy()
+			style := t.Selected.Copy().Padding(0, 1)
+			// If this is the highlight column, make it bold
+			if opts.HighlightColumn >= 0 && col == opts.HighlightColumn {
+				style = style.Bold(true)
+			}
+			return style
 		}
 
-		// Regular data rows
-		style := t.TableRow.Copy()
+		// Regular data rows with padding
+		style := t.TableRow.Copy().Padding(0, 1)
+
+		// Apply column-specific highlighting
+		if opts.HighlightColumn >= 0 && col == opts.HighlightColumn {
+			style = t.Highlight.Copy().Padding(0, 1).Bold(true)
+		}
+
 		// Apply alternating background for even data rows (2nd, 4th, etc.)
 		if row%2 == 1 {
 			style = style.Background(theme.VerySubtleBackground)
