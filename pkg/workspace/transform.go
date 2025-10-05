@@ -22,9 +22,31 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 
 	// Then process all discovered projects
 	for _, proj := range result.Projects {
-		// Check if this is an ecosystem worktree (has ParentEcosystemPath and is in .grove-worktrees)
-		isEcosystemWorktree := proj.ParentEcosystemPath != "" &&
-			strings.Contains(proj.Path, filepath.Join(proj.ParentEcosystemPath, ".grove-worktrees"))
+		// Extract worktree name if this project is inside .grove-worktrees
+		worktreeName := ""
+		if proj.ParentEcosystemPath != "" && strings.Contains(proj.Path, ".grove-worktrees") {
+			// Extract worktree name from path like: /eco/.grove-worktrees/my-branch/sub-project
+			relPath, err := filepath.Rel(proj.ParentEcosystemPath, proj.Path)
+			if err == nil {
+				parts := strings.Split(relPath, string(filepath.Separator))
+				if len(parts) >= 2 && parts[0] == ".grove-worktrees" {
+					worktreeName = parts[1]
+				}
+			}
+		}
+
+		// Check if this is an ecosystem worktree (has ParentEcosystemPath and IS the worktree directory itself)
+		// A worktree directory is: /eco/.grove-worktrees/branch-name
+		// A sub-project inside worktree is: /eco/.grove-worktrees/branch-name/sub-project
+		isEcosystemWorktree := false
+		if proj.ParentEcosystemPath != "" && strings.Contains(proj.Path, ".grove-worktrees") {
+			relPath, err := filepath.Rel(proj.ParentEcosystemPath, proj.Path)
+			if err == nil {
+				parts := strings.Split(relPath, string(filepath.Separator))
+				// It's a worktree if the path is exactly: .grove-worktrees/worktree-name
+				isEcosystemWorktree = len(parts) == 2 && parts[0] == ".grove-worktrees"
+			}
+		}
 
 		if isEcosystemWorktree {
 			// Ecosystem worktrees should be treated as worktrees of the ecosystem
@@ -35,6 +57,7 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 				Path:                proj.Path,
 				ParentPath:          proj.ParentEcosystemPath,
 				IsWorktree:          true,
+				WorktreeName:        worktreeName,
 				ParentEcosystemPath: proj.ParentEcosystemPath,
 				IsEcosystem:         true, // Ecosystem worktrees are also ecosystems
 			})
@@ -44,6 +67,7 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 				Name:                proj.Name,
 				Path:                proj.Path,
 				IsWorktree:          false,
+				WorktreeName:        worktreeName,
 				ParentEcosystemPath: proj.ParentEcosystemPath,
 			})
 

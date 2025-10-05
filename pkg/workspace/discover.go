@@ -346,8 +346,10 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		ecosystemPaths = append(ecosystemPaths, eco.Path)
 	}
 	// Also include ecosystem worktrees (projects that have a ParentEcosystemPath set)
+	// but exclude paths that are inside .grove-worktrees directories as those are
+	// worktree checkouts, not ecosystem roots
 	for _, proj := range result.Projects {
-		if proj.ParentEcosystemPath != "" {
+		if proj.ParentEcosystemPath != "" && !strings.Contains(proj.Path, ".grove-worktrees") {
 			ecosystemPaths = append(ecosystemPaths, proj.Path)
 		}
 	}

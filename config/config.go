@@ -315,18 +315,20 @@ func FindEcosystemConfig(startDir string) string {
 
 	dir := filepath.Dir(startDir) // Start from parent of workspace
 	for {
-		for _, name := range configNames {
-			path := filepath.Join(dir, name)
-			if info, err := os.Stat(path); err == nil && !info.IsDir() {
-				// Check if this config has workspaces field in the proxy extension
-				data, err := os.ReadFile(path)
-				if err == nil {
-					expanded := expandEnvVars(string(data))
-					var cfg Config
-					if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
-						// Check if the proxy extension has workspaces
-						if proxyExt, ok := cfg.Extensions["proxy"].(map[string]interface{}); ok {
-							if workspaces, ok := proxyExt["workspaces"].([]interface{}); ok && len(workspaces) > 0 {
+		// Skip any directory that is inside .grove-worktrees, as these are worktrees
+		// and not the actual ecosystem root
+		if !strings.Contains(dir, ".grove-worktrees") {
+			for _, name := range configNames {
+				path := filepath.Join(dir, name)
+				if info, err := os.Stat(path); err == nil && !info.IsDir() {
+					// Check if this config has workspaces field
+					data, err := os.ReadFile(path)
+					if err == nil {
+						expanded := expandEnvVars(string(data))
+						var cfg Config
+						if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
+							// An ecosystem config is identified by having a non-empty 'workspaces' field.
+							if len(cfg.Workspaces) > 0 {
 								return path
 							}
 						}

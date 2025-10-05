@@ -30,6 +30,16 @@ func FilterByFocus(projects []*workspace.ProjectInfo, focus *workspace.ProjectIn
 		}
 	}
 
+	// If the focused project is an ecosystem worktree, also include projects
+	// that have a WorktreeName matching this worktree's name
+	if focus.IsWorktree && focus.IsEcosystem && focus.WorktreeName != "" {
+		for _, p := range projects {
+			if p.WorktreeName == focus.WorktreeName && p.Path != focus.Path {
+				result = append(result, p)
+			}
+		}
+	}
+
 	return result
 }
 

@@ -77,8 +77,9 @@ type ClaudeSessionInfo struct {
 type ProjectInfo struct {
 	Name                string `json:"name"`
 	Path                string `json:"path"`
-	ParentPath          string `json:"parent_path,omitempty"`          // For worktrees, path to the parent repository
+	ParentPath          string `json:"parent_path,omitempty"`           // For worktrees, path to the parent repository
 	IsWorktree          bool   `json:"is_worktree"`
+	WorktreeName        string `json:"worktree_name,omitempty"`         // For projects inside an ecosystem worktree
 	ParentEcosystemPath string `json:"parent_ecosystem_path,omitempty"` // For sub-projects, path to parent ecosystem
 	IsEcosystem         bool   `json:"is_ecosystem"`
 

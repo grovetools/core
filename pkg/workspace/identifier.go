@@ -2,9 +2,7 @@ package workspace
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/mattsolo1/grove-core/util/sanitize"
 )
@@ -15,44 +13,37 @@ import (
 func (p *ProjectInfo) SessionIdentifier() string {
 	// Sanitize helper
 	s := func(name string) string {
-		return sanitize.ForDomainPart(name)
+		return sanitize.SanitizeForTmuxSession(name)
 	}
 
 	// Case 1: Project is inside an ecosystem's worktree directory.
-	// Path example: /path/to/my-eco/.grove-worktrees/feature-branch/sub-repo
-	if p.ParentEcosystemPath != "" && strings.Contains(p.Path, ".grove-worktrees") {
+	// Uses the WorktreeName field from the data model.
+	if p.ParentEcosystemPath != "" && p.WorktreeName != "" {
 		ecoName := s(filepath.Base(p.ParentEcosystemPath))
+		worktreeName := s(p.WorktreeName)
 
-		relPath, err := filepath.Rel(p.ParentEcosystemPath, p.Path)
-		if err == nil {
-			pathParts := strings.Split(relPath, string(os.PathSeparator))
-			if len(pathParts) > 1 && pathParts[0] == ".grove-worktrees" {
-				worktreeName := s(pathParts[1])
-
-				// The project *is* the worktree directory itself.
-				if len(pathParts) == 2 {
-					return fmt.Sprintf("%s-%s", ecoName, worktreeName)
-				}
-
-				// It's a sub-project within the worktree.
-				projectName := s(p.Name)
-				return fmt.Sprintf("%s-%s-%s", ecoName, worktreeName, projectName)
-			}
+		// Check if this project *is* the worktree directory itself (an ecosystem worktree)
+		if p.IsWorktree && p.IsEcosystem {
+			return fmt.Sprintf("%s_%s", ecoName, worktreeName)
 		}
+
+		// It's a sub-project within the worktree
+		projectName := s(p.Name)
+		return fmt.Sprintf("%s_%s_%s", ecoName, worktreeName, projectName)
 	}
 
 	// Case 2: Project is a worktree, but not part of an ecosystem.
 	if p.IsWorktree && p.ParentPath != "" {
 		parentName := s(filepath.Base(p.ParentPath))
 		projectName := s(p.Name)
-		return fmt.Sprintf("%s-%s", parentName, projectName)
+		return fmt.Sprintf("%s_%s", parentName, projectName)
 	}
 
 	// Case 3: A sub-project of an ecosystem (e.g., a submodule in the main repo).
 	if p.ParentEcosystemPath != "" && p.Path != p.ParentEcosystemPath {
 		ecoName := s(filepath.Base(p.ParentEcosystemPath))
 		projectName := s(p.Name)
-		return fmt.Sprintf("%s-%s", ecoName, projectName)
+		return fmt.Sprintf("%s_%s", ecoName, projectName)
 	}
 
 	// Case 4: Standalone project or an ecosystem's main repository.
