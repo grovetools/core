@@ -7,10 +7,10 @@ import (
 	"github.com/mattsolo1/grove-core/util/sanitize"
 )
 
-// SessionIdentifier generates a unique, sanitized identifier for a project,
-// suitable for use as a tmux session name. It creates namespaced identifiers for
-// projects within ecosystem worktrees.
-func (p *ProjectInfo) SessionIdentifier() string {
+// Identifier generates a unique, sanitized identifier for a project,
+// suitable for use as a tmux session name or other unique identifier.
+// It creates namespaced identifiers for projects within ecosystem worktrees.
+func (p *ProjectInfo) Identifier() string {
 	// Sanitize helper
 	s := func(name string) string {
 		return sanitize.SanitizeForTmuxSession(name)
