@@ -98,7 +98,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	ecosystemPath := ""
 	if len(projectConfig.Workspaces) == 0 {
 		// This appears to be a workspace config, look for ecosystem config
-		ecosystemPath = findEcosystemConfig(filepath.Dir(projectPath))
+		ecosystemPath = FindEcosystemConfig(filepath.Dir(projectPath))
 		if ecosystemPath != "" {
 			logger.WithField("path", ecosystemPath).Debug("Loading ecosystem configuration")
 			ecosystemData, err := os.ReadFile(ecosystemPath)
@@ -303,9 +303,9 @@ func getXDGConfigPath() string {
 	return ""
 }
 
-// findEcosystemConfig searches upward from the given directory for a grove.yml
+// FindEcosystemConfig searches upward from the given directory for a grove.yml
 // that has a 'workspaces' field (indicating it's an ecosystem config)
-func findEcosystemConfig(startDir string) string {
+func FindEcosystemConfig(startDir string) string {
 	configNames := []string{
 		"grove.yml",
 		"grove.yaml",
