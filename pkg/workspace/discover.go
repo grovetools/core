@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -371,4 +372,43 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	return result, nil
+}
+
+// FindEcosystemRoot searches upward from startDir to find a grove.yml containing a 'workspaces' key.
+func FindEcosystemRoot(startDir string) (string, error) {
+	if startDir == "" {
+		var err error
+		startDir, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get current directory: %w", err)
+		}
+	}
+
+	// Make startDir absolute
+	absStart, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	current := absStart
+	for {
+		groveYmlPath := filepath.Join(current, "grove.yml")
+		if _, err := os.Stat(groveYmlPath); err == nil {
+			// Load config to check if it has workspaces
+			cfg, err := config.Load(groveYmlPath)
+			if err == nil && len(cfg.Workspaces) > 0 {
+				return current, nil
+			}
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached root of filesystem
+			break
+		}
+		current = parent
+	}
+
+	return "", fmt.Errorf("no grove.yml with workspaces found in %s or parent directories", absStart)
 }
