@@ -47,6 +47,12 @@ type Project struct {
 	ModulePath          string                `json:"module_path,omitempty"`
 	ParentEcosystemPath string                `json:"parent_ecosystem_path,omitempty"`
 	Workspaces          []DiscoveredWorkspace `json:"workspaces"`
+
+	// Cloned repository-specific fields (populated by discovery for cx repo managed repos)
+	Version     string `json:"version,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	AuditStatus string `json:"audit_status,omitempty"`
+	ReportPath  string `json:"report_path,omitempty"`
 }
 
 // Ecosystem represents a top-level meta-repository.
@@ -86,4 +92,10 @@ type ProjectInfo struct {
 	// Optional, enriched data (populated by EnrichProjects)
 	GitStatus     interface{}        `json:"git_status,omitempty"`      // Using interface{} to avoid circular import with git package
 	ClaudeSession *ClaudeSessionInfo `json:"claude_session,omitempty"`
+
+	// Cloned repository-specific fields (populated by discovery)
+	Version     string `json:"version,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	AuditStatus string `json:"audit_status,omitempty"`
+	ReportPath  string `json:"report_path,omitempty"`
 }

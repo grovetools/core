@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/pkg/repo"
 	"github.com/sirupsen/logrus"
 )
 
@@ -66,7 +67,21 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	var wg sync.WaitGroup
-	resultsChan := make(chan groveResult, len(layeredCfg.Global.Groves))
+	resultsChan := make(chan groveResult, len(layeredCfg.Global.Groves)+1) // +1 for cloned repos
+
+	// Discover cloned repositories concurrently
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cloned, err := s.discoverClonedProjects()
+		if err != nil {
+			s.logger.Warnf("Could not discover cloned repositories: %v", err)
+			return
+		}
+		if len(cloned) > 0 {
+			resultsChan <- groveResult{projects: cloned}
+		}
+	}()
 
 	for key, groveCfg := range layeredCfg.Global.Groves {
 		if !groveCfg.Enabled {
@@ -411,4 +426,49 @@ func FindEcosystemRoot(startDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no grove.yml with workspaces found in %s or parent directories", absStart)
+}
+
+// discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
+func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
+	manager, err := repo.NewManager()
+	if err != nil {
+		return nil, err
+	}
+
+	cloned, err := manager.List()
+	if err != nil {
+		return nil, err
+	}
+
+	var projects []Project
+	for _, r := range cloned {
+		// Extract a simpler name from the URL
+		name := r.URL
+		if parts := strings.Split(name, "/"); len(parts) > 1 {
+			name = parts[len(parts)-1]
+		}
+		name = strings.TrimSuffix(name, ".git")
+
+		// Convert repo.RepoInfo to workspace.Project
+		proj := Project{
+			Name:        name,
+			Path:        r.LocalPath,
+			Type:        "Cloned",
+			Version:     r.PinnedVersion,
+			Commit:      r.ResolvedCommit,
+			AuditStatus: r.Audit.Status,
+			ReportPath:  r.Audit.ReportPath,
+			Workspaces: []DiscoveredWorkspace{
+				{
+					Name:              "main",
+					Path:              r.LocalPath,
+					Type:              WorkspaceTypePrimary,
+					ParentProjectPath: r.LocalPath,
+				},
+			},
+		}
+		projects = append(projects, proj)
+	}
+
+	return projects, nil
 }

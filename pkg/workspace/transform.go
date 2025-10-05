@@ -69,6 +69,10 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 				IsWorktree:          false,
 				WorktreeName:        worktreeName,
 				ParentEcosystemPath: proj.ParentEcosystemPath,
+				Version:             proj.Version,
+				Commit:              proj.Commit,
+				AuditStatus:         proj.AuditStatus,
+				ReportPath:          proj.ReportPath,
 			})
 
 			// Add all associated Worktree Workspaces
