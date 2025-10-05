@@ -62,3 +62,27 @@ type DiscoveryResult struct {
 	Ecosystems          []Ecosystem `json:"ecosystems"`
 	NonGroveDirectories []string   `json:"non_grove_directories,omitempty"`
 }
+
+// ClaudeSessionInfo holds information about an active Claude session.
+type ClaudeSessionInfo struct {
+	ID       string `json:"id"`
+	PID      int    `json:"pid"`
+	Status   string `json:"status"`
+	Duration string `json:"duration"`
+}
+
+// ProjectInfo is the enriched display model for projects.
+// It represents a flattened, view-friendly project item suitable for UIs.
+// It can represent an ecosystem, a primary project repository, or a worktree.
+type ProjectInfo struct {
+	Name                string `json:"name"`
+	Path                string `json:"path"`
+	ParentPath          string `json:"parent_path,omitempty"`          // For worktrees, path to the parent repository
+	IsWorktree          bool   `json:"is_worktree"`
+	ParentEcosystemPath string `json:"parent_ecosystem_path,omitempty"` // For sub-projects, path to parent ecosystem
+	IsEcosystem         bool   `json:"is_ecosystem"`
+
+	// Optional, enriched data (populated by EnrichProjects)
+	GitStatus     interface{}        `json:"git_status,omitempty"`      // Using interface{} to avoid circular import with git package
+	ClaudeSession *ClaudeSessionInfo `json:"claude_session,omitempty"`
+}
