@@ -69,6 +69,12 @@ type DiscoveryResult struct {
 	NonGroveDirectories []string   `json:"non_grove_directories,omitempty"`
 }
 
+// NoteCounts holds counts of specific note types for a workspace.
+type NoteCounts struct {
+	Current int `json:"current"`
+	Issues  int `json:"issues"`
+}
+
 // ClaudeSessionInfo holds information about an active Claude session.
 type ClaudeSessionInfo struct {
 	ID       string `json:"id"`
@@ -92,6 +98,7 @@ type ProjectInfo struct {
 	// Optional, enriched data (populated by EnrichProjects)
 	GitStatus     interface{}        `json:"git_status,omitempty"`      // Using interface{} to avoid circular import with git package
 	ClaudeSession *ClaudeSessionInfo `json:"claude_session,omitempty"`
+	NoteCounts    *NoteCounts        `json:"note_counts,omitempty"`
 
 	// Cloned repository-specific fields (populated by discovery)
 	Version     string `json:"version,omitempty"`

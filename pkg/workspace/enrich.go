@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,9 @@ type claudeSessionRaw struct {
 
 // EnrichmentOptions controls which data to fetch and for which projects
 type EnrichmentOptions struct {
+	// FetchNoteCounts controls whether to fetch note count data from nb
+	FetchNoteCounts bool
+
 	// FetchClaudeSessions controls whether to fetch Claude session data
 	FetchClaudeSessions bool
 
@@ -47,6 +51,7 @@ type EnrichmentOptions struct {
 // DefaultEnrichmentOptions returns options that fetch everything for all projects
 func DefaultEnrichmentOptions() *EnrichmentOptions {
 	return &EnrichmentOptions{
+		FetchNoteCounts:     true,
 		FetchClaudeSessions: true,
 		FetchGitStatus:      true,
 		GitStatusPaths:      nil, // nil means all projects
@@ -59,6 +64,16 @@ func DefaultEnrichmentOptions() *EnrichmentOptions {
 func EnrichProjects(ctx context.Context, projects []*ProjectInfo, opts *EnrichmentOptions) error {
 	if opts == nil {
 		opts = DefaultEnrichmentOptions()
+	}
+
+	// Fetch note counts once if requested
+	var noteCountsMap map[string]*NoteCounts
+	if opts.FetchNoteCounts {
+		var err error
+		noteCountsMap, err = fetchNoteCountsMap(projects)
+		if err != nil {
+			// Non-fatal, just means we can't show note counts
+		}
 	}
 
 	// Fetch Claude sessions once if requested
@@ -79,6 +94,13 @@ func EnrichProjects(ctx context.Context, projects []*ProjectInfo, opts *Enrichme
 	// Enrich each project
 	for i := range projects {
 		project := projects[i]
+
+		// Attach note count info if available
+		if noteCountsMap != nil {
+			if counts, ok := noteCountsMap[project.Path]; ok {
+				project.NoteCounts = counts
+			}
+		}
 
 		// Attach Claude session info if available
 		if claudeSessionMap != nil {
@@ -219,4 +241,69 @@ func fetchClaudeSessionMap() (map[string]*ClaudeSessionInfo, error) {
 	}
 
 	return sessionMap, nil
+}
+
+// fetchNoteCountsMap fetches note counts for all workspaces and returns a map keyed by project path.
+func fetchNoteCountsMap(projects []*ProjectInfo) (map[string]*NoteCounts, error) {
+	resultsByPath := make(map[string]*NoteCounts)
+
+	// Build a map of workspace names to paths for efficient lookup
+	nameToPath := make(map[string]string)
+	for _, p := range projects {
+		if p != nil {
+			nameToPath[p.Name] = p.Path
+		}
+	}
+
+	// Execute `nb list --workspaces --json`
+	// First, try the standard grove binary path
+	nbPath := filepath.Join(os.Getenv("HOME"), ".grove", "bin", "nb")
+	var cmd *exec.Cmd
+	if _, err := os.Stat(nbPath); err == nil {
+		cmd = exec.Command(nbPath, "list", "--workspaces", "--json")
+	} else {
+		// Fallback to searching the system PATH
+		cmd = exec.Command("nb", "list", "--workspaces", "--json")
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		// If `nb` is not found or fails, we return an empty map without an error.
+		// This is a non-fatal operation.
+		return resultsByPath, nil
+	}
+
+	// Define a local struct to unmarshal only the necessary fields
+	type nbNote struct {
+		Type      string `json:"type"`
+		Workspace string `json:"workspace"`
+	}
+
+	var notes []nbNote
+	if err := json.Unmarshal(output, &notes); err != nil {
+		return resultsByPath, fmt.Errorf("failed to unmarshal nb output: %w", err)
+	}
+
+	// Aggregate counts by workspace name
+	countsByName := make(map[string]*NoteCounts)
+	for _, note := range notes {
+		if _, ok := countsByName[note.Workspace]; !ok {
+			countsByName[note.Workspace] = &NoteCounts{}
+		}
+		switch note.Type {
+		case "current":
+			countsByName[note.Workspace].Current++
+		case "issues":
+			countsByName[note.Workspace].Issues++
+		}
+	}
+
+	// Convert the name-keyed map to a path-keyed map
+	for name, counts := range countsByName {
+		if path, ok := nameToPath[name]; ok {
+			resultsByPath[path] = counts
+		}
+	}
+
+	return resultsByPath, nil
 }
