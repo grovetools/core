@@ -220,6 +220,14 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 	}
 
 	for _, wt := range worktrees {
+		// Check if the branch is already checked out in any worktree
+		if wt.Branch == branchName {
+			// Verify the directory actually exists
+			if _, err := os.Stat(wt.Path); err == nil {
+				return wt.Path, nil // Branch already checked out in existing worktree
+			}
+		}
+
 		if wt.Path == worktreePath {
 			// Verify the directory actually exists
 			if _, err := os.Stat(worktreePath); err == nil {

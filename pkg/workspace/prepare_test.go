@@ -186,29 +186,62 @@ func TestPrepare(t *testing.T) {
 		repoDir := filepath.Join(tempDir, "test-repo")
 		require.NoError(t, os.MkdirAll(repoDir, 0755))
 		setupTestRepo(t, repoDir)
-		
+
 		// Create an existing branch
 		cmd := exec.Command("git", "checkout", "-b", "existing-branch")
 		cmd.Dir = repoDir
 		err := cmd.Run()
 		require.NoError(t, err)
-		
+
 		// Switch back to main
 		cmd = exec.Command("git", "checkout", "main")
 		cmd.Dir = repoDir
 		err = cmd.Run()
 		require.NoError(t, err)
-		
+
 		ctx := context.Background()
 		opts := PrepareOptions{
 			GitRoot:      repoDir,
 			WorktreeName: "test-workspace",
 			BranchName:   "existing-branch",
 		}
-		
+
 		// Should use existing branch without error
 		worktreePath, err := Prepare(ctx, opts)
 		require.NoError(t, err)
 		assert.NotEmpty(t, worktreePath)
+	})
+
+	t.Run("prepare with branch already checked out in worktree", func(t *testing.T) {
+		// Setup test repository
+		tempDir := t.TempDir()
+		repoDir := filepath.Join(tempDir, "test-repo")
+		require.NoError(t, os.MkdirAll(repoDir, 0755))
+		setupTestRepo(t, repoDir)
+
+		ctx := context.Background()
+
+		// First, create a worktree with a branch
+		opts1 := PrepareOptions{
+			GitRoot:      repoDir,
+			WorktreeName: "first-workspace",
+			BranchName:   "shared-branch",
+		}
+
+		firstWorktreePath, err := Prepare(ctx, opts1)
+		require.NoError(t, err)
+		assert.NotEmpty(t, firstWorktreePath)
+
+		// Now try to prepare another worktree for the same branch
+		// This should return the existing worktree path instead of failing
+		opts2 := PrepareOptions{
+			GitRoot:      repoDir,
+			WorktreeName: "second-workspace",
+			BranchName:   "shared-branch",
+		}
+
+		secondWorktreePath, err := Prepare(ctx, opts2)
+		require.NoError(t, err)
+		assert.Equal(t, firstWorktreePath, secondWorktreePath, "Should return existing worktree path when branch is already checked out")
 	})
 }
