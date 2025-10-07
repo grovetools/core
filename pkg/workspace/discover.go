@@ -25,12 +25,22 @@ func expandPath(path string) string {
 
 // DiscoveryService scans the filesystem to find and classify Grove entities.
 type DiscoveryService struct {
-	logger *logrus.Logger
+	logger     *logrus.Logger
+	configPath string // Optional: if set, used instead of HOME for config discovery
 }
 
 // NewDiscoveryService creates a new discovery service.
 func NewDiscoveryService(logger *logrus.Logger) *DiscoveryService {
 	return &DiscoveryService{logger: logger}
+}
+
+// WithConfigPath returns a new DiscoveryService with a custom config path for testing.
+// If configPath is set, it will be used instead of HOME directory when loading config.
+func (s *DiscoveryService) WithConfigPath(configPath string) *DiscoveryService {
+	return &DiscoveryService{
+		logger:     s.logger,
+		configPath: configPath,
+	}
 }
 
 // DiscoverAll scans all configured 'groves' and returns a comprehensive result.
@@ -48,7 +58,12 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 
 	// 1. Load the global configuration to find 'groves' search paths.
 	// We use LoadLayered to ensure we get the global config reliably.
-	layeredCfg, err := config.LoadLayered(os.Getenv("HOME"))
+	// If configPath is set (for testing), use it instead of HOME.
+	configDir := os.Getenv("HOME")
+	if s.configPath != "" {
+		configDir = s.configPath
+	}
+	layeredCfg, err := config.LoadLayered(configDir)
 	if err != nil || layeredCfg.Global == nil {
 		s.logger.Warn("No global grove.yml found or failed to load. No 'groves' to scan.")
 		return result, nil // Not a fatal error, just means no paths to scan.
