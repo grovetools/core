@@ -102,17 +102,17 @@ format = " $output "
 	}
 
 	// --- 2. Add the module to the prompt format if not already present ---
-	if strings.Contains(content, "$custom.grove") {
+	if strings.Contains(content, "${custom.grove}") || strings.Contains(content, "$custom.grove") {
 		fmt.Println("✓ Grove module already in starship format.")
 	} else {
 		// Try to insert it after git_metrics, which is a common element.
 		target := "$git_metrics\\"
 		if strings.Contains(content, target) {
-			replacement := target + "\n$custom.grove\\"
+			replacement := target + "\n${custom.grove}\\"
 			content = strings.Replace(content, target, replacement, 1)
 			fmt.Println("✓ Added Grove module to starship format.")
 		} else {
-			fmt.Printf("⚠️  Could not automatically add '$custom.grove' to your starship format.\n")
+			fmt.Printf("⚠️  Could not automatically add '${custom.grove}' to your starship format.\n")
 			fmt.Printf("   Please add it manually to the 'format' string in %s\n", configPath)
 		}
 	}
