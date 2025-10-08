@@ -92,6 +92,21 @@ func (c *Client) GetSessionPath(ctx context.Context, sessionName string) (string
 	return strings.TrimSpace(output), nil
 }
 
+// GetSessionPID returns the process ID of the tmux server for a given session.
+func (c *Client) GetSessionPID(ctx context.Context, sessionName string) (int, error) {
+	output, err := c.run(ctx, "display-message", "-p", "-t", sessionName, "#{session_pid}")
+	if err != nil {
+		return 0, fmt.Errorf("failed to get session PID from tmux: %w", err)
+	}
+
+	pid, err := strconv.Atoi(strings.TrimSpace(output))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse session PID from tmux output '%s': %w", output, err)
+	}
+
+	return pid, nil
+}
+
 // GetCursorPosition returns the 1-based row and column of the cursor in the specified session's active pane.
 func (c *Client) GetCursorPosition(ctx context.Context, sessionName string) (row int, col int, err error) {
 	// target-pane format is {session}:. which targets the active pane
