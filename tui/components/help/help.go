@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	ltable "github.com/charmbracelet/lipgloss/table"
 	"github.com/mattsolo1/grove-core/tui/keymap"
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
@@ -123,14 +124,6 @@ func (m Model) viewFull(groups [][]key.Binding) string {
 		return ""
 	}
 
-	// Styles
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(theme.DefaultColors.Border).
-		Padding(1, 2).
-		Width(80). // Max width for the help box
-		Align(lipgloss.Center)
-
 	titleText := m.Title
 	if titleText == "" {
 		titleText = "Help"
@@ -138,68 +131,71 @@ func (m Model) viewFull(groups [][]key.Binding) string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(m.Theme.Info.GetForeground()).
-		MarginBottom(1)
+		MarginBottom(1).
+		Align(lipgloss.Center)
 
-	columnStyle := lipgloss.NewStyle().
-		Width(38). // Width for each column
-		Align(lipgloss.Left)
-
-	keyStyle := m.Theme.Highlight
-	descStyle := m.Theme.Muted
-	sectionTitleStyle := lipgloss.NewStyle().Bold(true).MarginTop(1)
-
-	// Build columns from key binding groups
-	var renderedColumns []string
+	// Collect all key bindings into table rows
+	var rows [][]string
 	for _, group := range groups {
 		if len(group) == 0 {
 			continue
 		}
 
-		var columnLines []string
 		for _, binding := range group {
 			if !binding.Enabled() {
 				continue
 			}
 
-			key := binding.Help().Key
+			keyStr := binding.Help().Key
 			desc := binding.Help().Desc
 
-			if key == "" && desc != "" { // This is a section title
-				if len(columnLines) > 0 {
-					columnLines = append(columnLines, "") // Add space before section
-				}
-				columnLines = append(columnLines, sectionTitleStyle.Render(desc))
-			} else if key != "" && desc != "" {
-				pair := fmt.Sprintf("%s %s %s",
-					keyStyle.Render(key),
-					descStyle.Render("•"),
-					descStyle.Render(desc),
-				)
-				columnLines = append(columnLines, pair)
+			if keyStr == "" && desc != "" {
+				// Section title - span across both columns
+				rows = append(rows, []string{m.Theme.Info.Bold(true).Render(desc), ""})
+			} else if keyStr != "" && desc != "" {
+				rows = append(rows, []string{
+					m.Theme.Highlight.Render(keyStr),
+					m.Theme.Muted.Render(desc),
+				})
 			}
-		}
-
-		// Join lines, render column, and add to list of columns
-		if len(columnLines) > 0 {
-			renderedColumn := columnStyle.Render(strings.Join(columnLines, "\n"))
-			renderedColumns = append(renderedColumns, renderedColumn)
 		}
 	}
 
-	// Join columns horizontally
-	columns := lipgloss.JoinHorizontal(lipgloss.Top, renderedColumns...)
+	if len(rows) == 0 {
+		return ""
+	}
 
-	// Combine title and content
+	// Create table
+	table := ltable.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(theme.DefaultColors.Border)).
+		Headers("Key", "Description").
+		StyleFunc(func(row, col int) lipgloss.Style {
+			baseStyle := lipgloss.NewStyle().Padding(0, 1)
+			if row%2 == 0 {
+				return baseStyle.Background(theme.VerySubtleBackground)
+			}
+			return baseStyle
+		})
+
+	// Add rows
+	for _, row := range rows {
+		table = table.Row(row...)
+	}
+
+	// Render table
+	tableStr := table.String()
+
+	// Combine title and table
 	title := titleStyle.Render(titleText)
-	fullContent := lipgloss.JoinVertical(lipgloss.Center, title, columns)
+	content := lipgloss.JoinVertical(lipgloss.Center, title, "", tableStr)
 
-	// Render in a box and center on screen
-	dialog := boxStyle.Render(fullContent)
+	// Center on screen
 	return lipgloss.NewStyle().
 		Width(m.Width).
 		Height(m.Height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Render(dialog)
+		Render(content)
 }
 
 // Toggle toggles between showing all help and short help
