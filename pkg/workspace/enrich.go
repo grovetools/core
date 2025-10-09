@@ -373,82 +373,112 @@ func fetchPlanStatsMap() (map[string]*PlanStats, error) {
 		return nil, fmt.Errorf("failed to unmarshal flow output: %w", err)
 	}
 
-	// Get active plans for each workspace
-	activePlansByWorkspace := make(map[string]string) // workspace_path -> active_plan_id
-
-	// Try to get active plan for each unique workspace
-	workspaceSeen := make(map[string]bool)
-	for _, summary := range summaries {
-		if summary.WorkspacePath == "" || workspaceSeen[summary.WorkspacePath] {
-			continue
-		}
-		workspaceSeen[summary.WorkspacePath] = true
-
-		// Execute `flow plan current` in the workspace directory
-		currentCmd := exec.Command(flowPath, "plan", "current")
-		currentCmd.Dir = summary.WorkspacePath
-		currentOutput, err := currentCmd.Output()
-		if err == nil {
-			// Parse output like "Active job: plan-name"
-			outputStr := strings.TrimSpace(string(currentOutput))
-			if strings.HasPrefix(outputStr, "Active job: ") {
-				activePlan := strings.TrimPrefix(outputStr, "Active job: ")
-				activePlansByWorkspace[summary.WorkspacePath] = activePlan
-			}
-		}
+	// Collect unique workspace paths for parallel active plan fetching
+	type workspaceInfo struct {
+		path  string
+		plans []flowPlanSummary
 	}
+	workspaceMap := make(map[string]*workspaceInfo)
 
-	// First pass: count total plans per workspace
-	planCountByWorkspace := make(map[string]int)
-	for _, summary := range summaries {
-		if summary.WorkspacePath != "" {
-			planCountByWorkspace[summary.WorkspacePath]++
-		}
-	}
-
-	// Second pass: aggregate stats only for active plan in each workspace
+	// Single pass: group plans by workspace and count totals
 	for _, summary := range summaries {
 		if summary.WorkspacePath == "" {
 			continue
 		}
 
-		// Initialize PlanStats for this workspace if not exists
-		if _, ok := resultsByPath[summary.WorkspacePath]; !ok {
-			resultsByPath[summary.WorkspacePath] = &PlanStats{
-				TotalPlans: planCountByWorkspace[summary.WorkspacePath],
+		if _, ok := workspaceMap[summary.WorkspacePath]; !ok {
+			workspaceMap[summary.WorkspacePath] = &workspaceInfo{
+				path:  summary.WorkspacePath,
+				plans: make([]flowPlanSummary, 0),
 			}
 		}
+		workspaceMap[summary.WorkspacePath].plans = append(workspaceMap[summary.WorkspacePath].plans, summary)
+	}
 
-		stats := resultsByPath[summary.WorkspacePath]
+	// Fetch active plans for all workspaces in parallel
+	type activePlanResult struct {
+		workspacePath string
+		activePlan    string
+	}
 
-		// Check if this is the active plan for this workspace
-		activePlan := activePlansByWorkspace[summary.WorkspacePath]
-		if activePlan != "" && summary.ID == activePlan {
-			stats.ActivePlan = activePlan
+	activePlanChan := make(chan activePlanResult, len(workspaceMap))
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 5) // Limit to 5 concurrent calls
 
-			// Parse status string for counts (only for active plan)
-			// Status format: "3 completed, 1 running, 2 pending"
-			statusParts := strings.Split(summary.Status, ", ")
-			for _, part := range statusParts {
-				fields := strings.Fields(part)
-				if len(fields) >= 2 {
-					count, err := strconv.Atoi(fields[0])
-					if err != nil {
-						continue
-					}
-					stats.Total += count
-					status := fields[1]
-					switch status {
-					case "completed":
-						stats.Completed = count
-					case "running":
-						stats.Running = count
-					case "pending":
-						stats.Pending = count
-					case "failed":
-						stats.Failed = count
+	for _, wsInfo := range workspaceMap {
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
+			semaphore <- struct{}{}        // Acquire
+			defer func() { <-semaphore }() // Release
+
+			currentCmd := exec.Command(flowPath, "plan", "current")
+			currentCmd.Dir = path
+			currentOutput, err := currentCmd.Output()
+			if err == nil {
+				outputStr := strings.TrimSpace(string(currentOutput))
+				if strings.HasPrefix(outputStr, "Active job: ") {
+					activePlan := strings.TrimPrefix(outputStr, "Active job: ")
+					activePlanChan <- activePlanResult{path, activePlan}
+				}
+			}
+		}(wsInfo.path)
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(activePlanChan)
+	}()
+
+	// Collect active plans
+	activePlansByWorkspace := make(map[string]string)
+	for result := range activePlanChan {
+		activePlansByWorkspace[result.workspacePath] = result.activePlan
+	}
+
+	// Build results: aggregate stats only for active plan
+	for workspacePath, wsInfo := range workspaceMap {
+		stats := &PlanStats{
+			TotalPlans: len(wsInfo.plans),
+		}
+		resultsByPath[workspacePath] = stats
+
+		// Find and process the active plan
+		activePlan := activePlansByWorkspace[workspacePath]
+		if activePlan == "" {
+			continue
+		}
+
+		stats.ActivePlan = activePlan
+
+		// Find the active plan in the list
+		for _, summary := range wsInfo.plans {
+			if summary.ID == activePlan {
+				// Parse status string for counts
+				statusParts := strings.Split(summary.Status, ", ")
+				for _, part := range statusParts {
+					fields := strings.Fields(part)
+					if len(fields) >= 2 {
+						count, err := strconv.Atoi(fields[0])
+						if err != nil {
+							continue
+						}
+						stats.Total += count
+						status := fields[1]
+						switch status {
+						case "completed":
+							stats.Completed = count
+						case "running":
+							stats.Running = count
+						case "pending":
+							stats.Pending = count
+						case "failed":
+							stats.Failed = count
+						}
 					}
 				}
+				break // Found the active plan, no need to continue
 			}
 		}
 	}
