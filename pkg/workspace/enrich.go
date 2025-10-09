@@ -43,6 +43,9 @@ type EnrichmentOptions struct {
 	// FetchGitStatus controls whether to fetch Git status
 	FetchGitStatus bool
 
+	// FetchPlanStats controls whether to fetch plan statistics from grove-flow
+	FetchPlanStats bool
+
 	// GitStatusPaths limits Git status fetching to specific paths
 	// If nil or empty, fetches for all projects
 	GitStatusPaths map[string]bool
@@ -54,6 +57,7 @@ func DefaultEnrichmentOptions() *EnrichmentOptions {
 		FetchNoteCounts:     true,
 		FetchClaudeSessions: true,
 		FetchGitStatus:      true,
+		FetchPlanStats:      true,
 		GitStatusPaths:      nil, // nil means all projects
 	}
 }
@@ -87,6 +91,16 @@ func EnrichProjects(ctx context.Context, projects []*ProjectInfo, opts *Enrichme
 		}
 	}
 
+	// Fetch plan stats once if requested
+	var planStatsMap map[string]*PlanStats
+	if opts.FetchPlanStats {
+		var err error
+		planStatsMap, err = fetchPlanStatsMap()
+		if err != nil {
+			// Non-fatal, just means we can't show plan stats
+		}
+	}
+
 	// Create a wait group for concurrent Git status fetching
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10) // Limit to 10 concurrent git operations
@@ -106,6 +120,13 @@ func EnrichProjects(ctx context.Context, projects []*ProjectInfo, opts *Enrichme
 		if claudeSessionMap != nil {
 			if session, ok := claudeSessionMap[project.Path]; ok {
 				project.ClaudeSession = session
+			}
+		}
+
+		// Attach plan stats info if available
+		if planStatsMap != nil {
+			if stats, ok := planStatsMap[project.Path]; ok {
+				project.PlanStats = stats
 			}
 		}
 
@@ -151,6 +172,13 @@ func fetchGitStatusForPath(path string) (*ExtendedGitStatus, error) {
 
 	extStatus := &ExtendedGitStatus{
 		StatusInfo: status,
+	}
+
+	// Compute divergence from main/master for non-main branches
+	if status.Branch != "main" && status.Branch != "master" {
+		ahead, behind := git.GetCommitsDivergenceFromMain(cleanPath, status.Branch)
+		status.AheadMainCount = ahead
+		status.BehindMainCount = behind
 	}
 
 	// Get line stats using git diff --numstat
@@ -302,6 +330,80 @@ func fetchNoteCountsMap(projects []*ProjectInfo) (map[string]*NoteCounts, error)
 	for name, counts := range countsByName {
 		if path, ok := nameToPath[name]; ok {
 			resultsByPath[path] = counts
+		}
+	}
+
+	return resultsByPath, nil
+}
+
+// fetchPlanStatsMap fetches plan statistics for all workspaces by calling `flow plan list`.
+func fetchPlanStatsMap() (map[string]*PlanStats, error) {
+	resultsByPath := make(map[string]*PlanStats)
+
+	// Find the flow binary
+	flowPath := filepath.Join(os.Getenv("HOME"), ".grove", "bin", "flow")
+	if _, err := os.Stat(flowPath); os.IsNotExist(err) {
+		var findErr error
+		flowPath, findErr = exec.LookPath("flow")
+		if findErr != nil {
+			// flow binary not found, cannot fetch plan stats.
+			return resultsByPath, nil
+		}
+	}
+
+	// Execute `flow plan list --json --all-workspaces --include-finished`
+	cmd := exec.Command(flowPath, "plan", "list", "--json", "--all-workspaces", "--include-finished")
+	output, err := cmd.Output()
+	if err != nil {
+		// Command failed, return empty map without an error.
+		return resultsByPath, nil
+	}
+
+	// Define a local struct to unmarshal flow's output
+	type flowPlanSummary struct {
+		WorkspacePath string `json:"workspace_path"`
+		Status        string `json:"status"` // e.g., "3 completed, 1 running"
+	}
+
+	var summaries []flowPlanSummary
+	if err := json.Unmarshal(output, &summaries); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal flow output: %w", err)
+	}
+
+	// Aggregate stats by workspace path
+	for _, summary := range summaries {
+		if summary.WorkspacePath == "" {
+			continue
+		}
+		if _, ok := resultsByPath[summary.WorkspacePath]; !ok {
+			resultsByPath[summary.WorkspacePath] = &PlanStats{}
+		}
+
+		stats := resultsByPath[summary.WorkspacePath]
+		stats.Total++
+
+		// Parse status string for counts
+		// Status format: "3 completed, 1 running, 2 pending"
+		statusParts := strings.Split(summary.Status, ", ")
+		for _, part := range statusParts {
+			fields := strings.Fields(part)
+			if len(fields) >= 2 {
+				count, err := strconv.Atoi(fields[0])
+				if err != nil {
+					continue
+				}
+				status := fields[1]
+				switch status {
+				case "completed":
+					stats.Completed += count
+				case "running":
+					stats.Running += count
+				case "pending":
+					stats.Pending += count
+				case "failed":
+					stats.Failed += count
+				}
+			}
 		}
 	}
 

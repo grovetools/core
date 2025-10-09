@@ -34,6 +34,12 @@ type StatusInfo struct {
 	
 	// HasUpstream indicates if the branch has an upstream tracking branch
 	HasUpstream bool `json:"has_upstream"`
+
+	// AheadMainCount is the number of commits ahead of the local main/master branch
+	AheadMainCount int `json:"ahead_main_count"`
+
+	// BehindMainCount is the number of commits behind the local main/master branch
+	BehindMainCount int `json:"behind_main_count"`
 }
 
 // GetStatus returns detailed git status information for the repository at the given path
@@ -141,4 +147,50 @@ func GetStatus(path string) (*StatusInfo, error) {
 	status.IsDirty = status.ModifiedCount > 0 || status.UntrackedCount > 0 || status.StagedCount > 0
 
 	return status, nil
+}
+
+// GetCommitsDivergenceFromMain returns the number of commits a branch is ahead of and behind the local main/master branch.
+func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead int, behind int) {
+	cmdBuilder := command.NewSafeBuilder()
+
+	// Determine if main or master exists
+	mainBranch := ""
+	for _, branchName := range []string{"main", "master"} {
+		cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", "refs/heads/"+branchName)
+		if err != nil {
+			continue // Should not happen, but defensive
+		}
+		execCmd := cmd.Exec()
+		execCmd.Dir = repoPath
+		if execCmd.Run() == nil {
+			mainBranch = branchName
+			break
+		}
+	}
+
+	if mainBranch == "" || currentBranch == mainBranch {
+		return 0, 0
+	}
+
+	// git rev-list --left-right --count main...HEAD
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-list", "--left-right", "--count", mainBranch+"...HEAD")
+	if err != nil {
+		return 0, 0
+	}
+
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+
+	parts := strings.Fields(string(output))
+	if len(parts) == 2 {
+		// output is: <behind> <ahead>
+		behind, _ = strconv.Atoi(parts[0])
+		ahead, _ = strconv.Atoi(parts[1])
+	}
+
+	return ahead, behind
 }
