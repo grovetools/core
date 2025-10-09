@@ -48,8 +48,33 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		}
 	}
 
-	var parentEcosystemPath, worktreeName string
+	var parentEcosystemPath, worktreeName, worktreeRootPath string
 	var isEcosystem bool
+
+	// Extract worktree name if this project is inside any .grove-worktrees directory
+	// This needs to be done before checking if absPath == ecoDir because an ecosystem
+	// worktree is both an ecosystem AND a worktree
+	if strings.Contains(absPath, string(filepath.Separator)+".grove-worktrees"+string(filepath.Separator)) {
+		// Find the .grove-worktrees segment in the path
+		parts := strings.Split(absPath, string(filepath.Separator)+".grove-worktrees"+string(filepath.Separator))
+		if len(parts) >= 2 {
+			// Get the first path segment after .grove-worktrees
+			afterWorktrees := parts[1]
+			worktreeParts := strings.Split(afterWorktrees, string(filepath.Separator))
+			if len(worktreeParts) > 0 {
+				worktreeName = worktreeParts[0]
+				// Construct the worktree root path
+				worktreeRootPath = parts[0] + string(filepath.Separator) + ".grove-worktrees" + string(filepath.Separator) + worktreeName
+			}
+
+			// For worktrees, also try to find the parent ecosystem by looking up from
+			// the directory before .grove-worktrees
+			parentDir := parts[0]
+			if parentEcoPath := config.FindEcosystemConfig(parentDir); parentEcoPath != "" {
+				parentEcosystemPath = filepath.Dir(parentEcoPath)
+			}
+		}
+	}
 
 	if ecoPath != "" {
 		ecoDir := filepath.Dir(ecoPath) // The ecosystem root is the directory containing grove.yml
@@ -57,16 +82,9 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		if absPath == ecoDir {
 			isEcosystem = true // This is the ecosystem root
 		} else {
-			parentEcosystemPath = ecoDir
-			// Extract worktree name if this project is inside the ecosystem's .grove-worktrees
-			if strings.HasPrefix(absPath, filepath.Join(ecoDir, ".grove-worktrees")) {
-				relPath, err := filepath.Rel(ecoDir, absPath)
-				if err == nil {
-					parts := strings.Split(relPath, string(filepath.Separator))
-					if len(parts) >= 2 && parts[0] == ".grove-worktrees" {
-						worktreeName = parts[1]
-					}
-				}
+			// Only set parentEcosystemPath if we haven't already found it from worktree detection
+			if parentEcosystemPath == "" {
+				parentEcosystemPath = ecoDir
 			}
 		}
 	}
@@ -93,6 +111,7 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		ParentPath:          parentPath,
 		IsWorktree:          isWorktree,
 		WorktreeName:        worktreeName,
+		WorktreeRootPath:    worktreeRootPath,
 		ParentEcosystemPath: parentEcosystemPath,
 		IsEcosystem:         isEcosystem,
 	}, nil

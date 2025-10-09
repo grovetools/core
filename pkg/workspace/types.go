@@ -83,6 +83,17 @@ type ClaudeSessionInfo struct {
 	Duration string `json:"duration"`
 }
 
+// PlanStats holds counts of plans by status for a workspace.
+type PlanStats struct {
+	TotalPlans int    `json:"total_plans"` // Total number of plans in workspace
+	ActivePlan string `json:"active_plan"` // Name of the active plan
+	Total      int    `json:"total"`       // Total jobs in active plan
+	Pending    int    `json:"pending"`
+	Running    int    `json:"running"`
+	Completed  int    `json:"completed"`
+	Failed     int    `json:"failed"`
+}
+
 // ProjectInfo is the enriched display model for projects.
 // It represents a flattened, view-friendly project item suitable for UIs.
 // It can represent an ecosystem, a primary project repository, or a worktree.
@@ -92,6 +103,7 @@ type ProjectInfo struct {
 	ParentPath          string `json:"parent_path,omitempty"`           // For worktrees, path to the parent repository
 	IsWorktree          bool   `json:"is_worktree"`
 	WorktreeName        string `json:"worktree_name,omitempty"`         // For projects inside an ecosystem worktree
+	WorktreeRootPath    string `json:"worktree_root_path,omitempty"`    // For paths inside an ecosystem worktree, the absolute path to the worktree root
 	ParentEcosystemPath string `json:"parent_ecosystem_path,omitempty"` // For sub-projects, path to parent ecosystem
 	IsEcosystem         bool   `json:"is_ecosystem"`
 
@@ -99,6 +111,7 @@ type ProjectInfo struct {
 	GitStatus     interface{}        `json:"git_status,omitempty"`      // Using interface{} to avoid circular import with git package
 	ClaudeSession *ClaudeSessionInfo `json:"claude_session,omitempty"`
 	NoteCounts    *NoteCounts        `json:"note_counts,omitempty"`
+	PlanStats     *PlanStats         `json:"plan_stats,omitempty"`
 
 	// Cloned repository-specific fields (populated by discovery)
 	Version     string `json:"version,omitempty"`

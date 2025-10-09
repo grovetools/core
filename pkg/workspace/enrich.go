@@ -337,6 +337,7 @@ func fetchNoteCountsMap(projects []*ProjectInfo) (map[string]*NoteCounts, error)
 }
 
 // fetchPlanStatsMap fetches plan statistics for all workspaces by calling `flow plan list`.
+// For each workspace, it shows the total number of plans and stats for the active plan only.
 func fetchPlanStatsMap() (map[string]*PlanStats, error) {
 	resultsByPath := make(map[string]*PlanStats)
 
@@ -361,7 +362,9 @@ func fetchPlanStatsMap() (map[string]*PlanStats, error) {
 
 	// Define a local struct to unmarshal flow's output
 	type flowPlanSummary struct {
+		ID            string `json:"id"`
 		WorkspacePath string `json:"workspace_path"`
+		WorkspaceName string `json:"workspace_name"`
 		Status        string `json:"status"` // e.g., "3 completed, 1 running"
 	}
 
@@ -370,38 +373,81 @@ func fetchPlanStatsMap() (map[string]*PlanStats, error) {
 		return nil, fmt.Errorf("failed to unmarshal flow output: %w", err)
 	}
 
-	// Aggregate stats by workspace path
+	// Get active plans for each workspace
+	activePlansByWorkspace := make(map[string]string) // workspace_path -> active_plan_id
+
+	// Try to get active plan for each unique workspace
+	workspaceSeen := make(map[string]bool)
+	for _, summary := range summaries {
+		if summary.WorkspacePath == "" || workspaceSeen[summary.WorkspacePath] {
+			continue
+		}
+		workspaceSeen[summary.WorkspacePath] = true
+
+		// Execute `flow plan current` in the workspace directory
+		currentCmd := exec.Command(flowPath, "plan", "current")
+		currentCmd.Dir = summary.WorkspacePath
+		currentOutput, err := currentCmd.Output()
+		if err == nil {
+			// Parse output like "Active job: plan-name"
+			outputStr := strings.TrimSpace(string(currentOutput))
+			if strings.HasPrefix(outputStr, "Active job: ") {
+				activePlan := strings.TrimPrefix(outputStr, "Active job: ")
+				activePlansByWorkspace[summary.WorkspacePath] = activePlan
+			}
+		}
+	}
+
+	// First pass: count total plans per workspace
+	planCountByWorkspace := make(map[string]int)
+	for _, summary := range summaries {
+		if summary.WorkspacePath != "" {
+			planCountByWorkspace[summary.WorkspacePath]++
+		}
+	}
+
+	// Second pass: aggregate stats only for active plan in each workspace
 	for _, summary := range summaries {
 		if summary.WorkspacePath == "" {
 			continue
 		}
+
+		// Initialize PlanStats for this workspace if not exists
 		if _, ok := resultsByPath[summary.WorkspacePath]; !ok {
-			resultsByPath[summary.WorkspacePath] = &PlanStats{}
+			resultsByPath[summary.WorkspacePath] = &PlanStats{
+				TotalPlans: planCountByWorkspace[summary.WorkspacePath],
+			}
 		}
 
 		stats := resultsByPath[summary.WorkspacePath]
-		stats.Total++
 
-		// Parse status string for counts
-		// Status format: "3 completed, 1 running, 2 pending"
-		statusParts := strings.Split(summary.Status, ", ")
-		for _, part := range statusParts {
-			fields := strings.Fields(part)
-			if len(fields) >= 2 {
-				count, err := strconv.Atoi(fields[0])
-				if err != nil {
-					continue
-				}
-				status := fields[1]
-				switch status {
-				case "completed":
-					stats.Completed += count
-				case "running":
-					stats.Running += count
-				case "pending":
-					stats.Pending += count
-				case "failed":
-					stats.Failed += count
+		// Check if this is the active plan for this workspace
+		activePlan := activePlansByWorkspace[summary.WorkspacePath]
+		if activePlan != "" && summary.ID == activePlan {
+			stats.ActivePlan = activePlan
+
+			// Parse status string for counts (only for active plan)
+			// Status format: "3 completed, 1 running, 2 pending"
+			statusParts := strings.Split(summary.Status, ", ")
+			for _, part := range statusParts {
+				fields := strings.Fields(part)
+				if len(fields) >= 2 {
+					count, err := strconv.Atoi(fields[0])
+					if err != nil {
+						continue
+					}
+					stats.Total += count
+					status := fields[1]
+					switch status {
+					case "completed":
+						stats.Completed = count
+					case "running":
+						stats.Running = count
+					case "pending":
+						stats.Pending = count
+					case "failed":
+						stats.Failed = count
+					}
 				}
 			}
 		}
