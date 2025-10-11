@@ -48,13 +48,15 @@ func LoadFrom(startDir string) (*Config, error) {
 
 // LoadFromWithLogger loads configuration with hierarchical merging and logging
 func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error) {
-	// Find project config file first (it's required)
+	// Find project config file first
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
-		return nil, err
+		// If it's any error other than not found, we fail.
+		if !errors.Is(err, errors.ErrCodeConfigNotFound) {
+			return nil, err
+		}
+		projectPath = "" // No project file found, proceed without it.
 	}
-
-	logger.WithField("path", projectPath).Debug("Loading project configuration")
 
 	// Start with an empty config
 	var finalConfig *Config
@@ -80,85 +82,93 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 	}
 
-	// 2. Load and merge project config (required) - also without defaults/validation
-	projectData, err := os.ReadFile(projectPath)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").
-			WithDetail("path", projectPath)
-	}
+	if projectPath != "" {
+		logger.WithField("path", projectPath).Debug("Loading project configuration")
+		// 2. Load and merge project config - also without defaults/validation
+		projectData, err := os.ReadFile(projectPath)
+		if err != nil {
+			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").
+				WithDetail("path", projectPath)
+		}
 
-	expanded := expandEnvVars(string(projectData))
-	var projectConfig Config
-	if err := yaml.Unmarshal([]byte(expanded), &projectConfig); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").
-			WithDetail("path", projectPath)
-	}
+		expanded := expandEnvVars(string(projectData))
+		var projectConfig Config
+		if err := yaml.Unmarshal([]byte(expanded), &projectConfig); err != nil {
+			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").
+				WithDetail("path", projectPath)
+		}
 
-	// Check if this is a workspace config (has no workspaces field) and look for ecosystem config
-	ecosystemPath := ""
-	if len(projectConfig.Workspaces) == 0 {
-		// This appears to be a workspace config, look for ecosystem config
-		ecosystemPath = FindEcosystemConfig(filepath.Dir(projectPath))
-		if ecosystemPath != "" {
-			logger.WithField("path", ecosystemPath).Debug("Loading ecosystem configuration")
-			ecosystemData, err := os.ReadFile(ecosystemPath)
-			if err == nil {
-				expandedEco := expandEnvVars(string(ecosystemData))
-				var ecosystemConfig Config
-				if err := yaml.Unmarshal([]byte(expandedEco), &ecosystemConfig); err == nil {
-					// Merge ecosystem config after global but before project
-					if finalConfig == nil {
-						finalConfig = &ecosystemConfig
+		// Check if this is a workspace config (has no workspaces field) and look for ecosystem config
+		ecosystemPath := ""
+		if len(projectConfig.Workspaces) == 0 {
+			// This appears to be a workspace config, look for ecosystem config
+			ecosystemPath = FindEcosystemConfig(filepath.Dir(projectPath))
+			if ecosystemPath != "" {
+				logger.WithField("path", ecosystemPath).Debug("Loading ecosystem configuration")
+				ecosystemData, err := os.ReadFile(ecosystemPath)
+				if err == nil {
+					expandedEco := expandEnvVars(string(ecosystemData))
+					var ecosystemConfig Config
+					if err := yaml.Unmarshal([]byte(expandedEco), &ecosystemConfig); err == nil {
+						// Merge ecosystem config after global but before project
+						if finalConfig == nil {
+							finalConfig = &ecosystemConfig
+						} else {
+							logger.Debug("Merging ecosystem configuration over global configuration")
+							finalConfig = mergeConfigs(finalConfig, &ecosystemConfig)
+						}
 					} else {
-						logger.Debug("Merging ecosystem configuration over global configuration")
-						finalConfig = mergeConfigs(finalConfig, &ecosystemConfig)
+						logger.WithError(err).Warn("Failed to parse ecosystem configuration, continuing without it")
 					}
 				} else {
-					logger.WithError(err).Warn("Failed to parse ecosystem configuration, continuing without it")
+					logger.WithError(err).Warn("Failed to read ecosystem configuration, continuing without it")
 				}
-			} else {
-				logger.WithError(err).Warn("Failed to read ecosystem configuration, continuing without it")
+			}
+		}
+
+		if finalConfig == nil {
+			finalConfig = &projectConfig
+		} else {
+			logger.Debug("Merging project configuration over global/ecosystem configuration")
+			finalConfig = mergeConfigs(finalConfig, &projectConfig)
+		}
+
+		// 3. Load and merge override files if they exist (optional)
+		projectDir := filepath.Dir(projectPath)
+		overrideFiles := []string{
+			filepath.Join(projectDir, "grove.override.yml"),
+			filepath.Join(projectDir, "grove.override.yaml"),
+			filepath.Join(projectDir, ".grove.override.yml"),
+			filepath.Join(projectDir, ".grove.override.yaml"),
+		}
+
+		for _, overridePath := range overrideFiles {
+			if _, err := os.Stat(overridePath); err == nil {
+				logger.WithField("path", overridePath).Debug("Loading local override configuration")
+
+				overrideData, err := os.ReadFile(overridePath)
+				if err != nil {
+					logger.WithError(err).Warn("Failed to read override file, skipping")
+					continue
+				}
+
+				// Expand environment variables
+				expanded := expandEnvVars(string(overrideData))
+
+				var overrideConfig Config
+				if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err != nil {
+					logger.WithError(err).Warn("Failed to parse override file, skipping")
+					continue
+				}
+
+				finalConfig = mergeConfigs(finalConfig, &overrideConfig)
 			}
 		}
 	}
 
+	// If no configs were found at all, create an empty one to avoid nil pointers
 	if finalConfig == nil {
-		finalConfig = &projectConfig
-	} else {
-		logger.Debug("Merging project configuration over global configuration")
-		finalConfig = mergeConfigs(finalConfig, &projectConfig)
-	}
-
-	// 3. Load and merge override files if they exist (optional)
-	projectDir := filepath.Dir(projectPath)
-	overrideFiles := []string{
-		filepath.Join(projectDir, "grove.override.yml"),
-		filepath.Join(projectDir, "grove.override.yaml"),
-		filepath.Join(projectDir, ".grove.override.yml"),
-		filepath.Join(projectDir, ".grove.override.yaml"),
-	}
-
-	for _, overridePath := range overrideFiles {
-		if _, err := os.Stat(overridePath); err == nil {
-			logger.WithField("path", overridePath).Debug("Loading local override configuration")
-			
-			overrideData, err := os.ReadFile(overridePath)
-			if err != nil {
-				logger.WithError(err).Warn("Failed to read override file, skipping")
-				continue
-			}
-
-			// Expand environment variables
-			expanded := expandEnvVars(string(overrideData))
-
-			var overrideConfig Config
-			if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err != nil {
-				logger.WithError(err).Warn("Failed to parse override file, skipping")
-				continue
-			}
-
-			finalConfig = mergeConfigs(finalConfig, &overrideConfig)
-		}
+		finalConfig = &Config{}
 	}
 
 	// Set defaults
@@ -382,47 +392,56 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 	}
 
-	// 3. Load Project layer (required)
+	// 3. Load Project layer (optional)
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to find project config file")
+		// If config not found, it's not a fatal error. We can proceed with just global/defaults.
+		if !errors.Is(err, errors.ErrCodeConfigNotFound) {
+			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "error while finding project config file")
+		}
+		projectPath = "" // No project file found, proceed without it.
 	}
-	projectData, err := os.ReadFile(projectPath)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").WithDetail("path", projectPath)
+
+	if projectPath != "" {
+		projectData, err := os.ReadFile(projectPath)
+		if err != nil {
+			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").WithDetail("path", projectPath)
+		}
+		expandedProject := expandEnvVars(string(projectData))
+		var projectConfig Config
+		if err := yaml.Unmarshal([]byte(expandedProject), &projectConfig); err != nil {
+			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
+		}
+		layeredConfig.Project = &projectConfig
+		layeredConfig.FilePaths[SourceProject] = projectPath
 	}
-	expandedProject := expandEnvVars(string(projectData))
-	var projectConfig Config
-	if err := yaml.Unmarshal([]byte(expandedProject), &projectConfig); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
-	}
-	layeredConfig.Project = &projectConfig
-	layeredConfig.FilePaths[SourceProject] = projectPath
 
 	// 4. Load Override layers (optional)
-	projectDir := filepath.Dir(projectPath)
-	overrideFiles := []string{
-		filepath.Join(projectDir, "grove.override.yml"),
-		filepath.Join(projectDir, "grove.override.yaml"),
-		filepath.Join(projectDir, ".grove.override.yml"),
-		filepath.Join(projectDir, ".grove.override.yaml"),
-		// This also includes the previously named .grove-work.yml/.yaml
-		filepath.Join(projectDir, ".grove-work.yml"),
-		filepath.Join(projectDir, ".grove-work.yaml"),
-	}
-	for _, overridePath := range overrideFiles {
-		if _, err := os.Stat(overridePath); err == nil {
-			overrideData, err := os.ReadFile(overridePath)
-			if err != nil {
-				continue // Skip unreadable override files
-			}
-			expandedOverride := expandEnvVars(string(overrideData))
-			var overrideConfig Config
-			if err := yaml.Unmarshal([]byte(expandedOverride), &overrideConfig); err == nil {
-				layeredConfig.Overrides = append(layeredConfig.Overrides, OverrideSource{
-					Path:   overridePath,
-					Config: &overrideConfig,
-				})
+	if projectPath != "" {
+		projectDir := filepath.Dir(projectPath)
+		overrideFiles := []string{
+			filepath.Join(projectDir, "grove.override.yml"),
+			filepath.Join(projectDir, "grove.override.yaml"),
+			filepath.Join(projectDir, ".grove.override.yml"),
+			filepath.Join(projectDir, ".grove.override.yaml"),
+			// This also includes the previously named .grove-work.yml/.yaml
+			filepath.Join(projectDir, ".grove-work.yml"),
+			filepath.Join(projectDir, ".grove-work.yaml"),
+		}
+		for _, overridePath := range overrideFiles {
+			if _, err := os.Stat(overridePath); err == nil {
+				overrideData, err := os.ReadFile(overridePath)
+				if err != nil {
+					continue // Skip unreadable override files
+				}
+				expandedOverride := expandEnvVars(string(overrideData))
+				var overrideConfig Config
+				if err := yaml.Unmarshal([]byte(expandedOverride), &overrideConfig); err == nil {
+					layeredConfig.Overrides = append(layeredConfig.Overrides, OverrideSource{
+						Path:   overridePath,
+						Config: &overrideConfig,
+					})
+				}
 			}
 		}
 	}
