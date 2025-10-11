@@ -181,7 +181,10 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 
 					cfg, loadErr := config.Load(groveYmlPath)
 					if loadErr == nil {
-						if len(cfg.Workspaces) > 0 {
+						// An ecosystem's root directory should never be inside a .grove-worktrees directory.
+						// This check prevents an ecosystem worktree from being incorrectly identified as a new,
+						// separate top-level ecosystem, thus preventing duplication.
+						if len(cfg.Workspaces) > 0 && !strings.Contains(path, ".grove-worktrees") {
 							// This is an Ecosystem
 							ecosystemName := cfg.Name
 							if ecosystemName == "" {
