@@ -1,2 +1,5 @@
 name: grove-core
-description: Shared library for the Grove ecosystem
+description: Core libraries and debugging tools for the Grove ecosystem
+binary:
+  name: core
+  path: ./bin/core
