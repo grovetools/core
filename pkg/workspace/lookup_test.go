@@ -86,7 +86,10 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(ecoPath)
 		require.NoError(t, err)
 		assert.Equal(t, "my-ecosystem", node.Name)
-		assert.Equal(t, ecoPath, node.Path)
+		// Use EvalSymlinks to handle /var vs /private/var on macOS
+		expectedPath, _ := filepath.EvalSymlinks(ecoPath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindEcosystemRoot, node.Kind)
 	})
 
@@ -95,9 +98,13 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(projPath)
 		require.NoError(t, err)
 		assert.Equal(t, "project-a", node.Name)
-		assert.Equal(t, projPath, node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(projPath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindEcosystemSubProject, node.Kind)
-		assert.Equal(t, filepath.Join(rootDir, "work", "my-ecosystem"), node.ParentEcosystemPath)
+		expectedParent, _ := filepath.EvalSymlinks(filepath.Join(rootDir, "work", "my-ecosystem"))
+		actualParent, _ := filepath.EvalSymlinks(node.ParentEcosystemPath)
+		assert.Equal(t, expectedParent, actualParent)
 	})
 
 	t.Run("Subdirectory within project", func(t *testing.T) {
@@ -105,7 +112,9 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(subPath)
 		require.NoError(t, err)
 		assert.Equal(t, "project-a", node.Name)
-		assert.Equal(t, filepath.Join(rootDir, "work", "my-ecosystem", "project-a"), node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(filepath.Join(rootDir, "work", "my-ecosystem", "project-a"))
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindEcosystemSubProject, node.Kind)
 	})
 
@@ -114,7 +123,9 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(wtPath)
 		require.NoError(t, err)
 		assert.Equal(t, "feature-work", node.Name)
-		assert.Equal(t, wtPath, node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(wtPath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindEcosystemWorktree, node.Kind)
 	})
 
@@ -123,7 +134,9 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(projPath)
 		require.NoError(t, err)
 		assert.Equal(t, "standalone-project", node.Name)
-		assert.Equal(t, projPath, node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(projPath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindStandaloneProject, node.Kind)
 		assert.Empty(t, node.ParentEcosystemPath)
 	})
@@ -133,7 +146,9 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(wtPath)
 		require.NoError(t, err)
 		assert.Equal(t, "fix-bug", node.Name)
-		assert.Equal(t, wtPath, node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(wtPath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindStandaloneProjectWorktree, node.Kind)
 	})
 
@@ -142,7 +157,9 @@ func TestGetProjectByPath(t *testing.T) {
 		node, err := GetProjectByPath(nonGrovePath)
 		require.NoError(t, err)
 		assert.Equal(t, "other-repo", node.Name)
-		assert.Equal(t, nonGrovePath, node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(nonGrovePath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
 		assert.Equal(t, KindNonGroveRepo, node.Kind)
 	})
 
@@ -171,6 +188,136 @@ func TestGetProjectByPath(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "project-a", node.Name)
 		assert.True(t, filepath.IsAbs(node.Path), "Path should be absolute")
-		assert.Equal(t, projPath, node.Path)
+		expectedPath, _ := filepath.EvalSymlinks(projPath)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
+	})
+}
+
+// TestGetProjectByPath_WithEcosystemWorktrees tests the worktree scenarios
+// where cwd command should correctly identify workspace kinds and root ecosystem paths.
+func TestGetProjectByPath_WithEcosystemWorktrees(t *testing.T) {
+	rootDir := t.TempDir()
+
+	// Create a root directory for an ecosystem (my-ecosystem) containing a .git directory
+	ecoRootDir := filepath.Join(rootDir, "my-ecosystem")
+	require.NoError(t, os.MkdirAll(ecoRootDir, 0755))
+	require.NoError(t, os.Mkdir(filepath.Join(ecoRootDir, ".git"), 0755))
+
+	// Create grove.yml with workspaces key for ecosystem
+	ecoCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
+	ecoBytes, _ := yaml.Marshal(ecoCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(ecoRootDir, "grove.yml"), ecoBytes, 0644))
+
+	// Create an ecosystem worktree directory (my-ecosystem/.grove-worktrees/feature-branch)
+	// containing a .git file (to simulate a worktree) and a grove.yml
+	worktreeDir := filepath.Join(ecoRootDir, ".grove-worktrees", "feature-branch")
+	require.NoError(t, os.MkdirAll(worktreeDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte("gitdir: ../../.git/worktrees/feature-branch"), 0644))
+
+	wtCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
+	wtBytes, _ := yaml.Marshal(wtCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "grove.yml"), wtBytes, 0644))
+
+	// Create a sub-project within the worktree (.../feature-branch/sub-project)
+	// containing its own .git directory and a grove.yml without a workspaces key
+	subProjectDir := filepath.Join(worktreeDir, "sub-project")
+	require.NoError(t, os.MkdirAll(subProjectDir, 0755))
+	require.NoError(t, os.Mkdir(filepath.Join(subProjectDir, ".git"), 0755))
+
+	subProjCfg := config.Config{Name: "sub-project"}
+	subProjBytes, _ := yaml.Marshal(subProjCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(subProjectDir, "grove.yml"), subProjBytes, 0644))
+
+	// Create another sub-project within the worktree that is also a worktree
+	// (.../feature-branch/sub-project-wt), containing a .git file
+	subProjectWtDir := filepath.Join(worktreeDir, "sub-project-wt")
+	require.NoError(t, os.MkdirAll(subProjectWtDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(subProjectWtDir, ".git"), []byte("gitdir: ../../.git/worktrees/sub-project-wt"), 0644))
+
+	subProjWtCfg := config.Config{Name: "sub-project-wt"}
+	subProjWtBytes, _ := yaml.Marshal(subProjWtCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(subProjectWtDir, "grove.yml"), subProjWtBytes, 0644))
+
+	// Create a deeply nested path inside sub-project
+	deepPath := filepath.Join(subProjectDir, "src", "app", "components")
+	require.NoError(t, os.MkdirAll(deepPath, 0755))
+
+	t.Run("Case 1: Ecosystem Worktree", func(t *testing.T) {
+		// Path: .../my-ecosystem/.grove-worktrees/feature-branch
+		node, err := GetProjectByPath(worktreeDir)
+		require.NoError(t, err)
+		assert.Equal(t, "feature-branch", node.Name)
+		// Use EvalSymlinks to handle /var vs /private/var on macOS
+		expectedPath, _ := filepath.EvalSymlinks(worktreeDir)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
+		assert.Equal(t, KindEcosystemWorktree, node.Kind)
+		expectedRoot, _ := filepath.EvalSymlinks(ecoRootDir)
+		actualRoot, _ := filepath.EvalSymlinks(node.RootEcosystemPath)
+		assert.Equal(t, expectedRoot, actualRoot, "RootEcosystemPath should point to the true ecosystem root")
+	})
+
+	t.Run("Case 2: Sub-project in Worktree", func(t *testing.T) {
+		// Path: .../feature-branch/sub-project
+		node, err := GetProjectByPath(subProjectDir)
+		require.NoError(t, err)
+		assert.Equal(t, "sub-project", node.Name)
+		expectedPath, _ := filepath.EvalSymlinks(subProjectDir)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
+		assert.Equal(t, KindEcosystemWorktreeSubProject, node.Kind)
+		expectedParent, _ := filepath.EvalSymlinks(worktreeDir)
+		actualParent, _ := filepath.EvalSymlinks(node.ParentEcosystemPath)
+		assert.Equal(t, expectedParent, actualParent, "ParentEcosystemPath should point to the worktree")
+		expectedRoot, _ := filepath.EvalSymlinks(ecoRootDir)
+		actualRoot, _ := filepath.EvalSymlinks(node.RootEcosystemPath)
+		assert.Equal(t, expectedRoot, actualRoot, "RootEcosystemPath should point to the true ecosystem root")
+	})
+
+	t.Run("Case 3: Sub-project Worktree in Worktree", func(t *testing.T) {
+		// Path: .../feature-branch/sub-project-wt
+		node, err := GetProjectByPath(subProjectWtDir)
+		require.NoError(t, err)
+		assert.Equal(t, "sub-project-wt", node.Name)
+		expectedPath, _ := filepath.EvalSymlinks(subProjectWtDir)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
+		assert.Equal(t, KindEcosystemWorktreeSubProjectWorktree, node.Kind)
+		expectedRoot, _ := filepath.EvalSymlinks(ecoRootDir)
+		actualRoot, _ := filepath.EvalSymlinks(node.RootEcosystemPath)
+		assert.Equal(t, expectedRoot, actualRoot, "RootEcosystemPath should be correct")
+	})
+
+	t.Run("Case 4: Deeply nested path in sub-project", func(t *testing.T) {
+		// Path: .../sub-project/src/app/components
+		node, err := GetProjectByPath(deepPath)
+		require.NoError(t, err)
+		assert.Equal(t, "sub-project", node.Name)
+		expectedPath, _ := filepath.EvalSymlinks(subProjectDir)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
+		assert.Equal(t, KindEcosystemWorktreeSubProject, node.Kind)
+		expectedParent, _ := filepath.EvalSymlinks(worktreeDir)
+		actualParent, _ := filepath.EvalSymlinks(node.ParentEcosystemPath)
+		assert.Equal(t, expectedParent, actualParent)
+		expectedRoot, _ := filepath.EvalSymlinks(ecoRootDir)
+		actualRoot, _ := filepath.EvalSymlinks(node.RootEcosystemPath)
+		assert.Equal(t, expectedRoot, actualRoot, "RootEcosystemPath should point to the true ecosystem root even from deeply nested path")
+	})
+
+	t.Run("Ecosystem Root", func(t *testing.T) {
+		// Test that the ecosystem root itself is correctly identified
+		node, err := GetProjectByPath(ecoRootDir)
+		require.NoError(t, err)
+		assert.Equal(t, "my-ecosystem", node.Name)
+		expectedPath, _ := filepath.EvalSymlinks(ecoRootDir)
+		actualPath, _ := filepath.EvalSymlinks(node.Path)
+		assert.Equal(t, expectedPath, actualPath)
+		assert.Equal(t, KindEcosystemRoot, node.Kind)
+		expectedRoot, _ := filepath.EvalSymlinks(ecoRootDir)
+		actualRoot, _ := filepath.EvalSymlinks(node.RootEcosystemPath)
+		assert.Equal(t, expectedRoot, actualRoot)
+		assert.Empty(t, node.ParentEcosystemPath)
 	})
 }

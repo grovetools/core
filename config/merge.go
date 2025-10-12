@@ -52,11 +52,6 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 func mergeConfigs(base, override *Config) *Config {
 	result := *base
 
-	// Merge version
-	if override.Version != "" {
-		result.Version = override.Version
-	}
-
 	// Merge extensions
 	if override.Extensions != nil {
 		if result.Extensions == nil {
