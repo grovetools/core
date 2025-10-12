@@ -2,6 +2,7 @@ package wsnav
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattsolo1/grove-core/git"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"github.com/mattsolo1/grove-core/tui/components/navigator"
 )
@@ -19,8 +20,11 @@ func New(projects []*workspace.WorkspaceNode) *Model {
 		Projects: projectValues,
 	})
 
+	// ENRICHMENT EXAMPLE: Initialize enrichment data structures in the constructor.
+	// External callers should initialize their enrichment maps here as well.
 	m := &Model{
 		navigator: nav,
+		gitStatus: make(map[string]*git.StatusInfo),
 	}
 
 	// Set OnSelect callback to capture selection and quit

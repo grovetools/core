@@ -117,6 +117,11 @@ func (m *Model) buildTableView(availableHeight int) string {
 	// Build table rows
 	allRows := m.buildTableRows(hierarchical)
 
+	// Guard against empty results
+	if len(allRows) == 0 {
+		return "No matching workspaces found."
+	}
+
 	cursor := m.navigator.GetCursor()
 
 	// Calculate visible rows based on scroll offset
@@ -167,7 +172,7 @@ func (m *Model) buildTableView(availableHeight int) string {
 		[]string{"K", "●", "WORKSPACE", "PATH"},
 		visibleRows,
 		relativeCursor,
-		table.SelectableTableOptions{HighlightColumn: 2},
+		table.SelectableTableOptions{HighlightColumn: -1},
 	)
 
 	// Add scroll indicator if there are more items
@@ -224,12 +229,45 @@ func (m *Model) buildTableRows(projects []*workspace.WorkspaceNode) [][]string {
 		}
 
 		kind := kindAbbreviation(p.Kind)
-		name := fmt.Sprintf("%s%s%s", indent, prefix, p.Name)
+
+		// Apply styling based on workspace type
+		var nameStyle lipgloss.Style
+		if p.IsWorktree() {
+			// Worktrees: teal color (blue in the theme)
+			nameStyle = lipgloss.NewStyle().Foreground(theme.DefaultColors.Blue)
+		} else {
+			// Primary workspaces: cyan color
+			nameStyle = lipgloss.NewStyle().Foreground(theme.DefaultColors.Cyan)
+		}
+		name := nameStyle.Render(fmt.Sprintf("%s%s%s", indent, prefix, p.Name))
+
+		// ENRICHMENT EXAMPLE: Read enrichment data from the map using a read lock.
+		// This demonstrates how to safely access enrichment data in the view:
+		//   1. Use RLock/RUnlock for thread-safe reads (multiple readers allowed)
+		//   2. Check if data exists (nil check)
+		//   3. Render appropriate visual indicators based on the data
+		//
+		// External callers should follow this pattern to display their own
+		// enrichment data (sessions, note counts, plan stats, etc.)
+		m.gitStatusMutex.RLock()
+		gitStatus := m.gitStatus[p.Path]
+		m.gitStatusMutex.RUnlock()
+
+		// Render git status icon based on enrichment data
+		statusIcon := " "
+		if gitStatus != nil {
+			if gitStatus.IsDirty {
+				statusIcon = theme.DefaultTheme.Warning.Render("*")
+			} else {
+				statusIcon = theme.DefaultTheme.Success.Render("✔")
+			}
+		}
+
 		path := shortenPath(p.Path)
 
 		rows = append(rows, []string{
 			kind,
-			"●", // Placeholder for status
+			statusIcon,
 			name,
 			lipgloss.NewStyle().Faint(true).Render(path),
 		})

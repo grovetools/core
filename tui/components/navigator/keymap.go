@@ -29,8 +29,8 @@ var defaultKeyMap = KeyMap{
 		key.WithHelp("↓/j", "down"),
 	),
 	FocusEcosystem: key.NewBinding(
-		key.WithKeys("ctrl+f"),
-		key.WithHelp("ctrl+f", "focus ecosystem"),
+		key.WithKeys("ctrl+f", "@"),
+		key.WithHelp("@/ctrl+f", "focus ecosystem"),
 	),
 	ClearFocus: key.NewBinding(
 		key.WithKeys("ctrl+g"),
