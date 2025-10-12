@@ -22,6 +22,13 @@ func tickCmd() tea.Cmd {
 	})
 }
 
+// tick returns a command that sends a tick message after the configured RefreshInterval
+func (m Model) tick() tea.Cmd {
+	return tea.Tick(time.Duration(m.RefreshInterval)*time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
 // RefreshProjectsCmd returns a command that uses the model's ProjectsLoader to fetch updated projects.
 func (m *Model) RefreshProjectsCmd() tea.Cmd {
 	if m.ProjectsLoader == nil {

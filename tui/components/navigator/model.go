@@ -83,6 +83,9 @@ func New(cfg Config) Model {
 // Init initializes the navigator.
 // The parent application is now responsible for sending the initial ProjectsLoadedMsg.
 func (m Model) Init() tea.Cmd {
+	if m.RefreshInterval > 0 {
+		return m.tick() // Start the refresh loop
+	}
 	return nil
 }
 
@@ -131,8 +134,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// The parent can choose to send ticks to trigger a refresh
-		return m, m.RefreshProjectsCmd()
+		// When a tick is received, refresh projects and schedule the next tick.
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.RefreshProjectsCmd())
+		if m.RefreshInterval > 0 {
+			cmds = append(cmds, m.tick())
+		}
+		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
 		// If help is visible, it consumes all key presses

@@ -44,8 +44,8 @@ of ecosystems, projects, and worktrees.`
 			return nil
 		}
 
-		// Launch the TUI
-		p := tea.NewProgram(wsnav.New(projects), tea.WithAltScreen(), tea.WithMouseCellMotion())
+		// Launch the TUI with 30 second refresh interval
+		p := tea.NewProgram(wsnav.New(projects, 30), tea.WithAltScreen(), tea.WithMouseCellMotion())
 		finalModel, err := p.Run()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
