@@ -16,11 +16,11 @@ import (
 func setupMockFS(t *testing.T) (string, string) {
 	rootDir := t.TempDir()
 
-	// 1. Global config with 'groves'
+	// 1. Global config with 'search_paths'
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
 	globalCfg := config.Config{
-		Groves: map[string]config.GrovesConfig{
+		SearchPaths: map[string]config.SearchPathConfig{
 			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
 		},
 	}

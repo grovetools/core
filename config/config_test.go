@@ -108,6 +108,83 @@ monitoring:
 	}
 }
 
+// TestBackwardCompatibilityGrovesToSearchPaths verifies that old "groves" key
+// is automatically migrated to "search_paths"
+func TestBackwardCompatibilityGrovesToSearchPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected int // expected number of search paths
+	}{
+		{
+			name: "old groves key",
+			yaml: `
+version: "1.0"
+groves:
+  home:
+    path: ~/Code
+    enabled: true
+  work:
+    path: ~/Work
+    enabled: true
+`,
+			expected: 2,
+		},
+		{
+			name: "new search_paths key",
+			yaml: `
+version: "1.0"
+search_paths:
+  home:
+    path: ~/Code
+    enabled: true
+  work:
+    path: ~/Work
+    enabled: true
+`,
+			expected: 2,
+		},
+		{
+			name: "both keys present (search_paths wins)",
+			yaml: `
+version: "1.0"
+groves:
+  old:
+    path: ~/OldPath
+    enabled: true
+search_paths:
+  new:
+    path: ~/NewPath
+    enabled: true
+`,
+			expected: 1, // only search_paths should be used
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := LoadFromBytes([]byte(tt.yaml))
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			if len(cfg.SearchPaths) != tt.expected {
+				t.Errorf("Expected %d search paths, got %d", tt.expected, len(cfg.SearchPaths))
+			}
+
+			// For the "both keys" test, verify the right one was used
+			if tt.name == "both keys present (search_paths wins)" {
+				if _, ok := cfg.SearchPaths["new"]; !ok {
+					t.Error("Expected 'new' search path to be present")
+				}
+				if _, ok := cfg.SearchPaths["old"]; ok {
+					t.Error("Expected 'old' search path (from groves) to NOT be present")
+				}
+			}
+		})
+	}
+}
+
 // TestExtensionsDoNotInterfereWithCoreConfig verifies that extensions don't break core config parsing
 func TestExtensionsDoNotInterfereWithCoreConfig(t *testing.T) {
 	yamlContent := []byte(`

@@ -10,10 +10,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 // SetupSubmodules initializes submodules, creating linked worktrees where possible.
 func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, ds *DiscoveryService) error {
+	// If no discovery service provided, create a default one
+	if ds == nil {
+		logger := logrus.New()
+		logger.SetOutput(os.Stderr)
+		logger.SetLevel(logrus.WarnLevel)
+		ds = NewDiscoveryService(logger)
+	}
 	cmdCheckout := exec.CommandContext(ctx, "git", "checkout", "HEAD", "--", ".")
 	cmdCheckout.Dir = worktreePath
 	cmdCheckout.CombinedOutput() // Ignore error

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"github.com/mitchellh/mapstructure"
+	"gopkg.in/yaml.v3"
 )
 
 // SearchPathConfig defines the configuration for a single search path.
@@ -28,6 +29,9 @@ type Config struct {
 
 	// SearchPaths defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
+	//
+	// Note: For backward compatibility, the old "groves" key is still supported and will
+	// be automatically migrated to "search_paths" when loading configuration.
 	SearchPaths map[string]SearchPathConfig `yaml:"search_paths,omitempty"`
 
 	// ExplicitProjects defines specific projects to include without discovery.
@@ -38,6 +42,44 @@ type Config struct {
 	// This allows other tools in the Grove ecosystem to define their
 	// own configuration sections in grove.yml.
 	Extensions map[string]interface{} `yaml:",inline"`
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling to handle backward compatibility
+// for the old "groves" key, now renamed to "search_paths".
+func (c *Config) UnmarshalYAML(node *yaml.Node) error {
+	// Create a temporary struct with all fields to capture the data
+	type rawConfig struct {
+		Name             string                       `yaml:"name,omitempty"`
+		Version          string                       `yaml:"version"`
+		Workspaces       []string                     `yaml:"workspaces,omitempty"`
+		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty"`
+		Groves           map[string]SearchPathConfig  `yaml:"groves,omitempty"` // Legacy field
+		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
+		Extensions       map[string]interface{}       `yaml:",inline"`
+	}
+
+	var raw rawConfig
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	// Copy all fields
+	c.Name = raw.Name
+	c.Version = raw.Version
+	c.Workspaces = raw.Workspaces
+	c.ExplicitProjects = raw.ExplicitProjects
+	c.Extensions = raw.Extensions
+
+	// Handle backward compatibility: if "groves" is present but "search_paths" is not,
+	// use "groves" as "search_paths"
+	if len(raw.SearchPaths) > 0 {
+		c.SearchPaths = raw.SearchPaths
+	} else if len(raw.Groves) > 0 {
+		// Migrate old "groves" key to new "search_paths"
+		c.SearchPaths = raw.Groves
+	}
+
+	return nil
 }
 
 // SetDefaults sets default values for configuration

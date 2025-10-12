@@ -111,7 +111,7 @@ func TestSetupSubmodules(t *testing.T) {
 		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
 		
 		// Test SetupSubmodules with all repos
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, nil)
 		require.NoError(t, err)
 		
 		// Verify local-sub exists as a directory (linked worktree)
@@ -177,7 +177,7 @@ func TestSetupSubmodules(t *testing.T) {
 		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
 		
 		// Test SetupSubmodules with repos filter (only local-sub)
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{"local-sub"})
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{"local-sub"}, nil)
 		require.NoError(t, err)
 		
 		// Verify local-sub exists
@@ -236,7 +236,7 @@ func TestSetupSubmodules(t *testing.T) {
 		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
 		
 		// Test SetupSubmodules - should handle missing submodule gracefully
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, nil)
 		require.NoError(t, err)
 		
 		// Verify missing-sub directory exists (created as placeholder)
@@ -298,7 +298,7 @@ func TestSetupSubmodules(t *testing.T) {
 		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
 		
 		// Test SetupSubmodules with complex gitmodules
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, nil)
 		require.NoError(t, err)
 		
 		// Verify all submodule directories are created
@@ -354,7 +354,7 @@ func TestSetupSubmodules(t *testing.T) {
 		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
 		
 		// Test with empty repos list (should setup all submodules)
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{})
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{}, nil)
 		require.NoError(t, err)
 		
 		// Verify submodule directory is created

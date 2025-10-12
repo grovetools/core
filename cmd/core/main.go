@@ -15,6 +15,7 @@ func main() {
 
 	// Add subcommands
 	rootCmd.AddCommand(cmd.NewVersionCmd())
+	rootCmd.AddCommand(cmd.NewWsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

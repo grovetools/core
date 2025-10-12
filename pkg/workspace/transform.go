@@ -63,6 +63,20 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 
 	// Then process all discovered projects and their workspaces
 	for _, proj := range result.Projects {
+		// Check if this is a cloned repo (Type == "Cloned") - these should be NonGroveRepo
+		if proj.Type == "Cloned" {
+			projects = append(projects, &ProjectInfo{
+				Name:        proj.Name,
+				Path:        proj.Path,
+				Kind:        KindNonGroveRepo,
+				Version:     proj.Version,
+				Commit:      proj.Commit,
+				AuditStatus: proj.AuditStatus,
+				ReportPath:  proj.ReportPath,
+			})
+			continue
+		}
+
 		// Is this project an ecosystem worktree?
 		isEcoWorktree := false
 		if proj.ParentEcosystemPath != "" {

@@ -23,6 +23,166 @@ func expandPath(path string) string {
 	return os.ExpandEnv(path)
 }
 
+// directoryType represents the classification of a directory during discovery
+type directoryType int
+
+const (
+	typeUnknown directoryType = iota
+	typeEcosystem
+	typeProject
+	typeEcosystemWorktreeDir // The .grove-worktrees directory itself
+	typeNonGroveRepo
+	typeSkip // Already processed or should be skipped
+)
+
+// classifyDirectory examines a directory and returns its type based on filesystem markers
+func classifyDirectory(path string, d os.DirEntry) (directoryType, *config.Config, error) {
+	if !d.IsDir() {
+		return typeUnknown, nil, nil
+	}
+
+	// Special case: .grove-worktrees directory inside an ecosystem
+	if d.Name() == ".grove-worktrees" {
+		// Check if parent directory is an ecosystem
+		parentPath := filepath.Dir(path)
+		parentGroveYml := filepath.Join(parentPath, "grove.yml")
+		if _, statErr := os.Stat(parentGroveYml); statErr == nil {
+			parentCfg, loadErr := config.Load(parentGroveYml)
+			if loadErr == nil && len(parentCfg.Workspaces) > 0 {
+				// Parent is an ecosystem - this is an ecosystem worktree directory
+				return typeEcosystemWorktreeDir, parentCfg, nil
+			}
+		}
+		return typeUnknown, nil, nil
+	}
+
+	// Check for grove.yml to classify the directory
+	groveYmlPath := filepath.Join(path, "grove.yml")
+	if _, statErr := os.Stat(groveYmlPath); statErr == nil {
+		// Skip re-processing if this is a direct child of .grove-worktrees
+		// (the worktree directory itself, which was already classified)
+		if filepath.Base(filepath.Dir(path)) == ".grove-worktrees" {
+			return typeSkip, nil, nil
+		}
+
+		cfg, loadErr := config.Load(groveYmlPath)
+		if loadErr != nil {
+			return typeUnknown, nil, fmt.Errorf("failed to load grove.yml: %w", loadErr)
+		}
+
+		// Check if it's an ecosystem (has workspaces key)
+		// But ecosystem roots should never be inside .grove-worktrees directories
+		if len(cfg.Workspaces) > 0 && !strings.Contains(path, ".grove-worktrees") {
+			return typeEcosystem, cfg, nil
+		}
+
+		// It's a project
+		return typeProject, cfg, nil
+	}
+
+	// Check for .git to classify as Non-Grove Directory
+	if _, statErr := os.Stat(filepath.Join(path, ".git")); statErr == nil {
+		return typeNonGroveRepo, nil, nil
+	}
+
+	return typeUnknown, nil, nil
+}
+
+// processEcosystem handles discovery of an ecosystem root directory
+func processEcosystem(path string, cfg *config.Config) Ecosystem {
+	ecosystemName := cfg.Name
+	if ecosystemName == "" {
+		ecosystemName = filepath.Base(path)
+	}
+
+	eco := Ecosystem{
+		Name: ecosystemName,
+		Path: path,
+		Type: "User",
+	}
+
+	if eco.Name == "grove-ecosystem" {
+		eco.Type = "Grove"
+	}
+
+	return eco
+}
+
+// processProject handles discovery of a project directory and its worktrees
+func processProject(path string, cfg *config.Config) Project {
+	projectName := cfg.Name
+	if projectName == "" {
+		projectName = filepath.Base(path)
+	}
+
+	proj := Project{
+		Name:       projectName,
+		Path:       path,
+		Workspaces: []DiscoveredWorkspace{},
+	}
+
+	// Add the Primary Workspace
+	proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
+		Name:              "main",
+		Path:              path,
+		Type:              WorkspaceTypePrimary,
+		ParentProjectPath: path,
+	})
+
+	// Scan for Worktree Workspaces
+	worktreeBase := filepath.Join(path, ".grove-worktrees")
+	if entries, readErr := os.ReadDir(worktreeBase); readErr == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				wtPath := filepath.Join(worktreeBase, entry.Name())
+				proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
+					Name:              entry.Name(),
+					Path:              wtPath,
+					Type:              WorkspaceTypeWorktree,
+					ParentProjectPath: path,
+				})
+			}
+		}
+	}
+
+	return proj
+}
+
+// processEcosystemWorktreeDir handles the special case of .grove-worktrees directory
+// inside an ecosystem, treating each subdirectory as a project
+func processEcosystemWorktreeDir(path string, parentEcoPath string) []Project {
+	var projects []Project
+
+	if entries, readErr := os.ReadDir(path); readErr == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				wtPath := filepath.Join(path, entry.Name())
+				proj := Project{
+					Name:                entry.Name(),
+					Path:                wtPath,
+					ParentEcosystemPath: parentEcoPath,
+					Workspaces: []DiscoveredWorkspace{
+						{
+							Name:              entry.Name(),
+							Path:              wtPath,
+							Type:              WorkspaceTypePrimary,
+							ParentProjectPath: wtPath,
+						},
+					},
+				}
+				projects = append(projects, proj)
+			}
+		}
+	}
+
+	return projects
+}
+
+// processNonGroveRepo records a non-Grove git repository
+func processNonGroveRepo(path string) string {
+	return path
+}
+
 // DiscoveryService scans the filesystem to find and classify Grove entities.
 type DiscoveryService struct {
 	logger     *logrus.Logger
@@ -121,136 +281,60 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 				nonGrove:   []string{},
 			}
 
-			// 3. Scan the directory.
+			// 3. Scan the directory using the new helper-based approach.
 			err := filepath.WalkDir(grovePath, func(path string, d os.DirEntry, err error) error {
 				if err != nil {
 					return err
 				}
-				if !d.IsDir() {
+
+				// Classify the directory
+				entityType, groveCfg, classifyErr := classifyDirectory(path, d)
+				if classifyErr != nil {
+					// Log but continue on classification errors
+					s.logger.Warnf("Error classifying directory %s: %v", path, classifyErr)
 					return nil
 				}
 
-				// Special handling for .grove-worktrees directories
-				if d.Name() == ".grove-worktrees" {
-					// Check if parent directory is an ecosystem
+				// Handle based on classification
+				switch entityType {
+				case typeEcosystem:
+					// This is an ecosystem root - add it and continue descending
+					eco := processEcosystem(path, groveCfg)
+					groveRes.ecosystems = append(groveRes.ecosystems, eco)
+					return nil // Continue descending to find projects within
+
+				case typeProject:
+					// This is a project - add it and all its worktrees, then skip descending
+					proj := processProject(path, groveCfg)
+					groveRes.projects = append(groveRes.projects, proj)
+					return filepath.SkipDir
+
+				case typeEcosystemWorktreeDir:
+					// This is an ecosystem's .grove-worktrees directory
+					// Process each subdirectory as an ecosystem worktree project
 					parentPath := filepath.Dir(path)
-					parentGroveYml := filepath.Join(parentPath, "grove.yml")
-					if _, statErr := os.Stat(parentGroveYml); statErr == nil {
-						parentCfg, loadErr := config.Load(parentGroveYml)
-						if loadErr == nil && len(parentCfg.Workspaces) > 0 {
-							// Parent is an ecosystem - treat each worktree as a project
-							if entries, readErr := os.ReadDir(path); readErr == nil {
-								for _, entry := range entries {
-									if entry.IsDir() {
-										wtPath := filepath.Join(path, entry.Name())
-										proj := Project{
-											Name:                entry.Name(),
-											Path:                wtPath,
-											ParentEcosystemPath: parentPath,
-											Workspaces: []DiscoveredWorkspace{
-												{
-													Name:              entry.Name(),
-													Path:              wtPath,
-													Type:              WorkspaceTypePrimary,
-													ParentProjectPath: wtPath,
-												},
-											},
-										}
-										groveRes.projects = append(groveRes.projects, proj)
-									}
-								}
-							}
-							// Continue descending into ecosystem worktrees to discover repos/submodules within them
-							// This allows focusing on an ecosystem worktree to show all its contained repos
-							return nil
-						}
-					}
-					// If not an ecosystem's .grove-worktrees, continue normally
+					projects := processEcosystemWorktreeDir(path, parentPath)
+					groveRes.projects = append(groveRes.projects, projects...)
+					// Continue descending to discover repos/submodules within ecosystem worktrees
+					return nil
+
+				case typeNonGroveRepo:
+					// This is a git repo without grove.yml
+					nonGrovePath := processNonGroveRepo(path)
+					groveRes.nonGrove = append(groveRes.nonGrove, nonGrovePath)
+					return filepath.SkipDir
+
+				case typeSkip:
+					// Already processed, skip this directory
+					return nil
+
+				case typeUnknown:
+					// Not a grove entity, continue scanning
+					return nil
+
+				default:
 					return nil
 				}
-
-				// Check for grove.yml to classify the directory
-				groveYmlPath := filepath.Join(path, "grove.yml")
-				if _, statErr := os.Stat(groveYmlPath); statErr == nil {
-					// Skip re-processing only if this is a direct child of .grove-worktrees
-					// (the worktree directory itself, which was already classified above)
-					// But DO process subdirectories within worktrees (submodules, nested repos)
-					if filepath.Base(filepath.Dir(path)) == ".grove-worktrees" {
-						return nil
-					}
-
-					cfg, loadErr := config.Load(groveYmlPath)
-					if loadErr == nil {
-						// An ecosystem's root directory should never be inside a .grove-worktrees directory.
-						// This check prevents an ecosystem worktree from being incorrectly identified as a new,
-						// separate top-level ecosystem, thus preventing duplication.
-						if len(cfg.Workspaces) > 0 && !strings.Contains(path, ".grove-worktrees") {
-							// This is an Ecosystem
-							ecosystemName := cfg.Name
-							if ecosystemName == "" {
-								// Fall back to directory name if grove.yml has no name
-								ecosystemName = filepath.Base(path)
-							}
-							eco := Ecosystem{
-								Name: ecosystemName,
-								Path: path,
-								Type: "User", // Default to User, can be refined
-							}
-							if eco.Name == "grove-ecosystem" {
-								eco.Type = "Grove"
-							}
-							groveRes.ecosystems = append(groveRes.ecosystems, eco)
-
-							// Continue descending to find projects within the ecosystem
-							return nil
-						} else {
-							// This is a Project
-							projectName := cfg.Name
-							if projectName == "" {
-								// Fall back to directory name if grove.yml has no name
-								projectName = filepath.Base(path)
-							}
-							proj := Project{
-								Name:       projectName,
-								Path:       path,
-								Workspaces: []DiscoveredWorkspace{},
-							}
-							// Add the Primary Workspace
-							proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
-								Name:              "main",
-								Path:              path,
-								Type:              WorkspaceTypePrimary,
-								ParentProjectPath: path,
-							})
-
-							// Scan for Worktree Workspaces
-							worktreeBase := filepath.Join(path, ".grove-worktrees")
-							if entries, readErr := os.ReadDir(worktreeBase); readErr == nil {
-								for _, entry := range entries {
-									if entry.IsDir() {
-										wtPath := filepath.Join(worktreeBase, entry.Name())
-										proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
-											Name:              entry.Name(),
-											Path:              wtPath,
-											Type:              WorkspaceTypeWorktree,
-											ParentProjectPath: path,
-										})
-									}
-								}
-							}
-							groveRes.projects = append(groveRes.projects, proj)
-							return filepath.SkipDir // Don't descend further into a project
-						}
-					}
-				} else {
-					// Check for .git to classify as Non-Grove Directory
-					if _, statErr := os.Stat(filepath.Join(path, ".git")); statErr == nil {
-						groveRes.nonGrove = append(groveRes.nonGrove, path)
-						return filepath.SkipDir
-					}
-				}
-
-				return nil
 			})
 			if err != nil {
 				s.logger.Warnf("Error walking path for grove '%s': %v", groveName, err)

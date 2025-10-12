@@ -30,8 +30,7 @@ func TestGetProjectByPath(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "test-project", projInfo.Name)
 		assert.Equal(t, projectPath, projInfo.Path)
-		assert.False(t, projInfo.IsWorktree)
-		assert.False(t, projInfo.IsEcosystem)
+		assert.Equal(t, KindStandaloneProject, projInfo.Kind)
 		assert.Equal(t, "", projInfo.ParentEcosystemPath)
 	})
 

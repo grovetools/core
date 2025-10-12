@@ -48,7 +48,7 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		}
 	}
 
-	var parentEcosystemPath, worktreeName, worktreeRootPath string
+	var parentEcosystemPath string
 	var isEcosystem bool
 
 	// Extract worktree name if this project is inside any .grove-worktrees directory
@@ -58,15 +58,6 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		// Find the .grove-worktrees segment in the path
 		parts := strings.Split(absPath, string(filepath.Separator)+".grove-worktrees"+string(filepath.Separator))
 		if len(parts) >= 2 {
-			// Get the first path segment after .grove-worktrees
-			afterWorktrees := parts[1]
-			worktreeParts := strings.Split(afterWorktrees, string(filepath.Separator))
-			if len(worktreeParts) > 0 {
-				worktreeName = worktreeParts[0]
-				// Construct the worktree root path
-				worktreeRootPath = parts[0] + string(filepath.Separator) + ".grove-worktrees" + string(filepath.Separator) + worktreeName
-			}
-
 			// For worktrees, also try to find the parent ecosystem by looking up from
 			// the directory before .grove-worktrees
 			parentDir := parts[0]
@@ -105,14 +96,42 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		isEcosystem = true
 	}
 
+	// Determine the Kind based on the flags we've collected
+	var kind WorkspaceKind
+
+	// Check if it's a non-Grove repo
+	hasGroveYml, _ := config.FindConfigFile(absPath)
+	if hasGroveYml == "" {
+		kind = KindNonGroveRepo
+	} else if isEcosystem && !isWorktree {
+		kind = KindEcosystemRoot
+	} else if isEcosystemWorktree {
+		kind = KindEcosystemWorktree
+	} else if parentEcosystemPath != "" && isWorktree {
+		// Check if parent is an ecosystem worktree
+		if strings.Contains(parentPath, ".grove-worktrees") {
+			kind = KindEcosystemWorktreeSubProjectWorktree
+		} else {
+			kind = KindEcosystemSubProjectWorktree
+		}
+	} else if parentEcosystemPath != "" && !isWorktree {
+		// Check if inside an ecosystem worktree
+		if strings.Contains(absPath, ".grove-worktrees") {
+			kind = KindEcosystemWorktreeSubProject
+		} else {
+			kind = KindEcosystemSubProject
+		}
+	} else if isWorktree {
+		kind = KindStandaloneProjectWorktree
+	} else {
+		kind = KindStandaloneProject
+	}
+
 	return &ProjectInfo{
 		Name:                filepath.Base(absPath),
 		Path:                absPath,
-		ParentPath:          parentPath,
-		IsWorktree:          isWorktree,
-		WorktreeName:        worktreeName,
-		WorktreeRootPath:    worktreeRootPath,
+		Kind:                kind,
+		ParentProjectPath:   parentPath,
 		ParentEcosystemPath: parentEcosystemPath,
-		IsEcosystem:         isEcosystem,
 	}, nil
 }

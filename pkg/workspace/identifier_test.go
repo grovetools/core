@@ -18,25 +18,26 @@ func TestProjectInfo_Identifier(t *testing.T) {
 			project: &ProjectInfo{
 				Name: "my-project",
 				Path: "/path/to/my-project",
+				Kind: KindStandaloneProject,
 			},
 			expected: "my-project",
 		},
 		{
 			name: "Project worktree",
 			project: &ProjectInfo{
-				Name:       "feature-branch",
-				Path:       "/path/to/my-project/.grove-worktrees/feature-branch",
-				ParentPath: "/path/to/my-project",
-				IsWorktree: true,
+				Name:              "feature-branch",
+				Path:              "/path/to/my-project/.grove-worktrees/feature-branch",
+				Kind:              KindStandaloneProjectWorktree,
+				ParentProjectPath: "/path/to/my-project",
 			},
 			expected: "my-project_feature-branch",
 		},
 		{
 			name: "Ecosystem main repository",
 			project: &ProjectInfo{
-				Name:        "my-ecosystem",
-				Path:        "/path/to/my-ecosystem",
-				IsEcosystem: true,
+				Name: "my-ecosystem",
+				Path: "/path/to/my-ecosystem",
+				Kind: KindEcosystemRoot,
 			},
 			expected: "my-ecosystem",
 		},
@@ -45,10 +46,8 @@ func TestProjectInfo_Identifier(t *testing.T) {
 			project: &ProjectInfo{
 				Name:                "eco-feature",
 				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature",
-				ParentPath:          "/path/to/my-ecosystem",
-				IsWorktree:          true,
-				IsEcosystem:         true,
-				WorktreeName:        "eco-feature",
+				Kind:                KindEcosystemWorktree,
+				ParentProjectPath:   "/path/to/my-ecosystem",
 				ParentEcosystemPath: "/path/to/my-ecosystem",
 			},
 			expected: "my-ecosystem_eco-feature",
@@ -58,8 +57,8 @@ func TestProjectInfo_Identifier(t *testing.T) {
 			project: &ProjectInfo{
 				Name:                "sub-project",
 				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project",
-				WorktreeName:        "eco-feature",
-				ParentEcosystemPath: "/path/to/my-ecosystem",
+				Kind:                KindEcosystemWorktreeSubProject,
+				ParentEcosystemPath: "/path/to/my-ecosystem/.grove-worktrees/eco-feature",
 			},
 			expected: "my-ecosystem_eco-feature_sub-project",
 		},
@@ -68,6 +67,7 @@ func TestProjectInfo_Identifier(t *testing.T) {
 			project: &ProjectInfo{
 				Name:                "sub-project",
 				Path:                "/path/to/my-ecosystem/sub-project",
+				Kind:                KindEcosystemSubProject,
 				ParentEcosystemPath: "/path/to/my-ecosystem",
 			},
 			expected: "my-ecosystem_sub-project",
@@ -77,8 +77,8 @@ func TestProjectInfo_Identifier(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Correctly handle filepaths for the test environment
-			if tt.project.ParentPath != "" {
-				tt.project.ParentPath = filepath.FromSlash(tt.project.ParentPath)
+			if tt.project.ParentProjectPath != "" {
+				tt.project.ParentProjectPath = filepath.FromSlash(tt.project.ParentProjectPath)
 			}
 			if tt.project.ParentEcosystemPath != "" {
 				tt.project.ParentEcosystemPath = filepath.FromSlash(tt.project.ParentEcosystemPath)
