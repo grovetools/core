@@ -7,15 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProjectInfo_Identifier(t *testing.T) {
+func TestWorkspaceNode_Identifier(t *testing.T) {
 	tests := []struct {
 		name     string
-		project  *ProjectInfo
+		project  *WorkspaceNode
 		expected string
 	}{
 		{
 			name: "Standalone project",
-			project: &ProjectInfo{
+			project: &WorkspaceNode{
 				Name: "my-project",
 				Path: "/path/to/my-project",
 				Kind: KindStandaloneProject,
@@ -24,7 +24,7 @@ func TestProjectInfo_Identifier(t *testing.T) {
 		},
 		{
 			name: "Project worktree",
-			project: &ProjectInfo{
+			project: &WorkspaceNode{
 				Name:              "feature-branch",
 				Path:              "/path/to/my-project/.grove-worktrees/feature-branch",
 				Kind:              KindStandaloneProjectWorktree,
@@ -34,7 +34,7 @@ func TestProjectInfo_Identifier(t *testing.T) {
 		},
 		{
 			name: "Ecosystem main repository",
-			project: &ProjectInfo{
+			project: &WorkspaceNode{
 				Name: "my-ecosystem",
 				Path: "/path/to/my-ecosystem",
 				Kind: KindEcosystemRoot,
@@ -43,7 +43,7 @@ func TestProjectInfo_Identifier(t *testing.T) {
 		},
 		{
 			name: "Ecosystem worktree",
-			project: &ProjectInfo{
+			project: &WorkspaceNode{
 				Name:                "eco-feature",
 				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature",
 				Kind:                KindEcosystemWorktree,
@@ -54,7 +54,7 @@ func TestProjectInfo_Identifier(t *testing.T) {
 		},
 		{
 			name: "Sub-project within ecosystem worktree",
-			project: &ProjectInfo{
+			project: &WorkspaceNode{
 				Name:                "sub-project",
 				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project",
 				Kind:                KindEcosystemWorktreeSubProject,
@@ -64,7 +64,7 @@ func TestProjectInfo_Identifier(t *testing.T) {
 		},
 		{
 			name: "Sub-project within main ecosystem repo",
-			project: &ProjectInfo{
+			project: &WorkspaceNode{
 				Name:                "sub-project",
 				Path:                "/path/to/my-ecosystem/sub-project",
 				Kind:                KindEcosystemSubProject,

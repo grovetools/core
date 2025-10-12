@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -42,22 +43,23 @@ func determineKind(path, parentEcosystemPath, parentProjectPath string, isWorktr
 	return KindStandaloneProject
 }
 
-// TransformToProjectInfo converts a hierarchical DiscoveryResult into a flat list
-// of ProjectInfo items suitable for display in UIs.
-func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
-	var projects []*ProjectInfo
+// TransformToWorkspaceNodes converts a hierarchical DiscoveryResult into a flat list
+// of WorkspaceNode items suitable for display in UIs.
+func TransformToWorkspaceNodes(result *DiscoveryResult) []*WorkspaceNode {
+	var nodes []*WorkspaceNode
 	projectMap := make(map[string]*Project)
 	for i := range result.Projects {
 		projectMap[result.Projects[i].Path] = &result.Projects[i]
 	}
 
-	// First, add ecosystems themselves as ProjectInfo items
+	// First, add ecosystems themselves as WorkspaceNode items
 	for _, eco := range result.Ecosystems {
-		projects = append(projects, &ProjectInfo{
+		nodes = append(nodes, &WorkspaceNode{
 			Name:                eco.Name,
 			Path:                eco.Path,
 			Kind:                KindEcosystemRoot,
 			ParentEcosystemPath: "", // It is its own root
+			RootEcosystemPath:   eco.Path,
 		})
 	}
 
@@ -65,7 +67,7 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 	for _, proj := range result.Projects {
 		// Check if this is a cloned repo (Type == "Cloned") - these should be NonGroveRepo
 		if proj.Type == "Cloned" {
-			projects = append(projects, &ProjectInfo{
+			nodes = append(nodes, &WorkspaceNode{
 				Name:        proj.Name,
 				Path:        proj.Path,
 				Kind:        KindNonGroveRepo,
@@ -90,13 +92,14 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 		}
 
 		if isEcoWorktree {
-			// This is an Ecosystem Worktree, treat it as a single ProjectInfo
-			projects = append(projects, &ProjectInfo{
+			// This is an Ecosystem Worktree, treat it as a single WorkspaceNode
+			nodes = append(nodes, &WorkspaceNode{
 				Name:                filepath.Base(proj.Path),
 				Path:                proj.Path,
 				Kind:                KindEcosystemWorktree,
 				ParentProjectPath:   proj.ParentEcosystemPath,
 				ParentEcosystemPath: proj.ParentEcosystemPath, // An eco worktree is inside its own parent eco
+				// RootEcosystemPath will be set in the hierarchy resolution pass
 			})
 			// We don't process its 'workspaces' field because it's represented as a single entity.
 			// Sub-projects inside it will be handled as separate items in the result.Projects loop.
@@ -108,23 +111,31 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 		kind := KindStandaloneProject
 		if isSubProject {
 			// Check if it's inside an ecosystem worktree
-			// This logic is complex and relies on careful path inspection
 			if strings.Contains(proj.Path, ".grove-worktrees") {
-				kind = KindEcosystemWorktreeSubProject
+				// Check if this project is itself a git worktree by examining .git
+				gitPath := filepath.Join(proj.Path, ".git")
+				if stat, err := os.Stat(gitPath); err == nil && !stat.IsDir() {
+					// .git is a file, so this is a worktree (linked development)
+					kind = KindEcosystemWorktreeSubProjectWorktree
+				} else {
+					// .git is a directory or doesn't exist, so it's a full checkout
+					kind = KindEcosystemWorktreeSubProject
+				}
 			} else {
 				kind = KindEcosystemSubProject
 			}
 		}
 
-		projects = append(projects, &ProjectInfo{
+		nodes = append(nodes, &WorkspaceNode{
 			Name:                proj.Name,
 			Path:                proj.Path,
 			Kind:                kind,
 			ParentEcosystemPath: proj.ParentEcosystemPath,
-			Version:             proj.Version,
-			Commit:              proj.Commit,
-			AuditStatus:         proj.AuditStatus,
-			ReportPath:          proj.ReportPath,
+			// RootEcosystemPath will be set in the hierarchy resolution pass
+			Version:     proj.Version,
+			Commit:      proj.Commit,
+			AuditStatus: proj.AuditStatus,
+			ReportPath:  proj.ReportPath,
 		})
 
 		// Add all associated Worktree Workspaces
@@ -145,12 +156,13 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 					}
 				}
 
-				projects = append(projects, &ProjectInfo{
+				nodes = append(nodes, &WorkspaceNode{
 					Name:                ws.Name,
 					Path:                ws.Path,
 					Kind:                wtKind,
 					ParentProjectPath:   ws.ParentProjectPath,
 					ParentEcosystemPath: proj.ParentEcosystemPath,
+					// RootEcosystemPath will be set in the hierarchy resolution pass
 				})
 			}
 		}
@@ -158,12 +170,56 @@ func TransformToProjectInfo(result *DiscoveryResult) []*ProjectInfo {
 
 	// Also include Non-Grove Directories
 	for _, path := range result.NonGroveDirectories {
-		projects = append(projects, &ProjectInfo{
+		nodes = append(nodes, &WorkspaceNode{
 			Name: filepath.Base(path),
 			Path: path,
 			Kind: KindNonGroveRepo,
 		})
 	}
 
-	return projects
+	// Hierarchy resolution pass: set RootEcosystemPath for all nodes
+	nodeMap := make(map[string]*WorkspaceNode)
+	for _, node := range nodes {
+		nodeMap[node.Path] = node
+	}
+
+	for _, node := range nodes {
+		if node.Kind == KindEcosystemRoot {
+			// Already set during creation
+			continue
+		}
+
+		// Traverse up the ParentEcosystemPath chain to find the root
+		if node.ParentEcosystemPath != "" {
+			rootPath := findRootEcosystem(node.ParentEcosystemPath, nodeMap)
+			node.RootEcosystemPath = rootPath
+		}
+	}
+
+	return nodes
+}
+
+// findRootEcosystem traverses up the parent chain to find the ultimate EcosystemRoot
+func findRootEcosystem(startPath string, nodeMap map[string]*WorkspaceNode) string {
+	current := startPath
+	for {
+		node, exists := nodeMap[current]
+		if !exists {
+			// Path not in our map, return what we have
+			return current
+		}
+
+		if node.Kind == KindEcosystemRoot {
+			// Found the root
+			return node.Path
+		}
+
+		if node.ParentEcosystemPath == "" || node.ParentEcosystemPath == current {
+			// No more parents, this is as far as we can go
+			return current
+		}
+
+		// Move up the chain
+		current = node.ParentEcosystemPath
+	}
 }

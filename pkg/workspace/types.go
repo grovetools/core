@@ -142,24 +142,50 @@ const (
 	KindNonGroveRepo WorkspaceKind = "NonGroveRepo"
 )
 
-// ProjectInfo is the enriched display model for projects.
-// It represents a flattened, view-friendly project item suitable for UIs.
-type ProjectInfo struct {
+// WorkspaceNode is the enriched display model for workspace entities.
+// It represents a flattened, view-friendly node suitable for UIs, with explicit
+// parent-child relationships that form a hierarchical tree structure.
+type WorkspaceNode struct {
 	Name string        `json:"name"`
 	Path string        `json:"path"`
 	Kind WorkspaceKind `json:"kind"` // The single source of truth for the entity's type.
 
 	// ParentProjectPath is the path to the repository that manages this worktree.
-	// It is set ONLY for kinds that are worktrees.
+	// It is set ONLY for kinds that are worktrees (e.g., StandaloneProjectWorktree,
+	// EcosystemWorktree, EcosystemSubProjectWorktree, EcosystemWorktreeSubProjectWorktree).
 	ParentProjectPath string `json:"parent_project_path,omitempty"`
 
-	// ParentEcosystemPath is the path to the containing ecosystem's root directory.
+	// ParentEcosystemPath is the path to the immediate parent that provides ecosystem context.
+	// This could be an EcosystemRoot or an EcosystemWorktree.
 	// It is set for ALL kinds that exist within an ecosystem context.
 	ParentEcosystemPath string `json:"parent_ecosystem_path,omitempty"`
+
+	// RootEcosystemPath is the path to the top-level EcosystemRoot for this node.
+	// This allows quick grouping by the ultimate parent ecosystem and facilitates
+	// traversing to the root of the hierarchy. It is set for all nodes within an ecosystem.
+	RootEcosystemPath string `json:"root_ecosystem_path,omitempty"`
 
 	// Cloned repository-specific fields (populated by discovery)
 	Version     string `json:"version,omitempty"`
 	Commit      string `json:"commit,omitempty"`
 	AuditStatus string `json:"audit_status,omitempty"`
 	ReportPath  string `json:"report_path,omitempty"`
+}
+
+// IsWorktree returns true if this node represents a worktree
+func (w *WorkspaceNode) IsWorktree() bool {
+	switch w.Kind {
+	case KindStandaloneProjectWorktree,
+		KindEcosystemWorktree,
+		KindEcosystemSubProjectWorktree,
+		KindEcosystemWorktreeSubProjectWorktree:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsEcosystem returns true if this node represents an ecosystem (root or worktree)
+func (w *WorkspaceNode) IsEcosystem() bool {
+	return w.Kind == KindEcosystemRoot || w.Kind == KindEcosystemWorktree
 }

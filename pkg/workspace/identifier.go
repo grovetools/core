@@ -10,7 +10,7 @@ import (
 // Identifier generates a unique, sanitized identifier for a project,
 // suitable for use as a tmux session name or other unique identifier.
 // It creates namespaced identifiers for projects within ecosystem worktrees.
-func (p *ProjectInfo) Identifier() string {
+func (p *WorkspaceNode) Identifier() string {
 	// Sanitize helper
 	s := func(name string) string {
 		return sanitize.SanitizeForTmuxSession(name)

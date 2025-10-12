@@ -9,7 +9,7 @@ import (
 
 // ProjectsLoadedMsg is sent when a new list of projects has been fetched.
 type ProjectsLoadedMsg struct {
-	Projects []workspace.ProjectInfo
+	Projects []workspace.WorkspaceNode
 }
 
 // tickMsg is sent periodically to trigger a refresh

@@ -13,9 +13,9 @@ import (
 
 // Model is the generic navigator component model
 type Model struct {
-	projects        []workspace.ProjectInfo
-	filtered        []workspace.ProjectInfo
-	selected        workspace.ProjectInfo
+	projects        []workspace.WorkspaceNode
+	filtered        []workspace.WorkspaceNode
+	selected        workspace.WorkspaceNode
 	cursor          int
 	filterInput     textinput.Model
 	width           int
@@ -25,34 +25,34 @@ type Model struct {
 
 	// Focus mode state
 	ecosystemPickerMode bool                       // True when showing only ecosystems for selection
-	focusedProject      *workspace.ProjectInfo
+	focusedProject      *workspace.WorkspaceNode
 	worktreesFolded     bool // Whether worktrees are hidden/collapsed
 
 	// --- Callbacks for customization ---
 	// OnSelect is called when a project is selected (Enter). The returned command is executed.
-	OnSelect func(workspace.ProjectInfo) tea.Cmd
+	OnSelect func(workspace.WorkspaceNode) tea.Cmd
 
 	// RenderGutter allows the parent to define what status indicators appear
 	// to the left of each project name. It is passed the project and whether it's the currently selected item.
-	RenderGutter func(project workspace.ProjectInfo, isSelected bool) string
+	RenderGutter func(project workspace.WorkspaceNode, isSelected bool) string
 
 	// CustomKeyHandler allows the parent to intercept and handle key presses
 	// before the navigator's default keymap. If it returns a non-nil command, the navigator executes it.
 	CustomKeyHandler func(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 
 	// ProjectsLoader is a function that the navigator calls to refresh its project list.
-	ProjectsLoader func() ([]workspace.ProjectInfo, error)
+	ProjectsLoader func() ([]workspace.WorkspaceNode, error)
 
 	// RefreshInterval controls how often the navigator auto-refreshes (in seconds). 0 = no auto-refresh.
 	RefreshInterval int
 
 	// -- Internal State --
-	initialProjects []workspace.ProjectInfo // The full, unfiltered list of projects
+	initialProjects []workspace.WorkspaceNode // The full, unfiltered list of projects
 }
 
 // Config defines the configuration for the navigator.
 type Config struct {
-	Projects []workspace.ProjectInfo
+	Projects []workspace.WorkspaceNode
 }
 
 // New creates a new navigator model with the given configuration.
@@ -416,7 +416,7 @@ func (m Model) View() string {
 			line.WriteString(core_theme.DefaultTheme.Selected.Render(displayName))
 		} else {
 			// Style based on project type
-			if project.IsWorktree {
+			if project.IsWorktree() {
 				line.WriteString(core_theme.DefaultTheme.Info.Render(displayName))
 			} else {
 				line.WriteString(core_theme.DefaultTheme.Highlight.Copy().Bold(true).Render(displayName))
@@ -464,7 +464,7 @@ func (m Model) View() string {
 }
 
 // GetSelected returns the currently selected project.
-func (m Model) GetSelected() workspace.ProjectInfo {
+func (m Model) GetSelected() workspace.WorkspaceNode {
 	return m.selected
 }
 
@@ -474,10 +474,10 @@ func (m *Model) updateFiltered() {
 
 	// Handle ecosystem picker mode - show ecosystems with their worktrees in a tree
 	if m.ecosystemPickerMode {
-		m.filtered = []workspace.ProjectInfo{}
+		m.filtered = []workspace.WorkspaceNode{}
 
 		for _, p := range m.projects {
-			if !p.IsEcosystem {
+			if !p.IsEcosystem() {
 				continue
 			}
 
@@ -494,8 +494,8 @@ func (m *Model) updateFiltered() {
 	}
 
 	// Create a working list of projects, either all projects or just the focused ecosystem
-	var projectsToFilter []workspace.ProjectInfo
-	if m.focusedProject != nil && m.focusedProject.IsEcosystem {
+	var projectsToFilter []workspace.WorkspaceNode
+	if m.focusedProject != nil && m.focusedProject.IsEcosystem() {
 		// Focus is active on an ecosystem - show it and all its children
 		projectsToFilter = append(projectsToFilter, *m.focusedProject)
 
@@ -518,7 +518,7 @@ func (m *Model) updateFiltered() {
 		m.filtered = projectsToFilter
 	} else {
 		// Apply filter
-		m.filtered = []workspace.ProjectInfo{}
+		m.filtered = []workspace.WorkspaceNode{}
 		for _, p := range projectsToFilter {
 			lowerName := strings.ToLower(p.Name)
 			if lowerName == filter || strings.HasPrefix(lowerName, filter) ||

@@ -4,15 +4,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/config"
+	"github.com/sirupsen/logrus"
 )
 
-// GetProjectByPath analyzes a single directory path and constructs a complete,
-// enriched ProjectInfo object for it. It centralizes all logic for classifying
-// a project (e.g., ecosystem, worktree, etc.).
-func GetProjectByPath(path string) (*ProjectInfo, error) {
+// GetProjectByPath finds a workspace by path using the full discovery service.
+// It discovers all workspaces and returns the one that contains the given path.
+// If a path is inside a subdirectory of a workspace, it returns the containing workspace.
+//
+// Note: This function performs a full workspace discovery, which may take 100-500ms
+// depending on the number of configured search paths. This ensures consistency with
+// the rest of the system by using the canonical discovery and classification logic.
+func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path: %w", err)
@@ -23,115 +28,67 @@ func GetProjectByPath(path string) (*ProjectInfo, error) {
 		return nil, fmt.Errorf("path does not exist or is not a directory: %s", absPath)
 	}
 
-	// Find parent ecosystem using the core config function
-	ecoPath := config.FindEcosystemConfig(absPath)
-
-	// Detect if it's a worktree by checking if .git is a file
-	var isWorktree bool
-	var parentPath string
-	gitDirFile := filepath.Join(absPath, ".git")
-	if stat, err := os.Stat(gitDirFile); err == nil && !stat.IsDir() {
-		isWorktree = true
-		// Determine parent path if it's in a .grove-worktrees dir
-		if strings.Contains(absPath, ".grove-worktrees") {
-			parts := strings.Split(absPath, ".grove-worktrees")
-			if len(parts) > 0 {
-				parentPath = strings.TrimSuffix(parts[0], string(filepath.Separator))
-			}
-		} else {
-			// Fallback for worktrees not in our standard directory
-			// This is less reliable but a reasonable guess.
-			parentPath, _ = config.FindConfigFile(filepath.Dir(absPath))
-			if parentPath != "" {
-				parentPath = filepath.Dir(parentPath)
-			}
-		}
+	// Evaluate symlinks to get the canonical path for comparison
+	// This resolves /var -> /private/var on macOS and other symlinks
+	absPath, err = filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve path: %w", err)
 	}
 
-	var parentEcosystemPath string
-	var isEcosystem bool
+	// Create a logger with minimal output (suppress discovery logs)
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel) // Only show errors, not warnings
+	logger.SetOutput(os.Stderr)         // Ensure output goes to stderr
 
-	// Extract worktree name if this project is inside any .grove-worktrees directory
-	// This needs to be done before checking if absPath == ecoDir because an ecosystem
-	// worktree is both an ecosystem AND a worktree
-	if strings.Contains(absPath, string(filepath.Separator)+".grove-worktrees"+string(filepath.Separator)) {
-		// Find the .grove-worktrees segment in the path
-		parts := strings.Split(absPath, string(filepath.Separator)+".grove-worktrees"+string(filepath.Separator))
-		if len(parts) >= 2 {
-			// For worktrees, also try to find the parent ecosystem by looking up from
-			// the directory before .grove-worktrees
-			parentDir := parts[0]
-			if parentEcoPath := config.FindEcosystemConfig(parentDir); parentEcoPath != "" {
-				parentEcosystemPath = filepath.Dir(parentEcoPath)
-			}
-		}
+	// Use the discovery service to get all workspaces
+	nodes, err := GetProjects(logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover workspaces: %w", err)
 	}
 
-	if ecoPath != "" {
-		ecoDir := filepath.Dir(ecoPath) // The ecosystem root is the directory containing grove.yml
+	// Find the workspace that contains this path
+	// We want the longest matching prefix to get the most specific workspace
+	var bestMatch *WorkspaceNode
+	var bestMatchLen int
 
-		if absPath == ecoDir {
-			isEcosystem = true // This is the ecosystem root
-		} else {
-			// Only set parentEcosystemPath if we haven't already found it from worktree detection
-			if parentEcosystemPath == "" {
-				parentEcosystemPath = ecoDir
-			}
+	// On macOS, use case-insensitive comparison since the default filesystem is case-insensitive
+	caseInsensitive := runtime.GOOS == "darwin"
+
+	for _, node := range nodes {
+		// Resolve symlinks in the node path as well
+		nodePath, err := filepath.EvalSymlinks(node.Path)
+		if err != nil {
+			// If we can't resolve, use the original path
+			nodePath = node.Path
 		}
-	}
 
-	// An ecosystem worktree is both a worktree and an ecosystem
-	isEcosystemWorktree := false
-	if parentEcosystemPath != "" && isWorktree {
-		relPath, err := filepath.Rel(parentEcosystemPath, absPath)
-		if err == nil {
-			parts := strings.Split(relPath, string(filepath.Separator))
-			// It's a worktree directory if path is like: .grove-worktrees/some-name
-			if len(parts) == 2 && parts[0] == ".grove-worktrees" {
-				isEcosystemWorktree = true
+		checkPath := absPath
+
+		// Normalize case for comparison on case-insensitive filesystems
+		if caseInsensitive {
+			nodePath = strings.ToLower(nodePath)
+			checkPath = strings.ToLower(checkPath)
+		}
+
+		// Check if absPath is equal to or inside this workspace
+		if checkPath == nodePath {
+			// Exact match - this is the best possible match
+			return node, nil
+		}
+
+		// Check if absPath is a subdirectory of this workspace
+		if strings.HasPrefix(checkPath, nodePath+string(filepath.Separator)) {
+			// This node contains the path
+			if len(nodePath) > bestMatchLen {
+				bestMatch = node
+				bestMatchLen = len(nodePath)
 			}
 		}
 	}
-	if isEcosystemWorktree {
-		isEcosystem = true
+
+	if bestMatch != nil {
+		return bestMatch, nil
 	}
 
-	// Determine the Kind based on the flags we've collected
-	var kind WorkspaceKind
-
-	// Check if it's a non-Grove repo
-	hasGroveYml, _ := config.FindConfigFile(absPath)
-	if hasGroveYml == "" {
-		kind = KindNonGroveRepo
-	} else if isEcosystem && !isWorktree {
-		kind = KindEcosystemRoot
-	} else if isEcosystemWorktree {
-		kind = KindEcosystemWorktree
-	} else if parentEcosystemPath != "" && isWorktree {
-		// Check if parent is an ecosystem worktree
-		if strings.Contains(parentPath, ".grove-worktrees") {
-			kind = KindEcosystemWorktreeSubProjectWorktree
-		} else {
-			kind = KindEcosystemSubProjectWorktree
-		}
-	} else if parentEcosystemPath != "" && !isWorktree {
-		// Check if inside an ecosystem worktree
-		if strings.Contains(absPath, ".grove-worktrees") {
-			kind = KindEcosystemWorktreeSubProject
-		} else {
-			kind = KindEcosystemSubProject
-		}
-	} else if isWorktree {
-		kind = KindStandaloneProjectWorktree
-	} else {
-		kind = KindStandaloneProject
-	}
-
-	return &ProjectInfo{
-		Name:                filepath.Base(absPath),
-		Path:                absPath,
-		Kind:                kind,
-		ParentProjectPath:   parentPath,
-		ParentEcosystemPath: parentEcosystemPath,
-	}, nil
+	return nil, fmt.Errorf("no workspace found containing path: %s", absPath)
 }

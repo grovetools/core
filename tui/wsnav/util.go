@@ -20,13 +20,13 @@ func kindAbbreviation(kind workspace.WorkspaceKind) string {
 	case workspace.KindEcosystemSubProject:
 		return "Sub-Project"
 	case workspace.KindEcosystemWorktreeSubProject:
-		return "Sub-Project"
+		return "Eco WT SubProj"
 	case workspace.KindStandaloneProjectWorktree:
-		return "Worktree"
+		return "Proj Worktree"
 	case workspace.KindEcosystemSubProjectWorktree:
-		return "Worktree"
+		return "SubProj WT"
 	case workspace.KindEcosystemWorktreeSubProjectWorktree:
-		return "Worktree"
+		return "Eco WT Sub WT"
 	case workspace.KindNonGroveRepo:
 		return "Git Repo"
 	default:

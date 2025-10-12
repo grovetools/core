@@ -8,8 +8,8 @@ import (
 
 // Model represents the state of the workspace navigator TUI.
 type Model struct {
-	allProjects  []*workspace.ProjectInfo // The original, full list of all discovered projects.
-	viewProjects []*workspace.ProjectInfo // The hierarchically sorted list for display.
+	allProjects  []*workspace.WorkspaceNode // The original, full list of all discovered workspace nodes.
+	viewProjects []*workspace.WorkspaceNode // The hierarchically sorted list for display.
 	keys         KeyMap
 	help         help.Model
 	cursor       int

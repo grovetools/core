@@ -177,7 +177,7 @@ func (m *Model) buildTableRows() [][]string {
 		// Determine indentation and prefix for tree structure.
 		if p.ParentProjectPath != "" {
 			// This is a worktree. Let's find its parent.
-			var parent *workspace.ProjectInfo
+			var parent *workspace.WorkspaceNode
 			for _, potentialParent := range m.allProjects {
 				if potentialParent.Path == p.ParentProjectPath {
 					parent = potentialParent

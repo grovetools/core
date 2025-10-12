@@ -27,15 +27,11 @@ of ecosystems, projects, and worktrees.`
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		logger := cli.GetLogger(cmd)
 
-		// Discover all workspaces
-		discoveryService := workspace.NewDiscoveryService(logger)
-		discoveryResult, err := discoveryService.DiscoverAll()
+		// Discover all workspaces using the centralized function
+		projects, err := workspace.GetProjects(logger)
 		if err != nil {
 			return fmt.Errorf("failed to discover workspaces: %w", err)
 		}
-
-		// Transform into a flat list of enriched project info
-		projects := workspace.TransformToProjectInfo(discoveryResult)
 
 		// Handle JSON output
 		jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -53,6 +49,64 @@ of ecosystems, projects, and worktrees.`
 		if _, err := p.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 			return err
+		}
+
+		return nil
+	}
+
+	// Add subcommand for getting current workspace
+	cmd.AddCommand(newWsCwdCmd())
+
+	return cmd
+}
+
+// newWsCwdCmd creates the `ws cwd` subcommand
+func newWsCwdCmd() *cobra.Command {
+	cmd := cli.NewStandardCommand(
+		"cwd",
+		"Get workspace information for current working directory",
+	)
+	cmd.Long = `Get the workspace information for the current working directory.
+This command uses GetProjectByPath to find the workspace containing the current directory.`
+
+	cmd.Flags().Bool("json", false, "Output workspace in JSON format")
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		// Get current working directory
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get current directory: %w", err)
+		}
+
+		// Get the workspace for this path
+		node, err := workspace.GetProjectByPath(cwd)
+		if err != nil {
+			return fmt.Errorf("failed to get workspace: %w", err)
+		}
+
+		// Handle JSON output
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		if jsonOutput {
+			jsonData, err := json.MarshalIndent(node, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal workspace to JSON: %w", err)
+			}
+			fmt.Println(string(jsonData))
+			return nil
+		}
+
+		// Pretty print output
+		fmt.Printf("Name: %s\n", node.Name)
+		fmt.Printf("Path: %s\n", node.Path)
+		fmt.Printf("Kind: %s\n", node.Kind)
+		if node.ParentProjectPath != "" {
+			fmt.Printf("Parent Project: %s\n", node.ParentProjectPath)
+		}
+		if node.ParentEcosystemPath != "" {
+			fmt.Printf("Parent Ecosystem: %s\n", node.ParentEcosystemPath)
+		}
+		if node.RootEcosystemPath != "" {
+			fmt.Printf("Root Ecosystem: %s\n", node.RootEcosystemPath)
 		}
 
 		return nil

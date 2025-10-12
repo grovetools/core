@@ -8,12 +8,12 @@ import (
 )
 
 // FilterByFocus returns only the focused project and its children/worktrees
-func FilterByFocus(projects []*workspace.ProjectInfo, focus *workspace.ProjectInfo) []*workspace.ProjectInfo {
+func FilterByFocus(projects []*workspace.WorkspaceNode, focus *workspace.WorkspaceNode) []*workspace.WorkspaceNode {
 	if focus == nil {
 		return projects
 	}
 
-	var result []*workspace.ProjectInfo
+	var result []*workspace.WorkspaceNode
 
 	// Include the focused project
 	for _, p := range projects {
@@ -45,8 +45,8 @@ func FilterByFocus(projects []*workspace.ProjectInfo, focus *workspace.ProjectIn
 }
 
 // FoldWorktrees returns a new slice with all worktrees removed
-func FoldWorktrees(projects []*workspace.ProjectInfo) []*workspace.ProjectInfo {
-	var result []*workspace.ProjectInfo
+func FoldWorktrees(projects []*workspace.WorkspaceNode) []*workspace.WorkspaceNode {
+	var result []*workspace.WorkspaceNode
 	for _, p := range projects {
 		switch p.Kind {
 		case workspace.KindStandaloneProjectWorktree,
@@ -63,13 +63,13 @@ func FoldWorktrees(projects []*workspace.ProjectInfo) []*workspace.ProjectInfo {
 }
 
 // FilterByText returns projects where the name or path contains the text
-func FilterByText(projects []*workspace.ProjectInfo, text string) []*workspace.ProjectInfo {
+func FilterByText(projects []*workspace.WorkspaceNode, text string) []*workspace.WorkspaceNode {
 	if text == "" {
 		return projects
 	}
 
 	lowerText := strings.ToLower(text)
-	var result []*workspace.ProjectInfo
+	var result []*workspace.WorkspaceNode
 
 	for _, p := range projects {
 		lowerName := strings.ToLower(p.Name)
@@ -85,7 +85,7 @@ func FilterByText(projects []*workspace.ProjectInfo, text string) []*workspace.P
 
 // SortByMatchQuality sorts projects based on how well their name matches the filter text
 // Exact matches come first, then prefix matches, then substring matches
-func SortByMatchQuality(projects []*workspace.ProjectInfo, filterText string) []*workspace.ProjectInfo {
+func SortByMatchQuality(projects []*workspace.WorkspaceNode, filterText string) []*workspace.WorkspaceNode {
 	if filterText == "" {
 		return projects
 	}
@@ -93,11 +93,11 @@ func SortByMatchQuality(projects []*workspace.ProjectInfo, filterText string) []
 	lowerFilter := strings.ToLower(filterText)
 
 	// Create a copy to avoid modifying the original slice
-	result := make([]*workspace.ProjectInfo, len(projects))
+	result := make([]*workspace.WorkspaceNode, len(projects))
 	copy(result, projects)
 
 	// Helper function to get match quality score (higher is better)
-	getMatchQuality := func(p *workspace.ProjectInfo) int {
+	getMatchQuality := func(p *workspace.WorkspaceNode) int {
 		lowerName := strings.ToLower(p.Name)
 
 		if lowerName == lowerFilter {
@@ -119,17 +119,17 @@ func SortByMatchQuality(projects []*workspace.ProjectInfo, filterText string) []
 
 // SortByActivity sorts projects to show groups with active sessions first
 // The runningSessions map should have session names (derived from path) as keys
-func SortByActivity(projects []*workspace.ProjectInfo, runningSessions map[string]bool) []*workspace.ProjectInfo {
+func SortByActivity(projects []*workspace.WorkspaceNode, runningSessions map[string]bool) []*workspace.WorkspaceNode {
 	if runningSessions == nil || len(runningSessions) == 0 {
 		return projects
 	}
 
 	// Create a copy to avoid modifying the original slice
-	result := make([]*workspace.ProjectInfo, len(projects))
+	result := make([]*workspace.WorkspaceNode, len(projects))
 	copy(result, projects)
 
 	// Helper to determine if a project's group is active
-	isGroupActive := func(p *workspace.ProjectInfo) bool {
+	isGroupActive := func(p *workspace.WorkspaceNode) bool {
 		groupKey := p.Path
 		if p.ParentProjectPath != "" {
 			groupKey = p.ParentProjectPath
@@ -155,10 +155,10 @@ func SortByActivity(projects []*workspace.ProjectInfo, runningSessions map[strin
 
 // GroupByParent groups projects with their worktrees hierarchically
 // Returns a flat list where each parent is followed by its worktrees
-func GroupByParent(projects []*workspace.ProjectInfo, folded bool) []*workspace.ProjectInfo {
+func GroupByParent(projects []*workspace.WorkspaceNode, folded bool) []*workspace.WorkspaceNode {
 	// Build a map of parents to their worktrees
-	parentWorktrees := make(map[string][]*workspace.ProjectInfo)
-	var parents []*workspace.ProjectInfo
+	parentWorktrees := make(map[string][]*workspace.WorkspaceNode)
+	var parents []*workspace.WorkspaceNode
 
 	for _, p := range projects {
 		isWorktree := p.ParentProjectPath != ""
@@ -170,7 +170,7 @@ func GroupByParent(projects []*workspace.ProjectInfo, folded bool) []*workspace.
 	}
 
 	// Build result with parents followed by their worktrees (if not folded)
-	var result []*workspace.ProjectInfo
+	var result []*workspace.WorkspaceNode
 	for _, parent := range parents {
 		result = append(result, parent)
 

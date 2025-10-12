@@ -7,7 +7,7 @@ import (
 )
 
 // New creates a new model for the workspace navigator TUI.
-func New(projects []*workspace.ProjectInfo) Model {
+func New(projects []*workspace.WorkspaceNode) Model {
 	// Group projects hierarchically for display. This returns a flat list
 	// but in a parent-then-children order.
 	groupedProjects := filter.GroupByParent(projects, false)

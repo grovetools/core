@@ -459,24 +459,30 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 
 	// 5. Final pass to link Projects to their parent Ecosystems.
 	// First build a list of all potential ecosystem paths (ecosystems + ecosystem worktrees)
-	ecosystemPaths := make([]string, 0, len(result.Ecosystems)+len(result.Projects))
+	ecosystemPaths := make(map[string]bool)
 	for _, eco := range result.Ecosystems {
-		ecosystemPaths = append(ecosystemPaths, eco.Path)
+		ecosystemPaths[eco.Path] = true
 	}
-	// Also include ecosystem worktrees (projects that have a ParentEcosystemPath set)
-	// but exclude paths that are inside .grove-worktrees directories as those are
-	// worktree checkouts, not ecosystem roots
+
 	for _, proj := range result.Projects {
-		if proj.ParentEcosystemPath != "" && !strings.Contains(proj.Path, ".grove-worktrees") {
-			ecosystemPaths = append(ecosystemPaths, proj.Path)
+		// A project is an ecosystem worktree if it's a direct child of a .grove-worktrees directory.
+		// The discovery process ensures that .grove-worktrees is only processed when it's inside an ecosystem.
+		if filepath.Base(filepath.Dir(proj.Path)) == ".grove-worktrees" {
+			ecosystemPaths[proj.Path] = true
 		}
+	}
+
+	// Convert map to slice for matching
+	ecoPathSlice := make([]string, 0, len(ecosystemPaths))
+	for p := range ecosystemPaths {
+		ecoPathSlice = append(ecoPathSlice, p)
 	}
 
 	// Now link each project to its closest parent ecosystem
 	for i := range result.Projects {
 		// Find the most specific (longest) matching ecosystem path
 		var bestMatch string
-		for _, ecoPath := range ecosystemPaths {
+		for _, ecoPath := range ecoPathSlice {
 			if strings.HasPrefix(result.Projects[i].Path, ecoPath+string(filepath.Separator)) {
 				if len(ecoPath) > len(bestMatch) {
 					bestMatch = ecoPath
@@ -528,6 +534,17 @@ func FindEcosystemRoot(startDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no grove.yml with workspaces found in %s or parent directories", absStart)
+}
+
+// GetProjects performs discovery and transformation in a single call,
+// returning a flat list of WorkspaceNodes ready for consumption.
+func GetProjects(logger *logrus.Logger) ([]*WorkspaceNode, error) {
+	discoveryService := NewDiscoveryService(logger)
+	result, err := discoveryService.DiscoverAll()
+	if err != nil {
+		return nil, err
+	}
+	return TransformToWorkspaceNodes(result), nil
 }
 
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
