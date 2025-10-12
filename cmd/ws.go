@@ -46,9 +46,15 @@ of ecosystems, projects, and worktrees.`
 
 		// Launch the TUI
 		p := tea.NewProgram(wsnav.New(projects), tea.WithAltScreen(), tea.WithMouseCellMotion())
-		if _, err := p.Run(); err != nil {
+		finalModel, err := p.Run()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 			return err
+		}
+
+		// If a project was selected, print its path to stdout.
+		if m, ok := finalModel.(*wsnav.Model); ok && m.SelectedProject != nil {
+			fmt.Println(m.SelectedProject.Path)
 		}
 
 		return nil

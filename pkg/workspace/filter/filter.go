@@ -183,3 +183,57 @@ func GroupByParent(projects []*workspace.WorkspaceNode, folded bool) []*workspac
 
 	return result
 }
+
+// GroupHierarchically organizes projects in a tree structure considering full ecosystem hierarchy.
+// Returns a flat list ordered depth-first where each node is followed by its children.
+// This function considers:
+// - Ecosystem roots as top-level
+// - Ecosystem worktrees as children of root
+// - Sub-projects as children of their ecosystem
+// - Sub-project worktrees as children of their project
+func GroupHierarchically(projects []*workspace.WorkspaceNode, folded bool) []*workspace.WorkspaceNode {
+	// Build a map of parent path -> children
+	childrenMap := make(map[string][]*workspace.WorkspaceNode)
+
+	// Build a map for quick node lookup by path
+	nodeMap := make(map[string]*workspace.WorkspaceNode)
+	for _, p := range projects {
+		nodeMap[p.Path] = p
+	}
+
+	// Populate children map based on hierarchical parent
+	var roots []*workspace.WorkspaceNode
+	for _, p := range projects {
+		parent := p.GetHierarchicalParent()
+		if parent == "" {
+			// This is a root node
+			roots = append(roots, p)
+		} else {
+			childrenMap[parent] = append(childrenMap[parent], p)
+		}
+	}
+
+	// Recursively build the result in depth-first order
+	var result []*workspace.WorkspaceNode
+	var addNodeAndChildren func(node *workspace.WorkspaceNode, depth int)
+
+	addNodeAndChildren = func(node *workspace.WorkspaceNode, depth int) {
+		result = append(result, node)
+
+		if !folded || !node.IsWorktree() {
+			// Add children recursively
+			if children, exists := childrenMap[node.Path]; exists {
+				for _, child := range children {
+					addNodeAndChildren(child, depth+1)
+				}
+			}
+		}
+	}
+
+	// Add all root nodes and their children
+	for _, root := range roots {
+		addNodeAndChildren(root, 0)
+	}
+
+	return result
+}

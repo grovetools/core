@@ -2,11 +2,11 @@ package wsnav
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/mattsolo1/grove-core/tui/components/table"
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
@@ -57,17 +57,31 @@ func (m Model) View() string {
 
 	// Calculate available height for table content
 	// mainAreaHeight already accounts for header, footer, and topMargin
-	// The mainContentStyle has Padding(1) which takes 2 lines (top+bottom)
-	// We also need space for: table header row (1), separator (1), potential scroll indicator (1)
-	// So: mainAreaHeight - 2 (padding) - 1 (header) - 1 (separator) - 1 (scroll indicator) - 2 (safety margin)
-	availableTableHeight := mainAreaHeight - 7
+	// The mainContentStyle has:
+	//   - Border: 2 lines (top + bottom)
+	//   - Padding(1): 2 lines (top + bottom padding)
+	// The SelectableTable component will add:
+	//   - Border: 2 lines
+	//   - Header row: 1 line
+	//   - Separator: 1 line
+	// Scroll indicator: 1 line (optional, shown below table)
+	// Total overhead: mainContentStyle (4) + table internals (4) + scroll indicator (1) = 9
+	availableTableHeight := mainAreaHeight - 9
+	if availableTableHeight < 1 {
+		availableTableHeight = 1
+	}
 
 	// Create content for each component
 	headerContent := "WORKSPACE NAVIGATOR"
 
 	mainContent := m.buildTableView(availableTableHeight)
 
-	footerContent := m.help.View()
+	var footerParts []string
+	if m.focusedProject != nil {
+		footerParts = append(footerParts, fmt.Sprintf("[Focus: %s]", m.focusedProject.Name))
+	}
+	footerParts = append(footerParts, m.filterInput.View())
+	footerContent := strings.Join(footerParts, " > ")
 
 	// Render each component
 	header := headerStyle.Render(headerContent)
@@ -88,109 +102,96 @@ func (m Model) View() string {
 
 // buildTableView constructs and renders the main table of workspaces.
 func (m *Model) buildTableView(availableHeight int) string {
-	if len(m.viewProjects) == 0 {
+	if len(m.filteredProjects) == 0 {
 		return "No workspaces discovered.\n\nTip: Configure search_paths in ~/.grove/config.yml"
 	}
 
-	rows := m.buildTableRows()
-
-	var sb strings.Builder
-
-	// Header row
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(theme.DefaultColors.Orange)
-
-	sb.WriteString(headerStyle.Render("KIND"))
-	sb.WriteString(strings.Repeat(" ", 10))
-	sb.WriteString(headerStyle.Render("WORKSPACE"))
-	sb.WriteString(strings.Repeat(" ", 28))
-	sb.WriteString(headerStyle.Render("PATH"))
-	sb.WriteString("\n")
-
-	// Safe separator line
-	separatorWidth := m.width - 6
-	if separatorWidth > 0 {
-		sb.WriteString(strings.Repeat("─", separatorWidth))
-	}
-	sb.WriteString("\n")
+	allRows := m.buildTableRows()
 
 	// Calculate visible rows based on scroll offset
+	// We need to account for the table component's internal rendering
+	// The SelectableTable component adds borders and headers internally
+	// So we need to limit the data rows we pass to it
 	startIdx := m.scrollOffset
 	endIdx := startIdx + availableHeight
-	if endIdx > len(rows) {
-		endIdx = len(rows)
+	if endIdx > len(allRows) {
+		endIdx = len(allRows)
+	}
+	if startIdx >= len(allRows) {
+		startIdx = 0
+		endIdx = len(allRows)
+		if endIdx > availableHeight {
+			endIdx = availableHeight
+		}
 	}
 
-	// Data rows (only visible ones)
-	for i := startIdx; i < endIdx; i++ {
-		row := rows[i]
-		rowStyle := lipgloss.NewStyle()
-		if i == m.cursor {
-			// Highlight selected row
-			rowStyle = rowStyle.
-				Background(theme.DefaultColors.Orange).
-				Foreground(theme.DefaultColors.LightText)
-		}
+	visibleRows := allRows[startIdx:endIdx]
 
-		// Format: KIND  WORKSPACE  PATH
-		line := fmt.Sprintf("%-14s %-35s %s", row[0], row[1], row[2])
-
-		if i == m.cursor {
-			line = rowStyle.Render(line)
-		}
-
-		sb.WriteString(line)
-		sb.WriteString("\n")
+	// Adjust cursor to be relative to the visible window
+	relativeCursor := m.cursor - m.scrollOffset
+	if relativeCursor < 0 {
+		relativeCursor = 0
 	}
+	if relativeCursor >= len(visibleRows) {
+		relativeCursor = len(visibleRows) - 1
+	}
+
+	// Use the selectable table component for rendering.
+	// The component handles borders, selection, and the '◀' indicator.
+	mainContent := table.SelectableTableWithOptions(
+		[]string{"K", "●", "WORKSPACE", "PATH"},
+		visibleRows,
+		relativeCursor,
+		table.SelectableTableOptions{HighlightColumn: 2}, // Highlight the WORKSPACE column
+	)
 
 	// Add scroll indicator if there are more items
-	if len(rows) > availableHeight {
-		sb.WriteString("\n")
-		sb.WriteString(lipgloss.NewStyle().Faint(true).Render(
-			fmt.Sprintf("Showing %d-%d of %d workspaces", startIdx+1, endIdx, len(rows)),
-		))
+	if len(allRows) > availableHeight {
+		mainContent += "\n" + lipgloss.NewStyle().Faint(true).Render(
+			fmt.Sprintf("Showing %d-%d of %d workspaces", startIdx+1, endIdx, len(allRows)),
+		)
 	}
 
-	return sb.String()
+	return mainContent
 }
 
 // buildTableRows creates the data rows for the workspace table, including
-// indentation to create a hierarchical view.
+// indentation to create a hierarchical view based on depth.
 func (m *Model) buildTableRows() [][]string {
 	var rows [][]string
 
-	// Create a map to track the last worktree for each parent.
-	lastWorktreeOfParent := make(map[string]string)
-	for i := len(m.viewProjects) - 1; i >= 0; i-- {
-		p := m.viewProjects[i]
-		if p.ParentProjectPath != "" {
-			if _, exists := lastWorktreeOfParent[p.ParentProjectPath]; !exists {
-				lastWorktreeOfParent[p.ParentProjectPath] = p.Path
-			}
+	// Build a map of parent path -> children to determine if a node is the last child
+	childrenMap := make(map[string][]*workspace.WorkspaceNode)
+	for _, p := range m.filteredProjects {
+		parent := p.GetHierarchicalParent()
+		if parent != "" {
+			childrenMap[parent] = append(childrenMap[parent], p)
 		}
 	}
 
-	for _, p := range m.viewProjects {
-		var indent, prefix string
+	// Determine if a node is the last child of its parent
+	isLastChild := func(node *workspace.WorkspaceNode) bool {
+		parent := node.GetHierarchicalParent()
+		if parent == "" {
+			return false
+		}
+		children := childrenMap[parent]
+		return len(children) > 0 && children[len(children)-1].Path == node.Path
+	}
 
-		// Determine indentation and prefix for tree structure.
-		if p.ParentProjectPath != "" {
-			// This is a worktree. Let's find its parent.
-			var parent *workspace.WorkspaceNode
-			for _, potentialParent := range m.allProjects {
-				if potentialParent.Path == p.ParentProjectPath {
-					parent = potentialParent
-					break
-				}
-			}
+	for _, p := range m.filteredProjects {
+		depth := p.GetDepth()
 
-			if parent != nil && parent.ParentEcosystemPath != "" {
-				indent = "  " // Indent one level if parent is in an ecosystem
-			}
+		// Build indentation string based on depth
+		var indent string
+		var prefix string
 
-			isLast := lastWorktreeOfParent[p.ParentProjectPath] == p.Path
-			if isLast {
+		if depth > 0 {
+			// Add indentation (2 spaces per level)
+			indent = strings.Repeat("  ", depth-1)
+
+			// Add tree connector
+			if isLastChild(p) {
 				prefix = "└─ "
 			} else {
 				prefix = "├─ "
@@ -198,24 +199,12 @@ func (m *Model) buildTableRows() [][]string {
 		}
 
 		kind := kindAbbreviation(p.Kind)
-
 		name := fmt.Sprintf("%s%s%s", indent, prefix, p.Name)
 		path := shortenPath(p.Path)
 
-		// For ecosystem worktrees, we want to show the path relative to the ecosystem root
-		if p.Kind == workspace.KindEcosystemWorktreeSubProject || p.Kind == workspace.KindEcosystemWorktreeSubProjectWorktree {
-			if p.ParentEcosystemPath != "" {
-				// The parent is the ecosystem worktree, find its parent (the ecosystem root)
-				ecoRootPath := filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
-				relPath, err := filepath.Rel(ecoRootPath, p.Path)
-				if err == nil {
-					path = filepath.Join(shortenPath(ecoRootPath), relPath)
-				}
-			}
-		}
-
 		rows = append(rows, []string{
 			kind,
+			"●", // Placeholder for status
 			name,
 			lipgloss.NewStyle().Faint(true).Render(path),
 		})

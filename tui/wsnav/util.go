@@ -8,29 +8,19 @@ import (
 	"github.com/mattsolo1/grove-core/pkg/workspace"
 )
 
-// kindAbbreviation returns a human-readable string for a workspace kind.
+// kindAbbreviation returns a single-character string for a workspace kind.
 func kindAbbreviation(kind workspace.WorkspaceKind) string {
 	switch kind {
-	case workspace.KindEcosystemRoot:
-		return "Ecosystem"
-	case workspace.KindEcosystemWorktree:
-		return "Eco Worktree"
-	case workspace.KindStandaloneProject:
-		return "Project"
-	case workspace.KindEcosystemSubProject:
-		return "Sub-Project"
-	case workspace.KindEcosystemWorktreeSubProject:
-		return "Eco WT SubProj"
-	case workspace.KindStandaloneProjectWorktree:
-		return "Proj Worktree"
-	case workspace.KindEcosystemSubProjectWorktree:
-		return "SubProj WT"
-	case workspace.KindEcosystemWorktreeSubProjectWorktree:
-		return "Eco WT Sub WT"
+	case workspace.KindEcosystemRoot, workspace.KindEcosystemWorktree:
+		return "e" // Ecosystem
+	case workspace.KindStandaloneProject, workspace.KindEcosystemSubProject, workspace.KindEcosystemWorktreeSubProject:
+		return "p" // Project
+	case workspace.KindStandaloneProjectWorktree, workspace.KindEcosystemSubProjectWorktree, workspace.KindEcosystemWorktreeSubProjectWorktree:
+		return "w" // Worktree
 	case workspace.KindNonGroveRepo:
-		return "Git Repo"
+		return "g" // Git Repo
 	default:
-		return "Unknown"
+		return "?"
 	}
 }
 
