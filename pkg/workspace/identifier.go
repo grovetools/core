@@ -16,36 +16,48 @@ func (p *ProjectInfo) Identifier() string {
 		return sanitize.SanitizeForTmuxSession(name)
 	}
 
-	// Case 1: Project is inside an ecosystem's worktree directory.
-	// Uses the WorktreeName field from the data model.
-	if p.ParentEcosystemPath != "" && p.WorktreeName != "" {
-		ecoName := s(filepath.Base(p.ParentEcosystemPath))
-		worktreeName := s(p.WorktreeName)
-
-		// Check if this project *is* the worktree directory itself (an ecosystem worktree)
-		if p.IsWorktree && p.IsEcosystem {
-			return fmt.Sprintf("%s_%s", ecoName, worktreeName)
-		}
-
-		// It's a sub-project within the worktree
-		projectName := s(p.Name)
-		return fmt.Sprintf("%s_%s_%s", ecoName, worktreeName, projectName)
+	ecoName := ""
+	if p.ParentEcosystemPath != "" {
+		ecoName = s(filepath.Base(p.ParentEcosystemPath))
 	}
 
-	// Case 2: Project is a worktree, but not part of an ecosystem.
-	if p.IsWorktree && p.ParentPath != "" {
-		parentName := s(filepath.Base(p.ParentPath))
-		projectName := s(p.Name)
-		return fmt.Sprintf("%s_%s", parentName, projectName)
-	}
+	switch p.Kind {
+	case KindEcosystemWorktree:
+		// e.g., my-ecosystem_eco-feature
+		return fmt.Sprintf("%s_%s", ecoName, s(p.Name))
 
-	// Case 3: A sub-project of an ecosystem (e.g., a submodule in the main repo).
-	if p.ParentEcosystemPath != "" && p.Path != p.ParentEcosystemPath {
-		ecoName := s(filepath.Base(p.ParentEcosystemPath))
-		projectName := s(p.Name)
-		return fmt.Sprintf("%s_%s", ecoName, projectName)
-	}
+	case KindEcosystemWorktreeSubProject:
+		// e.g., my-ecosystem_eco-feature_sub-project
+		// The parent ecosystem path points to the ecosystem worktree
+		worktreeName := s(filepath.Base(p.ParentEcosystemPath))
+		// Get the grandparent ecosystem name
+		grandParentPath := filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
+		grandParentName := s(filepath.Base(grandParentPath))
+		return fmt.Sprintf("%s_%s_%s", grandParentName, worktreeName, s(p.Name))
 
-	// Case 4: Standalone project or an ecosystem's main repository.
-	return s(p.Name)
+	case KindEcosystemWorktreeSubProjectWorktree:
+		// e.g., my-ecosystem_eco-feature_sub-project_sub-feature
+		// The parent ecosystem path points to the ecosystem worktree
+		ecoWorktreeName := s(filepath.Base(p.ParentEcosystemPath))
+		// Get the root ecosystem name
+		rootEcoPath := filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
+		rootEcoName := s(filepath.Base(rootEcoPath))
+		return fmt.Sprintf("%s_%s_%s", rootEcoName, ecoWorktreeName, s(p.Name))
+
+	case KindStandaloneProjectWorktree, KindEcosystemSubProjectWorktree:
+		// e.g., my-project_feature-branch
+		parentName := s(filepath.Base(p.ParentProjectPath))
+		return fmt.Sprintf("%s_%s", parentName, s(p.Name))
+
+	case KindEcosystemSubProject:
+		// e.g., my-ecosystem_sub-project
+		return fmt.Sprintf("%s_%s", ecoName, s(p.Name))
+
+	case KindStandaloneProject, KindEcosystemRoot, KindNonGroveRepo:
+		// e.g., my-project
+		return s(p.Name)
+
+	default:
+		return s(p.Name)
+	}
 }

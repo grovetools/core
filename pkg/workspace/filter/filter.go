@@ -31,10 +31,11 @@ func FilterByFocus(projects []*workspace.ProjectInfo, focus *workspace.ProjectIn
 	}
 
 	// If the focused project is an ecosystem worktree, also include projects
-	// that have a WorktreeName matching this worktree's name
-	if focus.IsWorktree && focus.IsEcosystem && focus.WorktreeName != "" {
+	// that are children of this worktree
+	if focus.Kind == workspace.KindEcosystemWorktree {
 		for _, p := range projects {
-			if p.WorktreeName == focus.WorktreeName && p.Path != focus.Path {
+			// Include sub-projects that are inside this ecosystem worktree
+			if p.ParentEcosystemPath == focus.Path && p.Path != focus.Path {
 				result = append(result, p)
 			}
 		}
@@ -47,7 +48,14 @@ func FilterByFocus(projects []*workspace.ProjectInfo, focus *workspace.ProjectIn
 func FoldWorktrees(projects []*workspace.ProjectInfo) []*workspace.ProjectInfo {
 	var result []*workspace.ProjectInfo
 	for _, p := range projects {
-		if !p.IsWorktree {
+		switch p.Kind {
+		case workspace.KindStandaloneProjectWorktree,
+			workspace.KindEcosystemWorktree,
+			workspace.KindEcosystemSubProjectWorktree,
+			workspace.KindEcosystemWorktreeSubProjectWorktree:
+			// This is a worktree, so skip it.
+			continue
+		default:
 			result = append(result, p)
 		}
 	}
@@ -123,8 +131,8 @@ func SortByActivity(projects []*workspace.ProjectInfo, runningSessions map[strin
 	// Helper to determine if a project's group is active
 	isGroupActive := func(p *workspace.ProjectInfo) bool {
 		groupKey := p.Path
-		if p.IsWorktree {
-			groupKey = p.ParentPath
+		if p.ParentProjectPath != "" {
+			groupKey = p.ParentProjectPath
 		}
 		return runningSessions[groupKey]
 	}
@@ -153,8 +161,9 @@ func GroupByParent(projects []*workspace.ProjectInfo, folded bool) []*workspace.
 	var parents []*workspace.ProjectInfo
 
 	for _, p := range projects {
-		if p.IsWorktree {
-			parentWorktrees[p.ParentPath] = append(parentWorktrees[p.ParentPath], p)
+		isWorktree := p.ParentProjectPath != ""
+		if isWorktree {
+			parentWorktrees[p.ParentProjectPath] = append(parentWorktrees[p.ParentProjectPath], p)
 		} else {
 			parents = append(parents, p)
 		}

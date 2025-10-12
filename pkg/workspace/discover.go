@@ -69,8 +69,8 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		return result, nil // Not a fatal error, just means no paths to scan.
 	}
 
-	if len(layeredCfg.Global.Groves) == 0 {
-		s.logger.Info("No 'groves' search paths defined in global configuration.")
+	if len(layeredCfg.Global.SearchPaths) == 0 {
+		s.logger.Info("No 'search_paths' defined in global configuration.")
 		return result, nil
 	}
 
@@ -82,7 +82,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	var wg sync.WaitGroup
-	resultsChan := make(chan groveResult, len(layeredCfg.Global.Groves)+1) // +1 for cloned repos
+	resultsChan := make(chan groveResult, len(layeredCfg.Global.SearchPaths)+1) // +1 for cloned repos
 
 	// Discover cloned repositories concurrently
 	wg.Add(1)
@@ -98,13 +98,13 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		}
 	}()
 
-	for key, groveCfg := range layeredCfg.Global.Groves {
-		if !groveCfg.Enabled {
+	for key, searchCfg := range layeredCfg.Global.SearchPaths {
+		if !searchCfg.Enabled {
 			continue
 		}
 
 		// Expand path, e.g., ~/Work -> /Users/user/Work
-		expandedPath := expandPath(groveCfg.Path)
+		expandedPath := expandPath(searchCfg.Path)
 		absPath, err := filepath.Abs(expandedPath)
 		if err != nil {
 			s.logger.Warnf("Could not resolve path for grove '%s': %v", key, err)

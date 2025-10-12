@@ -13,7 +13,7 @@ import (
 )
 
 // SetupSubmodules initializes submodules, creating linked worktrees where possible.
-func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string) error {
+func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, ds *DiscoveryService) error {
 	cmdCheckout := exec.CommandContext(ctx, "git", "checkout", "HEAD", "--", ".")
 	cmdCheckout.Dir = worktreePath
 	cmdCheckout.CombinedOutput() // Ignore error
@@ -44,7 +44,7 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		}
 	}
 
-	localWorkspaces, err := DiscoverLocalWorkspaces(ctx)
+	localWorkspaces, err := discoverLocalWorkspacesFromService(ctx, ds)
 	if err != nil && hasGitmodules {
 		return setupSubmodulesStandard(ctx, worktreePath, branchName)
 	}
@@ -110,6 +110,29 @@ func setupSubmodulesStandard(ctx context.Context, worktreePath, branchName strin
 	return nil
 }
 
+// discoverLocalWorkspacesFromService uses the DiscoveryService to find projects and their primary workspace paths.
+func discoverLocalWorkspacesFromService(ctx context.Context, ds *DiscoveryService) (map[string]string, error) {
+	if ds == nil {
+		return make(map[string]string), fmt.Errorf("discovery service is nil")
+	}
+
+	result, err := ds.DiscoverAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover all workspaces: %w", err)
+	}
+
+	workspaceMap := make(map[string]string)
+	for _, proj := range result.Projects {
+		// The primary workspace path is the project's own path.
+		if proj.Path != "" {
+			workspaceMap[proj.Name] = proj.Path
+		}
+	}
+	return workspaceMap, nil
+}
+
+// DiscoverLocalWorkspaces is kept for backward compatibility with tests
+// New code should use discoverLocalWorkspacesFromService directly
 func DiscoverLocalWorkspaces(ctx context.Context) (map[string]string, error) {
 	// Check for test environment override first
 	if mockData := os.Getenv("GROVE_TEST_WORKSPACES"); mockData != "" {
@@ -117,7 +140,7 @@ func DiscoverLocalWorkspaces(ctx context.Context) (map[string]string, error) {
 		if err := json.Unmarshal([]byte(mockData), &workspaces); err != nil {
 			return make(map[string]string), nil
 		}
-		
+
 		result := make(map[string]string)
 		for _, ws := range workspaces {
 			// Find the main worktree - prioritize is_main:true, but fall back to path matching
@@ -128,7 +151,7 @@ func DiscoverLocalWorkspaces(ctx context.Context) (map[string]string, error) {
 					break
 				}
 			}
-			
+
 			// If no is_main:true found, use path matching as fallback
 			if mainPath == "" && len(ws.Worktrees) > 0 {
 				// Normalize paths for comparison (handle case sensitivity)
@@ -145,14 +168,14 @@ func DiscoverLocalWorkspaces(ctx context.Context) (map[string]string, error) {
 					mainPath = ws.Worktrees[0].Path
 				}
 			}
-			
+
 			if mainPath != "" {
 				result[ws.Name] = mainPath
 			}
 		}
 		return result, nil
 	}
-	
+
 	cmd := exec.CommandContext(ctx, "grove", "ws", "list", "--json")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

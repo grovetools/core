@@ -5,8 +5,8 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-// GrovesConfig defines the configuration for a single search path.
-type GrovesConfig struct {
+// SearchPathConfig defines the configuration for a single search path.
+type SearchPathConfig struct {
 	Path        string `yaml:"path"`
 	Enabled     bool   `yaml:"enabled"`
 	Description string `yaml:"description,omitempty"`
@@ -26,9 +26,9 @@ type Config struct {
 	Version    string   `yaml:"version"`
 	Workspaces []string `yaml:"workspaces,omitempty"`
 
-	// Groves defines the root directories to search for projects and ecosystems.
+	// SearchPaths defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
-	Groves map[string]GrovesConfig `yaml:"groves,omitempty"`
+	SearchPaths map[string]SearchPathConfig `yaml:"search_paths,omitempty"`
 
 	// ExplicitProjects defines specific projects to include without discovery.
 	// Useful for including individual directories that don't fit the grove model.

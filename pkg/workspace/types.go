@@ -64,54 +64,98 @@ type Ecosystem struct {
 
 // DiscoveryResult is the comprehensive output of the DiscoveryService.
 type DiscoveryResult struct {
-	Projects            []Project  `json:"projects"`
+	Projects            []Project   `json:"projects"`
 	Ecosystems          []Ecosystem `json:"ecosystems"`
-	NonGroveDirectories []string   `json:"non_grove_directories,omitempty"`
+	NonGroveDirectories []string    `json:"non_grove_directories,omitempty"`
 }
 
-// NoteCounts holds counts of specific note types for a workspace.
-type NoteCounts struct {
-	Current int `json:"current"`
-	Issues  int `json:"issues"`
-}
+// WorkspaceKind provides an unambiguous classification for a discovered workspace entity.
+type WorkspaceKind string
 
-// ClaudeSessionInfo holds information about an active Claude session.
-type ClaudeSessionInfo struct {
-	ID       string `json:"id"`
-	PID      int    `json:"pid"`
-	Status   string `json:"status"`
-	Duration string `json:"duration"`
-}
+const (
+	// --- Standalone Projects (not part of an Ecosystem) ---
 
-// PlanStats holds counts of plans by status for a workspace.
-type PlanStats struct {
-	TotalPlans int    `json:"total_plans"` // Total number of plans in workspace
-	ActivePlan string `json:"active_plan"` // Name of the active plan
-	Total      int    `json:"total"`       // Total jobs in active plan
-	Pending    int    `json:"pending"`
-	Running    int    `json:"running"`
-	Completed  int    `json:"completed"`
-	Failed     int    `json:"failed"`
-}
+	// KindStandaloneProject: A standard project with a grove.yml, not within an Ecosystem.
+	// Diagram:
+	// /path/to/my-project/  (grove.yml, .git/)
+	KindStandaloneProject WorkspaceKind = "StandaloneProject"
+
+	// KindStandaloneProjectWorktree: A git worktree of a StandaloneProject.
+	// Diagram:
+	// /path/to/my-project/
+	//   ├─ .git/
+	//   └─ .grove-worktrees/
+	//        └─ feature-branch/ (grove.yml, .git file) <-- This
+	KindStandaloneProjectWorktree WorkspaceKind = "StandaloneProjectWorktree"
+
+	// --- Ecosystem Root and its immediate children ---
+
+	// KindEcosystemRoot: The main repository of an ecosystem (has grove.yml with a 'workspaces' key).
+	// Diagram:
+	// /path/to/my-ecosystem/ (grove.yml with 'workspaces', .git/) <-- This
+	KindEcosystemRoot WorkspaceKind = "EcosystemRoot"
+
+	// KindEcosystemWorktree: A git worktree of an EcosystemRoot. It also functions as an ecosystem.
+	// Diagram:
+	// /path/to/my-ecosystem/
+	//   ├─ .git/
+	//   └─ .grove-worktrees/
+	//        └─ eco-feature/ (grove.yml with 'workspaces', .git file) <-- This
+	KindEcosystemWorktree WorkspaceKind = "EcosystemWorktree"
+
+	// KindEcosystemSubProject: A project (e.g., submodule) located directly inside an EcosystemRoot.
+	// Diagram:
+	// /path/to/my-ecosystem/ (EcosystemRoot)
+	//   └─ sub-project/ (grove.yml, .git/) <-- This
+	KindEcosystemSubProject WorkspaceKind = "EcosystemSubProject"
+
+	// KindEcosystemSubProjectWorktree: A git worktree of an EcosystemSubProject.
+	// Diagram:
+	// /path/to/my-ecosystem/ (EcosystemRoot)
+	//   └─ sub-project/
+	//        ├─ .git/
+	//        └─ .grove-worktrees/
+	//             └─ sub-feature/ (grove.yml, .git file) <-- This
+	KindEcosystemSubProjectWorktree WorkspaceKind = "EcosystemSubProjectWorktree"
+
+	// --- Projects within an Ecosystem Worktree ---
+
+	// KindEcosystemWorktreeSubProject: A project located inside an EcosystemWorktree.
+	// This occurs when a submodule is initialized with `git submodule update` instead of as a linked worktree.
+	// Diagram:
+	// /path/to/my-ecosystem/.grove-worktrees/eco-feature/ (EcosystemWorktree)
+	//   └─ sub-project/ (grove.yml, .git/) <-- This
+	KindEcosystemWorktreeSubProject WorkspaceKind = "EcosystemWorktreeSubProject"
+
+	// KindEcosystemWorktreeSubProjectWorktree: A git worktree of an EcosystemWorktreeSubProject.
+	// This is the preferred "linked development" state for a sub-project in an ecosystem worktree.
+	// Diagram:
+	// /path/to/my-ecosystem/.grove-worktrees/eco-feature/ (EcosystemWorktree)
+	//   └─ sub-project/ (grove.yml, .git file) <-- This
+	KindEcosystemWorktreeSubProjectWorktree WorkspaceKind = "EcosystemWorktreeSubProjectWorktree"
+
+	// --- Other ---
+
+	// KindNonGroveRepo: A directory with a .git folder but no grove.yml.
+	// Diagram:
+	// /path/to/other-repo/ (.git/ only, no grove.yml) <-- This
+	KindNonGroveRepo WorkspaceKind = "NonGroveRepo"
+)
 
 // ProjectInfo is the enriched display model for projects.
 // It represents a flattened, view-friendly project item suitable for UIs.
-// It can represent an ecosystem, a primary project repository, or a worktree.
 type ProjectInfo struct {
-	Name                string `json:"name"`
-	Path                string `json:"path"`
-	ParentPath          string `json:"parent_path,omitempty"`           // For worktrees, path to the parent repository
-	IsWorktree          bool   `json:"is_worktree"`
-	WorktreeName        string `json:"worktree_name,omitempty"`         // For projects inside an ecosystem worktree
-	WorktreeRootPath    string `json:"worktree_root_path,omitempty"`    // For paths inside an ecosystem worktree, the absolute path to the worktree root
-	ParentEcosystemPath string `json:"parent_ecosystem_path,omitempty"` // For sub-projects, path to parent ecosystem
-	IsEcosystem         bool   `json:"is_ecosystem"`
+	Name string        `json:"name"`
+	Path string        `json:"path"`
+	Kind WorkspaceKind `json:"kind"` // The single source of truth for the entity's type.
 
-	// Optional, enriched data (populated by EnrichProjects)
-	GitStatus     interface{}        `json:"git_status,omitempty"`      // Using interface{} to avoid circular import with git package
-	ClaudeSession *ClaudeSessionInfo `json:"claude_session,omitempty"`
-	NoteCounts    *NoteCounts        `json:"note_counts,omitempty"`
-	PlanStats     *PlanStats         `json:"plan_stats,omitempty"`
+	// ParentProjectPath is the path to the repository that manages this worktree.
+	// It is set ONLY for kinds that are worktrees.
+	ParentProjectPath string `json:"parent_project_path,omitempty"`
+
+	// ParentEcosystemPath is the path to the containing ecosystem's root directory.
+	// It is set for ALL kinds that exist within an ecosystem context.
+	ParentEcosystemPath string `json:"parent_ecosystem_path,omitempty"`
 
 	// Cloned repository-specific fields (populated by discovery)
 	Version     string `json:"version,omitempty"`
