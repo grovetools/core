@@ -468,6 +468,36 @@ func (m Model) GetSelected() workspace.WorkspaceNode {
 	return m.selected
 }
 
+// GetFiltered returns the currently filtered list of projects.
+func (m Model) GetFiltered() []workspace.WorkspaceNode {
+	return m.filtered
+}
+
+// GetCursor returns the current cursor position.
+func (m Model) GetCursor() int {
+	return m.cursor
+}
+
+// GetWidth returns the current width.
+func (m Model) GetWidth() int {
+	return m.width
+}
+
+// GetHeight returns the current height.
+func (m Model) GetHeight() int {
+	return m.height
+}
+
+// GetFocusedProject returns the currently focused project (if any).
+func (m Model) GetFocusedProject() *workspace.WorkspaceNode {
+	return m.focusedProject
+}
+
+// GetFilterInput returns the filter input model.
+func (m Model) GetFilterInput() string {
+	return m.filterInput.Value()
+}
+
 // updateFiltered applies the current filter and focus mode to update the filtered project list.
 func (m *Model) updateFiltered() {
 	filter := strings.ToLower(m.filterInput.Value())

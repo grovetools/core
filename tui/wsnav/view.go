@@ -6,18 +6,19 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/mattsolo1/grove-core/pkg/workspace/filter"
 	"github.com/mattsolo1/grove-core/tui/components/table"
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
-// View renders the TUI.
+// View renders the TUI with custom table-based display.
+// Overrides the navigator's default View to provide hierarchical table rendering.
 func (m Model) View() string {
-	if m.help.ShowAll {
-		return m.help.View()
-	}
+	width := m.navigator.GetWidth()
+	height := m.navigator.GetHeight()
 
 	// Handle very small terminal sizes
-	if m.width < 40 || m.height < 10 {
+	if width < 40 || height < 10 {
 		return "Terminal too small. Please resize."
 	}
 
@@ -27,7 +28,7 @@ func (m Model) View() string {
 	const topMargin = 1
 
 	// Calculate dynamic dimensions based on terminal size
-	mainAreaHeight := m.height - headerHeight - footerHeight - topMargin
+	mainAreaHeight := height - headerHeight - footerHeight - topMargin
 	if mainAreaHeight < 5 {
 		return "Terminal too small. Please resize."
 	}
@@ -36,7 +37,7 @@ func (m Model) View() string {
 	headerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.DefaultColors.Orange).
-		Width(m.width - 4).
+		Width(width - 4).
 		Height(headerHeight - 2).
 		Align(lipgloss.Center, lipgloss.Center).
 		Bold(true)
@@ -44,28 +45,18 @@ func (m Model) View() string {
 	mainContentStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.DefaultColors.Border).
-		Width(m.width - 4).
+		Width(width - 4).
 		Height(mainAreaHeight - 2).
 		Padding(1)
 
 	footerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.DefaultColors.Orange).
-		Width(m.width - 4).
+		Width(width - 4).
 		Height(footerHeight - 2).
 		Align(lipgloss.Center, lipgloss.Center)
 
 	// Calculate available height for table content
-	// mainAreaHeight already accounts for header, footer, and topMargin
-	// The mainContentStyle has:
-	//   - Border: 2 lines (top + bottom)
-	//   - Padding(1): 2 lines (top + bottom padding)
-	// The SelectableTable component will add:
-	//   - Border: 2 lines
-	//   - Header row: 1 line
-	//   - Separator: 1 line
-	// Scroll indicator: 1 line (optional, shown below table)
-	// Total overhead: mainContentStyle (4) + table internals (4) + scroll indicator (1) = 9
 	availableTableHeight := mainAreaHeight - 9
 	if availableTableHeight < 1 {
 		availableTableHeight = 1
@@ -77,10 +68,16 @@ func (m Model) View() string {
 	mainContent := m.buildTableView(availableTableHeight)
 
 	var footerParts []string
-	if m.focusedProject != nil {
-		footerParts = append(footerParts, fmt.Sprintf("[Focus: %s]", m.focusedProject.Name))
+	if focused := m.navigator.GetFocusedProject(); focused != nil {
+		footerParts = append(footerParts, fmt.Sprintf("[Focus: %s]", focused.Name))
 	}
-	footerParts = append(footerParts, m.filterInput.View())
+	filterVal := m.navigator.GetFilterInput()
+	if filterVal != "" {
+		footerParts = append(footerParts, fmt.Sprintf("Filter: %s", filterVal))
+	}
+	if len(footerParts) == 0 {
+		footerParts = append(footerParts, "Press / to filter, ctrl+f to focus")
+	}
 	footerContent := strings.Join(footerParts, " > ")
 
 	// Render each component
@@ -102,16 +99,27 @@ func (m Model) View() string {
 
 // buildTableView constructs and renders the main table of workspaces.
 func (m *Model) buildTableView(availableHeight int) string {
-	if len(m.filteredProjects) == 0 {
+	// Get filtered projects from navigator and convert to pointers
+	filtered := m.navigator.GetFiltered()
+	if len(filtered) == 0 {
 		return "No workspaces discovered.\n\nTip: Configure search_paths in ~/.grove/config.yml"
 	}
 
-	allRows := m.buildTableRows()
+	// Convert to pointers for filter functions
+	filteredPtrs := make([]*workspace.WorkspaceNode, len(filtered))
+	for i := range filtered {
+		filteredPtrs[i] = &filtered[i]
+	}
+
+	// Apply hierarchical grouping
+	hierarchical := filter.GroupHierarchically(filteredPtrs, false)
+
+	// Build table rows
+	allRows := m.buildTableRows(hierarchical)
+
+	cursor := m.navigator.GetCursor()
 
 	// Calculate visible rows based on scroll offset
-	// We need to account for the table component's internal rendering
-	// The SelectableTable component adds borders and headers internally
-	// So we need to limit the data rows we pass to it
 	startIdx := m.scrollOffset
 	endIdx := startIdx + availableHeight
 	if endIdx > len(allRows) {
@@ -125,10 +133,28 @@ func (m *Model) buildTableView(availableHeight int) string {
 		}
 	}
 
+	// Ensure cursor is visible
+	if cursor < startIdx {
+		m.scrollOffset = cursor
+		startIdx = cursor
+		endIdx = startIdx + availableHeight
+		if endIdx > len(allRows) {
+			endIdx = len(allRows)
+		}
+	}
+	if cursor >= endIdx {
+		endIdx = cursor + 1
+		startIdx = endIdx - availableHeight
+		if startIdx < 0 {
+			startIdx = 0
+		}
+		m.scrollOffset = startIdx
+	}
+
 	visibleRows := allRows[startIdx:endIdx]
 
 	// Adjust cursor to be relative to the visible window
-	relativeCursor := m.cursor - m.scrollOffset
+	relativeCursor := cursor - m.scrollOffset
 	if relativeCursor < 0 {
 		relativeCursor = 0
 	}
@@ -137,12 +163,11 @@ func (m *Model) buildTableView(availableHeight int) string {
 	}
 
 	// Use the selectable table component for rendering.
-	// The component handles borders, selection, and the '◀' indicator.
 	mainContent := table.SelectableTableWithOptions(
 		[]string{"K", "●", "WORKSPACE", "PATH"},
 		visibleRows,
 		relativeCursor,
-		table.SelectableTableOptions{HighlightColumn: 2}, // Highlight the WORKSPACE column
+		table.SelectableTableOptions{HighlightColumn: 2},
 	)
 
 	// Add scroll indicator if there are more items
@@ -157,12 +182,12 @@ func (m *Model) buildTableView(availableHeight int) string {
 
 // buildTableRows creates the data rows for the workspace table, including
 // indentation to create a hierarchical view based on depth.
-func (m *Model) buildTableRows() [][]string {
+func (m *Model) buildTableRows(projects []*workspace.WorkspaceNode) [][]string {
 	var rows [][]string
 
 	// Build a map of parent path -> children to determine if a node is the last child
 	childrenMap := make(map[string][]*workspace.WorkspaceNode)
-	for _, p := range m.filteredProjects {
+	for _, p := range projects {
 		parent := p.GetHierarchicalParent()
 		if parent != "" {
 			childrenMap[parent] = append(childrenMap[parent], p)
@@ -179,7 +204,7 @@ func (m *Model) buildTableRows() [][]string {
 		return len(children) > 0 && children[len(children)-1].Path == node.Path
 	}
 
-	for _, p := range m.filteredProjects {
+	for _, p := range projects {
 		depth := p.GetDepth()
 
 		// Build indentation string based on depth
