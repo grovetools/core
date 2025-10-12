@@ -19,14 +19,24 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		return "", fmt.Errorf("failed to prepare worktree: %w", err)
 	}
 
-	// Instantiate a discovery service to find local workspaces for submodule setup
-	// We use a null logger as we don't need discovery output here.
+	// Discover all workspaces once and create a provider for efficient lookups
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
 	logger.SetLevel(logrus.WarnLevel)
 	discoveryService := NewDiscoveryService(logger)
 
-	if err := SetupSubmodules(ctx, worktreePath, opts.BranchName, opts.Repos, discoveryService); err != nil {
+	discoveryResult, err := discoveryService.DiscoverAll()
+	if err != nil {
+		fmt.Printf("Warning: failed to discover workspaces for worktree '%s': %v\n", opts.WorktreeName, err)
+	}
+
+	// Create a provider from the discovery result
+	var provider *Provider
+	if discoveryResult != nil {
+		provider = NewProvider(discoveryResult)
+	}
+
+	if err := SetupSubmodules(ctx, worktreePath, opts.BranchName, opts.Repos, provider); err != nil {
 		fmt.Printf("Warning: failed to setup submodules for worktree '%s': %v\n", opts.WorktreeName, err)
 	}
 

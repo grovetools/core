@@ -35,7 +35,40 @@ const (
 	typeSkip // Already processed or should be skipped
 )
 
-// classifyDirectory examines a directory and returns its type based on filesystem markers
+// classifyWorkspaceRoot examines a directory and returns its type based on filesystem markers.
+// This is the single source of truth for workspace classification, used by both targeted lookups
+// and full discovery scans to ensure consistency.
+//
+// Note: This function classifies repository roots and does NOT handle worktree directory logic
+// (.grove-worktrees). That special case is handled separately by the walker.
+func classifyWorkspaceRoot(path string) (directoryType, *config.Config, error) {
+	// Check for grove.yml first to classify the directory
+	groveYmlPath := filepath.Join(path, "grove.yml")
+	if _, statErr := os.Stat(groveYmlPath); statErr == nil {
+		cfg, loadErr := config.Load(groveYmlPath)
+		if loadErr != nil {
+			return typeUnknown, nil, fmt.Errorf("failed to load grove.yml: %w", loadErr)
+		}
+
+		// Check if it's an ecosystem (has workspaces key)
+		if len(cfg.Workspaces) > 0 {
+			return typeEcosystem, cfg, nil
+		}
+
+		// It's a project
+		return typeProject, cfg, nil
+	}
+
+	// Check for .git to classify as Non-Grove Directory
+	if _, statErr := os.Stat(filepath.Join(path, ".git")); statErr == nil {
+		return typeNonGroveRepo, nil, nil
+	}
+
+	return typeUnknown, nil, nil
+}
+
+// classifyDirectory is a wrapper around classifyWorkspaceRoot that handles special cases
+// for the directory walker, including .grove-worktrees detection.
 func classifyDirectory(path string, d os.DirEntry) (directoryType, *config.Config, error) {
 	if !d.IsDir() {
 		return typeUnknown, nil, nil
@@ -56,36 +89,14 @@ func classifyDirectory(path string, d os.DirEntry) (directoryType, *config.Confi
 		return typeUnknown, nil, nil
 	}
 
-	// Check for grove.yml to classify the directory
-	groveYmlPath := filepath.Join(path, "grove.yml")
-	if _, statErr := os.Stat(groveYmlPath); statErr == nil {
-		// Skip re-processing if this is a direct child of .grove-worktrees
-		// (the worktree directory itself, which was already classified)
-		if filepath.Base(filepath.Dir(path)) == ".grove-worktrees" {
-			return typeSkip, nil, nil
-		}
-
-		cfg, loadErr := config.Load(groveYmlPath)
-		if loadErr != nil {
-			return typeUnknown, nil, fmt.Errorf("failed to load grove.yml: %w", loadErr)
-		}
-
-		// Check if it's an ecosystem (has workspaces key)
-		// But ecosystem roots should never be inside .grove-worktrees directories
-		if len(cfg.Workspaces) > 0 && !strings.Contains(path, ".grove-worktrees") {
-			return typeEcosystem, cfg, nil
-		}
-
-		// It's a project
-		return typeProject, cfg, nil
+	// Skip re-processing if this is a direct child of .grove-worktrees
+	// (the worktree directory itself, which was already classified)
+	if filepath.Base(filepath.Dir(path)) == ".grove-worktrees" {
+		return typeSkip, nil, nil
 	}
 
-	// Check for .git to classify as Non-Grove Directory
-	if _, statErr := os.Stat(filepath.Join(path, ".git")); statErr == nil {
-		return typeNonGroveRepo, nil, nil
-	}
-
-	return typeUnknown, nil, nil
+	// Use the central classification logic
+	return classifyWorkspaceRoot(path)
 }
 
 // processEcosystem handles discovery of an ecosystem root directory
@@ -537,14 +548,16 @@ func FindEcosystemRoot(startDir string) (string, error) {
 }
 
 // GetProjects performs discovery and transformation in a single call,
-// returning a flat list of WorkspaceNodes ready for consumption.
+// returning a flat list of WorkspaceNodes ready for consumption with
+// pre-calculated tree prefixes for rendering.
 func GetProjects(logger *logrus.Logger) ([]*WorkspaceNode, error) {
 	discoveryService := NewDiscoveryService(logger)
 	result, err := discoveryService.DiscoverAll()
 	if err != nil {
 		return nil, err
 	}
-	return TransformToWorkspaceNodes(result), nil
+	nodes := TransformToWorkspaceNodes(result)
+	return BuildWorkspaceTree(nodes), nil
 }
 
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.

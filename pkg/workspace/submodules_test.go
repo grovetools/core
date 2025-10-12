@@ -52,6 +52,30 @@ func createWorktree(t *testing.T, repoDir, worktreePath, branchName string) {
 	require.NoError(t, err, "Failed to create worktree")
 }
 
+// Helper function to create a mock Provider with workspaces
+func createMockProvider(workspaces map[string]string) *Provider {
+	var projects []Project
+	for name, path := range workspaces {
+		projects = append(projects, Project{
+			Name: name,
+			Path: path,
+			Workspaces: []DiscoveredWorkspace{
+				{
+					Name:              "main",
+					Path:              path,
+					Type:              WorkspaceTypePrimary,
+					ParentProjectPath: path,
+				},
+			},
+		})
+	}
+
+	result := &DiscoveryResult{
+		Projects: projects,
+	}
+	return NewProvider(result)
+}
+
 func TestSetupSubmodules(t *testing.T) {
 	// Skip if git is not available
 	if _, err := exec.LookPath("git"); err != nil {
@@ -100,18 +124,13 @@ func TestSetupSubmodules(t *testing.T) {
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
 		
-		// Mock DiscoverLocalWorkspaces by setting environment variable
-		// This simulates having the local-sub as a discovered workspace
-		oldFunc := discoverLocalWorkspacesFunc
-		discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
-			return map[string]string{
-				"local-sub": localSubmoduleDir,
-			}, nil
-		}
-		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
-		
+		// Create a mock Provider with the local-sub as a discovered workspace
+		mockProvider := createMockProvider(map[string]string{
+			"local-sub": localSubmoduleDir,
+		})
+
 		// Test SetupSubmodules with all repos
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
 		
 		// Verify local-sub exists as a directory (linked worktree)
@@ -167,17 +186,13 @@ func TestSetupSubmodules(t *testing.T) {
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
 		
-		// Mock DiscoverLocalWorkspaces
-		oldFunc := discoverLocalWorkspacesFunc
-		discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
-			return map[string]string{
-				"local-sub": localSubmoduleDir,
-			}, nil
-		}
-		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
-		
+		// Create a mock Provider
+		mockProvider := createMockProvider(map[string]string{
+			"local-sub": localSubmoduleDir,
+		})
+
 		// Test SetupSubmodules with repos filter (only local-sub)
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{"local-sub"}, nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{"local-sub"}, mockProvider)
 		require.NoError(t, err)
 		
 		// Verify local-sub exists
@@ -228,15 +243,11 @@ func TestSetupSubmodules(t *testing.T) {
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
 		
-		// Mock DiscoverLocalWorkspaces (no workspaces found)
-		oldFunc := discoverLocalWorkspacesFunc
-		discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		}
-		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
-		
+		// Create empty mock Provider (no workspaces found)
+		mockProvider := createMockProvider(map[string]string{})
+
 		// Test SetupSubmodules - should handle missing submodule gracefully
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
 		
 		// Verify missing-sub directory exists (created as placeholder)
@@ -290,15 +301,11 @@ func TestSetupSubmodules(t *testing.T) {
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
 		
-		// Mock DiscoverLocalWorkspaces
-		oldFunc := discoverLocalWorkspacesFunc
-		discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		}
-		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
-		
+		// Create empty mock Provider
+		mockProvider := createMockProvider(map[string]string{})
+
 		// Test SetupSubmodules with complex gitmodules
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
 		
 		// Verify all submodule directories are created
@@ -346,15 +353,11 @@ func TestSetupSubmodules(t *testing.T) {
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
 		
-		// Mock DiscoverLocalWorkspaces
-		oldFunc := discoverLocalWorkspacesFunc
-		discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		}
-		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
-		
+		// Create empty mock Provider
+		mockProvider := createMockProvider(map[string]string{})
+
 		// Test with empty repos list (should setup all submodules)
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{}, nil)
+		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{}, mockProvider)
 		require.NoError(t, err)
 		
 		// Verify submodule directory is created

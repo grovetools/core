@@ -15,14 +15,21 @@ import (
 )
 
 // SetupSubmodules initializes submodules, creating linked worktrees where possible.
-func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, ds *DiscoveryService) error {
-	// If no discovery service provided, create a default one
-	if ds == nil {
+// It accepts a Provider containing pre-discovered workspaces to avoid redundant filesystem scans.
+func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, provider *Provider) error {
+	// If no provider is given, create a temporary one
+	if provider == nil {
 		logger := logrus.New()
 		logger.SetOutput(os.Stderr)
 		logger.SetLevel(logrus.WarnLevel)
-		ds = NewDiscoveryService(logger)
+		ds := NewDiscoveryService(logger)
+		result, err := ds.DiscoverAll()
+		if err != nil {
+			return fmt.Errorf("failed to discover workspaces: %w", err)
+		}
+		provider = NewProvider(result)
 	}
+
 	cmdCheckout := exec.CommandContext(ctx, "git", "checkout", "HEAD", "--", ".")
 	cmdCheckout.Dir = worktreePath
 	cmdCheckout.CombinedOutput() // Ignore error
@@ -53,8 +60,9 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		}
 	}
 
-	localWorkspaces, err := discoverLocalWorkspacesFromService(ctx, ds)
-	if err != nil && hasGitmodules {
+	// Get local workspaces from the provider
+	localWorkspaces := provider.LocalWorkspaces()
+	if len(localWorkspaces) == 0 && hasGitmodules {
 		return setupSubmodulesStandard(ctx, worktreePath, branchName)
 	}
 

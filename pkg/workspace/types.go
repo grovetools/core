@@ -165,6 +165,10 @@ type WorkspaceNode struct {
 	// traversing to the root of the hierarchy. It is set for all nodes within an ecosystem.
 	RootEcosystemPath string `json:"root_ecosystem_path,omitempty"`
 
+	// Presentation fields for TUI rendering (pre-calculated for performance)
+	TreePrefix string `json:"-"` // Pre-calculated tree indentation and connectors (e.g., "  ├─ ")
+	Depth      int    `json:"-"` // Cached depth in the hierarchy
+
 	// Cloned repository-specific fields (populated by discovery)
 	Version     string `json:"version,omitempty"`
 	Commit      string `json:"commit,omitempty"`

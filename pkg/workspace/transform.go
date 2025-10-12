@@ -223,3 +223,122 @@ func findRootEcosystem(startPath string, nodeMap map[string]*WorkspaceNode) stri
 		current = node.ParentEcosystemPath
 	}
 }
+
+// BuildWorkspaceTree takes a flat slice of WorkspaceNodes and pre-calculates
+// presentation data for TUI rendering. It organizes nodes hierarchically and
+// populates the TreePrefix and Depth fields.
+//
+// The TreePrefix field contains the indentation and tree connectors (e.g., "  ├─ ", "  └─ ")
+// making it trivial for views to render the tree structure without complex logic.
+func BuildWorkspaceTree(nodes []*WorkspaceNode) []*WorkspaceNode {
+	if len(nodes) == 0 {
+		return nodes
+	}
+
+	// Import the filter package to use GroupHierarchically
+	// Note: This creates a dependency, but it's appropriate since we're building on that logic
+	hierarchical := groupHierarchicallyInternal(nodes, false)
+
+	// Build a map of parent path -> list of children to know when we're on the last child
+	childrenMap := make(map[string][]*WorkspaceNode)
+	for _, node := range hierarchical {
+		parent := node.GetHierarchicalParent()
+		if parent != "" {
+			childrenMap[parent] = append(childrenMap[parent], node)
+		}
+	}
+
+	// Iterate through the hierarchical list and calculate prefixes
+	for _, node := range hierarchical {
+		depth := node.GetDepth()
+		node.Depth = depth
+
+		if depth == 0 {
+			// Root level nodes have no prefix
+			node.TreePrefix = ""
+			continue
+		}
+
+		// Build the prefix based on depth and position
+		var prefix string
+		parent := node.GetHierarchicalParent()
+
+		if parent != "" {
+			siblings := childrenMap[parent]
+			isLastChild := false
+
+			// Check if this is the last child of its parent
+			for j, sibling := range siblings {
+				if sibling.Path == node.Path && j == len(siblings)-1 {
+					isLastChild = true
+					break
+				}
+			}
+
+			// Build indentation based on depth
+			for d := 1; d < depth; d++ {
+				prefix += "  "
+			}
+
+			// Add the tree connector
+			if isLastChild {
+				prefix += "└─ "
+			} else {
+				prefix += "├─ "
+			}
+		}
+
+		node.TreePrefix = prefix
+	}
+
+	return hierarchical
+}
+
+// groupHierarchicallyInternal is a simplified version of filter.GroupHierarchically
+// to avoid circular dependencies. It organizes nodes in depth-first order.
+func groupHierarchicallyInternal(nodes []*WorkspaceNode, folded bool) []*WorkspaceNode {
+	// Build a map of parent path -> children
+	childrenMap := make(map[string][]*WorkspaceNode)
+
+	// Build a map for quick node lookup by path
+	nodeMap := make(map[string]*WorkspaceNode)
+	for _, p := range nodes {
+		nodeMap[p.Path] = p
+	}
+
+	// Populate children map based on hierarchical parent
+	var roots []*WorkspaceNode
+	for _, p := range nodes {
+		parent := p.GetHierarchicalParent()
+		if parent == "" {
+			// This is a root node
+			roots = append(roots, p)
+		} else {
+			childrenMap[parent] = append(childrenMap[parent], p)
+		}
+	}
+
+	// Recursively build the result in depth-first order
+	var result []*WorkspaceNode
+	var addNodeAndChildren func(node *WorkspaceNode, depth int)
+
+	addNodeAndChildren = func(node *WorkspaceNode, depth int) {
+		result = append(result, node)
+
+		if !folded || !node.IsWorktree() {
+			// Add children recursively
+			if children, exists := childrenMap[node.Path]; exists {
+				for _, child := range children {
+					addNodeAndChildren(child, depth+1)
+				}
+			}
+		}
+	}
+
+	// Add all root nodes and their children
+	for _, root := range roots {
+		addNodeAndChildren(root, 0)
+	}
+
+	return result
+}

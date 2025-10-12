@@ -185,49 +185,12 @@ func (m *Model) buildTableView(availableHeight int) string {
 	return mainContent
 }
 
-// buildTableRows creates the data rows for the workspace table, including
-// indentation to create a hierarchical view based on depth.
+// buildTableRows creates the data rows for the workspace table.
+// Tree structure is pre-calculated in the TreePrefix field by BuildWorkspaceTree.
 func (m *Model) buildTableRows(projects []*workspace.WorkspaceNode) [][]string {
 	var rows [][]string
 
-	// Build a map of parent path -> children to determine if a node is the last child
-	childrenMap := make(map[string][]*workspace.WorkspaceNode)
 	for _, p := range projects {
-		parent := p.GetHierarchicalParent()
-		if parent != "" {
-			childrenMap[parent] = append(childrenMap[parent], p)
-		}
-	}
-
-	// Determine if a node is the last child of its parent
-	isLastChild := func(node *workspace.WorkspaceNode) bool {
-		parent := node.GetHierarchicalParent()
-		if parent == "" {
-			return false
-		}
-		children := childrenMap[parent]
-		return len(children) > 0 && children[len(children)-1].Path == node.Path
-	}
-
-	for _, p := range projects {
-		depth := p.GetDepth()
-
-		// Build indentation string based on depth
-		var indent string
-		var prefix string
-
-		if depth > 0 {
-			// Add indentation (2 spaces per level)
-			indent = strings.Repeat("  ", depth-1)
-
-			// Add tree connector
-			if isLastChild(p) {
-				prefix = "└─ "
-			} else {
-				prefix = "├─ "
-			}
-		}
-
 		kind := kindAbbreviation(p.Kind)
 
 		// Apply styling based on workspace type
@@ -239,7 +202,9 @@ func (m *Model) buildTableRows(projects []*workspace.WorkspaceNode) [][]string {
 			// Primary workspaces: cyan color
 			nameStyle = lipgloss.NewStyle().Foreground(theme.DefaultColors.Cyan)
 		}
-		name := nameStyle.Render(fmt.Sprintf("%s%s%s", indent, prefix, p.Name))
+
+		// Use pre-calculated TreePrefix for hierarchical display
+		name := nameStyle.Render(p.TreePrefix + p.Name)
 
 		// ENRICHMENT EXAMPLE: Read enrichment data from the map using a read lock.
 		// This demonstrates how to safely access enrichment data in the view:
