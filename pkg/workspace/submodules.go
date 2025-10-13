@@ -2,9 +2,7 @@ package workspace
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -148,96 +146,6 @@ func discoverLocalWorkspacesFromService(ctx context.Context, ds *DiscoveryServic
 	return workspaceMap, nil
 }
 
-// DiscoverLocalWorkspaces is kept for backward compatibility with tests
-// New code should use discoverLocalWorkspacesFromService directly
-func DiscoverLocalWorkspaces(ctx context.Context) (map[string]string, error) {
-	// Check for test environment override first
-	if mockData := os.Getenv("GROVE_TEST_WORKSPACES"); mockData != "" {
-		var workspaces []WorkspaceInfo
-		if err := json.Unmarshal([]byte(mockData), &workspaces); err != nil {
-			return make(map[string]string), nil
-		}
-
-		result := make(map[string]string)
-		for _, ws := range workspaces {
-			// Find the main worktree - prioritize is_main:true, but fall back to path matching
-			mainPath := ""
-			for _, wt := range ws.Worktrees {
-				if wt.IsMain {
-					mainPath = wt.Path
-					break
-				}
-			}
-
-			// If no is_main:true found, use path matching as fallback
-			if mainPath == "" && len(ws.Worktrees) > 0 {
-				// Normalize paths for comparison (handle case sensitivity)
-				wsPathNorm := strings.ToLower(filepath.Clean(ws.Path))
-				for _, wt := range ws.Worktrees {
-					wtPathNorm := strings.ToLower(filepath.Clean(wt.Path))
-					if wsPathNorm == wtPathNorm {
-						mainPath = wt.Path
-						break
-					}
-				}
-				// If still no match, use the first worktree as a last resort
-				if mainPath == "" {
-					mainPath = ws.Worktrees[0].Path
-				}
-			}
-
-			if mainPath != "" {
-				result[ws.Name] = mainPath
-			}
-		}
-		return result, nil
-	}
-
-	cmd := exec.CommandContext(ctx, "grove", "ws", "list", "--json")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return make(map[string]string), nil
-	}
-	var workspaces []WorkspaceInfo
-	if err := json.Unmarshal(stdout.Bytes(), &workspaces); err != nil {
-		return nil, err
-	}
-	result := make(map[string]string)
-	for _, ws := range workspaces {
-		// Find the main worktree - prioritize is_main:true, but fall back to path matching
-		mainPath := ""
-		for _, wt := range ws.Worktrees {
-			if wt.IsMain {
-				mainPath = wt.Path
-				break
-			}
-		}
-
-		// If no is_main:true found, use path matching as fallback
-		if mainPath == "" && len(ws.Worktrees) > 0 {
-			// Normalize paths for comparison (handle case sensitivity)
-			wsPathNorm := strings.ToLower(filepath.Clean(ws.Path))
-			for _, wt := range ws.Worktrees {
-				wtPathNorm := strings.ToLower(filepath.Clean(wt.Path))
-				if wsPathNorm == wtPathNorm {
-					mainPath = wt.Path
-					break
-				}
-			}
-			// If still no match, use the first worktree as a last resort
-			if mainPath == "" {
-				mainPath = ws.Worktrees[0].Path
-			}
-		}
-
-		if mainPath != "" {
-			result[ws.Name] = mainPath
-		}
-	}
-	return result, nil
-}
 
 func parseGitmodules(gitmodulesPath string) (map[string]string, error) {
 	file, err := os.Open(gitmodulesPath)
