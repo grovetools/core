@@ -206,9 +206,13 @@ func GroupHierarchically(projects []*workspace.WorkspaceNode, folded bool) []*wo
 	for _, p := range projects {
 		parent := p.GetHierarchicalParent()
 		if parent == "" {
-			// This is a root node
+			// This is a root node (no parent)
+			roots = append(roots, p)
+		} else if _, exists := nodeMap[parent]; !exists {
+			// Parent doesn't exist in the filtered list, treat as root
 			roots = append(roots, p)
 		} else {
+			// Parent exists, add to children map
 			childrenMap[parent] = append(childrenMap[parent], p)
 		}
 	}
