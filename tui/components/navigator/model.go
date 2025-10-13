@@ -1,7 +1,6 @@
 package navigator
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -534,40 +533,16 @@ func (m *Model) updateFiltered() {
 
 	// Create a working list of projects, either all projects or just the focused ecosystem
 	var projectsToFilter []workspace.WorkspaceNode
-	if m.focusedProject != nil && m.focusedProject.IsEcosystem() {
-		// Focus is active on an ecosystem - show it and all its descendants
+	if m.focusedProject != nil {
+		// Add the focused project itself
 		projectsToFilter = append(projectsToFilter, *m.focusedProject)
 
-		// Include all projects that are descendants (either direct children or nested within)
+		// Add all direct children (handles both ecosystem children and worktree children)
 		for _, p := range m.projects {
-			isChild := false
-
-			// 1. Primary check: Explicit parent properties
-			if p.ParentEcosystemPath == m.focusedProject.Path || p.ParentProjectPath == m.focusedProject.Path {
-				isChild = true
-			}
-
-			// 2. Fallback check: Filesystem path hierarchy
-			// Only use path prefix fallback for EcosystemWorktree, not EcosystemRoot
-			// This prevents showing worktree subprojects when focusing on the root ecosystem
-			if !isChild && m.focusedProject.Kind == workspace.KindEcosystemWorktree {
-				focusedPathPrefix := m.focusedProject.Path
-				if !strings.HasSuffix(focusedPathPrefix, string(filepath.Separator)) {
-					focusedPathPrefix += string(filepath.Separator)
-				}
-				if strings.HasPrefix(p.Path, focusedPathPrefix) {
-					isChild = true
-				}
-			}
-
-			// Add to filtered list if it's a child and not the project itself
-			if isChild && p.Path != m.focusedProject.Path {
+			if p.IsChildOf(m.focusedProject.Path) {
 				projectsToFilter = append(projectsToFilter, p)
 			}
 		}
-	} else if m.focusedProject != nil {
-		// Focused on something that is not an ecosystem (a regular project)
-		projectsToFilter = append(projectsToFilter, *m.focusedProject)
 	} else {
 		// No focus, use all projects
 		projectsToFilter = m.projects

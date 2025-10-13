@@ -228,3 +228,33 @@ func (w *WorkspaceNode) GetHierarchicalParent() string {
 	// Top-level nodes have no parent
 	return ""
 }
+
+// IsChildOf returns true if this node is a direct hierarchical child of the given parent path.
+// This handles both worktree children (via ParentProjectPath) and ecosystem children (via ParentEcosystemPath).
+func (w *WorkspaceNode) IsChildOf(parentPath string) bool {
+	return w.GetHierarchicalParent() == parentPath
+}
+
+// IsEcosystemChild returns true if this is a child within an ecosystem hierarchy
+// (not a worktree child). Useful for distinguishing ecosystem subprojects from worktrees.
+func (w *WorkspaceNode) IsEcosystemChild() bool {
+	return w.ParentEcosystemPath != "" && w.ParentProjectPath == ""
+}
+
+// IsProjectWorktreeChild returns true if this is a worktree child of a project
+// (not an ecosystem child). Useful for grouping worktrees under their parent projects.
+func (w *WorkspaceNode) IsProjectWorktreeChild() bool {
+	return w.ParentProjectPath != "" && !w.IsEcosystem()
+}
+
+// GetDirectChildren returns all nodes from the given list that are direct children of this node.
+// This properly handles both ecosystem children and worktree children.
+func (w *WorkspaceNode) GetDirectChildren(nodes []*WorkspaceNode) []*WorkspaceNode {
+	var children []*WorkspaceNode
+	for _, node := range nodes {
+		if node.IsChildOf(w.Path) && node.Path != w.Path {
+			children = append(children, node)
+		}
+	}
+	return children
+}
