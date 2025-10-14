@@ -3,3 +3,6 @@ description: Core libraries and debugging tools for the Grove ecosystem
 binary:
   name: core
   path: ./bin/core
+
+context:
+  default_rules_path: .cx/dev-no-tests.rules
