@@ -1,5 +1,7 @@
 package workspace
 
+import "fmt"
+
 // PrepareOptions holds configuration for preparing a workspace.
 type PrepareOptions struct {
 	GitRoot      string
@@ -176,7 +178,16 @@ type WorkspaceNode struct {
 	ReportPath  string `json:"report_path,omitempty"`
 }
 
-// IsWorktree returns true if this node represents a worktree
+// IsWorktree returns true if this node represents a worktree.
+// Note: This includes EcosystemWorktree, which is BOTH a worktree AND a container/ecosystem.
+// For filtering logic that needs to distinguish "leaf worktrees" from containers, use IsProjectWorktreeChild().
+//
+// Example hierarchy:
+//   grove-ecosystem/ (EcosystemRoot)
+//     ├─ grove-tmux/ (EcosystemSubProject) - IsWorktree()=false, IsEcosystemChild()=true
+//     └─ .grove-worktrees/
+//         └─ my-branch/ (EcosystemWorktree) - IsWorktree()=true, IsEcosystem()=true
+//             └─ grove-hooks/ (EcosystemWorktreeSubProject) - IsWorktree()=false, IsEcosystemChild()=true
 func (w *WorkspaceNode) IsWorktree() bool {
 	switch w.Kind {
 	case KindStandaloneProjectWorktree,
@@ -257,4 +268,48 @@ func (w *WorkspaceNode) GetDirectChildren(nodes []*WorkspaceNode) []*WorkspaceNo
 		}
 	}
 	return children
+}
+
+// GetGroupingKey returns the path that should be used for grouping related items together.
+// For project worktrees, this returns the parent project path so worktrees are grouped with their parent.
+// For all other nodes (including ecosystem children), this returns the node's own path.
+//
+// This is useful for filtering and sorting logic that needs to group worktrees with their parent repos
+// while treating ecosystem children as independent entities.
+//
+// Example:
+//   grove-ecosystem/grove-tmux (EcosystemSubProject) -> returns "grove-tmux"
+//   my-project/.grove-worktrees/feature (StandaloneProjectWorktree) -> returns "my-project"
+func (w *WorkspaceNode) GetGroupingKey() string {
+	// Only project worktrees (not ecosystem worktrees!) need to be grouped with their parent
+	if w.IsProjectWorktreeChild() {
+		return w.ParentProjectPath
+	}
+	return w.Path
+}
+
+// Validate checks the internal consistency of this WorkspaceNode and returns an error if
+// the node's fields don't match the expected invariants for its Kind.
+//
+// This is useful for catching bugs where node relationships are incorrectly set up.
+func (w *WorkspaceNode) Validate() error {
+	// All worktrees should have ParentProjectPath set
+	if w.IsProjectWorktreeChild() && w.ParentProjectPath == "" {
+		return fmt.Errorf("node %s (kind=%s) is a project worktree but has no ParentProjectPath", w.Path, w.Kind)
+	}
+
+	// All ecosystem children (that aren't worktrees) should have ParentEcosystemPath set
+	if w.IsEcosystemChild() && w.ParentEcosystemPath == "" {
+		return fmt.Errorf("node %s (kind=%s) is an ecosystem child but has no ParentEcosystemPath", w.Path, w.Kind)
+	}
+
+	// Ecosystem worktrees should have both ParentProjectPath (for worktree relationship) AND ParentEcosystemPath
+	if w.Kind == KindEcosystemWorktree {
+		if w.ParentProjectPath == "" {
+			return fmt.Errorf("ecosystem worktree %s has no ParentProjectPath", w.Path)
+		}
+		// Note: ParentEcosystemPath might legitimately be empty for top-level ecosystem worktrees
+	}
+
+	return nil
 }
