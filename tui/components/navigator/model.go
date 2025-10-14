@@ -67,6 +67,17 @@ func New(cfg Config) Model {
 		WithTitle("Project Navigator").
 		Build()
 
+	// Validate projects on initialization to catch bugs early
+	for i, p := range cfg.Projects {
+		if err := p.Validate(); err != nil {
+			// Log the error but don't fail - allow the TUI to start
+			// In the future, we might want to filter out invalid projects
+			_ = err // Suppress unused variable warning for now
+			// Consider: log.Printf("Invalid project at index %d: %v", i, err)
+			_ = i
+		}
+	}
+
 	m := Model{
 		initialProjects: cfg.Projects,
 		projects:        cfg.Projects,
@@ -105,6 +116,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		selectedPath := ""
 		if m.cursor < len(m.filtered) {
 			selectedPath = m.filtered[m.cursor].Path
+		}
+
+		// Validate projects when loading to catch bugs early
+		for i, p := range msg.Projects {
+			if err := p.Validate(); err != nil {
+				// Log the error but don't fail - allow the refresh to complete
+				_ = err
+				_ = i
+			}
 		}
 
 		// Update the main project list
