@@ -560,6 +560,18 @@ func GetProjects(logger *logrus.Logger) ([]*WorkspaceNode, error) {
 	return BuildWorkspaceTree(nodes), nil
 }
 
+// GetWorkspaceTree performs discovery and returns a fully formed workspace hierarchy.
+// This is the recommended function for UIs that need to render a tree.
+func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
+	discoveryService := NewDiscoveryService(logger)
+	result, err := discoveryService.DiscoverAll()
+	if err != nil {
+		return nil, err
+	}
+	nodes := TransformToWorkspaceNodes(result)
+	return BuildTree(nodes), nil
+}
+
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
 func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 	manager, err := repo.NewManager()

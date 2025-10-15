@@ -250,8 +250,8 @@ func BuildWorkspaceTree(nodes []*WorkspaceNode) []*WorkspaceNode {
 
 	// Iterate through the hierarchical list and calculate prefixes
 	for _, node := range hierarchical {
-		depth := node.GetDepth()
-		node.Depth = depth
+		// Use the pre-calculated Depth field
+		depth := node.Depth
 
 		if depth == 0 {
 			// Root level nodes have no prefix
@@ -323,6 +323,7 @@ func groupHierarchicallyInternal(nodes []*WorkspaceNode, folded bool) []*Workspa
 	var addNodeAndChildren func(node *WorkspaceNode, depth int)
 
 	addNodeAndChildren = func(node *WorkspaceNode, depth int) {
+		node.Depth = depth // Set the dynamically calculated depth
 		result = append(result, node)
 
 		if !folded || !node.IsWorktree() {
@@ -341,4 +342,46 @@ func groupHierarchicallyInternal(nodes []*WorkspaceNode, folded bool) []*Workspa
 	}
 
 	return result
+}
+
+// BuildTree constructs a hierarchical tree from a flat slice of WorkspaceNodes.
+// This is the recommended way for UIs to consume the workspace hierarchy.
+func BuildTree(nodes []*WorkspaceNode) []*WorkspaceTree {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	nodeMap := make(map[string]*WorkspaceNode)
+	for _, n := range nodes {
+		nodeMap[n.Path] = n
+	}
+
+	childrenMap := make(map[string][]*WorkspaceNode)
+	var roots []*WorkspaceNode
+	for _, n := range nodes {
+		parentPath := n.GetHierarchicalParent()
+		if parentPath == "" || nodeMap[parentPath] == nil {
+			roots = append(roots, n)
+		} else {
+			childrenMap[parentPath] = append(childrenMap[parentPath], n)
+		}
+	}
+
+	var buildSubTree func(node *WorkspaceNode) *WorkspaceTree
+	buildSubTree = func(node *WorkspaceNode) *WorkspaceTree {
+		treeNode := &WorkspaceTree{Node: node}
+		if children, exists := childrenMap[node.Path]; exists {
+			for _, childNode := range children {
+				treeNode.Children = append(treeNode.Children, buildSubTree(childNode))
+			}
+		}
+		return treeNode
+	}
+
+	var treeRoots []*WorkspaceTree
+	for _, rootNode := range roots {
+		treeRoots = append(treeRoots, buildSubTree(rootNode))
+	}
+
+	return treeRoots
 }

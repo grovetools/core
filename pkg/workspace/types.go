@@ -144,6 +144,13 @@ const (
 	KindNonGroveRepo WorkspaceKind = "NonGroveRepo"
 )
 
+// WorkspaceTree represents a node in the hierarchical workspace tree.
+// It's designed for consumers that need to render or traverse the full hierarchy.
+type WorkspaceTree struct {
+	Node     *WorkspaceNode   `json:"node"`
+	Children []*WorkspaceTree `json:"children"`
+}
+
 // WorkspaceNode is the enriched display model for workspace entities.
 // It represents a flattened, view-friendly node suitable for UIs, with explicit
 // parent-child relationships that form a hierarchical tree structure.
@@ -203,26 +210,6 @@ func (w *WorkspaceNode) IsWorktree() bool {
 // IsEcosystem returns true if this node represents an ecosystem (root or worktree)
 func (w *WorkspaceNode) IsEcosystem() bool {
 	return w.Kind == KindEcosystemRoot || w.Kind == KindEcosystemWorktree
-}
-
-// GetDepth returns the nesting depth of this node in the hierarchy
-// 0 = standalone projects and root ecosystems
-// 1 = ecosystem worktrees and sub-projects
-// 2 = sub-project worktrees and worktree sub-projects
-// 3 = worktree sub-project worktrees
-func (w *WorkspaceNode) GetDepth() int {
-	switch w.Kind {
-	case KindStandaloneProject, KindEcosystemRoot, KindNonGroveRepo:
-		return 0
-	case KindStandaloneProjectWorktree, KindEcosystemWorktree, KindEcosystemSubProject:
-		return 1
-	case KindEcosystemSubProjectWorktree, KindEcosystemWorktreeSubProject:
-		return 2
-	case KindEcosystemWorktreeSubProjectWorktree:
-		return 3
-	default:
-		return 0
-	}
 }
 
 // GetHierarchicalParent returns the logical parent path for hierarchical display.
