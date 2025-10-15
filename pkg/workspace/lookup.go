@@ -230,10 +230,13 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 
 		// Determine the kind for the primary workspace
 		kind := KindStandaloneProject
+		var parentProjectPath string
 
 		// Check if this is a worktree of a standalone project (not in an ecosystem)
 		if parentEcosystemPath == "" && strings.Contains(foundRootPath, ".grove-worktrees") {
 			kind = KindStandaloneProjectWorktree
+			// Set parent project path by going up past .grove-worktrees
+			parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
 		} else if parentEcosystemPath != "" {
 			// Check if the parent ecosystem is itself a worktree
 			parentIsWorktree := strings.Contains(parentEcosystemPath, ".grove-worktrees")
@@ -243,11 +246,19 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 				// The project is inside an ecosystem worktree
 				if projectIsWorktree {
 					kind = KindEcosystemWorktreeSubProjectWorktree
+					parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
 				} else {
 					kind = KindEcosystemWorktreeSubProject
 				}
 			} else {
-				kind = KindEcosystemSubProject
+				// Parent ecosystem is not a worktree, but the project might be
+				if projectIsWorktree {
+					kind = KindEcosystemSubProjectWorktree
+					// Set parent project path by going up past .grove-worktrees
+					parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
+				} else {
+					kind = KindEcosystemSubProject
+				}
 			}
 		}
 
@@ -255,6 +266,7 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 			Name:                projectName,
 			Path:                foundRootPath,
 			Kind:                kind,
+			ParentProjectPath:   parentProjectPath,
 			ParentEcosystemPath: parentEcosystemPath,
 			RootEcosystemPath:   rootEcosystemPath,
 		}

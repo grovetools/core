@@ -42,12 +42,19 @@ func (p *WorkspaceNode) Identifier() string {
 		// Get the root ecosystem name
 		rootEcoPath := filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
 		rootEcoName := s(filepath.Base(rootEcoPath))
-		return fmt.Sprintf("%s_%s_%s", rootEcoName, ecoWorktreeName, s(p.Name))
+		// Get the sub-project name
+		subProjectName := s(filepath.Base(p.ParentProjectPath))
+		return fmt.Sprintf("%s_%s_%s_%s", rootEcoName, ecoWorktreeName, subProjectName, s(p.Name))
 
-	case KindStandaloneProjectWorktree, KindEcosystemSubProjectWorktree:
+	case KindStandaloneProjectWorktree:
 		// e.g., my-project_feature-branch
 		parentName := s(filepath.Base(p.ParentProjectPath))
 		return fmt.Sprintf("%s_%s", parentName, s(p.Name))
+
+	case KindEcosystemSubProjectWorktree:
+		// e.g., my-ecosystem_sub-project_feature-branch
+		parentName := s(filepath.Base(p.ParentProjectPath))
+		return fmt.Sprintf("%s_%s_%s", ecoName, parentName, s(p.Name))
 
 	case KindEcosystemSubProject:
 		// e.g., my-ecosystem_sub-project

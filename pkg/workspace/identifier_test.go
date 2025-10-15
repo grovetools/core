@@ -72,6 +72,28 @@ func TestWorkspaceNode_Identifier(t *testing.T) {
 			},
 			expected: "my-ecosystem_sub-project",
 		},
+		{
+			name: "Sub-project worktree within main ecosystem repo",
+			project: &WorkspaceNode{
+				Name:                "feature-branch",
+				Path:                "/path/to/my-ecosystem/sub-project/.grove-worktrees/feature-branch",
+				Kind:                KindEcosystemSubProjectWorktree,
+				ParentProjectPath:   "/path/to/my-ecosystem/sub-project",
+				ParentEcosystemPath: "/path/to/my-ecosystem",
+			},
+			expected: "my-ecosystem_sub-project_feature-branch",
+		},
+		{
+			name: "Sub-project worktree within ecosystem worktree",
+			project: &WorkspaceNode{
+				Name:                "sub-feature",
+				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project/.grove-worktrees/sub-feature",
+				Kind:                KindEcosystemWorktreeSubProjectWorktree,
+				ParentProjectPath:   "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project",
+				ParentEcosystemPath: "/path/to/my-ecosystem/.grove-worktrees/eco-feature",
+			},
+			expected: "my-ecosystem_eco-feature_sub-project_sub-feature",
+		},
 	}
 
 	for _, tt := range tests {
