@@ -340,8 +340,21 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					return nil
 
 				case typeUnknown:
-					// Not a grove entity, continue scanning
-					return nil
+					// If the current path is the root of this specific search,
+					// we must descend into it, even if its type is unknown.
+					if path == grovePath {
+						return nil
+					}
+
+					// For any other directory that is not a recognized entity (ecosystem, project, git repo),
+					// we should not walk further down. This prevents deep scans into irrelevant directories
+					// (e.g., a notes folder) that might contain nested git repos.
+					// If a directory is meant to be a collection of projects, it should be added
+					// as its own 'search_path' in the configuration.
+					if d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil // It's a file, just ignore.
 
 				default:
 					return nil
