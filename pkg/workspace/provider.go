@@ -96,7 +96,7 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 	// e.g., grove-mcp/.grove-worktrees/1986
 	if !baseProjectNode.IsEcosystem() {
 		targetPath := filepath.Join(baseProjectNode.Path, ".grove-worktrees", worktreeName)
-		if node := p.FindByPath(targetPath); node != nil {
+		if node := p.FindByPath(targetPath); node != nil && node.Path == targetPath {
 			return node
 		}
 	}
@@ -116,7 +116,7 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 	// e.g., /ecosystem/.grove-worktrees/test444/grove-core
 	if !baseProjectNode.IsEcosystem() {
 		targetPath := filepath.Join(ecosystemPath, ".grove-worktrees", worktreeName, baseProjectNode.Name)
-		if node := p.FindByPath(targetPath); node != nil {
+		if node := p.FindByPath(targetPath); node != nil && node.Path == targetPath {
 			return node
 		}
 	}
