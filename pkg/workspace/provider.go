@@ -112,18 +112,43 @@ func (p *Provider) LocalWorkspacesInEcosystem(ecosystemPath string) map[string]s
 
 // validateAndWarnCollisions is called internally during provider construction
 // to automatically detect and warn about workspace name collisions.
+// It only reports true collisions between unrelated projects, not between
+// a project and its worktrees which legitimately share the same name.
 func (p *Provider) validateAndWarnCollisions() {
-	seen := make(map[string][]string)
+	// Group all nodes by name
+	seen := make(map[string][]*WorkspaceNode)
 	for _, node := range p.nodes {
-		seen[node.Name] = append(seen[node.Name], node.Path)
+		seen[node.Name] = append(seen[node.Name], node)
 	}
 
 	var collisions []error
-	for name, paths := range seen {
-		if len(paths) > 1 {
+	for name, nodes := range seen {
+		if len(nodes) <= 1 {
+			continue
+		}
+
+		// Group by logical source project to distinguish true collisions
+		// from a project and its worktrees (which share the same name)
+		sourceProjects := make(map[string][]string)
+		for _, node := range nodes {
+			// A worktree's source is its parent project, otherwise it's its own path
+			sourcePath := node.Path
+			if node.ParentProjectPath != "" {
+				sourcePath = node.ParentProjectPath
+			}
+			sourceProjects[sourcePath] = append(sourceProjects[sourcePath], node.Path)
+		}
+
+		// A collision occurs only if there are multiple different source projects
+		// with the same name. A project and its worktrees share one source.
+		if len(sourceProjects) > 1 {
+			var allPaths []string
+			for _, paths := range sourceProjects {
+				allPaths = append(allPaths, paths...)
+			}
 			collisions = append(collisions, fmt.Errorf(
-				"duplicate workspace name '%s' found at: %v (consider renaming in grove.yml to avoid collisions)",
-				name, paths))
+				"duplicate workspace name '%s' found for different projects at: %v (consider renaming in grove.yml to avoid collisions)",
+				name, allPaths))
 		}
 	}
 
