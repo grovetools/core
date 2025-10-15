@@ -35,7 +35,7 @@ func NewProvider(result *DiscoveryResult) *Provider {
 		pathMap: pathMap,
 	}
 
-	p.validateAndWarnCollisions()
+	// p.validateAndWarnCollisions()
 
 	return p
 }

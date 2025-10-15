@@ -21,11 +21,32 @@ type ExplicitProject struct {
 	Enabled     bool   `yaml:"enabled"`
 }
 
+// NotebookConfig defines the configuration for the centralized notebook system.
+type NotebookConfig struct {
+	// RootDir is the absolute path to the root of the notebook.
+	// If this is set, the system operates in "Centralized Mode".
+	// If empty, it operates in "Local Mode".
+	RootDir string `yaml:"root_dir,omitempty"`
+
+	// Path templates for customizing directory structure in Centralized Mode.
+	// These are optional and have sensible defaults.
+	NotesPathTemplate       string `yaml:"notes_path_template,omitempty"`
+	PlansPathTemplate       string `yaml:"plans_path_template,omitempty"`
+	ChatsPathTemplate       string `yaml:"chats_path_template,omitempty"`
+	GlobalNotesPathTemplate string `yaml:"global_notes_path_template,omitempty"`
+	GlobalPlansPathTemplate string `yaml:"global_plans_path_template,omitempty"`
+	GlobalChatsPathTemplate string `yaml:"global_chats_path_template,omitempty"`
+}
+
 // Config represents the grove.yml configuration
 type Config struct {
 	Name       string   `yaml:"name,omitempty"`
 	Version    string   `yaml:"version"`
 	Workspaces []string `yaml:"workspaces,omitempty"`
+
+	// Notebook defines the configuration for the centralized note and plan storage.
+	// This is the new, standardized way to configure where persistent data lives.
+	Notebook *NotebookConfig `yaml:"notebook,omitempty"`
 
 	// SearchPaths defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
@@ -52,6 +73,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Name             string                       `yaml:"name,omitempty"`
 		Version          string                       `yaml:"version"`
 		Workspaces       []string                     `yaml:"workspaces,omitempty"`
+		Notebook         *NotebookConfig              `yaml:"notebook,omitempty"`
 		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty"`
 		Groves           map[string]SearchPathConfig  `yaml:"groves,omitempty"` // Legacy field
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
@@ -67,6 +89,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Name = raw.Name
 	c.Version = raw.Version
 	c.Workspaces = raw.Workspaces
+	c.Notebook = raw.Notebook
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions
 
