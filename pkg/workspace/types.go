@@ -215,6 +215,12 @@ func (w *WorkspaceNode) IsEcosystem() bool {
 // GetHierarchicalParent returns the logical parent path for hierarchical display.
 // This considers both ParentProjectPath (for worktrees) and ParentEcosystemPath (for sub-projects).
 func (w *WorkspaceNode) GetHierarchicalParent() string {
+	// For KindEcosystemWorktreeSubProjectWorktree (linked development), the visual parent
+	// is the containing ecosystem worktree, not the original source repository.
+	if w.Kind == KindEcosystemWorktreeSubProjectWorktree {
+		return w.ParentEcosystemPath
+	}
+
 	// Worktrees have their project as parent
 	if w.ParentProjectPath != "" {
 		return w.ParentProjectPath
