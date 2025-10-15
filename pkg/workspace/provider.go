@@ -69,6 +69,32 @@ func (p *Provider) FindByPath(path string) *WorkspaceNode {
 	return bestMatch
 }
 
+// FindByWorktree finds a workspace node for a sub-project within a specific ecosystem worktree.
+// It is used to resolve a job's `worktree` field to the correct workspace node.
+// - baseProjectNode: The main project node.
+// - worktreeName: The name of the ecosystem worktree.
+func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName string) *WorkspaceNode {
+	// A worktree can only exist within an ecosystem.
+	// We need the root ecosystem path to construct the canonical path.
+	ecosystemPath := baseProjectNode.RootEcosystemPath
+	if ecosystemPath == "" {
+		// Fallback for nodes that might not have RootEcosystemPath resolved yet.
+		ecosystemPath = baseProjectNode.ParentEcosystemPath
+	}
+
+	if ecosystemPath == "" {
+		// This is a standalone project, it cannot have ecosystem worktrees.
+		return nil
+	}
+
+	// Construct the expected canonical path to the sub-project within the ecosystem worktree.
+	// e.g., /path/to/grove-ecosystem/.grove-worktrees/test444/grove-core
+	targetPath := filepath.Join(ecosystemPath, ".grove-worktrees", worktreeName, baseProjectNode.Name)
+
+	// Use the provider's internal map for a fast, exact path lookup.
+	return p.FindByPath(targetPath)
+}
+
 // Ecosystems returns all nodes that are ecosystem roots.
 func (p *Provider) Ecosystems() []*WorkspaceNode {
 	var ecosystems []*WorkspaceNode

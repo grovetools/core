@@ -306,21 +306,34 @@ func (l *NotebookLocator) ScanForAllPlans(provider *Provider) ([]ScannedDir, err
 		return nil, fmt.Errorf("workspace provider is required")
 	}
 
-	var planDirs []ScannedDir
-	seen := make(map[string]bool)
+	// Map of directory path -> owner node. We'll use this to deduplicate and prefer main projects.
+	dirOwners := make(map[string]*WorkspaceNode)
+	seenGroupKeys := make(map[string]bool)
 
 	for _, node := range provider.All() {
 		// We only need to check the root of a project group (not every worktree)
 		// as they share the same plan directory.
 		groupKey := node.GetGroupingKey()
-		if seen[groupKey] {
+		if seenGroupKeys[groupKey] {
 			continue
 		}
 
-		// Use the node representing the group key to resolve the path
+		// Use the node representing the group key to resolve the path.
+		// Prefer the main project node over worktree nodes.
 		groupNode := provider.FindByPath(groupKey)
 		if groupNode == nil {
 			continue // Should not happen
+		}
+
+		// If FindByPath returned a worktree, look for the main project instead
+		if groupNode.IsWorktree() {
+			// Find the main project with this exact path
+			for _, n := range provider.All() {
+				if n.Path == groupKey && !n.IsWorktree() {
+					groupNode = n
+					break
+				}
+			}
 		}
 
 		dir, err := l.GetPlansDir(groupNode)
@@ -329,9 +342,23 @@ func (l *NotebookLocator) ScanForAllPlans(provider *Provider) ([]ScannedDir, err
 		}
 
 		if _, err := os.Stat(dir); err == nil {
-			planDirs = append(planDirs, ScannedDir{Path: dir, Owner: groupNode})
+			// Check if we've already seen this directory path
+			if existingOwner, exists := dirOwners[dir]; exists {
+				// Prefer main projects over worktrees
+				if existingOwner.IsWorktree() && !groupNode.IsWorktree() {
+					dirOwners[dir] = groupNode
+				}
+			} else {
+				dirOwners[dir] = groupNode
+			}
 		}
-		seen[groupKey] = true
+		seenGroupKeys[groupKey] = true
+	}
+
+	// Convert map to slice
+	var planDirs []ScannedDir
+	for dir, owner := range dirOwners {
+		planDirs = append(planDirs, ScannedDir{Path: dir, Owner: owner})
 	}
 	return planDirs, nil
 }
@@ -344,21 +371,34 @@ func (l *NotebookLocator) ScanForAllChats(provider *Provider) ([]ScannedDir, err
 		return nil, fmt.Errorf("workspace provider is required")
 	}
 
-	var chatDirs []ScannedDir
-	seen := make(map[string]bool)
+	// Map of directory path -> owner node. We'll use this to deduplicate and prefer main projects.
+	dirOwners := make(map[string]*WorkspaceNode)
+	seenGroupKeys := make(map[string]bool)
 
 	for _, node := range provider.All() {
 		// We only need to check the root of a project group (not every worktree)
 		// as they share the same chat directory.
 		groupKey := node.GetGroupingKey()
-		if seen[groupKey] {
+		if seenGroupKeys[groupKey] {
 			continue
 		}
 
-		// Use the node representing the group key to resolve the path
+		// Use the node representing the group key to resolve the path.
+		// Prefer the main project node over worktree nodes.
 		groupNode := provider.FindByPath(groupKey)
 		if groupNode == nil {
 			continue // Should not happen
+		}
+
+		// If FindByPath returned a worktree, look for the main project instead
+		if groupNode.IsWorktree() {
+			// Find the main project with this exact path
+			for _, n := range provider.All() {
+				if n.Path == groupKey && !n.IsWorktree() {
+					groupNode = n
+					break
+				}
+			}
 		}
 
 		dir, err := l.GetChatsDir(groupNode)
@@ -367,9 +407,23 @@ func (l *NotebookLocator) ScanForAllChats(provider *Provider) ([]ScannedDir, err
 		}
 
 		if _, err := os.Stat(dir); err == nil {
-			chatDirs = append(chatDirs, ScannedDir{Path: dir, Owner: groupNode})
+			// Check if we've already seen this directory path
+			if existingOwner, exists := dirOwners[dir]; exists {
+				// Prefer main projects over worktrees
+				if existingOwner.IsWorktree() && !groupNode.IsWorktree() {
+					dirOwners[dir] = groupNode
+				}
+			} else {
+				dirOwners[dir] = groupNode
+			}
 		}
-		seen[groupKey] = true
+		seenGroupKeys[groupKey] = true
+	}
+
+	// Convert map to slice
+	var chatDirs []ScannedDir
+	for dir, owner := range dirOwners {
+		chatDirs = append(chatDirs, ScannedDir{Path: dir, Owner: owner})
 	}
 	return chatDirs, nil
 }
