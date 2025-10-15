@@ -129,11 +129,11 @@ func TestPrepare(t *testing.T) {
 		}
 		
 		// Mock DiscoverLocalWorkspaces to avoid actual discovery
-		oldFunc := discoverLocalWorkspacesFunc
-		discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		}
-		defer func() { discoverLocalWorkspacesFunc = oldFunc }()
+		// oldFunc := discoverLocalWorkspacesFunc
+		// discoverLocalWorkspacesFunc = func(ctx context.Context) (map[string]string, error) {
+		// 	return map[string]string{}, nil
+		// }
+		// defer func() { discoverLocalWorkspacesFunc = oldFunc }()
 		
 		// Create workspace
 		worktreePath, err := Prepare(ctx, opts)

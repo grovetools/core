@@ -442,7 +442,7 @@ func TestParseGitmodules(t *testing.T) {
 
 
 // Variable to allow mocking in tests
-var discoverLocalWorkspacesFunc = DiscoverLocalWorkspaces
+// var discoverLocalWorkspacesFunc = DiscoverLocalWorkspaces
 
 // Add this function to check if a path contains spaces
 func pathContainsSpaces(path string) bool {
