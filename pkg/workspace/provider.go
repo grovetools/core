@@ -69,17 +69,22 @@ func (p *Provider) FindByPath(path string) *WorkspaceNode {
 	return bestMatch
 }
 
-// FindByWorktree finds a workspace node for a sub-project within a specific ecosystem worktree.
+// FindByWorktree finds a workspace node for a worktree within an ecosystem.
 // It is used to resolve a job's `worktree` field to the correct workspace node.
-// - baseProjectNode: The main project node.
-// - worktreeName: The name of the ecosystem worktree.
+// - baseProjectNode: The base project node (can be ecosystem root or subproject).
+// - worktreeName: The name of the worktree.
+//
+// This handles two cases:
+// 1. Ecosystem worktrees: /ecosystem/.grove-worktrees/<name>/<subproject>
+// 2. Subproject worktrees: /ecosystem/<subproject>/.grove-worktrees/<name>
 func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName string) *WorkspaceNode {
-	// A worktree can only exist within an ecosystem.
-	// We need the root ecosystem path to construct the canonical path.
+	// Determine the ecosystem path
 	ecosystemPath := baseProjectNode.RootEcosystemPath
 	if ecosystemPath == "" {
-		// Fallback for nodes that might not have RootEcosystemPath resolved yet.
 		ecosystemPath = baseProjectNode.ParentEcosystemPath
+	}
+	if ecosystemPath == "" && baseProjectNode.IsEcosystem() {
+		ecosystemPath = baseProjectNode.Path
 	}
 
 	if ecosystemPath == "" {
@@ -87,12 +92,36 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 		return nil
 	}
 
-	// Construct the expected canonical path to the sub-project within the ecosystem worktree.
-	// e.g., /path/to/grove-ecosystem/.grove-worktrees/test444/grove-core
-	targetPath := filepath.Join(ecosystemPath, ".grove-worktrees", worktreeName, baseProjectNode.Name)
+	// Case 1: If base is a subproject, look for its worktree
+	// e.g., grove-mcp/.grove-worktrees/1986
+	if !baseProjectNode.IsEcosystem() {
+		targetPath := filepath.Join(baseProjectNode.Path, ".grove-worktrees", worktreeName)
+		if node := p.FindByPath(targetPath); node != nil {
+			return node
+		}
+	}
 
-	// Use the provider's internal map for a fast, exact path lookup.
-	return p.FindByPath(targetPath)
+	// Case 2: If base is ecosystem root, search for worktree in any subproject
+	// This handles jobs stored at ecosystem level that reference subproject worktrees
+	if baseProjectNode.IsEcosystem() {
+		for _, node := range p.nodes {
+			// Check if this is a worktree with the matching name in this ecosystem
+			if node.IsWorktree() && node.Name == worktreeName && node.RootEcosystemPath == ecosystemPath {
+				return node
+			}
+		}
+	}
+
+	// Case 3: Look for ecosystem worktree subproject
+	// e.g., /ecosystem/.grove-worktrees/test444/grove-core
+	if !baseProjectNode.IsEcosystem() {
+		targetPath := filepath.Join(ecosystemPath, ".grove-worktrees", worktreeName, baseProjectNode.Name)
+		if node := p.FindByPath(targetPath); node != nil {
+			return node
+		}
+	}
+
+	return nil
 }
 
 // Ecosystems returns all nodes that are ecosystem roots.
