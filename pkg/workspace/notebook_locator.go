@@ -20,6 +20,13 @@ const (
 	defaultGlobalChatsPathTemplate = "global/chats"
 )
 
+// ScannedDir represents a directory found by the locator, linking it
+// to the WorkspaceNode that owns it.
+type ScannedDir struct {
+	Path  string
+	Owner *WorkspaceNode
+}
+
 // NotebookLocator resolves paths for notes, plans, and chats based on configuration.
 // It operates in two modes:
 //   - Local Mode (default): Plans/chats are stored within the project directory (e.g., ./plans)
@@ -292,14 +299,14 @@ func renderPath(tplStr string, data interface{}) (string, error) {
 }
 
 // ScanForAllPlans discovers all plan directories across all known workspaces.
-// It returns a list of absolute paths to plan directories that actually exist on disk.
+// It returns a list of ScannedDir structs, linking each directory to its owner.
 // This method properly handles both Local Mode and Centralized Mode.
-func (l *NotebookLocator) ScanForAllPlans(provider *Provider) ([]string, error) {
+func (l *NotebookLocator) ScanForAllPlans(provider *Provider) ([]ScannedDir, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("workspace provider is required")
 	}
 
-	var planDirs []string
+	var planDirs []ScannedDir
 	seen := make(map[string]bool)
 
 	for _, node := range provider.All() {
@@ -322,7 +329,7 @@ func (l *NotebookLocator) ScanForAllPlans(provider *Provider) ([]string, error) 
 		}
 
 		if _, err := os.Stat(dir); err == nil {
-			planDirs = append(planDirs, dir)
+			planDirs = append(planDirs, ScannedDir{Path: dir, Owner: groupNode})
 		}
 		seen[groupKey] = true
 	}
@@ -330,14 +337,14 @@ func (l *NotebookLocator) ScanForAllPlans(provider *Provider) ([]string, error) 
 }
 
 // ScanForAllChats discovers all chat directories across all known workspaces.
-// It returns a list of absolute paths to chat directories that actually exist on disk.
+// It returns a list of ScannedDir structs, linking each directory to its owner.
 // This method properly handles both Local Mode and Centralized Mode.
-func (l *NotebookLocator) ScanForAllChats(provider *Provider) ([]string, error) {
+func (l *NotebookLocator) ScanForAllChats(provider *Provider) ([]ScannedDir, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("workspace provider is required")
 	}
 
-	var chatDirs []string
+	var chatDirs []ScannedDir
 	seen := make(map[string]bool)
 
 	for _, node := range provider.All() {
@@ -360,7 +367,7 @@ func (l *NotebookLocator) ScanForAllChats(provider *Provider) ([]string, error) 
 		}
 
 		if _, err := os.Stat(dir); err == nil {
-			chatDirs = append(chatDirs, dir)
+			chatDirs = append(chatDirs, ScannedDir{Path: dir, Owner: groupNode})
 		}
 		seen[groupKey] = true
 	}
