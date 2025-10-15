@@ -1,6 +1,9 @@
 package workspace
 
-import "path/filepath"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 // Provider acts as a read-only, in-memory store for a snapshot of discovered workspaces.
 // It provides fast lookups and access to the workspace hierarchy.
@@ -27,10 +30,14 @@ func NewProvider(result *DiscoveryResult) *Provider {
 		pathMap[node.Path] = node
 	}
 
-	return &Provider{
+	p := &Provider{
 		nodes:   nodes,
 		pathMap: pathMap,
 	}
+
+	p.validateAndWarnCollisions()
+
+	return p
 }
 
 // All returns a slice of all discovered WorkspaceNodes.
@@ -75,10 +82,55 @@ func (p *Provider) Ecosystems() []*WorkspaceNode {
 
 // LocalWorkspaces returns a map of workspace names to their paths,
 // suitable for use in submodule setup operations.
+//
+// WARNING: This method may silently overwrite entries if multiple workspaces
+// have the same name (e.g., "grove-core" in different ecosystems).
+// For ecosystem-aware operations, use LocalWorkspacesInEcosystem instead.
+//
+// Deprecated: Use LocalWorkspacesInEcosystem for more reliable lookups
+// that avoid name collision issues.
 func (p *Provider) LocalWorkspaces() map[string]string {
 	result := make(map[string]string)
 	for _, node := range p.nodes {
 		result[node.Name] = node.Path
 	}
 	return result
+}
+
+// LocalWorkspacesInEcosystem returns a map of workspace names to their paths,
+// filtered to only include workspaces within the specified ecosystem.
+// This avoids name collisions between workspaces in different ecosystems.
+func (p *Provider) LocalWorkspacesInEcosystem(ecosystemPath string) map[string]string {
+	result := make(map[string]string)
+	for _, node := range p.nodes {
+		if node.RootEcosystemPath == ecosystemPath {
+			result[node.Name] = node.Path
+		}
+	}
+	return result
+}
+
+// validateAndWarnCollisions is called internally during provider construction
+// to automatically detect and warn about workspace name collisions.
+func (p *Provider) validateAndWarnCollisions() {
+	seen := make(map[string][]string)
+	for _, node := range p.nodes {
+		seen[node.Name] = append(seen[node.Name], node.Path)
+	}
+
+	var collisions []error
+	for name, paths := range seen {
+		if len(paths) > 1 {
+			collisions = append(collisions, fmt.Errorf(
+				"duplicate workspace name '%s' found at: %v (consider renaming in grove.yml to avoid collisions)",
+				name, paths))
+		}
+	}
+
+	if len(collisions) > 0 {
+		fmt.Printf("⚠️  Warning: workspace name collisions detected:\n")
+		for _, collision := range collisions {
+			fmt.Printf("   %v\n", collision)
+		}
+	}
 }
