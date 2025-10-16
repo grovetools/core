@@ -29,6 +29,10 @@ type Session struct {
 	JobTitle      string `json:"job_title,omitempty" db:"job_title"`
 	JobFilePath   string `json:"job_file_path,omitempty" db:"job_file_path"`
 
+	// ClaudeSessionID stores the original UUID of a claude_code session when it's
+	// managed by a grove-flow interactive_agent job.
+	ClaudeSessionID string `json:"claude_session_id,omitempty" db:"claude_session_id"`
+
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`
 	IsDeleted bool `json:"-" db:"is_deleted"` // Keep as internal field
