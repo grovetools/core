@@ -114,22 +114,28 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 				// Use the subproject's own name, not the root ecosystem
 				// The subproject has its own notebook directory
 				contextNode = &WorkspaceNode{
-					Name: node.Name, // Keep the subproject's name
-					Path: node.Path,
+					Name:                node.Name, // Keep the subproject's name
+					Path:                node.Path,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.RootEcosystemPath != "" {
 				// This is an ecosystem worktree (not a subproject)
 				// Use the root ecosystem's name
 				contextNode = &WorkspaceNode{
-					Name: filepath.Base(node.RootEcosystemPath),
-					Path: node.RootEcosystemPath,
+					Name:                filepath.Base(node.RootEcosystemPath),
+					Path:                node.RootEcosystemPath,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.ParentProjectPath != "" {
 				// This is a standalone project worktree
 				// Use the parent project's name
 				contextNode = &WorkspaceNode{
-					Name: filepath.Base(node.ParentProjectPath),
-					Path: node.ParentProjectPath,
+					Name:                filepath.Base(node.ParentProjectPath),
+					Path:                node.ParentProjectPath,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			}
 		}
@@ -179,20 +185,26 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 			if node.Kind == KindEcosystemWorktreeSubProjectWorktree {
 				// Subproject within ecosystem worktree - use subproject's name
 				contextNode = &WorkspaceNode{
-					Name: node.Name,
-					Path: node.Path,
+					Name:                node.Name,
+					Path:                node.Path,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.RootEcosystemPath != "" {
 				// Ecosystem worktree - use root ecosystem's name
 				contextNode = &WorkspaceNode{
-					Name: filepath.Base(node.RootEcosystemPath),
-					Path: node.RootEcosystemPath,
+					Name:                filepath.Base(node.RootEcosystemPath),
+					Path:                node.RootEcosystemPath,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.ParentProjectPath != "" {
 				// Standalone project worktree - use parent project's name
 				contextNode = &WorkspaceNode{
-					Name: filepath.Base(node.ParentProjectPath),
-					Path: node.ParentProjectPath,
+					Name:                filepath.Base(node.ParentProjectPath),
+					Path:                node.ParentProjectPath,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			}
 		}
@@ -248,20 +260,26 @@ func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (str
 			if node.Kind == KindEcosystemWorktreeSubProjectWorktree {
 				// Subproject within ecosystem worktree - use subproject's name
 				contextNode = &WorkspaceNode{
-					Name: node.Name,
-					Path: node.Path,
+					Name:                node.Name,
+					Path:                node.Path,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.RootEcosystemPath != "" {
 				// Ecosystem worktree - use root ecosystem's name
 				contextNode = &WorkspaceNode{
-					Name: filepath.Base(node.RootEcosystemPath),
-					Path: node.RootEcosystemPath,
+					Name:                filepath.Base(node.RootEcosystemPath),
+					Path:                node.RootEcosystemPath,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.ParentProjectPath != "" {
 				// Standalone project worktree - use parent project's name
 				contextNode = &WorkspaceNode{
-					Name: filepath.Base(node.ParentProjectPath),
-					Path: node.ParentProjectPath,
+					Name:                filepath.Base(node.ParentProjectPath),
+					Path:                node.ParentProjectPath,
+					ParentEcosystemPath: node.ParentEcosystemPath,
+					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			}
 		}
