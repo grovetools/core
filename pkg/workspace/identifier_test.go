@@ -84,15 +84,16 @@ func TestWorkspaceNode_Identifier(t *testing.T) {
 			expected: "my-ecosystem_sub-project_feature-branch",
 		},
 		{
-			name: "Sub-project worktree within ecosystem worktree",
+			name: "Sub-project worktree within ecosystem worktree (linked development state)",
 			project: &WorkspaceNode{
-				Name:                "sub-feature",
-				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project/.grove-worktrees/sub-feature",
+				Name:                "sub-project",
+				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project",
 				Kind:                KindEcosystemWorktreeSubProjectWorktree,
-				ParentProjectPath:   "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project",
+				ParentProjectPath:   "/path/to/my-ecosystem/sub-project",
 				ParentEcosystemPath: "/path/to/my-ecosystem/.grove-worktrees/eco-feature",
+				RootEcosystemPath:   "/path/to/my-ecosystem",
 			},
-			expected: "my-ecosystem_eco-feature_sub-project_sub-feature",
+			expected: "my-ecosystem_eco-feature_sub-project",
 		},
 	}
 
@@ -104,6 +105,9 @@ func TestWorkspaceNode_Identifier(t *testing.T) {
 			}
 			if tt.project.ParentEcosystemPath != "" {
 				tt.project.ParentEcosystemPath = filepath.FromSlash(tt.project.ParentEcosystemPath)
+			}
+			if tt.project.RootEcosystemPath != "" {
+				tt.project.RootEcosystemPath = filepath.FromSlash(tt.project.RootEcosystemPath)
 			}
 			tt.project.Path = filepath.FromSlash(tt.project.Path)
 

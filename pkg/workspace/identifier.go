@@ -36,15 +36,13 @@ func (p *WorkspaceNode) Identifier() string {
 		return fmt.Sprintf("%s_%s_%s", grandParentName, worktreeName, s(p.Name))
 
 	case KindEcosystemWorktreeSubProjectWorktree:
-		// e.g., my-ecosystem_eco-feature_sub-project_sub-feature
-		// The parent ecosystem path points to the ecosystem worktree
+		// e.g., my-ecosystem_eco-feature_sub-project
+		// This is the "linked development" state for a sub-project in an ecosystem worktree.
+		// The sub-project worktree itself IS the working copy, so we use p.Name for the sub-project.
+		rootEcoName := s(filepath.Base(p.RootEcosystemPath))
 		ecoWorktreeName := s(filepath.Base(p.ParentEcosystemPath))
-		// Get the root ecosystem name
-		rootEcoPath := filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
-		rootEcoName := s(filepath.Base(rootEcoPath))
-		// Get the sub-project name
-		subProjectName := s(filepath.Base(p.ParentProjectPath))
-		return fmt.Sprintf("%s_%s_%s_%s", rootEcoName, ecoWorktreeName, subProjectName, s(p.Name))
+		subProjectName := s(p.Name)
+		return fmt.Sprintf("%s_%s_%s", rootEcoName, ecoWorktreeName, subProjectName)
 
 	case KindStandaloneProjectWorktree:
 		// e.g., my-project_feature-branch
