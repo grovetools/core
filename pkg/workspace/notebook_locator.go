@@ -109,19 +109,9 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 
 		// For worktrees, we need to use the parent project/ecosystem name
 		if node.IsWorktree() {
-			if node.Kind == KindEcosystemWorktreeSubProjectWorktree {
-				// This is a subproject within an ecosystem worktree
-				// Use the subproject's own name, not the root ecosystem
-				// The subproject has its own notebook directory
-				contextNode = &WorkspaceNode{
-					Name:                node.Name, // Keep the subproject's name
-					Path:                node.Path,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
-			} else if node.RootEcosystemPath != "" {
-				// This is an ecosystem worktree (not a subproject)
-				// Use the root ecosystem's name
+			if node.Kind == KindEcosystemWorktree {
+				// This is an ecosystem worktree. It acts as a container.
+				// Its notebook context is that of the root ecosystem.
 				contextNode = &WorkspaceNode{
 					Name:                filepath.Base(node.RootEcosystemPath),
 					Path:                node.RootEcosystemPath,
@@ -129,8 +119,11 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.ParentProjectPath != "" {
-				// This is a standalone project worktree
-				// Use the parent project's name
+				// This correctly handles all other worktree kinds that are children of a project:
+				// - KindStandaloneProjectWorktree
+				// - KindEcosystemSubProjectWorktree (This fixes the bug)
+				// - KindEcosystemWorktreeSubProjectWorktree
+				// In all these cases, the notebook context belongs to the parent project.
 				contextNode = &WorkspaceNode{
 					Name:                filepath.Base(node.ParentProjectPath),
 					Path:                node.ParentProjectPath,
@@ -182,16 +175,9 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 
 		// For worktrees, we need to use the parent project/ecosystem name
 		if node.IsWorktree() {
-			if node.Kind == KindEcosystemWorktreeSubProjectWorktree {
-				// Subproject within ecosystem worktree - use subproject's name
-				contextNode = &WorkspaceNode{
-					Name:                node.Name,
-					Path:                node.Path,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
-			} else if node.RootEcosystemPath != "" {
-				// Ecosystem worktree - use root ecosystem's name
+			if node.Kind == KindEcosystemWorktree {
+				// This is an ecosystem worktree. It acts as a container.
+				// Its notebook context is that of the root ecosystem.
 				contextNode = &WorkspaceNode{
 					Name:                filepath.Base(node.RootEcosystemPath),
 					Path:                node.RootEcosystemPath,
@@ -199,7 +185,11 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.ParentProjectPath != "" {
-				// Standalone project worktree - use parent project's name
+				// This correctly handles all other worktree kinds that are children of a project:
+				// - KindStandaloneProjectWorktree
+				// - KindEcosystemSubProjectWorktree (This fixes the bug)
+				// - KindEcosystemWorktreeSubProjectWorktree
+				// In all these cases, the notebook context belongs to the parent project.
 				contextNode = &WorkspaceNode{
 					Name:                filepath.Base(node.ParentProjectPath),
 					Path:                node.ParentProjectPath,
@@ -257,16 +247,9 @@ func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (str
 
 		// For worktrees, we need to use the parent project/ecosystem name
 		if node.IsWorktree() {
-			if node.Kind == KindEcosystemWorktreeSubProjectWorktree {
-				// Subproject within ecosystem worktree - use subproject's name
-				contextNode = &WorkspaceNode{
-					Name:                node.Name,
-					Path:                node.Path,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
-			} else if node.RootEcosystemPath != "" {
-				// Ecosystem worktree - use root ecosystem's name
+			if node.Kind == KindEcosystemWorktree {
+				// This is an ecosystem worktree. It acts as a container.
+				// Its notebook context is that of the root ecosystem.
 				contextNode = &WorkspaceNode{
 					Name:                filepath.Base(node.RootEcosystemPath),
 					Path:                node.RootEcosystemPath,
@@ -274,7 +257,11 @@ func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (str
 					RootEcosystemPath:   node.RootEcosystemPath,
 				}
 			} else if node.ParentProjectPath != "" {
-				// Standalone project worktree - use parent project's name
+				// This correctly handles all other worktree kinds that are children of a project:
+				// - KindStandaloneProjectWorktree
+				// - KindEcosystemSubProjectWorktree (This fixes the bug)
+				// - KindEcosystemWorktreeSubProjectWorktree
+				// In all these cases, the notebook context belongs to the parent project.
 				contextNode = &WorkspaceNode{
 					Name:                filepath.Base(node.ParentProjectPath),
 					Path:                node.ParentProjectPath,

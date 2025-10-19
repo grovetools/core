@@ -246,7 +246,11 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 				// The project is inside an ecosystem worktree
 				if projectIsWorktree {
 					kind = KindEcosystemWorktreeSubProjectWorktree
-					parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
+					// ParentProjectPath should point to the corresponding sub-project in the root ecosystem
+					// e.g., /path/to/ecosystem/grove-mcp (not .grove-worktrees!)
+					if rootEcosystemPath != "" {
+						parentProjectPath = filepath.Join(rootEcosystemPath, projectName)
+					}
 				} else {
 					kind = KindEcosystemWorktreeSubProject
 				}

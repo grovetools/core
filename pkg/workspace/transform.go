@@ -196,6 +196,17 @@ func TransformToWorkspaceNodes(result *DiscoveryResult) []*WorkspaceNode {
 		}
 	}
 
+	// Set ParentProjectPath for KindEcosystemWorktreeSubProjectWorktree nodes
+	// These are sub-projects within ecosystem worktrees (linked development state)
+	// Their ParentProjectPath should point to the corresponding sub-project in the root ecosystem
+	for _, node := range nodes {
+		if node.Kind == KindEcosystemWorktreeSubProjectWorktree && node.RootEcosystemPath != "" {
+			// Compute ParentProjectPath as RootEcosystemPath + project name
+			// e.g., /path/to/ecosystem + grove-mcp = /path/to/ecosystem/grove-mcp
+			node.ParentProjectPath = filepath.Join(node.RootEcosystemPath, node.Name)
+		}
+	}
+
 	return nodes
 }
 
