@@ -32,6 +32,7 @@ type Session struct {
 	// ClaudeSessionID stores the original UUID of a claude_code session when it's
 	// managed by a grove-flow interactive_agent job.
 	ClaudeSessionID string `json:"claude_session_id,omitempty" db:"claude_session_id"`
+	Provider        string `json:"provider,omitempty" db:"provider"`
 
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`

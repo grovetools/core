@@ -10,10 +10,12 @@ type SessionMetadata struct {
 	PID              int       `json:"pid"`
 	Repo             string    `json:"repo,omitempty"`
 	Branch           string    `json:"branch,omitempty"`
+	TmuxKey          string    `json:"tmux_key,omitempty"`
 	WorkingDirectory string    `json:"working_directory"`
 	User             string    `json:"user"`
 	StartedAt        time.Time `json:"started_at"`
 	TranscriptPath   string    `json:"transcript_path,omitempty"`
+	Type             string    `json:"type,omitempty"`
 	JobTitle         string    `json:"job_title,omitempty"`
 	PlanName         string    `json:"plan_name,omitempty"`
 	JobFilePath      string    `json:"job_file_path,omitempty"`
