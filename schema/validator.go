@@ -9,7 +9,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-//go:embed dist/grove.embedded.schema.json
+//go:embed grove.embedded.schema.json
 var embeddedSchemaData []byte
 
 // Validator validates configuration against the embedded JSON Schema.

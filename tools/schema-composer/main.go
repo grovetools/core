@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create bundled schema: %v", err)
 	}
-	bundledPath := filepath.Join(distDir, "grove.embedded.schema.json")
+	bundledPath := "schema/grove.embedded.schema.json"
 	if err := writeJSONFile(bundledPath, bundledSchema); err != nil {
 		log.Fatalf("Failed to write bundled schema: %v", err)
 	}
