@@ -1,5 +1,7 @@
 package logging
 
+//go:generate sh -c "cd .. && go run ./tools/logging-schema-generator/"
+
 // Config defines the structure for logging configuration in grove.yml.
 type Config struct {
 	// Level is the minimum log level to output (e.g., "debug", "info", "warn", "error").

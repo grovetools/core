@@ -7,6 +7,7 @@ import (
 )
 
 //go:generate go run ../tools/schema-generator/
+//go:generate sh -c "cd .. && go run ./tools/notebook-schema-generator/"
 
 // SearchPathConfig defines the configuration for a single search path.
 type SearchPathConfig struct {

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mattsolo1/grove-core/logging/config",
+  "$defs": {
+    "FileSinkConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [
+        "enabled",
+        "path"
+      ]
+    },
+    "FormatConfig": {
+      "properties": {
+        "preset": {
+          "type": "string"
+        },
+        "disable_timestamp": {
+          "type": "boolean"
+        },
+        "disable_component": {
+          "type": "boolean"
+        },
+        "structured_to_stderr": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [
+        "preset",
+        "disable_timestamp",
+        "disable_component",
+        "structured_to_stderr"
+      ]
+    }
+  },
+  "properties": {
+    "level": {
+      "type": "string"
+    },
+    "report_caller": {
+      "type": "boolean"
+    },
+    "file": {
+      "$ref": "#/$defs/FileSinkConfig"
+    },
+    "format": {
+      "$ref": "#/$defs/FormatConfig"
+    }
+  },
+  "type": "object",
+  "title": "Grove Logging Configuration",
+  "description": "Schema for the 'logging' extension in grove.yml."
+}

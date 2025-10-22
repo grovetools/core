@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mattsolo1/grove-core/config/notebook-config",
+  "properties": {
+    "root_dir": {
+      "type": "string"
+    },
+    "notes_path_template": {
+      "type": "string"
+    },
+    "plans_path_template": {
+      "type": "string"
+    },
+    "chats_path_template": {
+      "type": "string"
+    },
+    "global_notes_path_template": {
+      "type": "string"
+    },
+    "global_plans_path_template": {
+      "type": "string"
+    },
+    "global_chats_path_template": {
+      "type": "string"
+    }
+  },
+  "type": "object",
+  "title": "Grove Notebook Configuration",
+  "description": "Schema for the 'notebook' extension in grove.yml."
+}

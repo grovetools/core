@@ -30,6 +30,8 @@ all: build
 schema:
 	@echo "Generating base schema..."
 	@go generate ./config/...
+	@echo "Generating logging schema..."
+	@go generate ./logging/...
 	@echo "Composing final schemas..."
 	@go run ./tools/schema-composer/
 
