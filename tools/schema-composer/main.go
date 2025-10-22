@@ -73,8 +73,8 @@ func createResolvableSchema(basePath string) (map[string]interface{}, error) {
 		}
 	}
 
-	// Set additionalProperties to false to enforce strict top-level keys
-	schema["additionalProperties"] = false
+	// Set additionalProperties to true to allow extension properties
+	schema["additionalProperties"] = true
 	schema["title"] = "Grove Ecosystem Configuration Schema"
 	schema["description"] = "A unified schema for all grove.yml configuration files."
 
