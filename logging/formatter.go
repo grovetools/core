@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/mattsolo1/grove-core/tui/theme"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,9 +33,9 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	b.WriteString(fmt.Sprintf("[%s]", level))
 
 	if component, ok := entry.Data["component"]; ok && !f.Config.DisableComponent {
-		// Highlight component in magenta
-		magenta := color.New(color.FgMagenta, color.Bold).SprintFunc()
-		b.WriteString(fmt.Sprintf(" [%s]", magenta(component)))
+		// Highlight component using the theme's Accent style
+		componentStr := fmt.Sprintf("%v", component)
+		b.WriteString(fmt.Sprintf(" [%s]", theme.DefaultTheme.Accent.Render(componentStr)))
 	}
 
 	if entry.HasCaller() {
