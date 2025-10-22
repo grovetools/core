@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/mattsolo1/grove-core/config/base-config",
+  "$defs": {
+    "ExplicitProject": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path",
+        "enabled"
+      ]
+    },
+    "NotebookConfig": {
+      "properties": {
+        "root_dir": {
+          "type": "string"
+        },
+        "notes_path_template": {
+          "type": "string"
+        },
+        "plans_path_template": {
+          "type": "string"
+        },
+        "chats_path_template": {
+          "type": "string"
+        },
+        "global_notes_path_template": {
+          "type": "string"
+        },
+        "global_plans_path_template": {
+          "type": "string"
+        },
+        "global_chats_path_template": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "SearchPathConfig": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path",
+        "enabled"
+      ]
+    }
+  },
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the configuration"
+    },
+    "version": {
+      "type": "string",
+      "description": "Configuration version (e.g. '1.0')"
+    },
+    "workspaces": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "description": "List of workspace directories in this ecosystem"
+    },
+    "notebook": {
+      "$ref": "#/$defs/NotebookConfig",
+      "description": "Configuration for centralized notebook system"
+    },
+    "search_paths": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SearchPathConfig"
+      },
+      "type": "object",
+      "description": "Root directories to search for projects and ecosystems"
+    },
+    "explicit_projects": {
+      "items": {
+        "$ref": "#/$defs/ExplicitProject"
+      },
+      "type": "array",
+      "description": "Specific projects to include without discovery"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "version"
+  ],
+  "title": "Grove Core Configuration",
+  "description": "Base schema for core grove.yml properties."
+}

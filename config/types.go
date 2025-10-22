@@ -6,6 +6,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+//go:generate go run ../tools/schema-generator/
+
 // SearchPathConfig defines the configuration for a single search path.
 type SearchPathConfig struct {
 	Path        string `yaml:"path"`

@@ -23,11 +23,17 @@ LDFLAGS = -ldflags="\
 -X '$(VERSION_PKG).Branch=$(GIT_BRANCH)' \
 -X '$(VERSION_PKG).BuildDate=$(BUILD_DATE)'"
 
-.PHONY: all build test clean fmt vet lint run check dev build-all help
+.PHONY: all build test clean fmt vet lint run check dev build-all schema help
 
 all: build
 
-build:
+schema:
+	@echo "Generating base schema..."
+	@go generate ./config/...
+	@echo "Composing final schemas..."
+	@go run ./tools/schema-composer/
+
+build: schema
 	@mkdir -p $(BIN_DIR)
 	@echo "Building $(BINARY_NAME) version $(VERSION)..."
 	@go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/core
@@ -104,6 +110,7 @@ test-e2e: build test-e2e-build
 help:
 	@echo "Available targets:"
 	@echo "  make build       - Build the binary"
+	@echo "  make schema      - Generate JSON schemas"
 	@echo "  make test        - Run tests"
 	@echo "  make clean       - Clean build artifacts"
 	@echo "  make fmt         - Format code"
