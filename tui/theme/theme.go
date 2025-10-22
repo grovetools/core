@@ -158,10 +158,11 @@ type Theme struct {
 	Info    lipgloss.Style
 
 	// Text styles
-	Muted    lipgloss.Style
-	Selected lipgloss.Style
-	Bold     lipgloss.Style
-	Faint    lipgloss.Style
+	Muted       lipgloss.Style
+	Selected    lipgloss.Style
+	SelectedRow lipgloss.Style
+	Bold        lipgloss.Style
+	Faint       lipgloss.Style
 
 	// Table styles
 	TableHeader lipgloss.Style
@@ -313,6 +314,9 @@ func newThemeFromColors(colors Colors) *Theme {
 		Selected: lipgloss.NewStyle().
 			Background(colors.SelectedBackground).
 			Foreground(colors.LightText),
+
+		SelectedRow: lipgloss.NewStyle().
+			Background(colors.SelectedBackground),
 
 		Bold: lipgloss.NewStyle().
 			Bold(true).

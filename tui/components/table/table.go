@@ -243,24 +243,11 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		BorderStyle(lipgloss.NewStyle().Foreground(theme.Border)).
 		Headers(headers...)
 
-	// Apply styling with selection highlight
+	// Apply styling without selection background
 	// IMPORTANT: In lipgloss table StyleFunc, when headers are set via .Headers(),
 	// they are styled SEPARATELY and row indices in StyleFunc start at 0 for DATA rows only!
 	// So: row 0 = first data row, row 1 = second data row, etc.
 	table = table.StyleFunc(func(row, col int) lipgloss.Style {
-		// row 0 = first data row, row 1 = second data row, etc.
-		// selectedIndex is 0-based: 0 = first task, 1 = second task, etc.
-		// So we need: row == selectedIndex
-		if row == selectedIndex {
-			// Apply selected style. .Copy() prevents modifying the base theme style.
-			style := t.Selected.Copy().Padding(0, 1)
-			// If this is the highlight column, make it bold
-			if opts.HighlightColumn >= 0 && col == opts.HighlightColumn {
-				style = style.Bold(true)
-			}
-			return style
-		}
-
 		// Regular data rows with padding
 		style := t.TableRow.Copy().Padding(0, 1)
 
@@ -281,7 +268,7 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		table = table.Row(r...)
 	}
 
-	// Render the table and add selection indicator on the right
+	// Render the table and add selection indicator on the left
 	tableStr := table.String()
 	lines := strings.Split(tableStr, "\n")
 
@@ -294,11 +281,13 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 
 	// Add the indicator to each line
 	result := ""
+	arrow := theme.DefaultTheme.Highlight.Render("▶")
 	for i, line := range lines {
-		result += line
-		// Add the indicator only on the selected row's line
+		// Add the indicator on the left for the selected row
 		if i == selectedLineIndex {
-			result += " ◀"
+			result += arrow + " " + line
+		} else {
+			result += "  " + line
 		}
 		result += "\n"
 	}
