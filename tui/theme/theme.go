@@ -240,22 +240,22 @@ const (
 	IconBack   = "←"
 
 	// Job type icons
-	IconChat            = "★"
+	IconChat             = "★"
 	IconInteractiveAgent = "⚙"
-	IconOneshot         = "●"
-	IconHeadlessAgent   = "◆"
-	IconShell           = "▶"
+	IconOneshot          = "●"
+	IconHeadlessAgent    = "◆"
+	IconShell            = "▶"
 
 	// Session status icons (non-emoji)
-	IconStatusRunning      = "◐"
-	IconStatusIdle         = "⏸"
-	IconStatusCompleted    = "●"
-	IconStatusPendingUser  = "○"
-	IconStatusFailed       = "✗"
-	IconStatusInterrupted  = "⊗"
-	IconStatusHold         = "⏸"
-	IconStatusTodo         = "○"
-	IconStatusAbandoned    = "⊗"
+	IconStatusRunning     = "◐"
+	IconStatusIdle        = "⏸"
+	IconStatusCompleted   = "●"
+	IconStatusPendingUser = "○"
+	IconStatusFailed      = "✗"
+	IconStatusInterrupted = "⊗"
+	IconStatusHold        = "⏸"
+	IconStatusTodo        = "○"
+	IconStatusAbandoned   = "⊗"
 )
 
 // RenderHeader renders a header with the default Grove styling.
@@ -352,7 +352,6 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 
 		TableHeader: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colors.Green).
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderBottom(true).
 			BorderForeground(colors.Border),
