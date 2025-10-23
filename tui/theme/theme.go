@@ -238,6 +238,24 @@ const (
 	IconSearch = "🔍"
 	IconHelp   = "❓"
 	IconBack   = "←"
+
+	// Job type icons
+	IconChat            = "★"
+	IconInteractiveAgent = "⚙"
+	IconOneshot         = "●"
+	IconHeadlessAgent   = "◆"
+	IconShell           = "▶"
+
+	// Session status icons (non-emoji)
+	IconStatusRunning      = "◐"
+	IconStatusIdle         = "⏸"
+	IconStatusCompleted    = "●"
+	IconStatusPendingUser  = "○"
+	IconStatusFailed       = "✗"
+	IconStatusInterrupted  = "⊗"
+	IconStatusHold         = "⏸"
+	IconStatusTodo         = "○"
+	IconStatusAbandoned    = "⊗"
 )
 
 // RenderHeader renders a header with the default Grove styling.
