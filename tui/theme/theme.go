@@ -165,9 +165,10 @@ type Theme struct {
 	Faint       lipgloss.Style
 
 	// Table styles
-	TableHeader lipgloss.Style
-	TableRow    lipgloss.Style
-	TableBorder lipgloss.Style
+	TableHeader        lipgloss.Style
+	TableRow           lipgloss.Style
+	TableBorder        lipgloss.Style
+	UseAlternatingRows bool // Whether to use alternating row backgrounds in tables
 
 	// Container styles
 	Box  lipgloss.Style
@@ -269,25 +270,27 @@ func initDefaultTheme() *Theme {
 	themeName := getThemeName()
 	colors := resolveThemeColors(themeName)
 	applyColors(colors)
-	return newThemeFromColors(colors)
+	return newThemeFromColors(colors, themeName)
 }
 
 func newThemeFromName(name string) *Theme {
-	return newThemeFromColors(resolveThemeColors(name))
+	return newThemeFromColors(resolveThemeColors(name), name)
 }
 
-func newThemeFromColors(colors Colors) *Theme {
+func newThemeFromColors(colors Colors, themeName string) *Theme {
+	// Determine if we should use alternating rows based on theme
+	// Disable for terminal theme since we can't control ANSI color appearance
+	normalizedName := normalizeThemeName(themeName)
+	useAlternatingRows := normalizedName != "terminal"
 	return &Theme{
 		Colors: colors,
 
 		Header: lipgloss.NewStyle().
-			Foreground(colors.Green).
 			Bold(true).
 			MarginTop(1).
 			MarginBottom(1),
 
 		Title: lipgloss.NewStyle().
-			Foreground(colors.Green).
 			Bold(true).
 			Underline(true).
 			MarginBottom(1),
@@ -308,8 +311,7 @@ func newThemeFromColors(colors Colors) *Theme {
 			Foreground(colors.Cyan).
 			Bold(true),
 
-		Muted: lipgloss.NewStyle().
-			Foreground(colors.MutedText),
+		Muted: lipgloss.NewStyle(),
 
 		Selected: lipgloss.NewStyle().
 			Background(colors.SelectedBackground).
@@ -319,12 +321,10 @@ func newThemeFromColors(colors Colors) *Theme {
 			Background(colors.SelectedBackground),
 
 		Bold: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(colors.LightText),
+			Bold(true),
 
 		Faint: lipgloss.NewStyle().
-			Faint(true).
-			Foreground(colors.MutedText),
+			Faint(true),
 
 		TableHeader: lipgloss.NewStyle().
 			Bold(true).
@@ -333,12 +333,13 @@ func newThemeFromColors(colors Colors) *Theme {
 			BorderBottom(true).
 			BorderForeground(colors.Border),
 
-		TableRow: lipgloss.NewStyle().
-			Foreground(colors.LightText),
+		TableRow: lipgloss.NewStyle(),
 
 		TableBorder: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(colors.Border),
+
+		UseAlternatingRows: useAlternatingRows,
 
 		Box: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

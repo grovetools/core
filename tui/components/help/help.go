@@ -165,14 +165,21 @@ func (m Model) viewFull(groups [][]key.Binding) string {
 		return ""
 	}
 
+	// Pre-style headers
+	styledHeaders := []string{
+		m.Theme.TableHeader.Render("Key"),
+		m.Theme.TableHeader.Render("Description"),
+	}
+
 	// Create table
 	table := ltable.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(theme.DefaultColors.Border)).
-		Headers("Key", "Description").
+		Headers(styledHeaders...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			baseStyle := lipgloss.NewStyle().Padding(0, 1)
-			if row%2 == 0 {
+			// Apply alternating background only if theme supports it
+			if m.Theme.UseAlternatingRows && row%2 == 1 {
 				return baseStyle.Background(theme.VerySubtleBackground)
 			}
 			return baseStyle

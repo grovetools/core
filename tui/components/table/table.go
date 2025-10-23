@@ -238,10 +238,17 @@ type SelectableTableOptions struct {
 // SelectableTableWithOptions creates a table with custom highlighting options
 func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex int, opts SelectableTableOptions) string {
 	t := theme.DefaultTheme
+
+	// Pre-style headers with the theme's TableHeader style
+	styledHeaders := make([]string, len(headers))
+	for i, h := range headers {
+		styledHeaders[i] = t.TableHeader.Render(h)
+	}
+
 	table := ltable.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(theme.Border)).
-		Headers(headers...)
+		Headers(styledHeaders...)
 
 	// Apply styling without selection background
 	// IMPORTANT: In lipgloss table StyleFunc, when headers are set via .Headers(),
@@ -251,13 +258,11 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		// Regular data rows with padding
 		style := t.TableRow.Copy().Padding(0, 1)
 
-		// Apply column-specific highlighting
-		if opts.HighlightColumn >= 0 && col == opts.HighlightColumn {
-			style = t.Highlight.Copy().Padding(0, 1).Bold(true)
-		}
+		// Note: HighlightColumn feature removed - all columns use same style
 
 		// Apply alternating background for even data rows (2nd, 4th, etc.)
-		if row%2 == 1 {
+		// Only if the theme supports it (disabled for terminal theme)
+		if t.UseAlternatingRows && row%2 == 1 {
 			style = style.Background(theme.VerySubtleBackground)
 		}
 		return style
