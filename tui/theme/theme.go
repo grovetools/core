@@ -157,12 +157,12 @@ type Theme struct {
 	Warning lipgloss.Style
 	Info    lipgloss.Style
 
-	// Text styles
-	Muted       lipgloss.Style
+	// Text styles - visual hierarchy
+	Bold        lipgloss.Style // Emphasized text
+	Normal      lipgloss.Style // Regular terminal default text
+	Muted       lipgloss.Style // De-emphasized text
 	Selected    lipgloss.Style
 	SelectedRow lipgloss.Style
-	Bold        lipgloss.Style
-	Faint       lipgloss.Style
 
 	// Table styles
 	TableHeader        lipgloss.Style
@@ -182,6 +182,11 @@ type Theme struct {
 	// Special styles
 	Highlight lipgloss.Style
 	Accent    lipgloss.Style
+
+	// Workspace styles - used for displaying workspace hierarchies
+	WorkspaceEcosystem lipgloss.Style // Bold - for ecosystem workspaces
+	WorkspaceStandard  lipgloss.Style // Default - for standard workspaces
+	WorkspaceWorktree  lipgloss.Style // Faint - for worktree branches
 }
 
 var themeRegistry = map[string]func() Colors{
@@ -311,7 +316,14 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 			Foreground(colors.Cyan).
 			Bold(true),
 
-		Muted: lipgloss.NewStyle(),
+		// Text hierarchy: Bold → Normal → Muted
+		Bold: lipgloss.NewStyle().
+			Bold(true),
+
+		Normal: lipgloss.NewStyle(),
+
+		Muted: lipgloss.NewStyle().
+			Faint(true),
 
 		Selected: lipgloss.NewStyle().
 			Background(colors.SelectedBackground).
@@ -319,12 +331,6 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 
 		SelectedRow: lipgloss.NewStyle().
 			Background(colors.SelectedBackground),
-
-		Bold: lipgloss.NewStyle().
-			Bold(true),
-
-		Faint: lipgloss.NewStyle().
-			Faint(true),
 
 		TableHeader: lipgloss.NewStyle().
 			Bold(true).
@@ -371,6 +377,15 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 		Accent: lipgloss.NewStyle().
 			Foreground(colors.Violet).
 			Bold(true),
+
+		// Workspace styles use weight for hierarchy without explicit colors
+		WorkspaceEcosystem: lipgloss.NewStyle().
+			Bold(true),
+
+		WorkspaceStandard: lipgloss.NewStyle(),
+
+		WorkspaceWorktree: lipgloss.NewStyle().
+			Faint(true),
 	}
 }
 
