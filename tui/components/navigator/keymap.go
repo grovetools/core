@@ -52,7 +52,7 @@ var defaultKeyMap = KeyMap{
 
 // ShortHelp returns the short help text for the keymap
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
+	return []key.Binding{k.Quit}
 }
 
 // FullHelp returns the full help text for the keymap

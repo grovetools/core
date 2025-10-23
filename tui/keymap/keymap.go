@@ -166,7 +166,6 @@ func NewBase() Base {
 // ShortHelp returns a slice of key bindings for the short help view
 func (k Base) ShortHelp() []key.Binding {
 	return []key.Binding{
-		k.Help,
 		k.Quit,
 	}
 }
