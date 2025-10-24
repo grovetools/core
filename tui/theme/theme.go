@@ -234,6 +234,12 @@ const (
 	IconLeaf   = "🍃"
 	IconBranch = "🌿"
 
+	// Workspace type icons
+	IconEcosystem         = "◆" // Filled diamond for ecosystem roots
+	IconEcosystemWorktree = "◇" // Hollow diamond for ecosystem worktrees
+	IconWorktree          = "⑂" // Branch symbol for regular worktrees
+	IconRepo              = "⎇" // Git symbol for standard repos
+
 	// Action icons
 	IconSearch = "🔍"
 	IconHelp   = "❓"
