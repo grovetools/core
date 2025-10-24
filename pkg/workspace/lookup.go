@@ -305,6 +305,16 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	}
 
 	// Find the most specific node that contains the original path
+
+	// First, check for a case-sensitive exact path match. This is the most common and
+	// least ambiguous case, ensuring that if the input path is exactly a project root,
+	// that project is returned immediately.
+	for _, node := range nodes {
+		if node.Path == absPath {
+			return node, nil
+		}
+	}
+
 	var bestMatch *WorkspaceNode
 	var bestMatchLen int
 
