@@ -156,6 +156,7 @@ type ConfigSource string
 const (
 	SourceDefault   ConfigSource = "default"
 	SourceGlobal    ConfigSource = "global"
+	SourceEcosystem ConfigSource = "ecosystem"
 	SourceProject   ConfigSource = "project"
 	SourceOverride  ConfigSource = "override"
 	SourceUnknown   ConfigSource = "unknown"
@@ -172,6 +173,7 @@ type OverrideSource struct {
 type LayeredConfig struct {
 	Default   *Config          // Config with only default values applied.
 	Global    *Config          // Raw config from the global file.
+	Ecosystem *Config          // Raw config from the ecosystem file (if workspace is in an ecosystem).
 	Project   *Config          // Raw config from the project file.
 	Overrides []OverrideSource // Raw configs from override files, in order of application.
 	Final     *Config          // The fully merged and validated config.

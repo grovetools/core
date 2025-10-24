@@ -414,6 +414,22 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 		layeredConfig.Project = &projectConfig
 		layeredConfig.FilePaths[SourceProject] = projectPath
+
+		// 3.5. Load Ecosystem layer (optional, only if this is a workspace config)
+		if len(projectConfig.Workspaces) == 0 {
+			ecosystemPath := FindEcosystemConfig(filepath.Dir(projectPath))
+			if ecosystemPath != "" {
+				ecosystemData, err := os.ReadFile(ecosystemPath)
+				if err == nil {
+					expandedEco := expandEnvVars(string(ecosystemData))
+					var ecosystemConfig Config
+					if err := yaml.Unmarshal([]byte(expandedEco), &ecosystemConfig); err == nil {
+						layeredConfig.Ecosystem = &ecosystemConfig
+						layeredConfig.FilePaths[SourceEcosystem] = ecosystemPath
+					}
+				}
+			}
+		}
 	}
 
 	// 4. Load Override layers (optional)
@@ -453,6 +469,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	// Start with global if it exists
 	if layeredConfig.Global != nil {
 		finalConfig = layeredConfig.Global
+	}
+
+	// Merge ecosystem config (after global, before project)
+	if layeredConfig.Ecosystem != nil {
+		finalConfig = mergeConfigs(finalConfig, layeredConfig.Ecosystem)
 	}
 
 	// Merge project config
