@@ -238,7 +238,8 @@ const (
 	IconEcosystem         = "◆" // Filled diamond for ecosystem roots
 	IconEcosystemWorktree = "◇" // Hollow diamond for ecosystem worktrees
 	IconWorktree          = "⑂" // Branch symbol for regular worktrees
-	IconRepo              = "⎇" // Git symbol for standard repos
+	IconRepo              = "●" // Filled circle for standard repos
+	IconGitBranch         = "⎇" // Git branch symbol for branches
 
 	// Action icons
 	IconSearch = "🔍"
