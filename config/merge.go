@@ -52,6 +52,37 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 func mergeConfigs(base, override *Config) *Config {
 	result := *base
 
+	// Merge simple string fields
+	if override.Name != "" {
+		result.Name = override.Name
+	}
+	if override.Version != "" {
+		result.Version = override.Version
+	}
+
+	// Merge slice fields (replace if present)
+	if override.Workspaces != nil {
+		result.Workspaces = override.Workspaces
+	}
+	if override.ExplicitProjects != nil {
+		result.ExplicitProjects = override.ExplicitProjects
+	}
+
+	// Merge pointer fields (replace if present)
+	if override.Notebook != nil {
+		result.Notebook = override.Notebook
+	}
+
+	// Merge SearchPaths map
+	if override.SearchPaths != nil {
+		if result.SearchPaths == nil {
+			result.SearchPaths = make(map[string]SearchPathConfig)
+		}
+		for k, v := range override.SearchPaths {
+			result.SearchPaths[k] = v
+		}
+	}
+
 	// Merge extensions
 	if override.Extensions != nil {
 		if result.Extensions == nil {
