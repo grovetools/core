@@ -49,12 +49,12 @@ func setupMockFS(t *testing.T) (string, string) {
 	projBBytes, _ := yaml.Marshal(projBCfg)
 	require.NoError(t, os.WriteFile(filepath.Join(projBDir, "grove.yml"), projBBytes, 0644))
 
-	// 3. An Orphan Project
+	// 3. An Orphan Project using .grove.yml
 	orphanDir := filepath.Join(rootDir, "work", "orphan-project")
 	require.NoError(t, os.MkdirAll(orphanDir, 0755))
 	orphanCfg := config.Config{Name: "orphan-project"}
 	orphanBytes, _ := yaml.Marshal(orphanCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, "grove.yml"), orphanBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, ".grove.yml"), orphanBytes, 0644))
 
 	// 4. A Non-Grove Directory
 	nonGroveDir := filepath.Join(rootDir, "work", "other-dir")

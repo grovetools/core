@@ -12,6 +12,28 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// findGroveConfig checks for various grove config file names in a directory.
+// It returns the path to the found file, the loaded config, and an error if loading fails.
+// If no config file is found, it returns an error.
+func findGroveConfig(dir string) (string, *config.Config, error) {
+	configNames := []string{
+		"grove.yml",
+		"grove.yaml",
+		".grove.yml",
+		".grove.yaml",
+	}
+
+	for _, name := range configNames {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			// File exists, try to load it.
+			cfg, loadErr := config.Load(path)
+			return path, cfg, loadErr
+		}
+	}
+	return "", nil, fmt.Errorf("no grove config found in %s", dir)
+}
+
 // expandPath expands ~ to home directory and environment variables
 func expandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
@@ -42,19 +64,14 @@ const (
 // Note: This function classifies repository roots and does NOT handle worktree directory logic
 // (.grove-worktrees). That special case is handled separately by the walker.
 func classifyWorkspaceRoot(path string) (directoryType, *config.Config, error) {
-	// Check for grove.yml first to classify the directory
-	groveYmlPath := filepath.Join(path, "grove.yml")
-	if _, statErr := os.Stat(groveYmlPath); statErr == nil {
-		cfg, loadErr := config.Load(groveYmlPath)
-		if loadErr != nil {
-			return typeUnknown, nil, fmt.Errorf("failed to load grove.yml: %w", loadErr)
-		}
-
+	// Use the helper to find any valid grove config file
+	_, cfg, err := findGroveConfig(path)
+	if err == nil {
+		// A config file was found and loaded successfully.
 		// Check if it's an ecosystem (has workspaces key)
 		if len(cfg.Workspaces) > 0 {
 			return typeEcosystem, cfg, nil
 		}
-
 		// It's a project
 		return typeProject, cfg, nil
 	}
@@ -78,13 +95,10 @@ func classifyDirectory(path string, d os.DirEntry) (directoryType, *config.Confi
 	if d.Name() == ".grove-worktrees" {
 		// Check if parent directory is an ecosystem
 		parentPath := filepath.Dir(path)
-		parentGroveYml := filepath.Join(parentPath, "grove.yml")
-		if _, statErr := os.Stat(parentGroveYml); statErr == nil {
-			parentCfg, loadErr := config.Load(parentGroveYml)
-			if loadErr == nil && len(parentCfg.Workspaces) > 0 {
-				// Parent is an ecosystem - this is an ecosystem worktree directory
-				return typeEcosystemWorktreeDir, parentCfg, nil
-			}
+		_, parentCfg, err := findGroveConfig(parentPath)
+		if err == nil && len(parentCfg.Workspaces) > 0 {
+			// Parent is an ecosystem - this is an ecosystem worktree directory
+			return typeEcosystemWorktreeDir, parentCfg, nil
 		}
 		return typeUnknown, nil, nil
 	}
@@ -539,13 +553,11 @@ func FindEcosystemRoot(startDir string) (string, error) {
 
 	current := absStart
 	for {
-		groveYmlPath := filepath.Join(current, "grove.yml")
-		if _, err := os.Stat(groveYmlPath); err == nil {
-			// Load config to check if it has workspaces
-			cfg, err := config.Load(groveYmlPath)
-			if err == nil && len(cfg.Workspaces) > 0 {
-				return current, nil
-			}
+		// config.FindEcosystemConfig already handles multiple names and upward search
+		// so we use it directly here.
+		ecosystemConfigPath := config.FindEcosystemConfig(current)
+		if ecosystemConfigPath != "" {
+			return filepath.Dir(ecosystemConfigPath), nil
 		}
 
 		// Move up one directory

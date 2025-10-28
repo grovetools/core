@@ -132,10 +132,9 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		if isWorktree {
 			// The parent should be found by looking for parent grove.yml
 			checkDir := filepath.Dir(filepath.Dir(foundRootPath)) // Go up past .grove-worktrees
-			if groveYml := filepath.Join(checkDir, "grove.yml"); fileExists(groveYml) {
-				if cfg, err := config.Load(groveYml); err == nil && len(cfg.Workspaces) > 0 {
-					parentEcosystemPath = checkDir
-				}
+			_, cfg, err := findGroveConfig(checkDir)
+			if err == nil && len(cfg.Workspaces) > 0 {
+				parentEcosystemPath = checkDir
 			}
 		}
 
@@ -213,11 +212,10 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		// Check if we're inside an ecosystem by looking for a grove.yml with workspaces in parents
 		checkDir := filepath.Dir(foundRootPath)
 		for checkDir != filepath.Dir(checkDir) {
-			if groveYml := filepath.Join(checkDir, "grove.yml"); fileExists(groveYml) {
-				if cfg, err := config.Load(groveYml); err == nil && len(cfg.Workspaces) > 0 {
-					parentEcosystemPath = checkDir
-					break
-				}
+			_, cfg, err := findGroveConfig(checkDir)
+			if err == nil && len(cfg.Workspaces) > 0 {
+				parentEcosystemPath = checkDir
+				break
 			}
 			checkDir = filepath.Dir(checkDir)
 		}

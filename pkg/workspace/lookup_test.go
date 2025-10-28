@@ -52,18 +52,18 @@ func setupMockFSForLookup(t *testing.T) (string, string) {
 	ecoWtBytes, _ := yaml.Marshal(ecoWtCfg)
 	require.NoError(t, os.WriteFile(filepath.Join(ecoWorktreeDir, "grove.yml"), ecoWtBytes, 0644))
 
-	// 5. A Standalone Project with worktree
+	// 5. A Standalone Project with worktree, using .grove.yml
 	standaloneDir := filepath.Join(rootDir, "work", "standalone-project")
 	require.NoError(t, os.MkdirAll(standaloneDir, 0755))
 	standaloneCfg := config.Config{Name: "standalone-project"}
 	standaloneBytes, _ := yaml.Marshal(standaloneCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(standaloneDir, "grove.yml"), standaloneBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(standaloneDir, ".grove.yml"), standaloneBytes, 0644))
 
 	// Create worktree for standalone project
 	standaloneWorktreeDir := filepath.Join(standaloneDir, ".grove-worktrees", "fix-bug")
 	require.NoError(t, os.MkdirAll(standaloneWorktreeDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, ".git"), []byte("gitdir: ..."), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, "grove.yml"), standaloneBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, ".grove.yml"), standaloneBytes, 0644))
 
 	// 6. A Non-Grove Directory
 	nonGroveDir := filepath.Join(rootDir, "work", "other-repo")
