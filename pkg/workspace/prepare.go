@@ -36,7 +36,7 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		provider = NewProvider(discoveryResult)
 	}
 
-	if err := SetupSubmodules(ctx, worktreePath, opts.BranchName, opts.Repos, provider); err != nil {
+	if err := SetupSubmodules(ctx, worktreePath, opts.BranchName, opts.Repos, provider, setupHandlers...); err != nil {
 		fmt.Printf("Warning: failed to setup submodules for worktree '%s': %v\n", opts.WorktreeName, err)
 	}
 

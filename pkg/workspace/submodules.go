@@ -14,7 +14,7 @@ import (
 
 // SetupSubmodules initializes submodules, creating linked worktrees where possible.
 // It accepts a Provider containing pre-discovered workspaces to avoid redundant filesystem scans.
-func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, provider *Provider) error {
+func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, provider *Provider, setupHandlers ...func(worktreePath, gitRoot string) error) error {
 	// If no provider is given, create a temporary one
 	if provider == nil {
 		logger := logrus.New()
@@ -89,7 +89,14 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 				os.RemoveAll(targetPath)
 				cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
 				cmdWorktree.Dir = mainSubmodulePath
-				cmdWorktree.Run()
+				if err := cmdWorktree.Run(); err == nil {
+					// Run setup handlers for the newly created worktree
+					for _, handler := range setupHandlers {
+						if err := handler(targetPath, mainSubmodulePath); err != nil {
+							fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
+						}
+					}
+				}
 			}
 			continue
 		}
@@ -101,7 +108,14 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 				os.RemoveAll(targetPath)
 				cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
 				cmdWorktree.Dir = localRepoPath
-				cmdWorktree.Run()
+				if err := cmdWorktree.Run(); err == nil {
+					// Run setup handlers for the newly created worktree
+					for _, handler := range setupHandlers {
+						if err := handler(targetPath, localRepoPath); err != nil {
+							fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
+						}
+					}
+				}
 			}
 		} else {
 			externalSubmodules = append(externalSubmodules, submodulePath)
