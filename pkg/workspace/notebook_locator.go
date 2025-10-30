@@ -34,19 +34,21 @@ type ScannedDir struct {
 //
 // The mode is determined by whether notebook.root_dir is configured.
 type NotebookLocator struct {
-	config *config.NotebookConfig
+	config *config.Notebook
 }
 
 // NewNotebookLocator creates a new locator. It gracefully handles a nil config.
+// It uses the "default" notebook from the Notebooks map, maintaining backward compatibility.
 func NewNotebookLocator(cfg *config.Config) *NotebookLocator {
-	var notebookCfg *config.NotebookConfig
-	if cfg != nil {
-		notebookCfg = cfg.Notebook
+	var notebookCfg *config.Notebook
+	if cfg != nil && cfg.Notebooks != nil {
+		// Use the "default" notebook for backward compatibility
+		notebookCfg = cfg.Notebooks["default"]
 	}
 
 	// Ensure we have a config object to work with, even if it's empty.
 	if notebookCfg == nil {
-		notebookCfg = &config.NotebookConfig{}
+		notebookCfg = &config.Notebook{}
 	}
 
 	// Populate with defaults if templates are not provided by the user.

@@ -16,7 +16,7 @@ func main() {
 		FieldNameTag:              "yaml",
 	}
 
-	schema := r.Reflect(&config.NotebookConfig{})
+	schema := r.Reflect(&config.Notebook{})
 	schema.Title = "Grove Notebook Configuration"
 	schema.Description = "Schema for the 'notebook' extension in grove.yml."
 

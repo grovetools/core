@@ -25,7 +25,7 @@ func GenerateSchema() ([]byte, error) {
 		Name             string                      `yaml:"name,omitempty" jsonschema:"description=Name of the configuration"`
 		Version          string                      `yaml:"version" jsonschema:"required,description=Configuration version (e.g. '1.0')"`
 		Workspaces       []string                    `yaml:"workspaces,omitempty" jsonschema:"description=List of workspace directories in this ecosystem"`
-		Notebook         *NotebookConfig             `yaml:"notebook,omitempty" jsonschema:"description=Configuration for centralized notebook system"`
+		Notebooks        map[string]*Notebook        `yaml:"notebooks,omitempty" jsonschema:"description=Map of named notebook configurations"`
 		SearchPaths      map[string]SearchPathConfig `yaml:"search_paths,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
 		ExplicitProjects []ExplicitProject           `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
 	}

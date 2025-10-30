@@ -68,9 +68,14 @@ func mergeConfigs(base, override *Config) *Config {
 		result.ExplicitProjects = override.ExplicitProjects
 	}
 
-	// Merge pointer fields (replace if present)
-	if override.Notebook != nil {
-		result.Notebook = override.Notebook
+	// Merge Notebooks map
+	if override.Notebooks != nil {
+		if result.Notebooks == nil {
+			result.Notebooks = make(map[string]*Notebook)
+		}
+		for k, v := range override.Notebooks {
+			result.Notebooks[k] = v
+		}
 	}
 
 	// Merge SearchPaths map

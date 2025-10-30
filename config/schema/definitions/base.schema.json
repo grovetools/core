@@ -24,7 +24,7 @@
         "enabled"
       ]
     },
-    "NotebookConfig": {
+    "Notebook": {
       "properties": {
         "root_dir": {
           "type": "string"
@@ -87,9 +87,12 @@
       "type": "array",
       "description": "List of workspace directories in this ecosystem"
     },
-    "notebook": {
-      "$ref": "#/$defs/NotebookConfig",
-      "description": "Configuration for centralized notebook system"
+    "notebooks": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Notebook"
+      },
+      "type": "object",
+      "description": "Map of named notebook configurations"
     },
     "search_paths": {
       "additionalProperties": {

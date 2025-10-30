@@ -24,8 +24,8 @@ type ExplicitProject struct {
 	Enabled     bool   `yaml:"enabled"`
 }
 
-// NotebookConfig defines the configuration for the centralized notebook system.
-type NotebookConfig struct {
+// Notebook defines the configuration for a single, named notebook system.
+type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
 	// If this is set, the system operates in "Centralized Mode".
 	// If empty, it operates in "Local Mode".
@@ -47,9 +47,13 @@ type Config struct {
 	Version    string   `yaml:"version"`
 	Workspaces []string `yaml:"workspaces,omitempty"`
 
-	// Notebook defines the configuration for the centralized note and plan storage.
-	// This is the new, standardized way to configure where persistent data lives.
-	Notebook *NotebookConfig `yaml:"notebook,omitempty"`
+	// Notebooks defines a map of named notebook configurations.
+	// This is the new, preferred way to configure notebooks.
+	Notebooks map[string]*Notebook `yaml:"notebooks,omitempty"`
+
+	// Notebook is a legacy field for backward compatibility with the old single-notebook format.
+	// It is used only for unmarshaling and should not be accessed directly.
+	Notebook *Notebook `yaml:"notebook,omitempty"`
 
 	// SearchPaths defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
@@ -76,7 +80,8 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Name             string                       `yaml:"name,omitempty"`
 		Version          string                       `yaml:"version"`
 		Workspaces       []string                     `yaml:"workspaces,omitempty"`
-		Notebook         *NotebookConfig              `yaml:"notebook,omitempty"`
+		Notebooks        map[string]*Notebook         `yaml:"notebooks,omitempty"`
+		Notebook         *Notebook                    `yaml:"notebook,omitempty"` // Legacy field
 		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty"`
 		Groves           map[string]SearchPathConfig  `yaml:"groves,omitempty"` // Legacy field
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
@@ -92,9 +97,22 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Name = raw.Name
 	c.Version = raw.Version
 	c.Workspaces = raw.Workspaces
-	c.Notebook = raw.Notebook
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions
+
+	// Handle new "notebooks" map first.
+	c.Notebooks = raw.Notebooks
+
+	// Handle backward compatibility: if "notebooks" is not present but the old "notebook" is,
+	// migrate it to notebooks["default"].
+	if len(c.Notebooks) == 0 && raw.Notebook != nil {
+		if c.Notebooks == nil {
+			c.Notebooks = make(map[string]*Notebook)
+		}
+		c.Notebooks["default"] = raw.Notebook
+	}
+	// Unset the legacy field to prevent it from being marshaled back out.
+	c.Notebook = nil
 
 	// Handle backward compatibility: if "groves" is present but "search_paths" is not,
 	// use "groves" as "search_paths"

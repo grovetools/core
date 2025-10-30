@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/mattsolo1/grove-core/config/notebook-config",
+  "$id": "https://github.com/mattsolo1/grove-core/config/notebook",
   "properties": {
     "root_dir": {
       "type": "string"
