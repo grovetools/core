@@ -31,14 +31,30 @@ func findRootEcosystemPath(startDir string) string {
 	return rootPath
 }
 
-// isGitWorktree checks if a directory is a git worktree (has .git as a file, not a directory)
+// isGitWorktree checks if a directory is a git worktree by examining the .git file.
+// This distinguishes true git worktrees from git submodules, which both have .git as a file.
+// Worktrees point to .git/worktrees/, while submodules point to .git/modules/.
 func isGitWorktree(dir string) bool {
 	gitPath := filepath.Join(dir, ".git")
 	stat, err := os.Stat(gitPath)
 	if err != nil {
 		return false
 	}
-	return !stat.IsDir()
+
+	if stat.IsDir() {
+		return false // Regular git repo
+	}
+
+	// It's a file - read it to distinguish worktree from submodule
+	content, err := os.ReadFile(gitPath)
+	if err != nil {
+		return false
+	}
+
+	gitdir := strings.TrimSpace(string(content))
+	// Worktrees point to .git/worktrees/, submodules point to .git/modules/
+	return strings.Contains(gitdir, "/worktrees/") ||
+		strings.Contains(gitdir, string(filepath.Separator)+"worktrees"+string(filepath.Separator))
 }
 
 // GetProjectByPath finds a workspace by path using an efficient upward traversal.
