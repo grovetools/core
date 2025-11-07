@@ -3,6 +3,9 @@ package workspace
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
+
+	"github.com/mattsolo1/grove-core/util/pathutil"
 )
 
 // Provider acts as a read-only, in-memory store for a snapshot of discovered workspaces.
@@ -27,7 +30,11 @@ func NewProvider(result *DiscoveryResult) *Provider {
 
 	pathMap := make(map[string]*WorkspaceNode, len(nodes))
 	for _, node := range nodes {
-		pathMap[node.Path] = node
+		// Normalize the path for the lookup map.
+		normalizedPath, err := pathutil.NormalizeForLookup(node.Path)
+		if err == nil {
+			pathMap[normalizedPath] = node
+		}
 	}
 
 	p := &Provider{
@@ -48,20 +55,24 @@ func (p *Provider) All() []*WorkspaceNode {
 // FindByPath returns the WorkspaceNode for a given absolute path.
 // It performs a fast lookup using an internal map.
 func (p *Provider) FindByPath(path string) *WorkspaceNode {
-	// First, try an exact match
-	if node, exists := p.pathMap[path]; exists {
+	normalizedPath, err := pathutil.NormalizeForLookup(path)
+	if err != nil {
+		// Cannot normalize, fallback to simple lookup
+		return p.pathMap[path]
+	}
+
+	// First, try an exact match with the normalized path.
+	if node, exists := p.pathMap[normalizedPath]; exists {
 		return node
 	}
 
-	// If no exact match, find the containing workspace
+	// If no exact match, find the containing workspace using normalized paths.
 	var bestMatch *WorkspaceNode
 	for _, node := range p.nodes {
-		if node.Path == path {
-			return node
-		}
-		// Check if the node's path is a prefix of the search path
-		if len(path) > len(node.Path) && path[len(node.Path)] == filepath.Separator && path[:len(node.Path)] == node.Path {
-			if bestMatch == nil || len(node.Path) > len(bestMatch.Path) {
+		normalizedNodePath, _ := pathutil.NormalizeForLookup(node.Path)
+		// Check if the normalized node's path is a prefix of the normalized search path.
+		if strings.HasPrefix(normalizedPath, normalizedNodePath+string(filepath.Separator)) {
+			if bestMatch == nil || len(normalizedNodePath) > len(bestMatch.Path) {
 				bestMatch = node
 			}
 		}

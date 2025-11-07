@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/util/pathutil"
 	"github.com/sirupsen/logrus"
 )
 
@@ -75,10 +75,10 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		return nil, fmt.Errorf("path does not exist or is not a directory: %s", absPath)
 	}
 
-	// Evaluate symlinks to get the canonical path
-	absPath, err = filepath.EvalSymlinks(absPath)
+	// Normalize path for case-insensitive filesystems and resolve symlinks
+	absPath, err = pathutil.NormalizeForLookup(absPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve path: %w", err)
+		return nil, fmt.Errorf("failed to normalize path: %w", err)
 	}
 
 	// If we were given a file, start from its directory
@@ -319,41 +319,21 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	}
 
 	// Find the most specific node that contains the original path
-
-	// First, check for a case-sensitive exact path match. This is the most common and
-	// least ambiguous case, ensuring that if the input path is exactly a project root,
-	// that project is returned immediately.
-	for _, node := range nodes {
-		if node.Path == absPath {
-			return node, nil
-		}
-	}
-
 	var bestMatch *WorkspaceNode
-	var bestMatchLen int
-
-	// On macOS, use case-insensitive comparison
-	caseInsensitive := runtime.GOOS == "darwin"
+	normalizedAbsPath, _ := pathutil.NormalizeForLookup(absPath)
 
 	for _, node := range nodes {
-		nodePath := node.Path
-		checkPath := absPath
-
-		if caseInsensitive {
-			nodePath = strings.ToLower(nodePath)
-			checkPath = strings.ToLower(checkPath)
-		}
+		normalizedNodePath, _ := pathutil.NormalizeForLookup(node.Path)
 
 		// Check for exact match
-		if checkPath == nodePath {
+		if normalizedNodePath == normalizedAbsPath {
 			return node, nil
 		}
 
 		// Check if absPath is inside this node
-		if strings.HasPrefix(checkPath, nodePath+string(filepath.Separator)) {
-			if len(node.Path) > bestMatchLen {
+		if strings.HasPrefix(normalizedAbsPath, normalizedNodePath+string(filepath.Separator)) {
+			if bestMatch == nil || len(node.Path) > len(bestMatch.Path) {
 				bestMatch = node
-				bestMatchLen = len(node.Path)
 			}
 		}
 	}
