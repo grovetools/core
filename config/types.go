@@ -24,6 +24,13 @@ type ExplicitProject struct {
 	Enabled     bool   `yaml:"enabled"`
 }
 
+// NoteTypeConfig defines the configuration for a single, user-defined note type.
+type NoteTypeConfig struct {
+	Description    string `yaml:"description,omitempty"`
+	TemplatePath   string `yaml:"template_path,omitempty"`
+	FilenameFormat string `yaml:"filename_format,omitempty"` // e.g., "date-title", "timestamp-title", "title"
+}
+
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
@@ -39,6 +46,10 @@ type Notebook struct {
 	GlobalNotesPathTemplate string `yaml:"global_notes_path_template,omitempty"`
 	GlobalPlansPathTemplate string `yaml:"global_plans_path_template,omitempty"`
 	GlobalChatsPathTemplate string `yaml:"global_chats_path_template,omitempty"`
+
+	// Types defines a map of user-configurable note types.
+	// This will override the hardcoded defaults in grove-notebook if provided.
+	Types map[string]*NoteTypeConfig `yaml:"types,omitempty"`
 }
 
 // Config represents the grove.yml configuration

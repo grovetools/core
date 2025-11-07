@@ -1,6 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/mattsolo1/grove-core/config/notebook",
+  "$defs": {
+    "NoteTypeConfig": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "template_path": {
+          "type": "string"
+        },
+        "filename_format": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
   "properties": {
     "root_dir": {
       "type": "string"
@@ -22,6 +38,12 @@
     },
     "global_chats_path_template": {
       "type": "string"
+    },
+    "types": {
+      "additionalProperties": {
+        "$ref": "#/$defs/NoteTypeConfig"
+      },
+      "type": "object"
     }
   },
   "type": "object",

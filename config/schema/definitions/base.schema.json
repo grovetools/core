@@ -24,6 +24,21 @@
         "enabled"
       ]
     },
+    "NoteTypeConfig": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "template_path": {
+          "type": "string"
+        },
+        "filename_format": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "Notebook": {
       "properties": {
         "root_dir": {
@@ -46,6 +61,12 @@
         },
         "global_chats_path_template": {
           "type": "string"
+        },
+        "types": {
+          "additionalProperties": {
+            "$ref": "#/$defs/NoteTypeConfig"
+          },
+          "type": "object"
         }
       },
       "additionalProperties": false,

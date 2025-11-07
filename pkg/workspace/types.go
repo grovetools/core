@@ -1,6 +1,10 @@
 package workspace
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+)
 
 // PrepareOptions holds configuration for preparing a workspace.
 type PrepareOptions struct {
@@ -249,6 +253,46 @@ func (w *WorkspaceNode) IsEcosystemChild() bool {
 // (not an ecosystem child). Useful for grouping worktrees under their parent projects.
 func (w *WorkspaceNode) IsProjectWorktreeChild() bool {
 	return w.ParentProjectPath != "" && !w.IsEcosystem()
+}
+
+// GetWorktreeName returns the worktree name if this is a worktree node, otherwise empty string.
+// For ecosystem worktrees, it extracts the name from the ParentEcosystemPath.
+// For standalone project worktrees, it extracts from ParentProjectPath.
+func (w *WorkspaceNode) GetWorktreeName() string {
+	if !w.IsWorktree() {
+		return ""
+	}
+
+	// For ecosystem worktrees, the ParentEcosystemPath looks like:
+	// /path/to/grove-ecosystem/.grove-worktrees/WORKTREE_NAME
+	if w.Kind == KindEcosystemWorktree || w.Kind == KindEcosystemWorktreeSubProjectWorktree {
+		if w.ParentEcosystemPath != "" {
+			return filepath.Base(w.ParentEcosystemPath)
+		}
+		// For EcosystemWorktree itself, extract from its own path
+		if w.Kind == KindEcosystemWorktree {
+			return filepath.Base(w.Path)
+		}
+	}
+
+	// For standalone project worktrees, extract from ParentProjectPath relative to this path
+	if w.ParentProjectPath != "" {
+		rel, err := filepath.Rel(w.ParentProjectPath, w.Path)
+		if err == nil && rel != "." {
+			// The relative path will be like .grove-worktrees/WORKTREE_NAME
+			parts := filepath.SplitList(rel)
+			if len(parts) >= 2 {
+				return parts[1]
+			}
+			// Fallback: try splitting by separator
+			pathParts := strings.Split(rel, string(filepath.Separator))
+			if len(pathParts) >= 2 && pathParts[0] == ".grove-worktrees" {
+				return pathParts[1]
+			}
+		}
+	}
+
+	return ""
 }
 
 // GetDirectChildren returns all nodes from the given list that are direct children of this node.

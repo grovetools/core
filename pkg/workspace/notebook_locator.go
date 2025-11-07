@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	defaultNotesPathTemplate       = "repos/{{ .Workspace.Name }}/main/notes/{{ .NoteType }}"
-	defaultPlansPathTemplate       = "repos/{{ .Workspace.Name }}/main/plans"
-	defaultChatsPathTemplate       = "repos/{{ .Workspace.Name }}/main/chats"
+	defaultNotesPathTemplate       = "notebooks/{{ .Workspace.Name }}/notes/{{ .NoteType }}"
+	defaultPlansPathTemplate       = "notebooks/{{ .Workspace.Name }}/plans"
+	defaultChatsPathTemplate       = "notebooks/{{ .Workspace.Name }}/chats"
 	defaultGlobalNotesPathTemplate = "global/notes/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -86,9 +86,9 @@ func (l *NotebookLocator) isCentralized() bool {
 // In Centralized Mode, it uses the configured root_dir and path templates.
 func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 	if !l.isCentralized() {
-		// Local Mode: Plans are inside the project's root directory.
+		// Local Mode: Plans are inside the project's root .notebook directory.
 		// Use GetGroupingKey to correctly handle worktrees.
-		return filepath.Join(node.GetGroupingKey(), "plans"), nil
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "plans"), nil
 	}
 
 	// Centralized Mode
@@ -153,8 +153,8 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 // GetChatsDir is analogous to GetPlansDir.
 func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 	if !l.isCentralized() {
-		// Local Mode: Chats are inside the project's root directory.
-		return filepath.Join(node.GetGroupingKey(), "chats"), nil
+		// Local Mode: Chats are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "chats"), nil
 	}
 
 	// Centralized Mode
@@ -221,8 +221,8 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 // In Centralized Mode, it uses the configured root_dir and path templates.
 func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (string, error) {
 	if !l.isCentralized() {
-		// Local Mode: Notes are inside the project's root directory.
-		return filepath.Join(node.GetGroupingKey(), "notes", noteType), nil
+		// Local Mode: Notes are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "notes", noteType), nil
 	}
 
 	// Centralized Mode

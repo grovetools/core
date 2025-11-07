@@ -74,7 +74,46 @@ func mergeConfigs(base, override *Config) *Config {
 			result.Notebooks = make(map[string]*Notebook)
 		}
 		for k, v := range override.Notebooks {
-			result.Notebooks[k] = v
+			if v != nil {
+				// Deep merge notebook fields instead of replacing
+				if existing, exists := result.Notebooks[k]; exists && existing != nil {
+					merged := *existing // Copy existing
+					// Override non-empty fields
+					if v.RootDir != "" {
+						merged.RootDir = v.RootDir
+					}
+					if v.NotesPathTemplate != "" {
+						merged.NotesPathTemplate = v.NotesPathTemplate
+					}
+					if v.PlansPathTemplate != "" {
+						merged.PlansPathTemplate = v.PlansPathTemplate
+					}
+					if v.ChatsPathTemplate != "" {
+						merged.ChatsPathTemplate = v.ChatsPathTemplate
+					}
+					if v.GlobalNotesPathTemplate != "" {
+						merged.GlobalNotesPathTemplate = v.GlobalNotesPathTemplate
+					}
+					if v.GlobalPlansPathTemplate != "" {
+						merged.GlobalPlansPathTemplate = v.GlobalPlansPathTemplate
+					}
+					if v.GlobalChatsPathTemplate != "" {
+						merged.GlobalChatsPathTemplate = v.GlobalChatsPathTemplate
+					}
+					if v.Types != nil {
+						if merged.Types == nil {
+							merged.Types = make(map[string]*NoteTypeConfig)
+						}
+						for typeKey, typeVal := range v.Types {
+							merged.Types[typeKey] = typeVal
+						}
+					}
+					result.Notebooks[k] = &merged
+				} else {
+					// No existing notebook, just use the override
+					result.Notebooks[k] = v
+				}
+			}
 		}
 	}
 
