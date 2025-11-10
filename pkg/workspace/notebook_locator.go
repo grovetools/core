@@ -38,12 +38,20 @@ type NotebookLocator struct {
 }
 
 // NewNotebookLocator creates a new locator. It gracefully handles a nil config.
-// It uses the "default" notebook from the Notebooks map, maintaining backward compatibility.
+// It uses the "default" notebook from the Notebooks map, or the first notebook if "default" doesn't exist.
 func NewNotebookLocator(cfg *config.Config) *NotebookLocator {
 	var notebookCfg *config.Notebook
-	if cfg != nil && cfg.Notebooks != nil {
-		// Use the "default" notebook for backward compatibility
-		notebookCfg = cfg.Notebooks["default"]
+	if cfg != nil && cfg.Notebooks != nil && len(cfg.Notebooks) > 0 {
+		// Prefer "default" notebook for backward compatibility
+		if defaultNotebook, ok := cfg.Notebooks["default"]; ok {
+			notebookCfg = defaultNotebook
+		} else {
+			// Use the first notebook if "default" doesn't exist
+			for _, notebook := range cfg.Notebooks {
+				notebookCfg = notebook
+				break
+			}
+		}
 	}
 
 	// Ensure we have a config object to work with, even if it's empty.
