@@ -111,7 +111,7 @@ func (c *Client) GetSessionPID(ctx context.Context, sessionName string) (int, er
 func (c *Client) GetCursorPosition(ctx context.Context, sessionName string) (row int, col int, err error) {
 	// target-pane format is {session}:. which targets the active pane
 	targetPane := sessionName + ":."
-	
+
 	// Get cursor position using tmux display-message with cursor_y and cursor_x format
 	output, err := c.run(ctx, "display-message", "-p", "-t", targetPane, "#{cursor_y},#{cursor_x}")
 	if err != nil {
@@ -132,4 +132,71 @@ func (c *Client) GetCursorPosition(ctx context.Context, sessionName string) (row
 
 	// Tmux provides 0-indexed coordinates, so convert to 1-based for the API
 	return y + 1, x + 1, nil
+}
+
+// GetCurrentPaneID returns the ID of the currently active pane
+func (c *Client) GetCurrentPaneID(ctx context.Context) (string, error) {
+	output, err := c.run(ctx, "display-message", "-p", "#{pane_id}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// PaneExists checks if a pane with the given ID exists
+func (c *Client) PaneExists(ctx context.Context, paneID string) bool {
+	// Try to get the pane's ID - if it doesn't exist, this will fail
+	_, err := c.run(ctx, "display-message", "-p", "-t", paneID, "#{pane_id}")
+	return err == nil
+}
+
+// GetPaneWidth returns the width of the specified pane (or current pane if target is empty)
+func (c *Client) GetPaneWidth(ctx context.Context, target string) (int, error) {
+	args := []string{"display-message", "-p", "#{pane_width}"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	output, err := c.run(ctx, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get pane width: %w", err)
+	}
+
+	width, err := strconv.Atoi(strings.TrimSpace(output))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse pane width '%s': %w", output, err)
+	}
+	return width, nil
+}
+
+// SelectPane switches focus to the specified pane
+func (c *Client) SelectPane(ctx context.Context, paneID string) error {
+	_, err := c.run(ctx, "select-pane", "-t", paneID)
+	return err
+}
+
+// SplitWindow splits a target pane and optionally runs a command.
+// target can be a session, window, or pane identifier. Use "" for the current pane.
+// If horizontal is true, it creates a vertical split (side-by-side panes).
+// size, if > 0, specifies the width (for horizontal) or height (for vertical) of the new pane in cells.
+// Returns the pane ID of the newly created pane.
+func (c *Client) SplitWindow(ctx context.Context, target string, horizontal bool, size int, command string) (string, error) {
+	args := []string{"split-window", "-P", "-F", "#{pane_id}"}
+	if horizontal {
+		args = append(args, "-h")
+	}
+	if size > 0 {
+		args = append(args, "-l", strconv.Itoa(size))
+	}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	if command != "" {
+		args = append(args, command)
+	}
+
+	output, err := c.run(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
 }
