@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/util/pathutil"
 )
 
@@ -25,7 +26,13 @@ type Provider struct {
 // It transforms the raw discovery data into the final WorkspaceNode representation
 // and builds internal indexes for fast lookups.
 func NewProvider(result *DiscoveryResult) *Provider {
-	nodes := TransformToWorkspaceNodes(result)
+	// Load config for notebook name resolution (best effort)
+	cfg, _ := config.LoadDefault()
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
+
+	nodes := TransformToWorkspaceNodes(result, cfg)
 	nodes = BuildWorkspaceTree(nodes)
 
 	pathMap := make(map[string]*WorkspaceNode, len(nodes))

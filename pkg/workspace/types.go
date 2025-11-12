@@ -178,6 +178,11 @@ type WorkspaceNode struct {
 	// traversing to the root of the hierarchy. It is set for all nodes within an ecosystem.
 	RootEcosystemPath string `json:"root_ecosystem_path,omitempty"`
 
+	// NotebookName is the name of the notebook configuration (from notebooks.definitions)
+	// that this workspace should use. This is resolved during discovery based on which
+	// grove the workspace belongs to.
+	NotebookName string `json:"notebook_name,omitempty"`
+
 	// Presentation fields for TUI rendering (pre-calculated for performance)
 	TreePrefix string `json:"-"` // Pre-calculated tree indentation and connectors (e.g., "  ├─ ")
 	Depth      int    `json:"-"` // Cached depth in the hierarchy

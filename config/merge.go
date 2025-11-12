@@ -68,56 +68,80 @@ func mergeConfigs(base, override *Config) *Config {
 		result.ExplicitProjects = override.ExplicitProjects
 	}
 
-	// Merge Notebooks map
+	// Merge Notebooks configuration (now nested under NotebooksConfig)
 	if override.Notebooks != nil {
 		if result.Notebooks == nil {
-			result.Notebooks = make(map[string]*Notebook)
+			result.Notebooks = &NotebooksConfig{}
 		}
-		for k, v := range override.Notebooks {
-			if v != nil {
-				// Deep merge notebook fields instead of replacing
-				if existing, exists := result.Notebooks[k]; exists && existing != nil {
-					merged := *existing // Copy existing
-					// Override non-empty fields
-					if v.RootDir != "" {
-						merged.RootDir = v.RootDir
-					}
-					if v.NotesPathTemplate != "" {
-						merged.NotesPathTemplate = v.NotesPathTemplate
-					}
-					if v.PlansPathTemplate != "" {
-						merged.PlansPathTemplate = v.PlansPathTemplate
-					}
-					if v.ChatsPathTemplate != "" {
-						merged.ChatsPathTemplate = v.ChatsPathTemplate
-					}
-					if v.GlobalNotesPathTemplate != "" {
-						merged.GlobalNotesPathTemplate = v.GlobalNotesPathTemplate
-					}
-					if v.GlobalPlansPathTemplate != "" {
-						merged.GlobalPlansPathTemplate = v.GlobalPlansPathTemplate
-					}
-					if v.GlobalChatsPathTemplate != "" {
-						merged.GlobalChatsPathTemplate = v.GlobalChatsPathTemplate
-					}
-					if v.Types != nil {
-						if merged.Types == nil {
-							merged.Types = make(map[string]*NoteTypeConfig)
+
+		// Merge Definitions
+		if override.Notebooks.Definitions != nil {
+			if result.Notebooks.Definitions == nil {
+				result.Notebooks.Definitions = make(map[string]*Notebook)
+			}
+			for k, v := range override.Notebooks.Definitions {
+				if v != nil {
+					// Deep merge notebook fields instead of replacing
+					if existing, exists := result.Notebooks.Definitions[k]; exists && existing != nil {
+						merged := *existing // Copy existing
+						// Override non-empty fields
+						if v.RootDir != "" {
+							merged.RootDir = v.RootDir
 						}
-						for typeKey, typeVal := range v.Types {
-							merged.Types[typeKey] = typeVal
+						if v.NotesPathTemplate != "" {
+							merged.NotesPathTemplate = v.NotesPathTemplate
 						}
+						if v.PlansPathTemplate != "" {
+							merged.PlansPathTemplate = v.PlansPathTemplate
+						}
+						if v.ChatsPathTemplate != "" {
+							merged.ChatsPathTemplate = v.ChatsPathTemplate
+						}
+						if v.Types != nil {
+							if merged.Types == nil {
+								merged.Types = make(map[string]*NoteTypeConfig)
+							}
+							for typeKey, typeVal := range v.Types {
+								merged.Types[typeKey] = typeVal
+							}
+						}
+						result.Notebooks.Definitions[k] = &merged
+					} else {
+						// No existing notebook, just use the override
+						result.Notebooks.Definitions[k] = v
 					}
-					result.Notebooks[k] = &merged
-				} else {
-					// No existing notebook, just use the override
-					result.Notebooks[k] = v
 				}
+			}
+		}
+
+		// Merge Rules
+		if override.Notebooks.Rules != nil {
+			if result.Notebooks.Rules == nil {
+				result.Notebooks.Rules = &NotebookRules{}
+			}
+			if override.Notebooks.Rules.Default != "" {
+				result.Notebooks.Rules.Default = override.Notebooks.Rules.Default
+			}
+			if override.Notebooks.Rules.Global != nil && override.Notebooks.Rules.Global.RootDir != "" {
+				if result.Notebooks.Rules.Global == nil {
+					result.Notebooks.Rules.Global = &GlobalNotebookConfig{}
+				}
+				result.Notebooks.Rules.Global.RootDir = override.Notebooks.Rules.Global.RootDir
 			}
 		}
 	}
 
-	// Merge SearchPaths map
+	// Merge Groves map
+	if override.Groves != nil {
+		if result.Groves == nil {
+			result.Groves = make(map[string]GroveSourceConfig)
+		}
+		for k, v := range override.Groves {
+			result.Groves[k] = v
+		}
+	}
+
+	// Merge SearchPaths map (legacy support)
 	if override.SearchPaths != nil {
 		if result.SearchPaths == nil {
 			result.SearchPaths = make(map[string]SearchPathConfig)

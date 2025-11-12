@@ -30,15 +30,6 @@
     "chats_path_template": {
       "type": "string"
     },
-    "global_notes_path_template": {
-      "type": "string"
-    },
-    "global_plans_path_template": {
-      "type": "string"
-    },
-    "global_chats_path_template": {
-      "type": "string"
-    },
     "types": {
       "additionalProperties": {
         "$ref": "#/$defs/NoteTypeConfig"

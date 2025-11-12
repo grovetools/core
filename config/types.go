@@ -27,10 +27,19 @@ var DefaultNoteTypes = []string{
 }
 
 // SearchPathConfig defines the configuration for a single search path.
+// DEPRECATED: Use GroveSourceConfig instead.
 type SearchPathConfig struct {
 	Path        string `yaml:"path"`
 	Enabled     bool   `yaml:"enabled"`
 	Description string `yaml:"description,omitempty"`
+}
+
+// GroveSourceConfig defines the configuration for a single grove source.
+type GroveSourceConfig struct {
+	Path        string `yaml:"path"`
+	Enabled     bool   `yaml:"enabled"`
+	Description string `yaml:"description,omitempty"`
+	Notebook    string `yaml:"notebook,omitempty"`
 }
 
 // ExplicitProject defines a specific project to include regardless of discovery.
@@ -48,6 +57,23 @@ type NoteTypeConfig struct {
 	FilenameFormat string `yaml:"filename_format,omitempty"` // e.g., "date-title", "timestamp-title", "title"
 }
 
+// GlobalNotebookConfig defines the configuration for the system-wide global notebook.
+type GlobalNotebookConfig struct {
+	RootDir string `yaml:"root_dir,omitempty"`
+}
+
+// NotebookRules defines the usage rules for notebooks.
+type NotebookRules struct {
+	Default string                `yaml:"default,omitempty"`
+	Global  *GlobalNotebookConfig `yaml:"global,omitempty"`
+}
+
+// NotebooksConfig groups all notebook-related settings.
+type NotebooksConfig struct {
+	Definitions map[string]*Notebook `yaml:"definitions,omitempty"`
+	Rules       *NotebookRules       `yaml:"rules,omitempty"`
+}
+
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
@@ -57,12 +83,9 @@ type Notebook struct {
 
 	// Path templates for customizing directory structure in Centralized Mode.
 	// These are optional and have sensible defaults.
-	NotesPathTemplate       string `yaml:"notes_path_template,omitempty"`
-	PlansPathTemplate       string `yaml:"plans_path_template,omitempty"`
-	ChatsPathTemplate       string `yaml:"chats_path_template,omitempty"`
-	GlobalNotesPathTemplate string `yaml:"global_notes_path_template,omitempty"`
-	GlobalPlansPathTemplate string `yaml:"global_plans_path_template,omitempty"`
-	GlobalChatsPathTemplate string `yaml:"global_chats_path_template,omitempty"`
+	NotesPathTemplate string `yaml:"notes_path_template,omitempty"`
+	PlansPathTemplate string `yaml:"plans_path_template,omitempty"`
+	ChatsPathTemplate string `yaml:"chats_path_template,omitempty"`
 
 	// Types defines a map of user-configurable note types.
 	// This will override the hardcoded defaults in grove-notebook if provided.
@@ -75,19 +98,15 @@ type Config struct {
 	Version    string   `yaml:"version"`
 	Workspaces []string `yaml:"workspaces,omitempty"`
 
-	// Notebooks defines a map of named notebook configurations.
-	// This is the new, preferred way to configure notebooks.
-	Notebooks map[string]*Notebook `yaml:"notebooks,omitempty"`
+	// Notebooks contains all notebook-related configuration.
+	Notebooks *NotebooksConfig `yaml:"notebooks,omitempty"`
 
-	// Notebook is a legacy field for backward compatibility with the old single-notebook format.
-	// It is used only for unmarshaling and should not be accessed directly.
-	Notebook *Notebook `yaml:"notebook,omitempty"`
-
-	// SearchPaths defines the root directories to search for projects and ecosystems.
+	// Groves defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
-	//
-	// Note: For backward compatibility, the old "groves" key is still supported and will
-	// be automatically migrated to "search_paths" when loading configuration.
+	Groves map[string]GroveSourceConfig `yaml:"groves,omitempty"`
+
+	// SearchPaths is a legacy field for backward compatibility.
+	// DEPRECATED: Use Groves instead.
 	SearchPaths map[string]SearchPathConfig `yaml:"search_paths,omitempty"`
 
 	// ExplicitProjects defines specific projects to include without discovery.
@@ -101,19 +120,24 @@ type Config struct {
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling to handle backward compatibility
-// for the old "groves" key, now renamed to "search_paths".
+// for the old configuration formats.
 func (c *Config) UnmarshalYAML(node *yaml.Node) error {
-	// Create a temporary struct with all fields to capture the data
+	// Create a temporary struct with all fields to capture the data, including legacy ones.
 	type rawConfig struct {
 		Name             string                       `yaml:"name,omitempty"`
 		Version          string                       `yaml:"version"`
 		Workspaces       []string                     `yaml:"workspaces,omitempty"`
-		Notebooks        map[string]*Notebook         `yaml:"notebooks,omitempty"`
-		Notebook         *Notebook                    `yaml:"notebook,omitempty"` // Legacy field
-		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty"`
-		Groves           map[string]SearchPathConfig  `yaml:"groves,omitempty"` // Legacy field
+		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty"`
+		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
 		Extensions       map[string]interface{}       `yaml:",inline"`
+
+		// --- Legacy Fields for Backward Compatibility ---
+		SearchPaths       map[string]SearchPathConfig `yaml:"search_paths,omitempty"`      // Old name for Groves
+		LegacyNotebooks   map[string]*Notebook        `yaml:"-"`                           // To catch top-level notebooks map
+		LegacyNotebook    *Notebook                   `yaml:"notebook,omitempty"`          // Very old single notebook
+		DefaultNotebook   string                      `yaml:"default_notebook,omitempty"`  // Old top-level default
+		GlobalNotebookDir string                      `yaml:"global_notebook_dir,omitempty"` // Old top-level global dir
 	}
 
 	var raw rawConfig
@@ -121,34 +145,94 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 
-	// Copy all fields
+	// Copy standard fields
 	c.Name = raw.Name
 	c.Version = raw.Version
 	c.Workspaces = raw.Workspaces
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions
 
-	// Handle new "notebooks" map first.
-	c.Notebooks = raw.Notebooks
-
-	// Handle backward compatibility: if "notebooks" is not present but the old "notebook" is,
-	// migrate it to notebooks["default"].
-	if len(c.Notebooks) == 0 && raw.Notebook != nil {
-		if c.Notebooks == nil {
-			c.Notebooks = make(map[string]*Notebook)
+	// Handle backward compatibility for `search_paths` -> `groves`
+	if len(raw.Groves) > 0 {
+		c.Groves = raw.Groves
+	} else if len(raw.SearchPaths) > 0 {
+		// Migrate old `search_paths` key to new `groves`
+		c.Groves = make(map[string]GroveSourceConfig)
+		for k, v := range raw.SearchPaths {
+			c.Groves[k] = GroveSourceConfig{
+				Path:        v.Path,
+				Enabled:     v.Enabled,
+				Description: v.Description,
+			}
 		}
-		c.Notebooks["default"] = raw.Notebook
 	}
-	// Unset the legacy field to prevent it from being marshaled back out.
-	c.Notebook = nil
 
-	// Handle backward compatibility: if "groves" is present but "search_paths" is not,
-	// use "groves" as "search_paths"
-	if len(raw.SearchPaths) > 0 {
-		c.SearchPaths = raw.SearchPaths
-	} else if len(raw.Groves) > 0 {
-		// Migrate old "groves" key to new "search_paths"
-		c.SearchPaths = raw.Groves
+	// Handle new nested `notebooks` structure
+	c.Notebooks = raw.Notebooks
+	if c.Notebooks == nil {
+		c.Notebooks = &NotebooksConfig{}
+	}
+
+	// We need to detect if the YAML has the old flat notebooks map format
+	// This requires checking the raw YAML node directly
+	var legacyNotebooksMap map[string]*Notebook
+	for i := 0; i < len(node.Content); i += 2 {
+		if i+1 < len(node.Content) && node.Content[i].Value == "notebooks" {
+			// Check if this is a map of notebook definitions (old format)
+			// vs the new nested NotebooksConfig format
+			nbNode := node.Content[i+1]
+			if nbNode.Kind == yaml.MappingNode {
+				// Try to detect if it's the old format by checking for "definitions" or "rules" keys
+				hasDefinitions := false
+				hasRules := false
+				for j := 0; j < len(nbNode.Content); j += 2 {
+					if j+1 < len(nbNode.Content) {
+						key := nbNode.Content[j].Value
+						if key == "definitions" {
+							hasDefinitions = true
+						} else if key == "rules" {
+							hasRules = true
+						}
+					}
+				}
+				// If it doesn't have definitions or rules, it's the old flat format
+				if !hasDefinitions && !hasRules {
+					legacyNotebooksMap = make(map[string]*Notebook)
+					if err := nbNode.Decode(&legacyNotebooksMap); err == nil {
+						raw.LegacyNotebooks = legacyNotebooksMap
+					}
+				}
+			}
+			break
+		}
+	}
+
+	// Handle backward compatibility for top-level `notebooks` map (old format)
+	if len(raw.LegacyNotebooks) > 0 && c.Notebooks.Definitions == nil {
+		c.Notebooks.Definitions = raw.LegacyNotebooks
+	}
+
+	// Handle very old single `notebook` field
+	if raw.LegacyNotebook != nil && c.Notebooks.Definitions == nil {
+		c.Notebooks.Definitions = map[string]*Notebook{
+			"default": raw.LegacyNotebook,
+		}
+	}
+
+	// Handle backward compatibility for top-level `default_notebook` and `global_notebook_dir`
+	if c.Notebooks.Rules == nil {
+		c.Notebooks.Rules = &NotebookRules{}
+	}
+	if raw.DefaultNotebook != "" && c.Notebooks.Rules.Default == "" {
+		c.Notebooks.Rules.Default = raw.DefaultNotebook
+	}
+	if raw.GlobalNotebookDir != "" {
+		if c.Notebooks.Rules.Global == nil {
+			c.Notebooks.Rules.Global = &GlobalNotebookConfig{}
+		}
+		if c.Notebooks.Rules.Global.RootDir == "" {
+			c.Notebooks.Rules.Global.RootDir = raw.GlobalNotebookDir
+		}
 	}
 
 	return nil

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mattsolo1/grove-core/config"
 )
 
 // determineKind classifies a project or workspace based on its path and context.
@@ -45,7 +47,7 @@ func determineKind(path, parentEcosystemPath, parentProjectPath string, isWorktr
 
 // TransformToWorkspaceNodes converts a hierarchical DiscoveryResult into a flat list
 // of WorkspaceNode items suitable for display in UIs.
-func TransformToWorkspaceNodes(result *DiscoveryResult) []*WorkspaceNode {
+func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*WorkspaceNode {
 	var nodes []*WorkspaceNode
 	projectMap := make(map[string]*Project)
 	for i := range result.Projects {
@@ -204,6 +206,43 @@ func TransformToWorkspaceNodes(result *DiscoveryResult) []*WorkspaceNode {
 			// Compute ParentProjectPath as RootEcosystemPath + project name
 			// e.g., /path/to/ecosystem + grove-mcp = /path/to/ecosystem/grove-mcp
 			node.ParentProjectPath = filepath.Join(node.RootEcosystemPath, node.Name)
+		}
+	}
+
+	// Final pass: set NotebookName for all nodes based on which grove they belong to
+	if cfg != nil && cfg.Groves != nil && len(cfg.Groves) > 0 {
+		defaultNotebook := ""
+		if cfg.Notebooks != nil && cfg.Notebooks.Rules != nil {
+			defaultNotebook = cfg.Notebooks.Rules.Default
+		}
+
+		for _, node := range nodes {
+			var bestMatchGrove string
+			var bestMatchNotebook string
+
+			// Find the grove that this node's path falls under
+			for _, groveCfg := range cfg.Groves {
+				// Normalize paths for comparison
+				grovePath, err := filepath.Abs(expandPath(groveCfg.Path))
+				if err != nil {
+					continue
+				}
+
+				// Check if node path is under this grove path
+				if strings.HasPrefix(node.Path, grovePath) {
+					// Use the longest matching grove (most specific)
+					if len(grovePath) > len(bestMatchGrove) {
+						bestMatchGrove = grovePath
+						bestMatchNotebook = groveCfg.Notebook
+					}
+				}
+			}
+
+			if bestMatchNotebook != "" {
+				node.NotebookName = bestMatchNotebook
+			} else {
+				node.NotebookName = defaultNotebook
+			}
 		}
 	}
 

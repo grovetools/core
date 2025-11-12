@@ -254,8 +254,22 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		return result, nil // Not a fatal error, just means no paths to scan.
 	}
 
-	if len(layeredCfg.Global.SearchPaths) == 0 {
-		s.logger.Info("No 'search_paths' defined in global configuration.")
+	// Support both Groves (new) and SearchPaths (legacy)
+	groves := layeredCfg.Global.Groves
+	if len(groves) == 0 && len(layeredCfg.Global.SearchPaths) > 0 {
+		// Fallback to SearchPaths for backward compatibility
+		groves = make(map[string]config.GroveSourceConfig)
+		for k, v := range layeredCfg.Global.SearchPaths {
+			groves[k] = config.GroveSourceConfig{
+				Path:        v.Path,
+				Enabled:     v.Enabled,
+				Description: v.Description,
+			}
+		}
+	}
+
+	if len(groves) == 0 {
+		s.logger.Info("No 'groves' defined in global configuration.")
 		return result, nil
 	}
 
@@ -267,7 +281,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	var wg sync.WaitGroup
-	resultsChan := make(chan groveResult, len(layeredCfg.Global.SearchPaths)+1) // +1 for cloned repos
+	resultsChan := make(chan groveResult, len(groves)+1) // +1 for cloned repos
 
 	// Discover cloned repositories concurrently
 	wg.Add(1)
@@ -283,13 +297,13 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		}
 	}()
 
-	for key, searchCfg := range layeredCfg.Global.SearchPaths {
-		if !searchCfg.Enabled {
+	for key, groveCfg := range groves {
+		if !groveCfg.Enabled {
 			continue
 		}
 
 		// Expand path, e.g., ~/Work -> /Users/user/Work
-		expandedPath := expandPath(searchCfg.Path)
+		expandedPath := expandPath(groveCfg.Path)
 		absPath, err := filepath.Abs(expandedPath)
 		if err != nil {
 			s.logger.Warnf("Could not resolve path for grove '%s': %v", key, err)
@@ -297,7 +311,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		}
 
 		wg.Add(1)
-		go func(groveName, grovePath string) {
+		go func(groveName string, currentGroveCfg config.GroveSourceConfig, grovePath string) {
 			defer wg.Done()
 
 			groveRes := groveResult{
@@ -379,7 +393,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 			}
 
 			resultsChan <- groveRes
-		}(key, absPath)
+		}(key, groveCfg, absPath)
 	}
 
 	// Wait for all goroutines to complete and close channel
@@ -576,24 +590,40 @@ func FindEcosystemRoot(startDir string) (string, error) {
 // returning a flat list of WorkspaceNodes ready for consumption with
 // pre-calculated tree prefixes for rendering.
 func GetProjects(logger *logrus.Logger) ([]*WorkspaceNode, error) {
+	// Load config to pass to transformation
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// Non-fatal, proceed with empty config, but log warning
+		logger.Warnf("Could not load grove config, notebook names will not be resolved: %v", err)
+		cfg = &config.Config{}
+	}
+
 	discoveryService := NewDiscoveryService(logger)
 	result, err := discoveryService.DiscoverAll()
 	if err != nil {
 		return nil, err
 	}
-	nodes := TransformToWorkspaceNodes(result)
+	nodes := TransformToWorkspaceNodes(result, cfg)
 	return BuildWorkspaceTree(nodes), nil
 }
 
 // GetWorkspaceTree performs discovery and returns a fully formed workspace hierarchy.
 // This is the recommended function for UIs that need to render a tree.
 func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
+	// Load config to pass to transformation
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// Non-fatal, proceed with empty config, but log warning
+		logger.Warnf("Could not load grove config, notebook names will not be resolved: %v", err)
+		cfg = &config.Config{}
+	}
+
 	discoveryService := NewDiscoveryService(logger)
 	result, err := discoveryService.DiscoverAll()
 	if err != nil {
 		return nil, err
 	}
-	nodes := TransformToWorkspaceNodes(result)
+	nodes := TransformToWorkspaceNodes(result, cfg)
 	return BuildTree(nodes), nil
 }
 

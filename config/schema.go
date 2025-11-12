@@ -22,12 +22,12 @@ func GenerateSchema() ([]byte, error) {
 	// Create a temporary struct that omits the Extensions field
 	// so it's not included in the base schema.
 	type BaseConfig struct {
-		Name             string                      `yaml:"name,omitempty" jsonschema:"description=Name of the configuration"`
-		Version          string                      `yaml:"version" jsonschema:"required,description=Configuration version (e.g. '1.0')"`
-		Workspaces       []string                    `yaml:"workspaces,omitempty" jsonschema:"description=List of workspace directories in this ecosystem"`
-		Notebooks        map[string]*Notebook        `yaml:"notebooks,omitempty" jsonschema:"description=Map of named notebook configurations"`
-		SearchPaths      map[string]SearchPathConfig `yaml:"search_paths,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
-		ExplicitProjects []ExplicitProject           `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
+		Name             string                       `yaml:"name,omitempty" jsonschema:"description=Name of the configuration"`
+		Version          string                       `yaml:"version" jsonschema:"required,description=Configuration version (e.g. '1.0')"`
+		Workspaces       []string                     `yaml:"workspaces,omitempty" jsonschema:"description=List of workspace directories in this ecosystem"`
+		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Configuration for notebooks"`
+		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
+		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
 	}
 
 	schema := r.Reflect(&BaseConfig{})

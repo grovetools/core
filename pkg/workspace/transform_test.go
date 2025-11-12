@@ -90,7 +90,7 @@ func TestTransformToWorkspaceNodes_HierarchyAndClassification(t *testing.T) {
 	}
 
 	// Execute transformation
-	nodes := TransformToWorkspaceNodes(result)
+	nodes := TransformToWorkspaceNodes(result, nil)
 
 	// Create a map for easy lookup
 	nodeMap := make(map[string]*WorkspaceNode)
@@ -158,7 +158,7 @@ func TestTransformToWorkspaceNodes_StandaloneProject(t *testing.T) {
 		},
 	}
 
-	nodes := TransformToWorkspaceNodes(result)
+	nodes := TransformToWorkspaceNodes(result, nil)
 
 	require.Len(t, nodes, 1)
 	node := nodes[0]
@@ -204,7 +204,7 @@ func TestTransformToWorkspaceNodes_EcosystemSubProject(t *testing.T) {
 		},
 	}
 
-	nodes := TransformToWorkspaceNodes(result)
+	nodes := TransformToWorkspaceNodes(result, nil)
 
 	// Find the sub-project node
 	var subProjectNode *WorkspaceNode
@@ -279,7 +279,7 @@ func TestTransformToWorkspaceNodes_ClonedRepos(t *testing.T) {
 		},
 	}
 
-	nodes := TransformToWorkspaceNodes(result)
+	nodes := TransformToWorkspaceNodes(result, nil)
 
 	require.Len(t, nodes, 1)
 	node := nodes[0]

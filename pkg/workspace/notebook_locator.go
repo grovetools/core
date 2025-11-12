@@ -34,120 +34,127 @@ type ScannedDir struct {
 //
 // The mode is determined by whether notebook.root_dir is configured.
 type NotebookLocator struct {
-	config *config.Notebook
+	config *config.Config
 }
 
 // NewNotebookLocator creates a new locator. It gracefully handles a nil config.
-// It uses the "default" notebook from the Notebooks map, or the first notebook if "default" doesn't exist.
+// It now stores the full config to support dynamic notebook resolution based on WorkspaceNode.NotebookName.
 func NewNotebookLocator(cfg *config.Config) *NotebookLocator {
-	var notebookCfg *config.Notebook
-	if cfg != nil && cfg.Notebooks != nil && len(cfg.Notebooks) > 0 {
-		// Prefer "default" notebook for backward compatibility
-		if defaultNotebook, ok := cfg.Notebooks["default"]; ok {
-			notebookCfg = defaultNotebook
-		} else {
-			// Use the first notebook if "default" doesn't exist
-			for _, notebook := range cfg.Notebooks {
-				notebookCfg = notebook
-				break
-			}
-		}
-	}
-
 	// Ensure we have a config object to work with, even if it's empty.
-	if notebookCfg == nil {
-		notebookCfg = &config.Notebook{}
-	}
-
-	// Populate with defaults if templates are not provided by the user.
-	if notebookCfg.NotesPathTemplate == "" {
-		notebookCfg.NotesPathTemplate = defaultNotesPathTemplate
-	}
-	if notebookCfg.PlansPathTemplate == "" {
-		notebookCfg.PlansPathTemplate = defaultPlansPathTemplate
-	}
-	if notebookCfg.ChatsPathTemplate == "" {
-		notebookCfg.ChatsPathTemplate = defaultChatsPathTemplate
-	}
-	if notebookCfg.GlobalNotesPathTemplate == "" {
-		notebookCfg.GlobalNotesPathTemplate = defaultGlobalNotesPathTemplate
-	}
-	if notebookCfg.GlobalPlansPathTemplate == "" {
-		notebookCfg.GlobalPlansPathTemplate = defaultGlobalPlansPathTemplate
-	}
-	if notebookCfg.GlobalChatsPathTemplate == "" {
-		notebookCfg.GlobalChatsPathTemplate = defaultGlobalChatsPathTemplate
+	if cfg == nil {
+		cfg = &config.Config{}
 	}
 
 	return &NotebookLocator{
-		config: notebookCfg,
+		config: cfg,
 	}
 }
 
-// isCentralized returns true if the system is configured for centralized storage.
-func (l *NotebookLocator) isCentralized() bool {
-	return l.config != nil && l.config.RootDir != ""
+// getNotebookForNode retrieves the notebook configuration for a given node.
+// It uses the node's NotebookName field to look up the correct notebook definition.
+func (l *NotebookLocator) getNotebookForNode(node *WorkspaceNode) *config.Notebook {
+	if l.config == nil || l.config.Notebooks == nil {
+		// Default to centralized notebook at ~/.grove/notebooks/nb when no config exists
+		return &config.Notebook{
+			RootDir: "~/.grove/notebooks/nb",
+		}
+	}
+
+	// Use the node's NotebookName to look up the notebook
+	if node.NotebookName != "" && l.config.Notebooks.Definitions != nil {
+		if nb, exists := l.config.Notebooks.Definitions[node.NotebookName]; exists && nb != nil {
+			return nb
+		}
+	}
+
+	// Fallback to default notebook if specified
+	if l.config.Notebooks.Rules != nil && l.config.Notebooks.Rules.Default != "" {
+		if nb, exists := l.config.Notebooks.Definitions[l.config.Notebooks.Rules.Default]; exists && nb != nil {
+			return nb
+		}
+	}
+
+	// No notebook configuration found, default to centralized notebook at ~/.grove/notebooks/nb
+	return &config.Notebook{
+		RootDir: "~/.grove/notebooks/nb",
+	}
+}
+
+// isCentralized returns true if the system is configured for centralized storage for a given node.
+func (l *NotebookLocator) isCentralized(node *WorkspaceNode) bool {
+	nb := l.getNotebookForNode(node)
+	return nb != nil && nb.RootDir != ""
 }
 
 // GetPlansDir returns the absolute path to the plans directory for a given workspace node.
 // In Local Mode, it returns the plans directory within the project (using GetGroupingKey to handle worktrees).
 // In Centralized Mode, it uses the configured root_dir and path templates.
 func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
-	if !l.isCentralized() {
+	// Handle global case first
+	if node.Name == "global" {
+		if l.config != nil && l.config.Notebooks != nil && l.config.Notebooks.Rules != nil && l.config.Notebooks.Rules.Global != nil {
+			rootDir, err := pathutil.Expand(l.config.Notebooks.Rules.Global.RootDir)
+			if err != nil {
+				return "", fmt.Errorf("expanding global notebook root_dir: %w", err)
+			}
+			return filepath.Join(rootDir, "plans"), nil
+		}
+		// Fallback for when global is not explicitly configured
+		return pathutil.Expand("~/.grove/notebooks/global/plans")
+	}
+
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
 		// Local Mode: Plans are inside the project's root .notebook directory.
 		// Use GetGroupingKey to correctly handle worktrees.
 		return filepath.Join(node.GetGroupingKey(), ".notebook", "plans"), nil
 	}
 
 	// Centralized Mode
-	rootDir, err := pathutil.Expand(l.config.RootDir)
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
 	if err != nil {
-		return "", fmt.Errorf("expanding notebook root_dir: %w", err)
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
 
-	var tplStr string
-	var data interface{}
+	tplStr := notebook.PlansPathTemplate
+	if tplStr == "" {
+		tplStr = defaultPlansPathTemplate
+	}
 
-	if node.Name == "global" {
-		tplStr = l.config.GlobalPlansPathTemplate
-		data = struct{}{}
-	} else {
-		tplStr = l.config.PlansPathTemplate
+	// Determine the correct workspace name for different node kinds
+	contextNode := node
 
-		// Determine the correct workspace name for different node kinds
-		contextNode := node
-
-		// For worktrees, we need to use the parent project/ecosystem name
-		if node.IsWorktree() {
-			if node.Kind == KindEcosystemWorktree {
-				// This is an ecosystem worktree. It acts as a container.
-				// Its notebook context is that of the root ecosystem.
-				contextNode = &WorkspaceNode{
-					Name:                filepath.Base(node.RootEcosystemPath),
-					Path:                node.RootEcosystemPath,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
-			} else if node.ParentProjectPath != "" {
-				// This correctly handles all other worktree kinds that are children of a project:
-				// - KindStandaloneProjectWorktree
-				// - KindEcosystemSubProjectWorktree (This fixes the bug)
-				// - KindEcosystemWorktreeSubProjectWorktree
-				// In all these cases, the notebook context belongs to the parent project.
-				contextNode = &WorkspaceNode{
-					Name:                filepath.Base(node.ParentProjectPath),
-					Path:                node.ParentProjectPath,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
+	// For worktrees, we need to use the parent project/ecosystem name
+	if node.IsWorktree() {
+		if node.Kind == KindEcosystemWorktree {
+			// This is an ecosystem worktree. It acts as a container.
+			// Its notebook context is that of the root ecosystem.
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.RootEcosystemPath),
+				Path:                node.RootEcosystemPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
+			}
+		} else if node.ParentProjectPath != "" {
+			// This correctly handles all other worktree kinds that are children of a project:
+			// - KindStandaloneProjectWorktree
+			// - KindEcosystemSubProjectWorktree
+			// - KindEcosystemWorktreeSubProjectWorktree
+			// In all these cases, the notebook context belongs to the parent project.
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.ParentProjectPath),
+				Path:                node.ParentProjectPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
 			}
 		}
+	}
 
-		data = struct {
-			Workspace *WorkspaceNode
-		}{
-			Workspace: contextNode,
-		}
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
 	}
 
 	renderedPath, err := renderPath(tplStr, data)
@@ -160,60 +167,63 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 
 // GetChatsDir is analogous to GetPlansDir.
 func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
-	if !l.isCentralized() {
+	// Handle global case first
+	if node.Name == "global" {
+		if l.config != nil && l.config.Notebooks != nil && l.config.Notebooks.Rules != nil && l.config.Notebooks.Rules.Global != nil {
+			rootDir, err := pathutil.Expand(l.config.Notebooks.Rules.Global.RootDir)
+			if err != nil {
+				return "", fmt.Errorf("expanding global notebook root_dir: %w", err)
+			}
+			return filepath.Join(rootDir, "chats"), nil
+		}
+		// Fallback for when global is not explicitly configured
+		return pathutil.Expand("~/.grove/notebooks/global/chats")
+	}
+
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
 		// Local Mode: Chats are inside the project's root .notebook directory.
 		return filepath.Join(node.GetGroupingKey(), ".notebook", "chats"), nil
 	}
 
 	// Centralized Mode
-	rootDir, err := pathutil.Expand(l.config.RootDir)
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
 	if err != nil {
-		return "", fmt.Errorf("expanding notebook root_dir: %w", err)
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
 
-	var tplStr string
-	var data interface{}
+	tplStr := notebook.ChatsPathTemplate
+	if tplStr == "" {
+		tplStr = defaultChatsPathTemplate
+	}
 
-	if node.Name == "global" {
-		tplStr = l.config.GlobalChatsPathTemplate
-		data = struct{}{}
-	} else {
-		tplStr = l.config.ChatsPathTemplate
+	// Determine the correct workspace name for different node kinds
+	contextNode := node
 
-		// Determine the correct workspace name for different node kinds
-		contextNode := node
-
-		// For worktrees, we need to use the parent project/ecosystem name
-		if node.IsWorktree() {
-			if node.Kind == KindEcosystemWorktree {
-				// This is an ecosystem worktree. It acts as a container.
-				// Its notebook context is that of the root ecosystem.
-				contextNode = &WorkspaceNode{
-					Name:                filepath.Base(node.RootEcosystemPath),
-					Path:                node.RootEcosystemPath,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
-			} else if node.ParentProjectPath != "" {
-				// This correctly handles all other worktree kinds that are children of a project:
-				// - KindStandaloneProjectWorktree
-				// - KindEcosystemSubProjectWorktree (This fixes the bug)
-				// - KindEcosystemWorktreeSubProjectWorktree
-				// In all these cases, the notebook context belongs to the parent project.
-				contextNode = &WorkspaceNode{
-					Name:                filepath.Base(node.ParentProjectPath),
-					Path:                node.ParentProjectPath,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
+	// For worktrees, we need to use the parent project/ecosystem name
+	if node.IsWorktree() {
+		if node.Kind == KindEcosystemWorktree {
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.RootEcosystemPath),
+				Path:                node.RootEcosystemPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
+			}
+		} else if node.ParentProjectPath != "" {
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.ParentProjectPath),
+				Path:                node.ParentProjectPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
 			}
 		}
+	}
 
-		data = struct {
-			Workspace *WorkspaceNode
-		}{
-			Workspace: contextNode,
-		}
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
 	}
 
 	renderedPath, err := renderPath(tplStr, data)
@@ -228,66 +238,69 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 // In Local Mode, it returns the notes directory within the project (e.g., ./notes/{noteType}).
 // In Centralized Mode, it uses the configured root_dir and path templates.
 func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (string, error) {
-	if !l.isCentralized() {
+	// Handle global case first
+	if node.Name == "global" {
+		if l.config != nil && l.config.Notebooks != nil && l.config.Notebooks.Rules != nil && l.config.Notebooks.Rules.Global != nil {
+			rootDir, err := pathutil.Expand(l.config.Notebooks.Rules.Global.RootDir)
+			if err != nil {
+				return "", fmt.Errorf("expanding global notebook root_dir: %w", err)
+			}
+			return filepath.Join(rootDir, "notes", noteType), nil
+		}
+		// Fallback for when global is not explicitly configured
+		expandedPath, err := pathutil.Expand("~/.grove/notebooks/global/notes")
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(expandedPath, noteType), nil
+	}
+
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
 		// Local Mode: Notes are inside the project's root .notebook directory.
 		return filepath.Join(node.GetGroupingKey(), ".notebook", "notes", noteType), nil
 	}
 
 	// Centralized Mode
-	rootDir, err := pathutil.Expand(l.config.RootDir)
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
 	if err != nil {
-		return "", fmt.Errorf("expanding notebook root_dir: %w", err)
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
 
-	var tplStr string
-	var data interface{}
+	tplStr := notebook.NotesPathTemplate
+	if tplStr == "" {
+		tplStr = defaultNotesPathTemplate
+	}
 
-	if node.Name == "global" {
-		tplStr = l.config.GlobalNotesPathTemplate
-		data = struct {
-			NoteType string
-		}{
-			NoteType: noteType,
-		}
-	} else {
-		tplStr = l.config.NotesPathTemplate
+	// Determine the correct workspace name for different node kinds
+	contextNode := node
 
-		// Determine the correct workspace name for different node kinds
-		contextNode := node
-
-		// For worktrees, we need to use the parent project/ecosystem name
-		if node.IsWorktree() {
-			if node.Kind == KindEcosystemWorktree {
-				// This is an ecosystem worktree. It acts as a container.
-				// Its notebook context is that of the root ecosystem.
-				contextNode = &WorkspaceNode{
-					Name:                filepath.Base(node.RootEcosystemPath),
-					Path:                node.RootEcosystemPath,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
-			} else if node.ParentProjectPath != "" {
-				// This correctly handles all other worktree kinds that are children of a project:
-				// - KindStandaloneProjectWorktree
-				// - KindEcosystemSubProjectWorktree (This fixes the bug)
-				// - KindEcosystemWorktreeSubProjectWorktree
-				// In all these cases, the notebook context belongs to the parent project.
-				contextNode = &WorkspaceNode{
-					Name:                filepath.Base(node.ParentProjectPath),
-					Path:                node.ParentProjectPath,
-					ParentEcosystemPath: node.ParentEcosystemPath,
-					RootEcosystemPath:   node.RootEcosystemPath,
-				}
+	// For worktrees, we need to use the parent project/ecosystem name
+	if node.IsWorktree() {
+		if node.Kind == KindEcosystemWorktree {
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.RootEcosystemPath),
+				Path:                node.RootEcosystemPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
+			}
+		} else if node.ParentProjectPath != "" {
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.ParentProjectPath),
+				Path:                node.ParentProjectPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
 			}
 		}
+	}
 
-		data = struct {
-			Workspace *WorkspaceNode
-			NoteType  string
-		}{
-			Workspace: contextNode,
-			NoteType:  noteType,
-		}
+	data := struct {
+		Workspace *WorkspaceNode
+		NoteType  string
+	}{
+		Workspace: contextNode,
+		NoteType:  noteType,
 	}
 
 	renderedPath, err := renderPath(tplStr, data)

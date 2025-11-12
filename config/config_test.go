@@ -108,16 +108,16 @@ monitoring:
 	}
 }
 
-// TestBackwardCompatibilityGrovesToSearchPaths verifies that old "groves" key
-// is automatically migrated to "search_paths"
+// TestBackwardCompatibilityGrovesToSearchPaths verifies that old "search_paths" key
+// is automatically migrated to "groves" (new preferred format)
 func TestBackwardCompatibilityGrovesToSearchPaths(t *testing.T) {
 	tests := []struct {
 		name     string
 		yaml     string
-		expected int // expected number of search paths
+		expected int // expected number of groves
 	}{
 		{
-			name: "old groves key",
+			name: "new groves key",
 			yaml: `
 version: "1.0"
 groves:
@@ -131,7 +131,7 @@ groves:
 			expected: 2,
 		},
 		{
-			name: "new search_paths key",
+			name: "old search_paths key",
 			yaml: `
 version: "1.0"
 search_paths:
@@ -145,19 +145,19 @@ search_paths:
 			expected: 2,
 		},
 		{
-			name: "both keys present (search_paths wins)",
+			name: "both keys present (groves wins)",
 			yaml: `
 version: "1.0"
 groves:
-  old:
-    path: ~/OldPath
-    enabled: true
-search_paths:
   new:
     path: ~/NewPath
     enabled: true
+search_paths:
+  old:
+    path: ~/OldPath
+    enabled: true
 `,
-			expected: 1, // only search_paths should be used
+			expected: 1, // only groves should be used
 		},
 	}
 
@@ -168,17 +168,17 @@ search_paths:
 				t.Fatalf("Failed to load config: %v", err)
 			}
 
-			if len(cfg.SearchPaths) != tt.expected {
-				t.Errorf("Expected %d search paths, got %d", tt.expected, len(cfg.SearchPaths))
+			if len(cfg.Groves) != tt.expected {
+				t.Errorf("Expected %d groves, got %d", tt.expected, len(cfg.Groves))
 			}
 
 			// For the "both keys" test, verify the right one was used
-			if tt.name == "both keys present (search_paths wins)" {
-				if _, ok := cfg.SearchPaths["new"]; !ok {
-					t.Error("Expected 'new' search path to be present")
+			if tt.name == "both keys present (groves wins)" {
+				if _, ok := cfg.Groves["new"]; !ok {
+					t.Error("Expected 'new' grove to be present")
 				}
-				if _, ok := cfg.SearchPaths["old"]; ok {
-					t.Error("Expected 'old' search path (from groves) to NOT be present")
+				if _, ok := cfg.Groves["old"]; ok {
+					t.Error("Expected 'old' grove (from search_paths) to NOT be present")
 				}
 			}
 		})
