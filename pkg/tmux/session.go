@@ -89,6 +89,96 @@ func (c *Client) SelectWindow(ctx context.Context, target string) error {
 	return err
 }
 
+func (c *Client) MoveWindow(ctx context.Context, source, target string) error {
+	_, err := c.run(ctx, "move-window", "-s", source, "-t", target)
+	return err
+}
+
+func (c *Client) SwapWindow(ctx context.Context, source, target string) error {
+	_, err := c.run(ctx, "swap-window", "-s", source, "-t", target)
+	return err
+}
+
+// ListWindows returns a list of window indices for the current session
+func (c *Client) ListWindows(ctx context.Context, session string) ([]int, error) {
+	output, err := c.run(ctx, "list-windows", "-t", session, "-F", "#{window_index}")
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	indices := make([]int, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		idx, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil {
+			continue
+		}
+		indices = append(indices, idx)
+	}
+	return indices, nil
+}
+
+// InsertWindowAt moves a window to a specific position, shifting other windows as needed
+func (c *Client) InsertWindowAt(ctx context.Context, session, windowName string, targetIndex int) error {
+	windowTarget := session + ":" + windowName
+
+	// Get current window indices
+	indices, err := c.ListWindows(ctx, session)
+	if err != nil {
+		return fmt.Errorf("failed to list windows: %w", err)
+	}
+
+	// Find the highest window index that is >= targetIndex
+	// We need to shift these windows up to make space
+	toShift := []int{}
+	for _, idx := range indices {
+		if idx >= targetIndex {
+			toShift = append(toShift, idx)
+		}
+	}
+
+	// Sort in descending order so we shift from the end
+	// This prevents collisions
+	for i := 0; i < len(toShift); i++ {
+		for j := i + 1; j < len(toShift); j++ {
+			if toShift[i] < toShift[j] {
+				toShift[i], toShift[j] = toShift[j], toShift[i]
+			}
+		}
+	}
+
+	// Shift windows up one position each, starting from the highest
+	for _, idx := range toShift {
+		src := fmt.Sprintf("%s:%d", session, idx)
+		dst := fmt.Sprintf("%s:%d", session, idx+1)
+		// Use move-window which will shift the window
+		if err := c.MoveWindow(ctx, src, dst); err != nil {
+			// If move fails, the window might already be gone or unreachable
+			// Continue anyway
+		}
+	}
+
+	// Now move our window to the target position
+	targetPos := fmt.Sprintf("%s:%d", session, targetIndex)
+	return c.MoveWindow(ctx, windowTarget, targetPos)
+}
+
+func (c *Client) GetPaneCommand(ctx context.Context, target string) (string, error) {
+	output, err := c.run(ctx, "display-message", "-t", target, "-p", "#{pane_current_command}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+func (c *Client) KillWindow(ctx context.Context, target string) error {
+	_, err := c.run(ctx, "kill-window", "-t", target)
+	return err
+}
+
 func (c *Client) SwitchClient(ctx context.Context, target string) error {
 	_, err := c.run(ctx, "switch-client", "-t", target)
 	return err

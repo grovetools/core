@@ -8,44 +8,75 @@ import (
 	"strings"
 )
 
-// OpenFileInEditor finds or creates a window named "notebook" and opens the file in it.
+// OpenFileInEditor finds or creates a window with the given name and opens the file in it.
 // If the window exists, it switches to it and opens the file.
 // If not, it creates the window with the editor and file, and switches the client to it.
 // It's intended for workflows where a TUI in a popup needs to open a file in the main session.
-func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePath string) error {
+// The windowIndex parameter specifies the desired window position (0-based). Use -1 to skip positioning.
+func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePath string, windowName string, windowIndex int) error {
 	session, err := c.GetCurrentSession(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current session: %w", err)
 	}
 
-	windowName := "notebook"
+	if windowName == "" {
+		windowName = "editor" // A sensible default
+	}
 	windowTarget := session + ":" + windowName
 
-	// Try to select the "notebook" window to see if it exists
+	// Try to select the window to see if it exists
 	err = c.SelectWindow(ctx, windowTarget)
 	windowExists := (err == nil)
 
 	if windowExists {
-		// Notebook window exists, switch to it and send keys to open the file
-		if err := c.SwitchClient(ctx, windowTarget); err != nil {
-			// SwitchClient might fail, but SelectWindow already worked, so continue
-		}
+		// Check if an editor is still running in the window
+		currentCmd, err := c.GetPaneCommand(ctx, windowTarget)
+		editorRunning := err == nil && (currentCmd == "nvim" || currentCmd == "vim" || currentCmd == "vi")
 
-		// Escape path for vim's :e command
-		escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
+		if !editorRunning {
+			// Editor not running, kill the window and recreate it
+			if err := c.KillWindow(ctx, windowTarget); err != nil {
+				// Ignore error, continue to recreate
+			}
+			windowExists = false
+		} else {
+			// Editor is running, insert it at desired position if specified
+			if windowIndex >= 0 {
+				if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
+					// Ignore insert errors - window exists and we can still use it
+				}
+			}
 
-		// Send keys to the active pane in the notebook window
-		// Use empty string as target to send to the current pane
-		if err := c.SendKeys(ctx, "", fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
-			return fmt.Errorf("failed to send keys to notebook window: %w", err)
+			// Switch to it and send keys to open the file
+			if err := c.SwitchClient(ctx, windowTarget); err != nil {
+				// SwitchClient might fail, but SelectWindow already worked, so continue
+			}
+
+			// Escape path for vim's :e command
+			escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
+
+			// Send keys to the active pane in the window
+			// Use empty string as target to send to the current pane
+			if err := c.SendKeys(ctx, "", fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
+				return fmt.Errorf("failed to send keys to window '%s': %w", windowName, err)
+			}
 		}
-	} else {
-		// Notebook window doesn't exist, create it
+	}
+
+	if !windowExists {
+		// Window doesn't exist, create it
 		// The command needs to be properly quoted for the shell
 		command := fmt.Sprintf("%s %q", editorCmd, filePath)
 
 		if err := c.NewWindow(ctx, session+":", windowName, command); err != nil {
 			return fmt.Errorf("failed to create new window: %w", err)
+		}
+
+		// Insert it at the desired position if specified
+		if windowIndex >= 0 {
+			if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
+				// Ignore insert errors - window was created successfully
+			}
 		}
 
 		// Switch to the new window
@@ -55,6 +86,13 @@ func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePat
 	}
 
 	return nil
+}
+
+// ClosePopup closes the current tmux popup synchronously.
+// This is useful when you need to close a popup immediately before quitting a TUI.
+func (c *Client) ClosePopup(ctx context.Context) error {
+	cmd := exec.Command("tmux", "display-popup", "-C")
+	return cmd.Run()
 }
 
 // SwitchAndClosePopup switches to a tmux session and closes the current popup if running in one.
