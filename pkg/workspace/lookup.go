@@ -48,8 +48,8 @@ func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
 			normalizedGrovePath = grovePath
 		}
 
-		// Check if node path is under this grove path
-		if strings.HasPrefix(normalizedNodePath, normalizedGrovePath) {
+		// Check if node path is under this grove path (exact match or subdirectory)
+		if normalizedNodePath == normalizedGrovePath || strings.HasPrefix(normalizedNodePath, normalizedGrovePath+string(filepath.Separator)) {
 			// Use the longest matching grove (most specific)
 			if len(normalizedGrovePath) > len(bestMatchGrove) {
 				bestMatchGrove = normalizedGrovePath

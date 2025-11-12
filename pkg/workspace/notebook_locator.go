@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	defaultNotesPathTemplate       = "notebooks/{{ .Workspace.Name }}/notes/{{ .NoteType }}"
-	defaultPlansPathTemplate       = "notebooks/{{ .Workspace.Name }}/plans"
-	defaultChatsPathTemplate       = "notebooks/{{ .Workspace.Name }}/chats"
+	defaultNotesPathTemplate       = "{{ .Workspace.Name }}/notes/{{ .NoteType }}"
+	defaultPlansPathTemplate       = "{{ .Workspace.Name }}/plans"
+	defaultChatsPathTemplate       = "{{ .Workspace.Name }}/chats"
 	defaultGlobalNotesPathTemplate = "global/notes/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -324,6 +324,50 @@ func renderPath(tplStr string, data interface{}) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// ContentDirectory represents a directory containing notebook content
+type ContentDirectory struct {
+	Path string
+	Type string // "notes", "plans", "chats"
+}
+
+// GetAllContentDirs returns all directories that contain content for a workspace.
+// This includes the notes directory (containing subdirs like current, learn, etc.),
+// the plans directory, and the chats directory.
+func (l *NotebookLocator) GetAllContentDirs(node *WorkspaceNode) ([]ContentDirectory, error) {
+	var dirs []ContentDirectory
+
+	// Add notes directory (which contains subdirs like current, learn, etc.)
+	// We get one note type and go up a level to get the parent notes directory
+	notesPath, err := l.GetNotesDir(node, "current")
+	if err == nil {
+		// Go up one level to get the parent notes directory
+		dirs = append(dirs, ContentDirectory{
+			Path: filepath.Dir(notesPath),
+			Type: "notes",
+		})
+	}
+
+	// Add plans directory
+	plansPath, err := l.GetPlansDir(node)
+	if err == nil {
+		dirs = append(dirs, ContentDirectory{
+			Path: plansPath,
+			Type: "plans",
+		})
+	}
+
+	// Add chats directory
+	chatsPath, err := l.GetChatsDir(node)
+	if err == nil {
+		dirs = append(dirs, ContentDirectory{
+			Path: chatsPath,
+			Type: "chats",
+		})
+	}
+
+	return dirs, nil
 }
 
 // ScanForAllPlans discovers all plan directories across all known workspaces.
