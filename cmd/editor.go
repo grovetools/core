@@ -16,7 +16,7 @@ func NewEditorCmd() *cobra.Command {
 		Long:  `Finds or creates a tmux window named "editor" at index 1 and opens the specified file or current directory. This command is intended to be run from within a tmux popup.`,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			filePath := "."
+			filePath := ""
 			if len(args) > 0 {
 				filePath = args[0]
 			}
@@ -29,7 +29,12 @@ func NewEditorCmd() *cobra.Command {
 			client, err := tmux.NewClient()
 			if err != nil {
 				// Not in a tmux session, just open the editor normally.
-				editorCmd := exec.Command(editor, filePath)
+				var editorCmd *exec.Cmd
+				if filePath != "" {
+					editorCmd = exec.Command(editor, filePath)
+				} else {
+					editorCmd = exec.Command(editor)
+				}
 				editorCmd.Stdin = os.Stdin
 				editorCmd.Stdout = os.Stdout
 				editorCmd.Stderr = os.Stderr
@@ -37,6 +42,7 @@ func NewEditorCmd() *cobra.Command {
 			}
 
 			// Open the file in the "editor" window at index 1.
+			// If no file path, just open the editor
 			ctx := context.Background()
 			if err := client.OpenFileInEditor(ctx, editor, filePath, "editor", 1); err != nil {
 				return err

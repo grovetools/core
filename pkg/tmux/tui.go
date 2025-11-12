@@ -47,18 +47,21 @@ func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePat
 				}
 			}
 
-			// Switch to it and send keys to open the file
+			// Switch to it and send keys to open the file (if a file was specified)
 			if err := c.SwitchClient(ctx, windowTarget); err != nil {
 				// SwitchClient might fail, but SelectWindow already worked, so continue
 			}
 
-			// Escape path for vim's :e command
-			escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
+			// Only send :e command if a file path was specified
+			if filePath != "" {
+				// Escape path for vim's :e command
+				escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
 
-			// Send keys to the active pane in the window
-			// Use empty string as target to send to the current pane
-			if err := c.SendKeys(ctx, "", fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
-				return fmt.Errorf("failed to send keys to window '%s': %w", windowName, err)
+				// Send keys to the active pane in the window
+				// Use empty string as target to send to the current pane
+				if err := c.SendKeys(ctx, "", fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
+					return fmt.Errorf("failed to send keys to window '%s': %w", windowName, err)
+				}
 			}
 		}
 	}
@@ -66,7 +69,12 @@ func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePat
 	if !windowExists {
 		// Window doesn't exist, create it
 		// The command needs to be properly quoted for the shell
-		command := fmt.Sprintf("%s %q", editorCmd, filePath)
+		var command string
+		if filePath != "" {
+			command = fmt.Sprintf("%s %q", editorCmd, filePath)
+		} else {
+			command = editorCmd
+		}
 
 		if err := c.NewWindow(ctx, session+":", windowName, command); err != nil {
 			return fmt.Errorf("failed to create new window: %w", err)
