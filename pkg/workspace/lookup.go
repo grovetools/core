@@ -11,6 +11,60 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// assignNotebookName sets the NotebookName field for a node based on grove configuration.
+// It finds the most specific grove (longest path match) that contains the node's path
+// and assigns the notebook configured for that grove.
+func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
+	if cfg == nil || cfg.Groves == nil || len(cfg.Groves) == 0 {
+		return
+	}
+
+	defaultNotebook := ""
+	if cfg.Notebooks != nil && cfg.Notebooks.Rules != nil {
+		defaultNotebook = cfg.Notebooks.Rules.Default
+	}
+
+	var bestMatchGrove string
+	var bestMatchNotebook string
+
+	// Normalize the node path for comparison
+	normalizedNodePath, err := pathutil.NormalizeForLookup(node.Path)
+	if err != nil {
+		normalizedNodePath = node.Path
+	}
+
+	// Find the grove that this node's path falls under
+	for _, groveCfg := range cfg.Groves {
+		// Normalize paths for comparison
+		expandedPath := expandPath(groveCfg.Path)
+		grovePath, err := filepath.Abs(expandedPath)
+		if err != nil {
+			continue
+		}
+
+		// Normalize the grove path for comparison (handles case-insensitive filesystems)
+		normalizedGrovePath, err := pathutil.NormalizeForLookup(grovePath)
+		if err != nil {
+			normalizedGrovePath = grovePath
+		}
+
+		// Check if node path is under this grove path
+		if strings.HasPrefix(normalizedNodePath, normalizedGrovePath) {
+			// Use the longest matching grove (most specific)
+			if len(normalizedGrovePath) > len(bestMatchGrove) {
+				bestMatchGrove = normalizedGrovePath
+				bestMatchNotebook = groveCfg.Notebook
+			}
+		}
+	}
+
+	if bestMatchNotebook != "" {
+		node.NotebookName = bestMatchNotebook
+	} else {
+		node.NotebookName = defaultNotebook
+	}
+}
+
 // findRootEcosystemPath finds the top-most ecosystem containing a given directory.
 // It traverses upward from startDir to find the highest-level ecosystem in a chain.
 func findRootEcosystemPath(startDir string) string {
@@ -315,6 +369,20 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 					})
 				}
 			}
+		}
+	}
+
+	// Load config to assign notebook names
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// Log but don't fail - notebook assignment is optional
+		logrus.Debugf("Failed to load config for notebook assignment: %v", err)
+	}
+
+	// Assign notebook names to all nodes based on grove configuration
+	if cfg != nil {
+		for _, node := range nodes {
+			assignNotebookName(node, cfg)
 		}
 	}
 

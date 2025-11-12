@@ -210,40 +210,8 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 	}
 
 	// Final pass: set NotebookName for all nodes based on which grove they belong to
-	if cfg != nil && cfg.Groves != nil && len(cfg.Groves) > 0 {
-		defaultNotebook := ""
-		if cfg.Notebooks != nil && cfg.Notebooks.Rules != nil {
-			defaultNotebook = cfg.Notebooks.Rules.Default
-		}
-
-		for _, node := range nodes {
-			var bestMatchGrove string
-			var bestMatchNotebook string
-
-			// Find the grove that this node's path falls under
-			for _, groveCfg := range cfg.Groves {
-				// Normalize paths for comparison
-				grovePath, err := filepath.Abs(expandPath(groveCfg.Path))
-				if err != nil {
-					continue
-				}
-
-				// Check if node path is under this grove path
-				if strings.HasPrefix(node.Path, grovePath) {
-					// Use the longest matching grove (most specific)
-					if len(grovePath) > len(bestMatchGrove) {
-						bestMatchGrove = grovePath
-						bestMatchNotebook = groveCfg.Notebook
-					}
-				}
-			}
-
-			if bestMatchNotebook != "" {
-				node.NotebookName = bestMatchNotebook
-			} else {
-				node.NotebookName = defaultNotebook
-			}
-		}
+	for _, node := range nodes {
+		assignNotebookName(node, cfg)
 	}
 
 	return nodes
