@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -18,6 +19,38 @@ func (c *Client) SessionExists(ctx context.Context, sessionName string) (bool, e
 	}
 
 	return false, err
+}
+
+// IsPopup checks if the current pane is inside a tmux popup window.
+func (c *Client) IsPopup(ctx context.Context) (bool, error) {
+	// Method 1: Check GROVE_IN_POPUP environment variable (set by user's binding)
+	// This is the most reliable method - users should use:
+	// bind-key -n C-n display-popup -w 100% -h 100% -x C -y C -E "GROVE_IN_POPUP=1 nb tui"
+	if value := os.Getenv("GROVE_IN_POPUP"); value == "1" || value == "true" {
+		return true, nil
+	}
+
+	// Method 2: Check TMUX_POPUP environment variable (if set by user)
+	if _, exists := os.LookupEnv("TMUX_POPUP"); exists {
+		return true, nil
+	}
+
+	// Method 3: Check for window with 'M' flag (popup menu)
+	output, err := c.run(ctx, "display-message", "-p", "#{window_flags}")
+	if err != nil {
+		return false, err
+	}
+	if strings.Contains(strings.TrimSpace(output), "M") {
+		return true, nil
+	}
+
+	// Method 4: Check if pane is marked (used in some popup configurations)
+	output, err = c.run(ctx, "display-message", "-p", "#{pane_marked}")
+	if err == nil && strings.TrimSpace(output) == "1" {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (c *Client) KillSession(ctx context.Context, sessionName string) error {

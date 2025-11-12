@@ -5,7 +5,57 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
+
+// OpenFileInEditor finds or creates a window named "notebook" and opens the file in it.
+// If the window exists, it switches to it and opens the file.
+// If not, it creates the window with the editor and file, and switches the client to it.
+// It's intended for workflows where a TUI in a popup needs to open a file in the main session.
+func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePath string) error {
+	session, err := c.GetCurrentSession(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current session: %w", err)
+	}
+
+	windowName := "notebook"
+	windowTarget := session + ":" + windowName
+
+	// Try to select the "notebook" window to see if it exists
+	err = c.SelectWindow(ctx, windowTarget)
+	windowExists := (err == nil)
+
+	if windowExists {
+		// Notebook window exists, switch to it and send keys to open the file
+		if err := c.SwitchClient(ctx, windowTarget); err != nil {
+			// SwitchClient might fail, but SelectWindow already worked, so continue
+		}
+
+		// Escape path for vim's :e command
+		escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
+
+		// Send keys to the active pane in the notebook window
+		// Use empty string as target to send to the current pane
+		if err := c.SendKeys(ctx, "", fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
+			return fmt.Errorf("failed to send keys to notebook window: %w", err)
+		}
+	} else {
+		// Notebook window doesn't exist, create it
+		// The command needs to be properly quoted for the shell
+		command := fmt.Sprintf("%s %q", editorCmd, filePath)
+
+		if err := c.NewWindow(ctx, session+":", windowName, command); err != nil {
+			return fmt.Errorf("failed to create new window: %w", err)
+		}
+
+		// Switch to the new window
+		if err := c.SwitchClient(ctx, windowTarget); err != nil {
+			// Ignore errors - the window was created successfully
+		}
+	}
+
+	return nil
+}
 
 // SwitchAndClosePopup switches to a tmux session and closes the current popup if running in one.
 // This ensures the popup closes regardless of whether the binding has the -E flag.
