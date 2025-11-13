@@ -9,22 +9,6 @@ import (
 //go:generate go run ../tools/schema-generator/
 //go:generate sh -c "cd .. && go run ./tools/notebook-schema-generator/"
 
-// DefaultNoteTypes lists the standard note type directories used across Grove tools.
-// These are generic note groups that should be associated with the parent repository
-// rather than worktrees when discovered.
-var DefaultNoteTypes = []string{
-	"current",
-	"llm",
-	"learn",
-	"daily",
-	"issues",
-	"architecture",
-	"todos",
-	"quick",
-	"archive",
-	"prompts",
-	"blog",
-}
 
 // SearchPathConfig defines the configuration for a single search path.
 // DEPRECATED: Use GroveSourceConfig instead.
