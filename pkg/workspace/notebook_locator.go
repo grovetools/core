@@ -338,9 +338,9 @@ type ContentDirectory struct {
 func (l *NotebookLocator) GetAllContentDirs(node *WorkspaceNode) ([]ContentDirectory, error) {
 	var dirs []ContentDirectory
 
-	// Add notes directory (which contains subdirs like current, learn, etc.)
+	// Add notes directory (which contains subdirs like inbox, learn, etc.)
 	// We get one note type and go up a level to get the parent notes directory
-	notesPath, err := l.GetNotesDir(node, "current")
+	notesPath, err := l.GetNotesDir(node, "inbox")
 	if err == nil {
 		// Go up one level to get the parent notes directory
 		dirs = append(dirs, ContentDirectory{
