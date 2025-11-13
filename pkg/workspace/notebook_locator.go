@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	defaultNotesPathTemplate       = "{{ .Workspace.Name }}/notes/{{ .NoteType }}"
-	defaultPlansPathTemplate       = "{{ .Workspace.Name }}/plans"
-	defaultChatsPathTemplate       = "{{ .Workspace.Name }}/chats"
-	defaultGlobalNotesPathTemplate = "global/notes/{{ .NoteType }}"
+	defaultNotesPathTemplate       = "workspaces/{{ .Workspace.Name }}/{{ .NoteType }}"
+	defaultPlansPathTemplate       = "workspaces/{{ .Workspace.Name }}/plans"
+	defaultChatsPathTemplate       = "workspaces/{{ .Workspace.Name }}/chats"
+	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
 )
