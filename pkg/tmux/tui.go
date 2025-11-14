@@ -156,3 +156,45 @@ func (c *Client) NewWindowAndClosePopup(ctx context.Context, sessionName, window
 
 	return c.ClosePopupCmd(), nil
 }
+
+// FocusOrRunCommandInWindow ensures a window with the given name exists, runs the command, and focuses it.
+// If the window already exists, it just switches to it without killing it (preserving any work in progress).
+// If the window doesn't exist, it creates it at the specified index.
+func (c *Client) FocusOrRunCommandInWindow(ctx context.Context, command, windowName string, windowIndex int) error {
+	session, err := c.GetCurrentSession(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current session: %w", err)
+	}
+
+	windowTarget := session + ":" + windowName
+
+	// Check if window exists by trying to select it.
+	err = c.SelectWindow(ctx, windowTarget)
+	if err == nil {
+		// Window exists, just switch to it (don't kill it - preserve work in progress)
+		if err := c.SwitchClient(ctx, windowTarget); err != nil {
+			return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
+		}
+		return nil
+	}
+
+	// Window doesn't exist, create it at the next available index
+	if err := c.NewWindow(ctx, session+":", windowName, command); err != nil {
+		return fmt.Errorf("failed to create new window '%s': %w", windowName, err)
+	}
+
+	// If an index is specified, move the window to that position.
+	if windowIndex >= 0 {
+		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
+			// Log as a warning; failing to move the window is not a critical failure.
+			// The window is still created and will be focused.
+		}
+	}
+
+	// Switch the client to the new window to make it active.
+	if err := c.SwitchClient(ctx, windowTarget); err != nil {
+		return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
+	}
+
+	return nil
+}

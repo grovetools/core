@@ -18,6 +18,7 @@ func main() {
 	rootCmd.AddCommand(cmd.NewWsCmd())
 	rootCmd.AddCommand(cmd.NewConfigCmd())
 	rootCmd.AddCommand(cmd.NewEditorCmd())
+	rootCmd.AddCommand(cmd.NewOpenInWindowCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
