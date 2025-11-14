@@ -21,6 +21,9 @@ func main() {
 		WorkspaceModelScenario(),
 		WorkspaceEdgeCasesScenario(),
 		WorkspaceAdvancedScenario(),
+		NotebooksConfigIsolationScenario(),
+		NotebooksLocalModeScenario(),
+		NotebooksXDGConfigHomeScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

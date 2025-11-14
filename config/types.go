@@ -43,7 +43,7 @@ type NoteTypeConfig struct {
 
 // GlobalNotebookConfig defines the configuration for the system-wide global notebook.
 type GlobalNotebookConfig struct {
-	RootDir string `yaml:"root_dir,omitempty"`
+	RootDir string `yaml:"root_dir"`
 }
 
 // NotebookRules defines the usage rules for notebooks.
@@ -63,7 +63,7 @@ type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
 	// If this is set, the system operates in "Centralized Mode".
 	// If empty, it operates in "Local Mode".
-	RootDir string `yaml:"root_dir,omitempty"`
+	RootDir string `yaml:"root_dir"`
 
 	// Path templates for customizing directory structure in Centralized Mode.
 	// These are optional and have sensible defaults.
