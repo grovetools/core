@@ -20,6 +20,7 @@ func main() {
 		CoreConfigVersionScenario(),
 		WorkspaceModelScenario(),
 		WorkspaceEdgeCasesScenario(),
+		WorkspaceAdvancedScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.
