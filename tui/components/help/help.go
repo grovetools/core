@@ -187,8 +187,21 @@ func (m *Model) renderHelpContent(groups [][]key.Binding, vMargin, hMargin, gutt
 	rightCol := m.renderTableFromRows(rightRows)
 	twoCol := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, strings.Repeat(" ", gutter), rightCol)
 
-	if lipgloss.Height(twoCol) <= m.Height-vMargin && lipgloss.Width(twoCol) <= m.Width-hMargin {
-		return twoCol
+	// Add title above the two-column layout
+	titleText := m.Title
+	if titleText == "" {
+		titleText = "Help"
+	}
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(m.Theme.Info.GetForeground()).
+		MarginBottom(1).
+		Align(lipgloss.Center)
+
+	twoColWithTitle := lipgloss.JoinVertical(lipgloss.Center, titleStyle.Render(titleText), twoCol)
+
+	if lipgloss.Height(twoColWithTitle) <= m.Height-vMargin && lipgloss.Width(twoColWithTitle) <= m.Width-hMargin {
+		return twoColWithTitle
 	}
 
 	// 3. Fallback to scrollable single-column layout
