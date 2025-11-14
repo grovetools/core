@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
@@ -21,24 +22,53 @@ type Model struct {
 	Theme      *theme.Theme
 	CustomHelp [][]key.Binding // Additional custom key bindings to display
 	Title      string      // Title for the full help view
+	viewport   viewport.Model
 }
 
 // New creates a new help model with default settings
 func New(keys interface{}) Model {
+	vp := viewport.New(0, 0)
+	// Disable mouse events for the viewport by default, as it can interfere
+	// with the main application's mouse handling.
+	vp.MouseWheelEnabled = false
 	return Model{
-		Keys:    keys,
-		ShowAll: false,
-		Theme:   theme.DefaultTheme,
+		Keys:     keys,
+		ShowAll:  false,
+		Theme:    theme.DefaultTheme,
+		viewport: vp,
 	}
 }
 
 // Update handles messages for the help component
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+		if m.ShowAll {
+			m.setViewportContent()
+		}
+
+	case tea.KeyMsg:
+		if m.ShowAll {
+			// Get standard keys for closing the view
+			helpBinding := m.getHelpBinding()
+			quitBinding := m.getQuitBinding()
+
+			// Close on help, quit, or escape keys
+			if key.Matches(msg, helpBinding) || key.Matches(msg, quitBinding) || msg.Type == tea.KeyEsc {
+				m.Toggle()
+				return m, nil
+			}
+
+			// Pass all other messages to the viewport for scrolling
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
+		}
 	}
+
 	return m, nil
 }
 
@@ -48,38 +78,22 @@ func (m Model) View() string {
 		m.Theme = theme.DefaultTheme
 	}
 
-	var helpGroups [][]key.Binding
-	var shortHelpGroup []key.Binding
+	if m.ShowAll {
+		// Render the viewport, centered on the screen to create a modal effect.
+		return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center,
+			m.viewport.View(),
+		)
+	}
 
-	// Extract keybindings based on the type of Keys
+	// For the short view, get the appropriate key group
+	var shortHelpGroup []key.Binding
 	switch k := m.Keys.(type) {
-	case keymap.Base:
-		helpGroups = k.FullHelp()
-		shortHelpGroup = k.ShortHelp()
 	case interface {
-		FullHelp() [][]key.Binding
 		ShortHelp() []key.Binding
 	}:
-		helpGroups = k.FullHelp()
 		shortHelpGroup = k.ShortHelp()
-	case interface{ FullHelp() [][]key.Binding }:
-		helpGroups = k.FullHelp()
-	case interface{ ShortHelp() []key.Binding }:
-		shortHelpGroup = k.ShortHelp()
-		// If only short help is provided, use it for the full view as well
-		if len(helpGroups) == 0 {
-			helpGroups = [][]key.Binding{shortHelpGroup}
-		}
 	}
 
-	// Add custom help if provided
-	if m.CustomHelp != nil {
-		helpGroups = append(helpGroups, m.CustomHelp...)
-	}
-
-	if m.ShowAll {
-		return m.viewFull(helpGroups)
-	}
 	return m.viewShort(shortHelpGroup)
 }
 
@@ -118,8 +132,64 @@ func (m Model) viewShort(group []key.Binding) string {
 	return helpPrompt + " • " + strings.Join(pairs, " • ")
 }
 
-// viewFull renders the full, multi-column, centered help dialog.
-func (m Model) viewFull(groups [][]key.Binding) string {
+// setViewportContent renders the help content, determines the best layout
+// (single or dual column), and sets it in the viewport.
+func (m *Model) setViewportContent() {
+	const (
+		verticalMargin   = 4
+		horizontalMargin = 4
+		gutterWidth      = 4
+	)
+
+	// Get all keybinding groups
+	var helpGroups [][]key.Binding
+	switch k := m.Keys.(type) {
+	case keymap.Base:
+		helpGroups = k.FullHelp()
+	case interface{ FullHelp() [][]key.Binding }:
+		helpGroups = k.FullHelp()
+	}
+	if m.CustomHelp != nil {
+		helpGroups = append(helpGroups, m.CustomHelp...)
+	}
+
+	content := m.renderHelpContent(helpGroups, verticalMargin, horizontalMargin, gutterWidth)
+	m.viewport.SetContent(content)
+
+	// Set viewport dimensions with a margin
+	m.viewport.Width = lipgloss.Width(content)
+	m.viewport.Height = m.Height - verticalMargin
+}
+
+// renderHelpContent tries to fit the help text into the available space,
+// first as a single column, then two columns, before falling back to a
+// scrollable single column view.
+func (m *Model) renderHelpContent(groups [][]key.Binding, vMargin, hMargin, gutter int) string {
+	// 1. Try single-column layout
+	singleCol := m.renderTable(groups)
+	if lipgloss.Height(singleCol) <= m.Height-vMargin {
+		return singleCol
+	}
+
+	// 2. Try two-column layout if content is too tall
+	mid := (len(groups) + 1) / 2
+	leftGroups := groups[:mid]
+	rightGroups := groups[mid:]
+
+	leftCol := m.renderTable(leftGroups)
+	rightCol := m.renderTable(rightGroups)
+	twoCol := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, strings.Repeat(" ", gutter), rightCol)
+
+	if lipgloss.Height(twoCol) <= m.Height-vMargin && lipgloss.Width(twoCol) <= m.Width-hMargin {
+		return twoCol
+	}
+
+	// 3. Fallback to scrollable single-column layout
+	return singleCol
+}
+
+// renderTable renders a set of keybinding groups into a styled table string.
+func (m *Model) renderTable(groups [][]key.Binding) string {
 	if len(groups) == 0 {
 		return ""
 	}
@@ -132,25 +202,20 @@ func (m Model) viewFull(groups [][]key.Binding) string {
 		Bold(true).
 		Foreground(m.Theme.Info.GetForeground()).
 		MarginBottom(1).
-		Align(lipgloss.Center)
+		Align(lipgloss.Left) // Align left for table headers
 
-	// Collect all key bindings into table rows
 	var rows [][]string
 	for _, group := range groups {
 		if len(group) == 0 {
 			continue
 		}
-
 		for _, binding := range group {
 			if !binding.Enabled() {
 				continue
 			}
-
 			keyStr := binding.Help().Key
 			desc := binding.Help().Desc
-
 			if keyStr == "" && desc != "" {
-				// Section title - span across both columns
 				rows = append(rows, []string{m.Theme.Info.Bold(true).Render(desc), ""})
 			} else if keyStr != "" && desc != "" {
 				rows = append(rows, []string{
@@ -165,49 +230,49 @@ func (m Model) viewFull(groups [][]key.Binding) string {
 		return ""
 	}
 
-	// Pre-style headers
-	styledHeaders := []string{
-		m.Theme.TableHeader.Render("Key"),
-		m.Theme.TableHeader.Render("Description"),
-	}
-
-	// Create table
 	table := ltable.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(theme.DefaultColors.Border)).
-		Headers(styledHeaders...).
+		Border(lipgloss.HiddenBorder()).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			baseStyle := lipgloss.NewStyle().Padding(0, 1)
-			// Apply alternating background only if theme supports it
-			if m.Theme.UseAlternatingRows && row%2 == 1 {
-				return baseStyle.Background(theme.VerySubtleBackground)
-			}
-			return baseStyle
+			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	// Add rows
 	for _, row := range rows {
 		table = table.Row(row...)
 	}
 
-	// Render table
-	tableStr := table.String()
-
-	// Combine title and table
-	title := titleStyle.Render(titleText)
-	content := lipgloss.JoinVertical(lipgloss.Center, title, "", tableStr)
-
-	// Center on screen
-	return lipgloss.NewStyle().
-		Width(m.Width).
-		Height(m.Height).
-		Align(lipgloss.Center, lipgloss.Center).
-		Render(content)
+	return lipgloss.JoinVertical(lipgloss.Left, titleStyle.Render(titleText), table.String())
 }
 
-// Toggle toggles between showing all help and short help
+// getHelpBinding retrieves the help keybinding from the model's Keys interface.
+func (m *Model) getHelpBinding() key.Binding {
+	switch k := m.Keys.(type) {
+	case keymap.Base:
+		return k.Help
+	case interface{ GetHelp() key.Binding }:
+		return k.GetHelp()
+	}
+	return key.NewBinding(key.WithKeys("?")) // Fallback
+}
+
+// getQuitBinding retrieves the quit keybinding from the model's Keys interface.
+func (m *Model) getQuitBinding() key.Binding {
+	switch k := m.Keys.(type) {
+	case keymap.Base:
+		return k.Quit
+	case interface{ GetQuit() key.Binding }:
+		return k.GetQuit()
+	}
+	return key.NewBinding(key.WithKeys("q")) // Fallback
+}
+
+// Toggle toggles between showing all help and short help. When showing, it
+// recalculates content layout and resets the scroll position.
 func (m *Model) Toggle() {
 	m.ShowAll = !m.ShowAll
+	if m.ShowAll {
+		m.setViewportContent()
+		m.viewport.GotoTop()
+	}
 }
 
 // SetSize sets the dimensions of the help view
