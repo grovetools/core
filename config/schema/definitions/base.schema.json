@@ -31,7 +31,10 @@
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "root_dir"
+      ]
     },
     "GroveSourceConfig": {
       "properties": {
@@ -92,7 +95,10 @@
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "root_dir"
+      ]
     },
     "NotebookRules": {
       "properties": {
