@@ -8,88 +8,89 @@ import (
 	"strings"
 )
 
-// OpenFileInEditor finds or creates a window with the given name and opens the file in it.
-// If the window exists, it switches to it and opens the file.
-// If not, it creates the window with the editor and file, and switches the client to it.
-// It's intended for workflows where a TUI in a popup needs to open a file in the main session.
-// The windowIndex parameter specifies the desired window position (0-based). Use -1 to skip positioning.
-func (c *Client) OpenFileInEditor(ctx context.Context, editorCmd string, filePath string, windowName string, windowIndex int) error {
+// OpenInEditorWindow finds or creates a window with a given name and opens a file.
+// If the window exists, it's focused. If a file is provided, it's opened in the
+// existing editor session. A new session can be forced with the reset flag.
+func (c *Client) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, windowName string, windowIndex int, reset bool) error {
 	session, err := c.GetCurrentSession(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current session: %w", err)
 	}
 
-	if windowName == "" {
-		windowName = "editor" // A sensible default
-	}
 	windowTarget := session + ":" + windowName
 
-	// Try to select the window to see if it exists
+	// Check if window exists
 	err = c.SelectWindow(ctx, windowTarget)
-	windowExists := (err == nil)
+	windowExists := err == nil
 
-	if windowExists {
-		// Check if an editor is still running in the window
-		currentCmd, err := c.GetPaneCommand(ctx, windowTarget)
-		editorRunning := err == nil && (currentCmd == "nvim" || currentCmd == "vim" || currentCmd == "vi")
-
-		if !editorRunning {
-			// Editor not running, kill the window and recreate it
-			if err := c.KillWindow(ctx, windowTarget); err != nil {
-				// Ignore error, continue to recreate
-			}
-			windowExists = false
-		} else {
-			// Editor is running, insert it at desired position if specified
-			if windowIndex >= 0 {
-				if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
-					// Ignore insert errors - window exists and we can still use it
-				}
-			}
-
-			// Switch to it and send keys to open the file (if a file was specified)
-			if err := c.SwitchClient(ctx, windowTarget); err != nil {
-				// SwitchClient might fail, but SelectWindow already worked, so continue
-			}
-
-			// Only send :e command if a file path was specified
-			if filePath != "" {
-				// Escape path for vim's :e command
-				escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
-
-				// Send keys to the active pane in the window
-				// Use empty string as target to send to the current pane
-				if err := c.SendKeys(ctx, "", fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
-					return fmt.Errorf("failed to send keys to window '%s': %w", windowName, err)
-				}
-			}
+	// Handle reset flag
+	if windowExists && reset {
+		if err := c.KillWindow(ctx, windowTarget); err != nil {
+			// Log as a warning but continue as if it didn't exist
 		}
+		windowExists = false
 	}
 
-	if !windowExists {
-		// Window doesn't exist, create it
-		// The command needs to be properly quoted for the shell
-		var command string
+	if windowExists {
+		// Window exists, focus it and open the file if provided
+		if err := c.SwitchClient(ctx, windowTarget); err != nil {
+			// This might fail if client is already there, which is fine.
+		}
+
 		if filePath != "" {
-			command = fmt.Sprintf("%s %q", editorCmd, filePath)
-		} else {
-			command = editorCmd
-		}
+			currentCmd, err := c.GetPaneCommand(ctx, windowTarget)
+			editorRunning := err == nil && (strings.Contains(currentCmd, "nvim") || strings.Contains(currentCmd, "vim") || strings.Contains(currentCmd, "vi"))
 
-		if err := c.NewWindow(ctx, session+":", windowName, command); err != nil {
-			return fmt.Errorf("failed to create new window: %w", err)
-		}
-
-		// Insert it at the desired position if specified
-		if windowIndex >= 0 {
-			if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
-				// Ignore insert errors - window was created successfully
+			if editorRunning {
+				// Editor is running, send :e command
+				escapedPath := strings.ReplaceAll(filePath, " ", `\ `)
+				if err := c.SendKeys(ctx, windowTarget, fmt.Sprintf(":e %s", escapedPath), "Enter"); err != nil {
+					return fmt.Errorf("failed to send keys to window '%s': %w", windowName, err)
+				}
+			} else {
+				// No editor running, send the full command to start one in the pane
+				shellCommand := editorCmd
+				if filePath != "" {
+					// Basic shell escaping for the file path
+					shellEscapedFilePath := "'" + strings.ReplaceAll(filePath, "'", `'\''`) + "'"
+					shellCommand += " " + shellEscapedFilePath
+				}
+				if err := c.SendKeys(ctx, windowTarget, shellCommand, "Enter"); err != nil {
+					return fmt.Errorf("failed to send command to pane in window '%s': %w", windowName, err)
+				}
 			}
 		}
 
-		// Switch to the new window
+		// Ensure it's at the correct index
+		if windowIndex >= 0 {
+			if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
+				// Log the error but don't fail - window is still usable
+				fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
+			}
+		}
+	} else {
+		// Window doesn't exist, create it
+		var commandToRun string
+		if filePath != "" {
+			// Quoting is important for paths with spaces
+			commandToRun = fmt.Sprintf("%s %q", editorCmd, filePath)
+		} else {
+			commandToRun = editorCmd
+		}
+
+		if err := c.NewWindow(ctx, session+":", windowName, commandToRun); err != nil {
+			return fmt.Errorf("failed to create new window '%s': %w", windowName, err)
+		}
+
+		if windowIndex >= 0 {
+			if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
+				// Log the error but don't fail - window is still usable
+				fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
+			}
+		}
+
 		if err := c.SwitchClient(ctx, windowTarget); err != nil {
-			// Ignore errors - the window was created successfully
+			// Ignore switch errors, window was created
 		}
 	}
 
@@ -186,8 +187,64 @@ func (c *Client) FocusOrRunCommandInWindow(ctx context.Context, command, windowN
 	// If an index is specified, move the window to that position.
 	if windowIndex >= 0 {
 		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
-			// Log as a warning; failing to move the window is not a critical failure.
-			// The window is still created and will be focused.
+			// Log the error but don't fail - window is still usable
+			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
+		}
+	}
+
+	// Switch the client to the new window to make it active.
+	if err := c.SwitchClient(ctx, windowTarget); err != nil {
+		return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
+	}
+
+	return nil
+}
+
+// FocusOrRunTUIWithErrorHandling runs a TUI command in a tmux window with error handling.
+// If the window exists, it focuses it. If not, it creates the window and runs the command.
+// If the command fails, it displays the error and opens a shell for debugging.
+func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, windowName string, windowIndex int) error {
+	session, err := c.GetCurrentSession(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current session: %w", err)
+	}
+
+	windowTarget := session + ":" + windowName
+
+	// Check if window exists by trying to select it.
+	err = c.SelectWindow(ctx, windowTarget)
+	if err == nil {
+		// Window exists, just switch to it (don't kill it - preserve work in progress)
+		if err := c.SwitchClient(ctx, windowTarget); err != nil {
+			return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
+		}
+		return nil
+	}
+
+	// Determine the shell to use for error handling
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "sh"
+	}
+
+	// Wrap the command with error handling that keeps the window open
+	wrappedCommand := fmt.Sprintf(`%s -c '%s || { echo; echo "Command failed with exit code $?"; echo "Command: %s"; echo; echo "Press Enter to open a shell for debugging, or Ctrl+C to close..."; read; exec %s; }'`,
+		shell,
+		strings.ReplaceAll(command, "'", `'\''`), // Escape single quotes in command
+		strings.ReplaceAll(command, "'", `'\''`), // Escape for display
+		shell,
+	)
+
+	// Window doesn't exist, create it with the wrapped command
+	if err := c.NewWindow(ctx, session+":", windowName, wrappedCommand); err != nil {
+		return fmt.Errorf("failed to create new window '%s': %w", windowName, err)
+	}
+
+	// If an index is specified, move the window to that position.
+	if windowIndex >= 0 {
+		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
+			// Log the error but don't fail - window is still usable
+			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
 		}
 	}
 

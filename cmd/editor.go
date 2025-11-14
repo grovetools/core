@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/mattsolo1/grove-core/pkg/tmux"
 	"github.com/spf13/cobra"
@@ -13,7 +14,7 @@ func NewEditorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "editor [file]",
 		Short: "Open a file or directory in the dedicated editor window",
-		Long:  `Finds or creates a tmux window named "editor" at index 1 and opens the specified file or current directory. This command is intended to be run from within a tmux popup.`,
+		Long:  `Finds or creates a tmux window (default name "editor", index 1) and opens the specified file or current directory. By default, if the window exists, it is focused. New flags allow customizing the editor command, window name/index, and forcing a reset of the window.`,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filePath := ""
@@ -21,30 +22,41 @@ func NewEditorCmd() *cobra.Command {
 				filePath = args[0]
 			}
 
-			editor := os.Getenv("EDITOR")
-			if editor == "" {
-				editor = "nvim" // Default to nvim
+			// Get flag values
+			editorCmdStr, _ := cmd.Flags().GetString("cmd")
+			reset, _ := cmd.Flags().GetBool("reset")
+			windowName, _ := cmd.Flags().GetString("window-name")
+			windowIndex, _ := cmd.Flags().GetInt("window-index")
+
+			// Determine editor command
+			if editorCmdStr == "" {
+				editorCmdStr = os.Getenv("EDITOR")
+				if editorCmdStr == "" {
+					editorCmdStr = "nvim" // Default to nvim
+				}
 			}
 
 			client, err := tmux.NewClient()
 			if err != nil {
 				// Not in a tmux session, just open the editor normally.
-				var editorCmd *exec.Cmd
+				// Use sh -c to properly handle complex commands and arguments.
+				fullCommand := editorCmdStr
 				if filePath != "" {
-					editorCmd = exec.Command(editor, filePath)
-				} else {
-					editorCmd = exec.Command(editor)
+					// Basic shell quoting for file path
+					quotedPath := "'" + strings.ReplaceAll(filePath, "'", `'\''`) + "'"
+					fullCommand += " " + quotedPath
 				}
+
+				editorCmd := exec.Command("sh", "-c", fullCommand)
 				editorCmd.Stdin = os.Stdin
 				editorCmd.Stdout = os.Stdout
 				editorCmd.Stderr = os.Stderr
 				return editorCmd.Run()
 			}
 
-			// Open the file in the "editor" window at index 1.
-			// If no file path, just open the editor
+			// In a tmux session, use the new editor window management function.
 			ctx := context.Background()
-			if err := client.OpenFileInEditor(ctx, editor, filePath, "editor", 1); err != nil {
+			if err := client.OpenInEditorWindow(ctx, editorCmdStr, filePath, windowName, windowIndex, reset); err != nil {
 				return err
 			}
 
@@ -56,5 +68,11 @@ func NewEditorCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().String("cmd", "", "Custom editor command to execute. The file path will be appended if provided. Defaults to $EDITOR or 'nvim'.")
+	cmd.Flags().Bool("reset", false, "If the editor window exists, kill it and start a fresh session.")
+	cmd.Flags().String("window-name", "editor", "Name of the target tmux window.")
+	cmd.Flags().Int("window-index", 1, "Index (position) for the editor window.")
+
 	return cmd
 }

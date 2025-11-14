@@ -16,7 +16,7 @@ func NewOpenInWindowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "open-in-window -- [command...]",
 		Short: "Runs a command in a dedicated, focused tmux window",
-		Long:  `Finds or creates a tmux window with a given name, kills any existing process in it, runs the specified command, and focuses the window. If not in a tmux session, it runs the command directly.`,
+		Long:  `Finds or creates a tmux window with a given name, runs the specified command if the window is new, and focuses it. If the window already exists, it is simply focused; any existing process is NOT killed or replaced.`,
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			windowName, _ := cmd.Flags().GetString("name")

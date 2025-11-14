@@ -121,48 +121,20 @@ func (c *Client) ListWindows(ctx context.Context, session string) ([]int, error)
 	return indices, nil
 }
 
-// InsertWindowAt moves a window to a specific position, shifting other windows as needed
+// InsertWindowAt moves a window to a specific position
+// Uses tmux's swap-window to avoid renumbering issues
 func (c *Client) InsertWindowAt(ctx context.Context, session, windowName string, targetIndex int) error {
 	windowTarget := session + ":" + windowName
-
-	// Get current window indices
-	indices, err := c.ListWindows(ctx, session)
-	if err != nil {
-		return fmt.Errorf("failed to list windows: %w", err)
-	}
-
-	// Find the highest window index that is >= targetIndex
-	// We need to shift these windows up to make space
-	toShift := []int{}
-	for _, idx := range indices {
-		if idx >= targetIndex {
-			toShift = append(toShift, idx)
-		}
-	}
-
-	// Sort in descending order so we shift from the end
-	// This prevents collisions
-	for i := 0; i < len(toShift); i++ {
-		for j := i + 1; j < len(toShift); j++ {
-			if toShift[i] < toShift[j] {
-				toShift[i], toShift[j] = toShift[j], toShift[i]
-			}
-		}
-	}
-
-	// Shift windows up one position each, starting from the highest
-	for _, idx := range toShift {
-		src := fmt.Sprintf("%s:%d", session, idx)
-		dst := fmt.Sprintf("%s:%d", session, idx+1)
-		// Use move-window which will shift the window
-		if err := c.MoveWindow(ctx, src, dst); err != nil {
-			// If move fails, the window might already be gone or unreachable
-			// Continue anyway
-		}
-	}
-
-	// Now move our window to the target position
 	targetPos := fmt.Sprintf("%s:%d", session, targetIndex)
+
+	// Check if target index exists
+	err := c.SelectWindow(ctx, targetPos)
+	if err == nil {
+		// Target exists, swap with it
+		return c.SwapWindow(ctx, windowTarget, targetPos)
+	}
+
+	// Target doesn't exist, just move to it
 	return c.MoveWindow(ctx, windowTarget, targetPos)
 }
 
