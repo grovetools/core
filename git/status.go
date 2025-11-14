@@ -48,7 +48,7 @@ func GetStatus(path string) (*StatusInfo, error) {
 	status := &StatusInfo{}
 
 	// Use git status --porcelain=v2 --branch for a single, efficient call
-	cmd, err := cmdBuilder.Build(context.Background(), "git", "status", "--porcelain=v2", "--branch")
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "status", "--porcelain=v2", "--branch", "--ignore-submodules")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build command: %w", err)
 	}
