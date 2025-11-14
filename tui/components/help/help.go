@@ -172,12 +172,19 @@ func (m *Model) renderHelpContent(groups [][]key.Binding, vMargin, hMargin, gutt
 	}
 
 	// 2. Try two-column layout if content is too tall
-	mid := (len(groups) + 1) / 2
-	leftGroups := groups[:mid]
-	rightGroups := groups[mid:]
+	// Collect all rows first to split them evenly
+	allRows := m.collectRows(groups)
+	if len(allRows) == 0 {
+		return ""
+	}
 
-	leftCol := m.renderTable(leftGroups)
-	rightCol := m.renderTable(rightGroups)
+	// Split rows in half for balanced columns
+	mid := len(allRows) / 2
+	leftRows := allRows[:mid]
+	rightRows := allRows[mid:]
+
+	leftCol := m.renderTableFromRows(leftRows)
+	rightCol := m.renderTableFromRows(rightRows)
 	twoCol := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, strings.Repeat(" ", gutter), rightCol)
 
 	if lipgloss.Height(twoCol) <= m.Height-vMargin && lipgloss.Width(twoCol) <= m.Width-hMargin {
@@ -188,22 +195,8 @@ func (m *Model) renderHelpContent(groups [][]key.Binding, vMargin, hMargin, gutt
 	return singleCol
 }
 
-// renderTable renders a set of keybinding groups into a styled table string.
-func (m *Model) renderTable(groups [][]key.Binding) string {
-	if len(groups) == 0 {
-		return ""
-	}
-
-	titleText := m.Title
-	if titleText == "" {
-		titleText = "Help"
-	}
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(m.Theme.Info.GetForeground()).
-		MarginBottom(1).
-		Align(lipgloss.Left) // Align left for table headers
-
+// collectRows collects all rows from all keybinding groups.
+func (m *Model) collectRows(groups [][]key.Binding) [][]string {
 	var rows [][]string
 	for _, group := range groups {
 		if len(group) == 0 {
@@ -225,7 +218,11 @@ func (m *Model) renderTable(groups [][]key.Binding) string {
 			}
 		}
 	}
+	return rows
+}
 
+// renderTableFromRows renders a set of pre-collected rows into a styled table.
+func (m *Model) renderTableFromRows(rows [][]string) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -240,7 +237,31 @@ func (m *Model) renderTable(groups [][]key.Binding) string {
 		table = table.Row(row...)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, titleStyle.Render(titleText), table.String())
+	return table.String()
+}
+
+// renderTable renders a set of keybinding groups into a styled table string.
+func (m *Model) renderTable(groups [][]key.Binding) string {
+	if len(groups) == 0 {
+		return ""
+	}
+
+	titleText := m.Title
+	if titleText == "" {
+		titleText = "Help"
+	}
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(m.Theme.Info.GetForeground()).
+		MarginBottom(1).
+		Align(lipgloss.Left) // Align left for table headers
+
+	rows := m.collectRows(groups)
+	if len(rows) == 0 {
+		return ""
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, titleStyle.Render(titleText), m.renderTableFromRows(rows))
 }
 
 // getHelpBinding retrieves the help keybinding from the model's Keys interface.
