@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"os"
 )
 
 func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
@@ -24,6 +25,20 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 		_, err = c.run(ctx, "rename-window", "-t", opts.SessionName, opts.WindowName)
 		if err != nil {
 			return fmt.Errorf("failed to rename window: %w", err)
+		}
+	}
+
+	// Move window to specified index if provided
+	if opts.WindowIndex >= 0 {
+		windowToMove := opts.WindowName
+		if windowToMove == "" {
+			// If no name, the first window has the same name as the session
+			windowToMove = opts.SessionName
+		}
+		// InsertWindowAt handles moving or swapping to the target index
+		if err := c.InsertWindowAt(ctx, opts.SessionName, windowToMove, opts.WindowIndex); err != nil {
+			// This is not a fatal error for session creation, but we should log it
+			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowToMove, opts.WindowIndex, err)
 		}
 	}
 
