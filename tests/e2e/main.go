@@ -18,6 +18,8 @@ func main() {
 		CoreConfigOverrideScenario(),
 		CoreConfigMissingScenario(),
 		CoreConfigVersionScenario(),
+		WorkspaceModelScenario(),
+		WorkspaceEdgeCasesScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.
