@@ -1,4 +1,4 @@
-<!-- DOCGEN:OVERVIEW:START -->
+# Grove Core - MAIN BRANCH VERSION
 
 `grove-core` is the foundational Go library for the Grove ecosystem. It provides a shared set of packages and utilities that ensure consistency and reduce boilerplate code across all Grove command-line tools.
 
