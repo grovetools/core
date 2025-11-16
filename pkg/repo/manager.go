@@ -275,16 +275,56 @@ func (m *Manager) loadManifest() (*Manifest, error) {
 	data, err := os.ReadFile(m.manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return manifest, nil
+			// Main manifest doesn't exist, try loading from backup.
+			return m.loadFromBackup(manifest)
 		}
 		return nil, fmt.Errorf("reading manifest: %w", err)
 	}
 
 	if err := json.Unmarshal(data, manifest); err != nil {
-		return nil, fmt.Errorf("unmarshaling manifest: %w", err)
+		// Unmarshal failed, indicating corruption. Try the backup.
+		fmt.Fprintf(os.Stderr, "Warning: manifest file %s is corrupt. Attempting to recover from backup.\n", m.manifestPath)
+		recoveredManifest, backupErr := m.loadFromBackup(manifest)
+		if backupErr != nil {
+			// Backup failed too. Return the original corruption error, but add context.
+			return nil, fmt.Errorf("unmarshaling manifest failed and backup could not be loaded: %w; backup error: %v", err, backupErr)
+		}
+		// Recovery successful.
+		return recoveredManifest, nil
 	}
 
 	return manifest, nil
+}
+
+// loadFromBackup attempts to load the manifest from the backup file.
+// If successful, it restores the main manifest file from the backup.
+func (m *Manager) loadFromBackup(originalManifest *Manifest) (*Manifest, error) {
+	backupPath := m.manifestPath + ".bak"
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No main file and no backup, just return the empty manifest.
+			return originalManifest, nil
+		}
+		return nil, fmt.Errorf("reading backup manifest: %w", err)
+	}
+
+	// Unmarshal the backup data into a new manifest struct to avoid side effects.
+	backupManifest := &Manifest{
+		Repositories: make(map[string]RepoInfo),
+	}
+	if err := json.Unmarshal(backupData, backupManifest); err != nil {
+		return nil, fmt.Errorf("unmarshaling backup manifest: %w", err)
+	}
+
+	// Restore the main manifest from the backup
+	if err := os.WriteFile(m.manifestPath, backupData, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to restore manifest from backup: %v\n", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "Successfully recovered manifest from backup %s.\n", backupPath)
+	}
+
+	return backupManifest, nil
 }
 
 func (m *Manager) saveManifest(manifest *Manifest) error {
@@ -293,9 +333,45 @@ func (m *Manager) saveManifest(manifest *Manifest) error {
 		return fmt.Errorf("marshaling manifest: %w", err)
 	}
 
-	if err := os.WriteFile(m.manifestPath, data, 0644); err != nil {
-		return fmt.Errorf("writing manifest: %w", err)
+	// 1. Write to a temporary file.
+	manifestDir := filepath.Dir(m.manifestPath)
+	tempFile, err := os.CreateTemp(manifestDir, "manifest-*.json.tmp")
+	if err != nil {
+		return fmt.Errorf("creating temp manifest file: %w", err)
 	}
 
+	successful := false
+	defer func() {
+		if !successful {
+			os.Remove(tempFile.Name())
+		}
+	}()
+
+	if _, err := tempFile.Write(data); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("writing to temp manifest file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("closing temp manifest file: %w", err)
+	}
+
+	// 2. Backup the existing manifest file if it exists.
+	backupPath := m.manifestPath + ".bak"
+	if _, err := os.Stat(m.manifestPath); err == nil {
+		if err := os.Rename(m.manifestPath, backupPath); err != nil {
+			return fmt.Errorf("failed to backup manifest: %w", err)
+		}
+	}
+
+	// 3. Atomically rename the temporary file to the final path.
+	if err := os.Rename(tempFile.Name(), m.manifestPath); err != nil {
+		// If the final rename fails, try to restore the backup.
+		if _, backupErr := os.Stat(backupPath); backupErr == nil {
+			os.Rename(backupPath, m.manifestPath)
+		}
+		return fmt.Errorf("failed to activate new manifest: %w", err)
+	}
+
+	successful = true
 	return nil
 }
