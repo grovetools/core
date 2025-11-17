@@ -8,43 +8,52 @@ import (
 
 // Nerd Font Icons (Private Constants)
 const (
-	nerdIconTree                   = "" // fa-tree
-	nerdIconProject                = "" // cod-project
-	nerdIconRepo                   = "" // cod-repo
-	nerdIconWorktree               = "" // dev-git_branch
-	nerdIconEcosystem              = "" // fa-folder_tree
-	nerdIconGitBranch              = "" // dev-git_branch
-	nerdIconSuccess                = "✓"
-	nerdIconError                  = "✗"
-	nerdIconWarning                = "⚠"
-	nerdIconInfo                   = "ℹ"
-	nerdIconRunning                = "" // fa-refresh
-	nerdIconPending                = "…"
-	nerdIconSelect                 = "▶"
-	nerdIconArrow                  = "→"
-	nerdIconBullet                 = "•"
-	nerdIconNote                   = "" // cod-note
-	nerdIconPlan                   = "" // oct-project_roadmap
-	nerdIconChat                   = "💬"
-	nerdIconOneshot                = "🎯"
-	nerdIconInteractiveAgent       = "🤖"
-	nerdIconHeadlessAgent          = "◆"
-	nerdIconShell                  = "▶"
-	nerdIconStatusCompleted        = "●"
-	nerdIconStatusRunning          = "◐"
-	nerdIconStatusFailed           = "✗"
-	nerdIconStatusBlocked          = "🚫"
-	nerdIconStatusNeedsReview      = "👁"
-	nerdIconStatusPendingUser      = "○"
-	nerdIconStatusHold             = "⏸"
-	nerdIconStatusTodo             = "○"
-	nerdIconStatusAbandoned        = "🗑️"
-	nerdIconStatusInterrupted      = "⊗"
+	nerdIconTree                   = "" // fa-tree (U+F1BB)
+	nerdIconProject                = "" // cod-project (U+EB30)
+	nerdIconRepo                   = "" // cod-repo (U+EA62)
+	nerdIconWorktree               = "" // oct-workflow (U+F52E)
+	nerdIconEcosystem              = "" // fa-folder_tree (U+EF81)
+	nerdIconGitBranch              = "" // dev-git_branch (U+E725)
+	nerdIconSuccess                = "󰄬" // md-check (U+F012C)
+	nerdIconError                  = "" // cod-error (U+EA87)
+	nerdIconWarning                = "" // fa-warning (U+F071)
+	nerdIconInfo                   = "󰋼" // md-information (U+F02FC)
+	nerdIconRunning                = "" // fa-refresh (U+F021)
+	nerdIconPending                = "󰦖" // md-progress_clock (U+F0996)
+	nerdIconSelect                 = "󰱒" // md-checkbox_outline (U+F0C52)
+	nerdIconArrow                  = "󰁔" // md-arrow_right (U+F0054)
+	nerdIconBullet                 = "" // oct-dot_fill (U+F444)
+	nerdIconNote                   = "󰎚" // md-note (U+F039A)
+	nerdIconPlan                   = "󰚸" // md-note_multiple (U+F06B8)
+	nerdIconChat                   = "󰭹" // md-chat (U+F0B79)
+	nerdIconOneshot                = "" // fa-bullseye (U+F140)
+	nerdIconInteractiveAgent       = "" // fa-robot (U+EE0D)
+	nerdIconHeadlessAgent          = "󰭆" // md-robot_industrial (U+F0B46)
+	nerdIconShell                  = "" // seti-shell (U+E691)
+	nerdIconStatusCompleted        = "󰄳" // md-checkbox_marked_circle (U+F0133)
+	nerdIconStatusRunning          = "󰔟" // md-timer_sand (U+F051F)
+	nerdIconStatusFailed           = "" // oct-x (U+F467)
+	nerdIconStatusBlocked          = "" // oct-blocked (U+F479)
+	nerdIconStatusNeedsReview      = "" // oct-code_review (U+F4AF)
+	nerdIconStatusPendingUser      = "󰭻" // md-chat_processing (U+F0B7B)
+	nerdIconStatusHold             = "󰏧" // md-pause_octagon (U+F03E7)
+	nerdIconStatusTodo             = "󰄱" // md-checkbox_blank_outline (U+F0131)
+	nerdIconStatusAbandoned        = "󰩹" // md-trash_can (U+F0A79)
+	nerdIconStatusInterrupted      = "" // pom-external_interruption (U+E00A)
+
+	nerdIconArchive                = "󰀼" // md-archive (U+F003C)
+	nerdIconArrowLeft              = "󰁍" // md-arrow_left (U+F004D)
+	nerdIconArrowLeftBold          = "󰜱" // md-arrow_left_bold (U+F0731)
+	nerdIconArrowRightBold         = "󰜴" // md-arrow_right_bold (U+F0734)
+	nerdIconFilter                 = "󱣬" // md-filter_check (U+F18EC)
+	nerdIconSave                   = "󰉉" // md-floppy (U+F0249)
+	nerdIconSelectAll              = "󰒆" // md-select_all (U+F0486)
+	nerdIconAudited                = "󰳈" // md-shield_check_outline (U+F0CC8)
 )
 
 // ASCII Fallback Icons (Private Constants)
 const (
-	asciiIconTree              = "🌲"
+	asciiIconTree                  = "[T]" // Tree
 	asciiIconProject           = "◆"
 	asciiIconRepo              = "●"
 	asciiIconWorktree          = "⑂"
@@ -69,13 +78,22 @@ const (
 	asciiIconStatusCompleted   = "●"
 	asciiIconStatusRunning     = "◐"
 	asciiIconStatusFailed      = "✗"
-	asciiIconStatusBlocked     = "🚫"
-	asciiIconStatusNeedsReview = "👁"
+	asciiIconStatusBlocked         = "[X]" // Blocked
+	asciiIconStatusNeedsReview     = "[?]"
 	asciiIconStatusPendingUser = "○"
-	asciiIconStatusHold        = "⏸"
+	asciiIconStatusHold            = "[H]"
 	asciiIconStatusTodo        = "○"
-	asciiIconStatusAbandoned   = "🗑️"
+	asciiIconStatusAbandoned       = "[D]" // Abandoned
 	asciiIconStatusInterrupted = "⊗"
+
+	asciiIconArchive               = "[A]" // Archive
+	asciiIconArrowLeft             = "←" // Arrow left
+	asciiIconArrowLeftBold         = "<=" //  Arrow left bold
+	asciiIconArrowRightBold        = "=>" //  Arrow right bold
+	asciiIconFilter                = "⊲" // Filter
+	asciiIconSave                  = "[S]" // Save
+	asciiIconSelectAll             = "[*]" //  Select all
+	asciiIconAudited               = "✓" // Audited
 )
 
 // Public Icon Variables
@@ -112,6 +130,15 @@ var (
 	IconStatusTodo        string
 	IconStatusAbandoned   string
 	IconStatusInterrupted string
+
+	IconArchive                    string
+	IconArrowLeft                  string
+	IconArrowLeftBold              string
+	IconArrowRightBold             string
+	IconFilter                     string
+	IconSave                       string
+	IconSelectAll                  string
+	IconAudited                    string
 )
 
 // init function determines which icon set to use
@@ -163,6 +190,14 @@ func init() {
 		IconStatusTodo = asciiIconStatusTodo
 		IconStatusAbandoned = asciiIconStatusAbandoned
 		IconStatusInterrupted = asciiIconStatusInterrupted
+		IconArchive = asciiIconArchive
+		IconArrowLeft = asciiIconArrowLeft
+		IconArrowLeftBold = asciiIconArrowLeftBold
+		IconArrowRightBold = asciiIconArrowRightBold
+		IconFilter = asciiIconFilter
+		IconSave = asciiIconSave
+		IconSelectAll = asciiIconSelectAll
+		IconAudited = asciiIconAudited
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -197,5 +232,13 @@ func init() {
 		IconStatusTodo = nerdIconStatusTodo
 		IconStatusAbandoned = nerdIconStatusAbandoned
 		IconStatusInterrupted = nerdIconStatusInterrupted
+		IconArchive = nerdIconArchive
+		IconArrowLeft = nerdIconArrowLeft
+		IconArrowLeftBold = nerdIconArrowLeftBold
+		IconArrowRightBold = nerdIconArrowRightBold
+		IconFilter = nerdIconFilter
+		IconSave = nerdIconSave
+		IconSelectAll = nerdIconSelectAll
+		IconAudited = nerdIconAudited
 	}
 }
