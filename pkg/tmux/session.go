@@ -99,6 +99,48 @@ func (c *Client) SwapWindow(ctx context.Context, source, target string) error {
 	return err
 }
 
+// ListWindowsDetailed returns a list of windows with detailed information for the given session.
+func (c *Client) ListWindowsDetailed(ctx context.Context, sessionName string) ([]Window, error) {
+	format := `#{window_id}:#{window_index}:#{window_name}:#{?window_active,1,0}:#{pane_current_command}`
+	output, err := c.run(ctx, "list-windows", "-t", sessionName, "-F", format)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	windows := make([]Window, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 5)
+		if len(parts) < 5 {
+			continue // Skip malformed lines
+		}
+
+		index, err := strconv.Atoi(parts[1])
+		if err != nil {
+			continue // Skip if index is not a number
+		}
+
+		win := Window{
+			ID:       parts[0],
+			Index:    index,
+			Name:     parts[2],
+			IsActive: parts[3] == "1",
+			Command:  parts[4],
+		}
+		windows = append(windows, win)
+	}
+	return windows, nil
+}
+
+// RenameWindow renames a tmux window.
+func (c *Client) RenameWindow(ctx context.Context, target string, newName string) error {
+	_, err := c.run(ctx, "rename-window", "-t", target, newName)
+	return err
+}
+
 // ListWindows returns a list of window indices for the current session
 func (c *Client) ListWindows(ctx context.Context, session string) ([]int, error) {
 	output, err := c.run(ctx, "list-windows", "-t", session, "-F", "#{window_index}")

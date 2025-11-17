@@ -13,3 +13,12 @@ type PaneOptions struct {
 	WorkingDirectory string
 	SendKeys         string
 }
+
+// Window holds detailed information about a tmux window.
+type Window struct {
+	ID       string `json:"id"`
+	Index    int    `json:"index"`
+	Name     string `json:"name"`
+	IsActive bool   `json:"is_active"`
+	Command  string `json:"command"` // Active pane's command
+}
