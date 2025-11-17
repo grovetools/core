@@ -91,6 +91,33 @@ const (
 	nerdIconFileTree               = "󰙅" // md-file_tree (U+F0645)
 	nerdIconPineTreeBox            = "󰐆" // md-pine_tree_box (U+F0406)
 	nerdIconViewDashboard          = "󰕮" // md-view_dashboard (U+F056E)
+
+	nerdIconFolderMinus            = "" // fa-folder_minus (U+EEC6)
+	nerdIconFolderOpen             = "" // fa-folder_open (U+F07C)
+	nerdIconFolderOpenO            = "" // fa-folder_open_o (U+F115)
+	nerdIconFolderPlus             = "" // fa-folder_plus (U+EEC7)
+	nerdIconFolderTree             = "" // fa-folder_tree (U+EF81)
+	nerdIconFile                   = "󰈔" // md-file (U+F0214)
+	nerdIconFileCancel             = "󰷆" // md-file_cancel (U+F0DC6)
+	nerdIconFileKey                = "󱆄" // md-file_key (U+F1184)
+	nerdIconFileLock               = "󰈡" // md-file_lock (U+F0221)
+	nerdIconFilePlus               = "󰝒" // md-file_plus (U+F0752)
+	nerdIconFire                   = "󰈸" // md-fire (U+F0238)
+	nerdIconFolder                 = "󰉋" // md-folder (U+F024B)
+	nerdIconFolderCheck            = "󱥾" // md-folder_check (U+F197E)
+	nerdIconFolderEye              = "󱞊" // md-folder_eye (U+F178A)
+	nerdIconFolderLock             = "󰉐" // md-folder_lock (U+F0250)
+	nerdIconFolderMultiple         = "󰉓" // md-folder_multiple (U+F0253)
+	nerdIconFolderMultiplePlus     = "󱑾" // md-folder_multiple_plus (U+F147E)
+	nerdIconFolderOff              = "󱧸" // md-folder_off (U+F19F8)
+	nerdIconFolderOpenMd           = "󰝰" // md-folder_open (U+F0770)
+	nerdIconFolderPlusMd           = "󰉗" // md-folder_plus (U+F0257)
+	nerdIconFolderQuestion         = "󱧊" // md-folder_question (U+F19CA)
+	nerdIconFolderRemove           = "󰉘" // md-folder_remove (U+F0258)
+	nerdIconFolderSearch           = "󰥨" // md-folder_search (U+F0968)
+	nerdIconFolderStar             = "󰚝" // md-folder_star (U+F069D)
+	nerdIconFolderSync             = "󰴋" // md-folder_sync (U+F0D0B)
+	nerdIconFileDirectoryFill      = "" // oct-file_directory_fill (U+F4D3)
 )
 
 // ASCII Fallback Icons (Private Constants)
@@ -178,6 +205,33 @@ const (
 	asciiIconFileTree              = "[F]" // File tree
 	asciiIconPineTreeBox           = "[P]" // Pine tree box
 	asciiIconViewDashboard         = "[W]" // View dashboard/workspace
+
+	asciiIconFolderMinus           = "[-]" // Folder minus
+	asciiIconFolderOpen            = "[o]" // Folder open
+	asciiIconFolderOpenO           = "(o)" // Folder open outline
+	asciiIconFolderPlus            = "[+]" // Folder plus
+	asciiIconFolderTree            = "[T]" // Folder tree
+	asciiIconFile                  = "[ ]" // File
+	asciiIconFileCancel            = "[x]" // File cancel
+	asciiIconFileKey               = "[K]" // File key
+	asciiIconFileLock              = "[#]" // File lock
+	asciiIconFilePlus              = "[+]" // File plus
+	asciiIconFire                  = "[*]" // Fire
+	asciiIconFolder                = "[ ]" // Folder
+	asciiIconFolderCheck           = "[✓]" // Folder check
+	asciiIconFolderEye             = "[E]" // Folder eye
+	asciiIconFolderLock            = "[#]" // Folder lock
+	asciiIconFolderMultiple        = "[=]" // Folder multiple
+	asciiIconFolderMultiplePlus    = "[+]" // Folder multiple plus
+	asciiIconFolderOff             = "[-]" // Folder off
+	asciiIconFolderOpenMd          = "(o)" // Folder open (md)
+	asciiIconFolderPlusMd          = "[+]" // Folder plus (md)
+	asciiIconFolderQuestion        = "[?]" // Folder question
+	asciiIconFolderRemove          = "[-]" // Folder remove
+	asciiIconFolderSearch          = "[/]" // Folder search
+	asciiIconFolderStar            = "[*]" // Folder star
+	asciiIconFolderSync            = "[~]" // Folder sync
+	asciiIconFileDirectoryFill     = "[D]" // File directory fill
 )
 
 // Public Icon Variables
@@ -265,6 +319,33 @@ var (
 	IconFileTree                   string
 	IconPineTreeBox                string
 	IconViewDashboard              string
+
+	IconFolderMinus                string
+	IconFolderOpen                 string
+	IconFolderOpenO                string
+	IconFolderPlus                 string
+	IconFolderTree                 string
+	IconFile                       string
+	IconFileCancel                 string
+	IconFileKey                    string
+	IconFileLock                   string
+	IconFilePlus                   string
+	IconFire                       string
+	IconFolder                     string
+	IconFolderCheck                string
+	IconFolderEye                  string
+	IconFolderLock                 string
+	IconFolderMultiple             string
+	IconFolderMultiplePlus         string
+	IconFolderOff                  string
+	IconFolderOpenMd               string
+	IconFolderPlusMd               string
+	IconFolderQuestion             string
+	IconFolderRemove               string
+	IconFolderSearch               string
+	IconFolderStar                 string
+	IconFolderSync                 string
+	IconFileDirectoryFill          string
 )
 
 // init function determines which icon set to use
@@ -361,6 +442,32 @@ func init() {
 		IconFileTree = asciiIconFileTree
 		IconPineTreeBox = asciiIconPineTreeBox
 		IconViewDashboard = asciiIconViewDashboard
+		IconFolderMinus = asciiIconFolderMinus
+		IconFolderOpen = asciiIconFolderOpen
+		IconFolderOpenO = asciiIconFolderOpenO
+		IconFolderPlus = asciiIconFolderPlus
+		IconFolderTree = asciiIconFolderTree
+		IconFile = asciiIconFile
+		IconFileCancel = asciiIconFileCancel
+		IconFileKey = asciiIconFileKey
+		IconFileLock = asciiIconFileLock
+		IconFilePlus = asciiIconFilePlus
+		IconFire = asciiIconFire
+		IconFolder = asciiIconFolder
+		IconFolderCheck = asciiIconFolderCheck
+		IconFolderEye = asciiIconFolderEye
+		IconFolderLock = asciiIconFolderLock
+		IconFolderMultiple = asciiIconFolderMultiple
+		IconFolderMultiplePlus = asciiIconFolderMultiplePlus
+		IconFolderOff = asciiIconFolderOff
+		IconFolderOpenMd = asciiIconFolderOpenMd
+		IconFolderPlusMd = asciiIconFolderPlusMd
+		IconFolderQuestion = asciiIconFolderQuestion
+		IconFolderRemove = asciiIconFolderRemove
+		IconFolderSearch = asciiIconFolderSearch
+		IconFolderStar = asciiIconFolderStar
+		IconFolderSync = asciiIconFolderSync
+		IconFileDirectoryFill = asciiIconFileDirectoryFill
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -440,5 +547,31 @@ func init() {
 		IconFileTree = nerdIconFileTree
 		IconPineTreeBox = nerdIconPineTreeBox
 		IconViewDashboard = nerdIconViewDashboard
+		IconFolderMinus = nerdIconFolderMinus
+		IconFolderOpen = nerdIconFolderOpen
+		IconFolderOpenO = nerdIconFolderOpenO
+		IconFolderPlus = nerdIconFolderPlus
+		IconFolderTree = nerdIconFolderTree
+		IconFile = nerdIconFile
+		IconFileCancel = nerdIconFileCancel
+		IconFileKey = nerdIconFileKey
+		IconFileLock = nerdIconFileLock
+		IconFilePlus = nerdIconFilePlus
+		IconFire = nerdIconFire
+		IconFolder = nerdIconFolder
+		IconFolderCheck = nerdIconFolderCheck
+		IconFolderEye = nerdIconFolderEye
+		IconFolderLock = nerdIconFolderLock
+		IconFolderMultiple = nerdIconFolderMultiple
+		IconFolderMultiplePlus = nerdIconFolderMultiplePlus
+		IconFolderOff = nerdIconFolderOff
+		IconFolderOpenMd = nerdIconFolderOpenMd
+		IconFolderPlusMd = nerdIconFolderPlusMd
+		IconFolderQuestion = nerdIconFolderQuestion
+		IconFolderRemove = nerdIconFolderRemove
+		IconFolderSearch = nerdIconFolderSearch
+		IconFolderStar = nerdIconFolderStar
+		IconFolderSync = nerdIconFolderSync
+		IconFileDirectoryFill = nerdIconFileDirectoryFill
 	}
 }
