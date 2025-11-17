@@ -68,6 +68,29 @@ const (
 	nerdIconArrowUp                = "󰁝" // md-arrow_up (U+F005D)
 	nerdIconArrowUpBold            = "󰜷" // md-arrow_up_bold (U+F0737)
 	nerdIconArrowUpDownBold        = "󰹺" // md-arrow_up_down_bold (U+F0E7A)
+
+	nerdIconChecklist              = "" // cod-checklist (U+EAB3)
+	nerdIconArchitecture           = "" // fa-building_columns (U+F19C)
+	nerdIconCalendar               = "󰃭" // md-calendar (U+F00ED)
+	nerdIconChatQuestion           = "󱜸" // md-chat_question (U+F1738)
+	nerdIconClockFast              = "󰅒" // md-clock_fast (U+F0152)
+	nerdIconLoading                = "󰝲" // md-loading (U+F0772)
+	nerdIconRss                    = "󰑫" // md-rss (U+F046B)
+	nerdIconSchool                 = "󰑴" // md-school (U+F0474)
+	nerdIconIssueClosed            = "" // oct-issue_closed (U+F41D)
+	nerdIconIssueOpened            = "" // oct-issue_opened (U+F41B)
+	nerdIconNoteCurrent            = "󰅒" // md-clock_fast (U+F0152)
+	nerdIconNoteIssues             = "" // oct-issue_opened (U+F41B)
+	nerdIconNoteInbox              = "󰚇" // md-inbox (U+F0687)
+	nerdIconNoteCompleted          = "󰄳" // md-checkbox_marked_circle (U+F0133)
+	nerdIconNoteReview             = "" // oct-code_review (U+F4AF)
+	nerdIconNoteInProgress         = "󰔟" // md-timer_sand (U+F051F)
+
+	nerdIconSparkle                    = "" // cod-sparkle (U+EC10)
+
+	nerdIconFileTree               = "󰙅" // md-file_tree (U+F0645)
+	nerdIconPineTreeBox            = "󰐆" // md-pine_tree_box (U+F0406)
+	nerdIconViewDashboard          = "󰕮" // md-view_dashboard (U+F056E)
 )
 
 // ASCII Fallback Icons (Private Constants)
@@ -132,6 +155,29 @@ const (
 	asciiIconArrowUp               = "↑" // Arrow up
 	asciiIconArrowUpBold           = "^^" // Arrow up bold
 	asciiIconArrowUpDownBold       = "<>" // Arrow up/down bold
+
+	asciiIconChecklist             = "[]" // Checklist/todo
+	asciiIconArchitecture          = "[A]" // Architecture
+	asciiIconCalendar              = "[C]" // Calendar/daily note
+	asciiIconChatQuestion          = "[?]" // Chat question/prompt
+	asciiIconClockFast             = "[Q]" // Quick note
+	asciiIconLoading               = "..." // Loading
+	asciiIconRss                   = "[R]" // RSS/blog
+	asciiIconSchool                = "[L]" // School/learn
+	asciiIconIssueClosed           = "[x]" // Issue closed
+	asciiIconIssueOpened           = "[!]" // Issue opened
+	asciiIconNoteCurrent           = "[>]" // Current note
+	asciiIconNoteIssues            = "[!]" // Issues notes
+	asciiIconNoteInbox             = "[I]" // Inbox notes
+	asciiIconNoteCompleted         = "[✓]" // Completed notes
+	asciiIconNoteReview            = "[R]" // Review notes
+	asciiIconNoteInProgress        = "[~]" // In-progress notes
+
+	asciiIconSparkle                   = "[+]" // New
+
+	asciiIconFileTree              = "[F]" // File tree
+	asciiIconPineTreeBox           = "[P]" // Pine tree box
+	asciiIconViewDashboard         = "[W]" // View dashboard/workspace
 )
 
 // Public Icon Variables
@@ -196,6 +242,29 @@ var (
 	IconArrowUp                    string
 	IconArrowUpBold                string
 	IconArrowUpDownBold            string
+
+	IconChecklist                  string
+	IconArchitecture               string
+	IconCalendar                   string
+	IconChatQuestion               string
+	IconClockFast                  string
+	IconLoading                    string
+	IconRss                        string
+	IconSchool                     string
+	IconIssueClosed                string
+	IconIssueOpened                string
+	IconNoteCurrent                string
+	IconNoteIssues                 string
+	IconNoteInbox                  string
+	IconNoteCompleted              string
+	IconNoteReview                 string
+	IconNoteInProgress             string
+
+	IconSparkle                        string
+
+	IconFileTree                   string
+	IconPineTreeBox                string
+	IconViewDashboard              string
 )
 
 // init function determines which icon set to use
@@ -272,6 +341,26 @@ func init() {
 		IconArrowUp = asciiIconArrowUp
 		IconArrowUpBold = asciiIconArrowUpBold
 		IconArrowUpDownBold = asciiIconArrowUpDownBold
+		IconChecklist = asciiIconChecklist
+		IconArchitecture = asciiIconArchitecture
+		IconCalendar = asciiIconCalendar
+		IconChatQuestion = asciiIconChatQuestion
+		IconClockFast = asciiIconClockFast
+		IconLoading = asciiIconLoading
+		IconRss = asciiIconRss
+		IconSchool = asciiIconSchool
+		IconIssueClosed = asciiIconIssueClosed
+		IconIssueOpened = asciiIconIssueOpened
+		IconNoteCurrent = asciiIconNoteCurrent
+		IconNoteIssues = asciiIconNoteIssues
+		IconNoteInbox = asciiIconNoteInbox
+		IconNoteCompleted = asciiIconNoteCompleted
+		IconNoteReview = asciiIconNoteReview
+		IconNoteInProgress = asciiIconNoteInProgress
+		IconSparkle = asciiIconSparkle
+		IconFileTree = asciiIconFileTree
+		IconPineTreeBox = asciiIconPineTreeBox
+		IconViewDashboard = asciiIconViewDashboard
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -331,5 +420,25 @@ func init() {
 		IconArrowUp = nerdIconArrowUp
 		IconArrowUpBold = nerdIconArrowUpBold
 		IconArrowUpDownBold = nerdIconArrowUpDownBold
+		IconChecklist = nerdIconChecklist
+		IconArchitecture = nerdIconArchitecture
+		IconCalendar = nerdIconCalendar
+		IconChatQuestion = nerdIconChatQuestion
+		IconClockFast = nerdIconClockFast
+		IconLoading = nerdIconLoading
+		IconRss = nerdIconRss
+		IconSchool = nerdIconSchool
+		IconIssueClosed = nerdIconIssueClosed
+		IconIssueOpened = nerdIconIssueOpened
+		IconNoteCurrent = nerdIconNoteCurrent
+		IconNoteIssues = nerdIconNoteIssues
+		IconNoteInbox = nerdIconNoteInbox
+		IconNoteCompleted = nerdIconNoteCompleted
+		IconNoteReview = nerdIconNoteReview
+		IconNoteInProgress = nerdIconNoteInProgress
+		IconSparkle = nerdIconSparkle
+		IconFileTree = nerdIconFileTree
+		IconPineTreeBox = nerdIconPineTreeBox
+		IconViewDashboard = nerdIconViewDashboard
 	}
 }
