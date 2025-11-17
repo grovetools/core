@@ -62,6 +62,17 @@ const (
 	nerdIconInbox                  = "󰚇" // md-inbox (U+F0687)
 	nerdIconLightbulb              = "󰌵" // md-lightbulb (U+F0335)
 	nerdIconMerge                  = "󰽜" // md-merge (U+F0F5C)
+	nerdIconHome                   = "󰋜" // md-home (U+F02DC)
+	nerdIconRobot                  = "󰚩" // md-robot (U+F06A9)
+	nerdIconTrophy                 = "" // fa-trophy (U+F091)
+	nerdIconChart                  = "󰄨" // md-chart_bar (U+F0128)
+	nerdIconSnowflake              = "" // fa-snowflake (U+F2DC)
+	nerdIconClock                  = "󰥔" // md-clock (U+F0954)
+	nerdIconMoney                  = "" // fa-sack_dollar (U+EF8D)
+	nerdIconSync                   = "󰓦" // md-sync (U+F04E6)
+	nerdIconHelp                   = "󰋗" // md-help_circle (U+F02D7)
+	nerdIconBuild                  = "󰣪" // md-hammer (U+F08EA)
+	nerdIconStop                   = "󰙦" // md-stop_circle (U+F0666)
 
 	nerdIconArrowDown              = "󰁅" // md-arrow_down (U+F0045)
 	nerdIconArrowDownBold          = "󰜮" // md-arrow_down_bold (U+F072E)
@@ -176,6 +187,17 @@ const (
 	asciiIconInbox                 = "[I]" //  Inbox
 	asciiIconLightbulb             = "[*]" //  Lightbulb
 	asciiIconMerge                 = "><" // Merge
+	asciiIconHome                   = "[H]" // Home
+	asciiIconRobot                  = "[R]" // Robot
+	asciiIconTrophy                 = "[T]" // Trophy
+	asciiIconChart                  = "[C]" // Chart/Statistics
+	asciiIconSnowflake              = "[*]" // Snowflake
+	asciiIconClock                  = "[C]" // Clock
+	asciiIconMoney                  = "[$]" // Money
+	asciiIconSync                   = "[~]" // Sync
+	asciiIconHelp                   = "[?]" // Help
+	asciiIconBuild                  = "[B]" // Build/Hammer
+	asciiIconStop                   = "[S]" // Stop
 
 	asciiIconArrowDown             = "↓" // Arrow down
 	asciiIconArrowDownBold         = "vv" // Arrow down bold
@@ -290,6 +312,17 @@ var (
 	IconInbox                      string
 	IconLightbulb                  string
 	IconMerge                      string
+	IconHome                          string
+	IconRobot                         string
+	IconTrophy                        string
+	IconChart                         string
+	IconSnowflake                     string
+	IconClock                         string
+	IconMoney                         string
+	IconSync                          string
+	IconHelp                          string
+	IconBuild                         string
+	IconStop                          string
 
 	IconArrowDown                  string
 	IconArrowDownBold              string
@@ -417,6 +450,17 @@ func init() {
 		IconInbox = asciiIconInbox
 		IconLightbulb = asciiIconLightbulb
 		IconMerge = asciiIconMerge
+		IconHome = asciiIconHome
+		IconRobot = asciiIconRobot
+		IconTrophy = asciiIconTrophy
+		IconChart = asciiIconChart
+		IconSnowflake = asciiIconSnowflake
+		IconClock = asciiIconClock
+		IconMoney = asciiIconMoney
+		IconSync = asciiIconSync
+		IconHelp = asciiIconHelp
+		IconBuild = asciiIconBuild
+		IconStop = asciiIconStop
 		IconArrowDown = asciiIconArrowDown
 		IconArrowDownBold = asciiIconArrowDownBold
 		IconArrowUp = asciiIconArrowUp
@@ -522,6 +566,17 @@ func init() {
 		IconInbox = nerdIconInbox
 		IconLightbulb = nerdIconLightbulb
 		IconMerge = nerdIconMerge
+		IconHome = nerdIconHome
+		IconRobot = nerdIconRobot
+		IconTrophy = nerdIconTrophy
+		IconChart = nerdIconChart
+		IconSnowflake = nerdIconSnowflake
+		IconClock = nerdIconClock
+		IconMoney = nerdIconMoney
+		IconSync = nerdIconSync
+		IconHelp = nerdIconHelp
+		IconBuild = nerdIconBuild
+		IconStop = nerdIconStop
 		IconArrowDown = nerdIconArrowDown
 		IconArrowDownBold = nerdIconArrowDownBold
 		IconArrowUp = nerdIconArrowUp
