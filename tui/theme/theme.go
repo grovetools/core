@@ -217,53 +217,6 @@ func NewThemeWithName(name string) *Theme {
 	return newThemeFromName(name)
 }
 
-// Icons used across the Grove ecosystem.
-const (
-	// Status icons
-	IconPending = "⏳"
-	IconRunning = "🔄"
-	IconSuccess = "✅"
-	IconError   = "❌"
-	IconWarning = "⚠️"
-	IconInfo    = "ℹ️"
-
-	// Navigation icons
-	IconArrow  = "→"
-	IconBullet = "•"
-	IconTree   = "🌲" // Grove theme!
-	IconLeaf   = "🍃"
-	IconBranch = "🌿"
-
-	// Workspace type icons
-	IconEcosystem         = "◆" // Filled diamond for ecosystem roots
-	IconEcosystemWorktree = "◇" // Hollow diamond for ecosystem worktrees
-	IconWorktree          = "⑂" // Branch symbol for regular worktrees
-	IconRepo              = "●" // Filled circle for standard repos
-	IconGitBranch         = "⎇" // Git branch symbol for branches
-
-	// Action icons
-	IconSearch = "🔍"
-	IconHelp   = "❓"
-	IconBack   = "←"
-
-	// Job type icons
-	IconChat             = "★"
-	IconInteractiveAgent = "⚙"
-	IconOneshot          = "●"
-	IconHeadlessAgent    = "◆"
-	IconShell            = "▶"
-
-	// Session status icons (non-emoji)
-	IconStatusRunning     = "◐"
-	IconStatusIdle        = "⏸"
-	IconStatusCompleted   = "●"
-	IconStatusPendingUser = "○"
-	IconStatusFailed      = "✗"
-	IconStatusInterrupted = "⊗"
-	IconStatusHold        = "⏸"
-	IconStatusTodo        = "○"
-	IconStatusAbandoned   = "⊗"
-)
 
 // RenderHeader renders a header with the default Grove styling.
 func RenderHeader(title string) string {

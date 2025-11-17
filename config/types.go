@@ -58,6 +58,11 @@ type NotebooksConfig struct {
 	Rules       *NotebookRules       `yaml:"rules,omitempty"`
 }
 
+// TUIConfig holds TUI-specific settings.
+type TUIConfig struct {
+	Icons string `yaml:"icons,omitempty"` // Can be "nerd" or "ascii"
+}
+
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
@@ -84,6 +89,9 @@ type Config struct {
 
 	// Notebooks contains all notebook-related configuration.
 	Notebooks *NotebooksConfig `yaml:"notebooks,omitempty"`
+
+	// TUI contains TUI-specific configuration.
+	TUI *TUIConfig `yaml:"tui,omitempty"`
 
 	// Groves defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
@@ -112,6 +120,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Version          string                       `yaml:"version"`
 		Workspaces       []string                     `yaml:"workspaces,omitempty"`
 		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty"`
+		TUI              *TUIConfig                   `yaml:"tui,omitempty"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
 		Extensions       map[string]interface{}       `yaml:",inline"`
@@ -133,6 +142,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Name = raw.Name
 	c.Version = raw.Version
 	c.Workspaces = raw.Workspaces
+	c.TUI = raw.TUI
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions
 

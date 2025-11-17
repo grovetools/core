@@ -295,7 +295,7 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 
 	// Add the indicator to each line
 	result := ""
-	arrow := theme.DefaultTheme.Highlight.Render("▶")
+	arrow := theme.DefaultTheme.Highlight.Render(theme.IconSelect)
 	for i, line := range lines {
 		// Add the indicator on the left for the selected row
 		if i == selectedLineIndex {
