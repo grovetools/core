@@ -278,11 +278,20 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 	lines := strings.Split(tableStr, "\n")
 
 	// Calculate which line the selected row is on
+	// If headers are present:
 	// Line 0: top border
 	// Line 1: header row
 	// Line 2: separator line after header
 	// Line 3+: data rows (first data row is at index 3)
-	selectedLineIndex := 3 + selectedIndex
+	// If no headers:
+	// Line 0: top border
+	// Line 1+: data rows (first data row is at index 1)
+	var selectedLineIndex int
+	if len(headers) > 0 {
+		selectedLineIndex = 3 + selectedIndex
+	} else {
+		selectedLineIndex = 1 + selectedIndex
+	}
 
 	// Add the indicator to each line
 	result := ""
