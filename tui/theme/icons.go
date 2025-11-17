@@ -21,6 +21,7 @@ const (
 	nerdIconRunning                = "" // fa-refresh (U+F021)
 	nerdIconPending                = "󰦖" // md-progress_clock (U+F0996)
 	nerdIconSelect                 = "󰱒" // md-checkbox_outline (U+F0C52)
+	nerdIconUnselect              = "󰄱" // md-checkbox_blank_outline (U+F0131)
 	nerdIconArrow                  = "󰁔" // md-arrow_right (U+F0054)
 	nerdIconBullet                 = "" // oct-dot_fill (U+F444)
 	nerdIconNote                   = "󰎚" // md-note (U+F039A)
@@ -49,6 +50,24 @@ const (
 	nerdIconSave                   = "󰉉" // md-floppy (U+F0249)
 	nerdIconSelectAll              = "󰒆" // md-select_all (U+F0486)
 	nerdIconAudited                = "󰳈" // md-shield_check_outline (U+F0CC8)
+
+	nerdIconPullRequest            = "" // cod-git_pull_request (U+EA64)
+	nerdIconPullRequestClosed      = "" // cod-git_pull_request_closed (U+EBDA)
+	nerdIconPullRequestCreate      = "" // cod-git_pull_request_create (U+EBBC)
+	nerdIconPullRequestDraft       = "" // cod-git_pull_request_draft (U+EBDB)
+	nerdIconPullRequestNewChanges  = "" // cod-git_pull_request_new_changes (U+EC0C)
+	nerdIconGithubAction           = "" // cod-github_action (U+EAFF)
+	nerdIconGitCompare             = "" // dev-git_compare (U+E728)
+	nerdIconGit                    = "󰊢" // md-git (U+F02A2)
+	nerdIconInbox                  = "󰚇" // md-inbox (U+F0687)
+	nerdIconLightbulb              = "󰌵" // md-lightbulb (U+F0335)
+	nerdIconMerge                  = "󰽜" // md-merge (U+F0F5C)
+
+	nerdIconArrowDown              = "󰁅" // md-arrow_down (U+F0045)
+	nerdIconArrowDownBold          = "󰜮" // md-arrow_down_bold (U+F072E)
+	nerdIconArrowUp                = "󰁝" // md-arrow_up (U+F005D)
+	nerdIconArrowUpBold            = "󰜷" // md-arrow_up_bold (U+F0737)
+	nerdIconArrowUpDownBold        = "󰹺" // md-arrow_up_down_bold (U+F0E7A)
 )
 
 // ASCII Fallback Icons (Private Constants)
@@ -66,6 +85,7 @@ const (
 	asciiIconRunning           = "◐"
 	asciiIconPending           = "…"
 	asciiIconSelect            = "▶"
+	asciiIconUnselect          = "○" // Unselect
 	asciiIconArrow             = "→"
 	asciiIconBullet            = "•"
 	asciiIconNote              = "▢"
@@ -94,6 +114,24 @@ const (
 	asciiIconSave                  = "[S]" // Save
 	asciiIconSelectAll             = "[*]" //  Select all
 	asciiIconAudited               = "✓" // Audited
+
+	asciiIconPullRequest           = "PR" // Pull request
+	asciiIconPullRequestClosed     = "[x]PR" // PR closed
+	asciiIconPullRequestCreate     = "[+]PR" // PR create
+	asciiIconPullRequestDraft      = "[~]PR" // PR draft
+	asciiIconPullRequestNewChanges = "[!]PR" // PR new changes
+	asciiIconGithubAction          = "[A]" // GitHub action
+	asciiIconGitCompare            = "<>" // Git compare
+	asciiIconGit                   = "git" // Git
+	asciiIconInbox                 = "[I]" //  Inbox
+	asciiIconLightbulb             = "[*]" //  Lightbulb
+	asciiIconMerge                 = "><" // Merge
+
+	asciiIconArrowDown             = "↓" // Arrow down
+	asciiIconArrowDownBold         = "vv" // Arrow down bold
+	asciiIconArrowUp               = "↑" // Arrow up
+	asciiIconArrowUpBold           = "^^" // Arrow up bold
+	asciiIconArrowUpDownBold       = "<>" // Arrow up/down bold
 )
 
 // Public Icon Variables
@@ -111,6 +149,7 @@ var (
 	IconRunning           string
 	IconPending           string
 	IconSelect            string
+	IconUnselect              string
 	IconArrow             string
 	IconBullet            string
 	IconNote              string
@@ -139,6 +178,24 @@ var (
 	IconSave                       string
 	IconSelectAll                  string
 	IconAudited                    string
+
+	IconPullRequest                string
+	IconPullRequestClosed          string
+	IconPullRequestCreate          string
+	IconPullRequestDraft           string
+	IconPullRequestNewChanges      string
+	IconGithubAction               string
+	IconGitCompare                 string
+	IconGit                        string
+	IconInbox                      string
+	IconLightbulb                  string
+	IconMerge                      string
+
+	IconArrowDown                  string
+	IconArrowDownBold              string
+	IconArrowUp                    string
+	IconArrowUpBold                string
+	IconArrowUpDownBold            string
 )
 
 // init function determines which icon set to use
@@ -171,6 +228,7 @@ func init() {
 		IconRunning = asciiIconRunning
 		IconPending = asciiIconPending
 		IconSelect = asciiIconSelect
+		IconUnselect = asciiIconUnselect
 		IconArrow = asciiIconArrow
 		IconBullet = asciiIconBullet
 		IconNote = asciiIconNote
@@ -198,6 +256,22 @@ func init() {
 		IconSave = asciiIconSave
 		IconSelectAll = asciiIconSelectAll
 		IconAudited = asciiIconAudited
+		IconPullRequest = asciiIconPullRequest
+		IconPullRequestClosed = asciiIconPullRequestClosed
+		IconPullRequestCreate = asciiIconPullRequestCreate
+		IconPullRequestDraft = asciiIconPullRequestDraft
+		IconPullRequestNewChanges = asciiIconPullRequestNewChanges
+		IconGithubAction = asciiIconGithubAction
+		IconGitCompare = asciiIconGitCompare
+		IconGit = asciiIconGit
+		IconInbox = asciiIconInbox
+		IconLightbulb = asciiIconLightbulb
+		IconMerge = asciiIconMerge
+		IconArrowDown = asciiIconArrowDown
+		IconArrowDownBold = asciiIconArrowDownBold
+		IconArrowUp = asciiIconArrowUp
+		IconArrowUpBold = asciiIconArrowUpBold
+		IconArrowUpDownBold = asciiIconArrowUpDownBold
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -213,6 +287,7 @@ func init() {
 		IconRunning = nerdIconRunning
 		IconPending = nerdIconPending
 		IconSelect = nerdIconSelect
+		IconUnselect = nerdIconUnselect
 		IconArrow = nerdIconArrow
 		IconBullet = nerdIconBullet
 		IconNote = nerdIconNote
@@ -240,5 +315,21 @@ func init() {
 		IconSave = nerdIconSave
 		IconSelectAll = nerdIconSelectAll
 		IconAudited = nerdIconAudited
+		IconPullRequest = nerdIconPullRequest
+		IconPullRequestClosed = nerdIconPullRequestClosed
+		IconPullRequestCreate = nerdIconPullRequestCreate
+		IconPullRequestDraft = nerdIconPullRequestDraft
+		IconPullRequestNewChanges = nerdIconPullRequestNewChanges
+		IconGithubAction = nerdIconGithubAction
+		IconGitCompare = nerdIconGitCompare
+		IconGit = nerdIconGit
+		IconInbox = nerdIconInbox
+		IconLightbulb = nerdIconLightbulb
+		IconMerge = nerdIconMerge
+		IconArrowDown = nerdIconArrowDown
+		IconArrowDownBold = nerdIconArrowDownBold
+		IconArrowUp = nerdIconArrowUp
+		IconArrowUpBold = nerdIconArrowUpBold
+		IconArrowUpDownBold = nerdIconArrowUpDownBold
 	}
 }
