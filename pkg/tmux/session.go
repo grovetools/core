@@ -9,7 +9,7 @@ import (
 )
 
 func (c *Client) SessionExists(ctx context.Context, sessionName string) (bool, error) {
-	_, err := c.run(ctx, "has-session", "-t", sessionName)
+	_, err := c.run(ctx, "has-session", "-t", "="+sessionName)
 	if err == nil {
 		return true, nil
 	}
@@ -54,7 +54,7 @@ func (c *Client) IsPopup(ctx context.Context) (bool, error) {
 }
 
 func (c *Client) KillSession(ctx context.Context, sessionName string) error {
-	_, err := c.run(ctx, "kill-session", "-t", sessionName)
+	_, err := c.run(ctx, "kill-session", "-t", "="+sessionName)
 	return err
 }
 
@@ -204,6 +204,13 @@ func (c *Client) SwitchClient(ctx context.Context, target string) error {
 	return err
 }
 
+// SwitchClientToSession switches the client to the specified session.
+// It uses an exact match for the session name to avoid ambiguity.
+func (c *Client) SwitchClientToSession(ctx context.Context, sessionName string) error {
+	_, err := c.run(ctx, "switch-client", "-t", "="+sessionName)
+	return err
+}
+
 func (c *Client) GetCurrentSession(ctx context.Context) (string, error) {
 	output, err := c.run(ctx, "display-message", "-p", "#{session_name}")
 	if err != nil {
@@ -228,7 +235,7 @@ func (c *Client) ListSessions(ctx context.Context) ([]string, error) {
 
 // GetSessionPath returns the working directory path of a specific tmux session.
 func (c *Client) GetSessionPath(ctx context.Context, sessionName string) (string, error) {
-	output, err := c.run(ctx, "display-message", "-p", "-t", sessionName, "#{session_path}")
+	output, err := c.run(ctx, "display-message", "-p", "-t", "="+sessionName, "#{session_path}")
 	if err != nil {
 		return "", err
 	}
@@ -237,7 +244,7 @@ func (c *Client) GetSessionPath(ctx context.Context, sessionName string) (string
 
 // GetSessionPID returns the process ID of the tmux server for a given session.
 func (c *Client) GetSessionPID(ctx context.Context, sessionName string) (int, error) {
-	output, err := c.run(ctx, "display-message", "-p", "-t", sessionName, "#{session_pid}")
+	output, err := c.run(ctx, "display-message", "-p", "-t", "="+sessionName, "#{session_pid}")
 	if err != nil {
 		return 0, fmt.Errorf("failed to get session PID from tmux: %w", err)
 	}

@@ -130,7 +130,7 @@ func (c *Client) ClosePopupCmd() *exec.Cmd {
 // Returns a command to be executed after the TUI exits.
 func (c *Client) SelectWindowAndClosePopup(ctx context.Context, sessionName, windowName string) (*exec.Cmd, error) {
 	// Switch to session
-	if err := c.SwitchClient(ctx, sessionName); err != nil {
+	if err := c.SwitchClientToSession(ctx, sessionName); err != nil {
 		return nil, fmt.Errorf("failed to switch session: %w", err)
 	}
 
@@ -146,7 +146,7 @@ func (c *Client) SelectWindowAndClosePopup(ctx context.Context, sessionName, win
 // Returns a command to be executed after the TUI exits.
 func (c *Client) NewWindowAndClosePopup(ctx context.Context, sessionName, windowName, command string) (*exec.Cmd, error) {
 	// Switch to session
-	if err := c.SwitchClient(ctx, sessionName); err != nil {
+	if err := c.SwitchClientToSession(ctx, sessionName); err != nil {
 		return nil, fmt.Errorf("failed to switch session: %w", err)
 	}
 
