@@ -101,7 +101,7 @@ func (c *Client) SwapWindow(ctx context.Context, source, target string) error {
 
 // ListWindowsDetailed returns a list of windows with detailed information for the given session.
 func (c *Client) ListWindowsDetailed(ctx context.Context, sessionName string) ([]Window, error) {
-	format := `#{window_id}:#{window_index}:#{window_name}:#{?window_active,1,0}:#{pane_current_command}`
+	format := `#{window_id}:#{window_index}:#{window_name}:#{?window_active,1,0}:#{pane_current_command}:#{pane_pid}`
 	output, err := c.run(ctx, "list-windows", "-t", sessionName, "-F", format)
 	if err != nil {
 		return nil, err
@@ -113,8 +113,8 @@ func (c *Client) ListWindowsDetailed(ctx context.Context, sessionName string) ([
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, ":", 5)
-		if len(parts) < 5 {
+		parts := strings.SplitN(line, ":", 6)
+		if len(parts) < 6 {
 			continue // Skip malformed lines
 		}
 
@@ -123,12 +123,18 @@ func (c *Client) ListWindowsDetailed(ctx context.Context, sessionName string) ([
 			continue // Skip if index is not a number
 		}
 
+		pid, err := strconv.Atoi(parts[5])
+		if err != nil {
+			pid = 0 // Default to 0 if PID can't be parsed
+		}
+
 		win := Window{
 			ID:       parts[0],
 			Index:    index,
 			Name:     parts[2],
 			IsActive: parts[3] == "1",
 			Command:  parts[4],
+			PID:      pid,
 		}
 		windows = append(windows, win)
 	}

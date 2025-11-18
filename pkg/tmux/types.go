@@ -21,4 +21,5 @@ type Window struct {
 	Name     string `json:"name"`
 	IsActive bool   `json:"is_active"`
 	Command  string `json:"command"` // Active pane's command
+	PID      int    `json:"pid"`     // Active pane's PID
 }
