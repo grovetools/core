@@ -420,7 +420,7 @@ func (m Model) View() string {
 
 		// Cursor
 		if isSelected {
-			line.WriteString(core_theme.DefaultTheme.Highlight.Render("▶ "))
+			line.WriteString(core_theme.DefaultTheme.Highlight.Render(core_theme.IconSelect + " "))
 		} else {
 			line.WriteString("  ")
 		}

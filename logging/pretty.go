@@ -64,8 +64,8 @@ func (p *PrettyLogger) WithWriter(w io.Writer) *PrettyLogger {
 // Success logs a success message with a checkmark
 func (p *PrettyLogger) Success(message string) {
 	// Pretty print to console
-	fmt.Fprintf(p.writer, "%s %s\n", 
-		p.styles.Success.Render("✓"),
+	fmt.Fprintf(p.writer, "%s %s\n",
+		p.styles.Success.Render(theme.IconSuccess),
 		p.styles.Success.Render(message))
 }
 
@@ -79,7 +79,7 @@ func (p *PrettyLogger) InfoPretty(message string) {
 func (p *PrettyLogger) WarnPretty(message string) {
 	// Pretty print to console
 	fmt.Fprintf(p.writer, "%s %s\n",
-		p.styles.Warning.Render("⚠"),
+		p.styles.Warning.Render(theme.IconWarning),
 		p.styles.Warning.Render(message))
 }
 
@@ -87,7 +87,7 @@ func (p *PrettyLogger) WarnPretty(message string) {
 func (p *PrettyLogger) ErrorPretty(message string, err error) {
 	// Pretty print to console
 	fmt.Fprintf(p.writer, "%s %s",
-		p.styles.Error.Render("✗"),
+		p.styles.Error.Render(theme.IconError),
 		p.styles.Error.Render(message))
 	if err != nil {
 		fmt.Fprintf(p.writer, ": %s", p.styles.Error.Render(err.Error()))

@@ -249,7 +249,7 @@ func RenderKeyValue(key, value string) string {
 // RenderSection creates a section with a title and content
 func RenderSection(title, content string) string {
 	t := theme.DefaultTheme
-	titleLine := t.Header.Render(fmt.Sprintf("▶ %s", title))
+	titleLine := t.Header.Render(fmt.Sprintf("%s %s", theme.IconSelect, title))
 	contentLines := lipgloss.NewStyle().
 		MarginLeft(2).
 		Render(content)

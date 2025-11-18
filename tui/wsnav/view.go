@@ -169,7 +169,7 @@ func (m *Model) buildTableView(availableHeight int) string {
 
 	// Use the selectable table component for rendering.
 	mainContent := table.SelectableTableWithOptions(
-		[]string{"K", "●", "WORKSPACE", "PATH"},
+		[]string{"K", theme.IconRepo, "WORKSPACE", "PATH"},
 		visibleRows,
 		relativeCursor,
 		table.SelectableTableOptions{HighlightColumn: -1},
@@ -222,9 +222,9 @@ func (m *Model) buildTableRows(projects []*workspace.WorkspaceNode) [][]string {
 		statusIcon := " "
 		if gitStatus != nil {
 			if gitStatus.IsDirty {
-				statusIcon = theme.DefaultTheme.Warning.Render("*")
+				statusIcon = theme.DefaultTheme.Warning.Render(theme.IconWarning)
 			} else {
-				statusIcon = theme.DefaultTheme.Success.Render("✔")
+				statusIcon = theme.DefaultTheme.Success.Render(theme.IconSuccess)
 			}
 		}
 
