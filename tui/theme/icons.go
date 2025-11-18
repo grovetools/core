@@ -25,7 +25,7 @@ const (
 	nerdIconArrow                  = "󰁔" // md-arrow_right (U+F0054)
 	nerdIconBullet                 = "" // oct-dot_fill (U+F444)
 	nerdIconNote                   = "󰎚" // md-note (U+F039A)
-	nerdIconPlan                   = "󰚸" // md-note_multiple (U+F06B8)
+	nerdIconPlan                   = "󰠡" // md-floor_plan (U+F0821)
 	nerdIconChat                   = "󰭹" // md-chat (U+F0B79)
 	nerdIconOneshot                = "" // fa-bullseye (U+F140)
 	nerdIconInteractiveAgent       = "" // fa-robot (U+EE0D)
@@ -98,6 +98,8 @@ const (
 	nerdIconNoteInProgress         = "󰔟" // md-timer_sand (U+F051F)
 
 	nerdIconSparkle                    = "" // cod-sparkle (U+EC10)
+	nerdIconCode                       = "" // fa-code (U+F121)
+	nerdIconNotebook                   = "󰠮" // md-notebook (U+F082E)
 
 	nerdIconFileTree               = "󰙅" // md-file_tree (U+F0645)
 	nerdIconPineTreeBox            = "󰐆" // md-pine_tree_box (U+F0406)
@@ -223,6 +225,8 @@ const (
 	asciiIconNoteInProgress        = "[~]" // In-progress notes
 
 	asciiIconSparkle                   = "[+]" // New
+	asciiIconCode                      = "</>" // Code
+	asciiIconNotebook                  = "[N]" // Notebook
 
 	asciiIconFileTree              = "[F]" // File tree
 	asciiIconPineTreeBox           = "[P]" // Pine tree box
@@ -348,6 +352,8 @@ var (
 	IconNoteInProgress             string
 
 	IconSparkle                        string
+	IconCode                           string
+	IconNotebook                       string
 
 	IconFileTree                   string
 	IconPineTreeBox                string
@@ -483,6 +489,8 @@ func init() {
 		IconNoteReview = asciiIconNoteReview
 		IconNoteInProgress = asciiIconNoteInProgress
 		IconSparkle = asciiIconSparkle
+		IconCode = asciiIconCode
+		IconNotebook = asciiIconNotebook
 		IconFileTree = asciiIconFileTree
 		IconPineTreeBox = asciiIconPineTreeBox
 		IconViewDashboard = asciiIconViewDashboard
@@ -599,6 +607,8 @@ func init() {
 		IconNoteReview = nerdIconNoteReview
 		IconNoteInProgress = nerdIconNoteInProgress
 		IconSparkle = nerdIconSparkle
+		IconCode = nerdIconCode
+		IconNotebook = nerdIconNotebook
 		IconFileTree = nerdIconFileTree
 		IconPineTreeBox = nerdIconPineTreeBox
 		IconViewDashboard = nerdIconViewDashboard
