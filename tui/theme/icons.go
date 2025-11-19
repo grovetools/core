@@ -100,6 +100,7 @@ const (
 	nerdIconSparkle                    = "" // cod-sparkle (U+EC10)
 	nerdIconCode                       = "" // fa-code (U+F121)
 	nerdIconNotebook                   = "󰠮" // md-notebook (U+F082E)
+	nerdIconDocs                       = "󰡯" // md-file_question (U+F086F)
 
 	nerdIconFileTree               = "󰙅" // md-file_tree (U+F0645)
 	nerdIconPineTreeBox            = "󰐆" // md-pine_tree_box (U+F0406)
@@ -227,6 +228,7 @@ const (
 	asciiIconSparkle                   = "[+]" // New
 	asciiIconCode                      = "</>" // Code
 	asciiIconNotebook                  = "[N]" // Notebook
+	asciiIconDocs                      = "[D]" // Docs
 
 	asciiIconFileTree              = "[F]" // File tree
 	asciiIconPineTreeBox           = "[P]" // Pine tree box
@@ -354,6 +356,7 @@ var (
 	IconSparkle                        string
 	IconCode                           string
 	IconNotebook                       string
+	IconDocs                           string
 
 	IconFileTree                   string
 	IconPineTreeBox                string
@@ -491,6 +494,7 @@ func init() {
 		IconSparkle = asciiIconSparkle
 		IconCode = asciiIconCode
 		IconNotebook = asciiIconNotebook
+		IconDocs = asciiIconDocs
 		IconFileTree = asciiIconFileTree
 		IconPineTreeBox = asciiIconPineTreeBox
 		IconViewDashboard = asciiIconViewDashboard
@@ -609,6 +613,7 @@ func init() {
 		IconSparkle = nerdIconSparkle
 		IconCode = nerdIconCode
 		IconNotebook = nerdIconNotebook
+		IconDocs = nerdIconDocs
 		IconFileTree = nerdIconFileTree
 		IconPineTreeBox = nerdIconPineTreeBox
 		IconViewDashboard = nerdIconViewDashboard
