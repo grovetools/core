@@ -3,6 +3,7 @@ package workspace
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -665,6 +666,16 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 			}
 		}
 
+		// Get the default branch for the bare repo
+		defaultBranch := "main" // fallback
+		cmd := exec.Command("git", "-C", r.BarePath, "symbolic-ref", "refs/remotes/origin/HEAD")
+		if output, err := cmd.Output(); err == nil {
+			ref := strings.TrimSpace(string(output))
+			if strings.HasPrefix(ref, "refs/remotes/origin/") {
+				defaultBranch = strings.TrimPrefix(ref, "refs/remotes/origin/")
+			}
+		}
+
 		// Bare repos are EcosystemSubProjects under the cx ecosystem
 		proj := Project{
 			Name:                name,
@@ -672,6 +683,9 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 			Type:                "Bare",
 			ParentEcosystemPath: cxEcosystemPath,
 			Workspaces:          []DiscoveredWorkspace{},
+			RepoURL:             r.URL,
+			RepoShorthand:       r.Shorthand,
+			Version:             defaultBranch,
 		}
 
 		// Discover worktrees for this bare repo in .grove-worktrees

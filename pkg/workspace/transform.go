@@ -109,6 +109,8 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 				Commit:              proj.Commit,
 				AuditStatus:         proj.AuditStatus,
 				ReportPath:          proj.ReportPath,
+				RepoURL:             proj.RepoURL,
+				RepoShorthand:       proj.RepoShorthand,
 			})
 
 			// Add worktrees for this bare repo
@@ -120,6 +122,9 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 						Kind:                KindEcosystemSubProjectWorktree,
 						ParentProjectPath:   ws.ParentProjectPath,
 						ParentEcosystemPath: proj.ParentEcosystemPath,
+						RepoURL:             proj.RepoURL,
+						RepoShorthand:       proj.RepoShorthand,
+						Version:             proj.Version,
 					})
 				}
 			}

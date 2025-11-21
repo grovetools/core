@@ -55,10 +55,12 @@ type Project struct {
 	Workspaces          []DiscoveredWorkspace `json:"workspaces"`
 
 	// Cloned repository-specific fields (populated by discovery for cx repo managed repos)
-	Version     string `json:"version,omitempty"`
-	Commit      string `json:"commit,omitempty"`
-	AuditStatus string `json:"audit_status,omitempty"`
-	ReportPath  string `json:"report_path,omitempty"`
+	Version       string `json:"version,omitempty"`
+	Commit        string `json:"commit,omitempty"`
+	AuditStatus   string `json:"audit_status,omitempty"`
+	ReportPath    string `json:"report_path,omitempty"`
+	RepoURL       string `json:"repo_url,omitempty"`
+	RepoShorthand string `json:"repo_shorthand,omitempty"`
 }
 
 // Ecosystem represents a top-level meta-repository.
@@ -188,10 +190,12 @@ type WorkspaceNode struct {
 	Depth      int    `json:"-"` // Cached depth in the hierarchy
 
 	// Cloned repository-specific fields (populated by discovery)
-	Version     string `json:"version,omitempty"`
-	Commit      string `json:"commit,omitempty"`
-	AuditStatus string `json:"audit_status,omitempty"`
-	ReportPath  string `json:"report_path,omitempty"`
+	Version       string `json:"version,omitempty"`
+	Commit        string `json:"commit,omitempty"`
+	AuditStatus   string `json:"audit_status,omitempty"`
+	ReportPath    string `json:"report_path,omitempty"`
+	RepoURL       string `json:"repo_url,omitempty"`
+	RepoShorthand string `json:"repo_shorthand,omitempty"`
 }
 
 // IsWorktree returns true if this node represents a worktree.
