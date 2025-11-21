@@ -51,6 +51,9 @@
     "report_caller": {
       "type": "boolean"
     },
+    "log_startup": {
+      "type": "boolean"
+    },
     "file": {
       "$ref": "#/$defs/FileSinkConfig"
     },

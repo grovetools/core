@@ -196,8 +196,13 @@ func NewLogger(component string) *logrus.Entry {
 		logger.SetOutput(io.Discard)
 	}
 
-	// Log version information once on first logger initialization
+	// Log version information once on first logger initialization (if enabled)
 	initOnce.Do(func() {
+		// Only log startup message if explicitly enabled in config
+		if !logCfg.LogStartup {
+			return
+		}
+
 		info := version.GetInfo()
 
 		// Get binary name for more useful logging

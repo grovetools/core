@@ -12,6 +12,10 @@ type Config struct {
 	// Can be enabled with the GROVE_LOG_CALLER=true environment variable.
 	ReportCaller bool `yaml:"report_caller"`
 
+	// LogStartup, if true, logs "Grove binary started" on first logger initialization.
+	// Defaults to false.
+	LogStartup bool `yaml:"log_startup"`
+
 	// File configures logging to a file.
 	File FileSinkConfig `yaml:"file"`
 

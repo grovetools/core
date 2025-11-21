@@ -20,6 +20,7 @@ func main() {
 	rootCmd.AddCommand(cmd.NewEditorCmd())
 	rootCmd.AddCommand(cmd.NewOpenInWindowCmd())
 	rootCmd.AddCommand(cmd.NewTmuxCmd())
+	rootCmd.AddCommand(cmd.NewLogsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
