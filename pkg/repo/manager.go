@@ -21,6 +21,7 @@ type Manager struct {
 
 type RepoInfo struct {
 	URL            string    `json:"url"`
+	Shorthand      string    `json:"shorthand,omitempty"`
 	LocalPath      string    `json:"local_path"`
 	PinnedVersion  string    `json:"pinned_version"`
 	ResolvedCommit string    `json:"resolved_commit"`
@@ -62,6 +63,34 @@ func NewManager() (*Manager, error) {
 	}, nil
 }
 
+// extractShorthand extracts "owner/repo" from common Git hosting URLs.
+// Returns empty string if no shorthand can be extracted.
+func extractShorthand(repoURL string) string {
+	// Remove protocol prefixes
+	url := strings.TrimPrefix(repoURL, "https://")
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimPrefix(url, "git@")
+
+	// Replace colon (from git@host:owner/repo) with slash
+	url = strings.Replace(url, ":", "/", 1)
+
+	// Check for common hosting providers
+	for _, host := range []string{"github.com", "gitlab.com", "bitbucket.com"} {
+		if strings.HasPrefix(url, host+"/") {
+			// Extract the part after the host
+			parts := strings.SplitN(url, "/", 3)
+			if len(parts) >= 3 {
+				shorthand := parts[1] + "/" + parts[2]
+				// Remove .git suffix if present
+				shorthand = strings.TrimSuffix(shorthand, ".git")
+				return shorthand
+			}
+		}
+	}
+
+	return ""
+}
+
 func (m *Manager) Ensure(repoURL, version string) (localPath string, resolvedCommit string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,6 +125,7 @@ func (m *Manager) Ensure(repoURL, version string) (localPath string, resolvedCom
 
 	info := RepoInfo{
 		URL:            repoURL,
+		Shorthand:      extractShorthand(repoURL),
 		LocalPath:      localPath,
 		PinnedVersion:  version,
 		ResolvedCommit: resolvedCommit,
@@ -127,9 +157,25 @@ func (m *Manager) List() ([]RepoInfo, error) {
 	}
 
 	var repos []RepoInfo
-	for _, repo := range manifest.Repositories {
+	needsSave := false
+	for url, repo := range manifest.Repositories {
+		// Populate shorthand if not already set (for backwards compatibility)
+		if repo.Shorthand == "" {
+			repo.Shorthand = extractShorthand(url)
+			manifest.Repositories[url] = repo
+			needsSave = true
+		}
 		repos = append(repos, repo)
 	}
+
+	// Save the manifest if we backfilled any shorthands
+	if needsSave {
+		if err := m.saveManifest(manifest); err != nil {
+			// Don't fail the list operation if save fails
+			fmt.Fprintf(os.Stderr, "Warning: failed to save backfilled shorthands: %v\n", err)
+		}
+	}
+
 	return repos, nil
 }
 
@@ -160,6 +206,10 @@ func (m *Manager) Sync() error {
 
 		info.ResolvedCommit = resolvedCommit
 		info.LastSyncedAt = time.Now()
+		// Populate shorthand if not already set (for backwards compatibility)
+		if info.Shorthand == "" {
+			info.Shorthand = extractShorthand(url)
+		}
 		manifest.Repositories[url] = info
 	}
 
