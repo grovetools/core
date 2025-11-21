@@ -65,9 +65,68 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 		})
 	}
 
+	// Check if we have any bare repos (cx-managed) and add a virtual ecosystem node for them
+	cxEcosystemPath := ""
+	hasBareRepos := false
+	for _, proj := range result.Projects {
+		if proj.Type == "Bare" && proj.ParentEcosystemPath != "" {
+			cxEcosystemPath = proj.ParentEcosystemPath
+			hasBareRepos = true
+			break
+		}
+	}
+
+	// Add virtual cx-repos ecosystem node if there are bare repos and the ecosystem doesn't already exist
+	if hasBareRepos && cxEcosystemPath != "" {
+		ecosystemExists := false
+		for _, eco := range result.Ecosystems {
+			if eco.Path == cxEcosystemPath {
+				ecosystemExists = true
+				break
+			}
+		}
+		if !ecosystemExists {
+			nodes = append(nodes, &WorkspaceNode{
+				Name:              "cx-repos",
+				Path:              cxEcosystemPath,
+				Kind:              KindEcosystemRoot,
+				RootEcosystemPath: cxEcosystemPath,
+			})
+		}
+	}
+
 	// Then process all discovered projects and their workspaces
 	for _, proj := range result.Projects {
-		// Check if this is a cloned repo (Type == "Cloned") - these should be NonGroveRepo
+		// Handle bare repos from cx repo - these are EcosystemSubProjects
+		if proj.Type == "Bare" {
+			// Add the bare repo itself as an EcosystemSubProject
+			nodes = append(nodes, &WorkspaceNode{
+				Name:                proj.Name,
+				Path:                proj.Path,
+				Kind:                KindEcosystemSubProject,
+				ParentEcosystemPath: proj.ParentEcosystemPath,
+				Version:             proj.Version,
+				Commit:              proj.Commit,
+				AuditStatus:         proj.AuditStatus,
+				ReportPath:          proj.ReportPath,
+			})
+
+			// Add worktrees for this bare repo
+			for _, ws := range proj.Workspaces {
+				if ws.Type == WorkspaceTypeWorktree {
+					nodes = append(nodes, &WorkspaceNode{
+						Name:                ws.Name,
+						Path:                ws.Path,
+						Kind:                KindEcosystemSubProjectWorktree,
+						ParentProjectPath:   ws.ParentProjectPath,
+						ParentEcosystemPath: proj.ParentEcosystemPath,
+					})
+				}
+			}
+			continue
+		}
+
+		// Check if this is a cloned repo (Type == "Cloned") - legacy handling
 		if proj.Type == "Cloned" {
 			nodes = append(nodes, &WorkspaceNode{
 				Name:        proj.Name,

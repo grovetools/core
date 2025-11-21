@@ -36,6 +36,16 @@ type Manifest struct {
 	Audits       map[string]AuditInfo `json:"audits"`       // map[commitHash]AuditInfo
 }
 
+// GetCxEcosystemPath returns the path to the cx ecosystem root (~/.grove/cx).
+// This is the parent ecosystem path for all cx-managed bare repos.
+func GetCxEcosystemPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("getting home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".grove", "cx"), nil
+}
+
 func NewManager() (*Manager, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

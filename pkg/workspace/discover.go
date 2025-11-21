@@ -629,6 +629,7 @@ func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
 
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
 // These are now treated as EcosystemSubProjects under the ~/.grove/cx/ ecosystem.
+// Each bare repo is discovered along with its worktrees in the .grove-worktrees directory.
 func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 	manager, err := repo.NewManager()
 	if err != nil {
@@ -649,12 +650,20 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 
 	var projects []Project
 	for _, r := range cloned {
-		// Extract a simpler name from the URL
-		name := r.URL
-		if parts := strings.Split(name, "/"); len(parts) > 1 {
-			name = parts[len(parts)-1]
+		// Extract a simpler name from the URL or shorthand
+		name := r.Shorthand
+		if name == "" {
+			name = r.URL
+			if parts := strings.Split(name, "/"); len(parts) > 1 {
+				name = parts[len(parts)-1]
+			}
+			name = strings.TrimSuffix(name, ".git")
+		} else {
+			// Use the repo name from shorthand (e.g., "owner/repo" -> "repo")
+			if parts := strings.Split(name, "/"); len(parts) > 1 {
+				name = parts[len(parts)-1]
+			}
 		}
-		name = strings.TrimSuffix(name, ".git")
 
 		// Bare repos are EcosystemSubProjects under the cx ecosystem
 		proj := Project{
@@ -662,15 +671,25 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 			Path:                r.BarePath,
 			Type:                "Bare",
 			ParentEcosystemPath: cxEcosystemPath,
-			Workspaces: []DiscoveredWorkspace{
-				{
-					Name:              "bare",
-					Path:              r.BarePath,
-					Type:              WorkspaceTypePrimary,
-					ParentProjectPath: "",
-				},
-			},
+			Workspaces:          []DiscoveredWorkspace{},
 		}
+
+		// Discover worktrees for this bare repo in .grove-worktrees
+		worktreesDir := filepath.Join(r.BarePath, ".grove-worktrees")
+		if entries, readErr := os.ReadDir(worktreesDir); readErr == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					wtPath := filepath.Join(worktreesDir, entry.Name())
+					proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
+						Name:              entry.Name(),
+						Path:              wtPath,
+						Type:              WorkspaceTypeWorktree,
+						ParentProjectPath: r.BarePath,
+					})
+				}
+			}
+		}
+
 		projects = append(projects, proj)
 	}
 
