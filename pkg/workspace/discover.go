@@ -628,6 +628,7 @@ func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
 }
 
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
+// These are now treated as EcosystemSubProjects under the ~/.grove/cx/ ecosystem.
 func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 	manager, err := repo.NewManager()
 	if err != nil {
@@ -639,6 +640,13 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 		return nil, err
 	}
 
+	// Get the cx ecosystem path
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	cxEcosystemPath := filepath.Join(homeDir, ".grove", "cx")
+
 	var projects []Project
 	for _, r := range cloned {
 		// Extract a simpler name from the URL
@@ -648,21 +656,18 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 		}
 		name = strings.TrimSuffix(name, ".git")
 
-		// Convert repo.RepoInfo to workspace.Project
+		// Bare repos are EcosystemSubProjects under the cx ecosystem
 		proj := Project{
-			Name:        name,
-			Path:        r.LocalPath,
-			Type:        "Cloned",
-			Version:     r.PinnedVersion,
-			Commit:      r.ResolvedCommit,
-			AuditStatus: r.Audit.Status,
-			ReportPath:  r.Audit.ReportPath,
+			Name:                name,
+			Path:                r.BarePath,
+			Type:                "Bare",
+			ParentEcosystemPath: cxEcosystemPath,
 			Workspaces: []DiscoveredWorkspace{
 				{
-					Name:              "main",
-					Path:              r.LocalPath,
+					Name:              "bare",
+					Path:              r.BarePath,
 					Type:              WorkspaceTypePrimary,
-					ParentProjectPath: r.LocalPath,
+					ParentProjectPath: "",
 				},
 			},
 		}

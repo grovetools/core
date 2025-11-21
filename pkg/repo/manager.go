@@ -20,24 +20,20 @@ type Manager struct {
 }
 
 type RepoInfo struct {
-	URL            string    `json:"url"`
-	Shorthand      string    `json:"shorthand,omitempty"`
-	LocalPath      string    `json:"local_path"`
-	PinnedVersion  string    `json:"pinned_version"`
-	ResolvedCommit string    `json:"resolved_commit"`
-	LastSyncedAt   time.Time `json:"last_synced_at"`
-	Audit          AuditInfo `json:"audit"`
+	URL       string `json:"url"`
+	Shorthand string `json:"shorthand,omitempty"`
+	BarePath  string `json:"bare_path"`
 }
 
 type AuditInfo struct {
-	Status        string    `json:"status"`
-	AuditedAt     time.Time `json:"audited_at"`
-	AuditedCommit string    `json:"audited_commit"`
-	ReportPath    string    `json:"report_path,omitempty"`
+	Status     string    `json:"status"` // "passed", "failed", "not_audited"
+	AuditedAt  time.Time `json:"audited_at"`
+	ReportPath string    `json:"report_path,omitempty"`
 }
 
 type Manifest struct {
-	Repositories map[string]RepoInfo `json:"repositories"`
+	Repositories map[string]RepoInfo  `json:"repositories"` // map[repoURL]RepoInfo
+	Audits       map[string]AuditInfo `json:"audits"`       // map[commitHash]AuditInfo
 }
 
 func NewManager() (*Manager, error) {
@@ -91,7 +87,60 @@ func extractShorthand(repoURL string) string {
 	return ""
 }
 
-func (m *Manager) Ensure(repoURL, version string) (localPath string, resolvedCommit string, err error) {
+// Ensure makes sure the bare clone for the given repository exists and is up-to-date.
+// It does not perform any checkouts. Use EnsureVersion for version-specific worktrees.
+func (m *Manager) Ensure(repoURL string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	manifest, err := m.loadManifest()
+	if err != nil {
+		return fmt.Errorf("loading manifest: %w", err)
+	}
+
+	barePath := m.getLocalPath(repoURL)
+
+	// Check if bare repository exists
+	if _, err := os.Stat(barePath); os.IsNotExist(err) {
+		// Clone as bare repository
+		if err := m.cloneRepository(repoURL, barePath); err != nil {
+			return fmt.Errorf("cloning repository: %w", err)
+		}
+	} else {
+		// Fetch updates for existing bare repository
+		if err := m.fetchRepository(barePath); err != nil {
+			return fmt.Errorf("fetching repository: %w", err)
+		}
+	}
+
+	// Update manifest
+	if manifest.Repositories == nil {
+		manifest.Repositories = make(map[string]RepoInfo)
+	}
+
+	info := RepoInfo{
+		URL:       repoURL,
+		Shorthand: extractShorthand(repoURL),
+		BarePath:  barePath,
+	}
+
+	manifest.Repositories[repoURL] = info
+
+	if err := m.saveManifest(manifest); err != nil {
+		return fmt.Errorf("saving manifest: %w", err)
+	}
+
+	return nil
+}
+
+// EnsureVersion ensures a specific version of a repository is checked out in a worktree.
+// It returns the absolute path to the worktree and the resolved commit hash.
+func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, resolvedCommit string, err error) {
+	// Ensure the bare clone exists and is up-to-date
+	if err := m.Ensure(repoURL); err != nil {
+		return "", "", fmt.Errorf("ensuring bare clone: %w", err)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -100,51 +149,119 @@ func (m *Manager) Ensure(repoURL, version string) (localPath string, resolvedCom
 		return "", "", fmt.Errorf("loading manifest: %w", err)
 	}
 
-	localPath = m.getLocalPath(repoURL)
-
-	if _, err := os.Stat(localPath); os.IsNotExist(err) {
-		if err := m.cloneRepository(repoURL, localPath); err != nil {
-			return "", "", fmt.Errorf("cloning repository: %w", err)
-		}
-	} else {
-		if err := m.fetchRepository(localPath); err != nil {
-			return "", "", fmt.Errorf("fetching repository: %w", err)
-		}
+	info, exists := manifest.Repositories[repoURL]
+	if !exists {
+		return "", "", fmt.Errorf("repository %s not found in manifest after ensure", repoURL)
 	}
 
-	if version != "" {
-		if err := m.checkoutVersion(localPath, version); err != nil {
-			return "", "", fmt.Errorf("checking out version %s: %w", version, err)
-		}
+	barePath := info.BarePath
+
+	// Resolve the version to a commit hash
+	// If version is empty, use origin/HEAD (default branch)
+	versionToResolve := version
+	if versionToResolve == "" {
+		versionToResolve = "origin/HEAD"
 	}
 
-	resolvedCommit, err = m.getResolvedCommit(localPath)
+	resolvedCommit, err = m.resolveVersion(barePath, versionToResolve)
 	if err != nil {
-		return "", "", fmt.Errorf("getting resolved commit: %w", err)
+		return "", "", fmt.Errorf("resolving version %s: %w", versionToResolve, err)
 	}
 
-	info := RepoInfo{
-		URL:            repoURL,
-		Shorthand:      extractShorthand(repoURL),
-		LocalPath:      localPath,
-		PinnedVersion:  version,
-		ResolvedCommit: resolvedCommit,
-		LastSyncedAt:   time.Now(),
-		Audit: AuditInfo{
-			Status: "not_audited",
-		},
+	// Create worktree under the bare repo in .grove-worktrees/{commit-hash}
+	// This follows the standard workspace pattern
+	worktreeDir := filepath.Join(barePath, ".grove-worktrees")
+	worktreePath = filepath.Join(worktreeDir, resolvedCommit[:12])
+
+	// Create worktree directory if needed
+	if err := os.MkdirAll(worktreeDir, 0755); err != nil {
+		return "", "", fmt.Errorf("creating worktree directory: %w", err)
 	}
 
-	if manifest.Repositories == nil {
-		manifest.Repositories = make(map[string]RepoInfo)
+	// Check if worktree already exists
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		// Create the worktree
+		if err := m.createWorktree(barePath, worktreePath, resolvedCommit); err != nil {
+			return "", "", fmt.Errorf("creating worktree: %w", err)
+		}
 	}
-	manifest.Repositories[repoURL] = info
 
-	if err := m.saveManifest(manifest); err != nil {
-		return "", "", fmt.Errorf("saving manifest: %w", err)
+	return worktreePath, resolvedCommit, nil
+}
+
+// resolveVersion resolves a version string (branch, tag, or commit) to a full commit hash
+func (m *Manager) resolveVersion(barePath, version string) (string, error) {
+	// Special handling for origin/HEAD or empty version - find the default branch
+	if version == "origin/HEAD" || version == "" {
+		// Try to get the symbolic ref for origin/HEAD
+		cmd := exec.Command("git", "-C", barePath, "symbolic-ref", "refs/remotes/origin/HEAD")
+		if output, err := cmd.Output(); err == nil {
+			// Parse the ref (e.g., "refs/remotes/origin/main" -> "origin/main")
+			ref := strings.TrimSpace(string(output))
+			if strings.HasPrefix(ref, "refs/remotes/origin/") {
+				version = "origin/" + strings.TrimPrefix(ref, "refs/remotes/origin/")
+			}
+		} else {
+			// Fallback: try common default branch names
+			for _, branch := range []string{"origin/main", "origin/master"} {
+				cmd := exec.Command("git", "-C", barePath, "rev-parse", branch+"^{commit}")
+				if output, err := cmd.Output(); err == nil {
+					return strings.TrimSpace(string(output)), nil
+				}
+			}
+			return "", fmt.Errorf("could not determine default branch")
+		}
 	}
 
-	return localPath, resolvedCommit, nil
+	// Try the version as-is first (could be a tag, commit hash, or already-prefixed branch)
+	cmd := exec.Command("git", "-C", barePath, "rev-parse", version+"^{commit}")
+	output, err := cmd.Output()
+	if err == nil {
+		return strings.TrimSpace(string(output)), nil
+	}
+
+	// For bare repos, branches are in refs/heads/, not refs/remotes/origin/
+	// Try various common patterns
+	if !strings.Contains(version, "/") {
+		candidates := []string{
+			"refs/heads/" + version,    // bare repo branches
+			"origin/" + version,         // regular clone remote branches
+			"refs/remotes/origin/" + version, // full remote ref
+		}
+
+		for _, candidate := range candidates {
+			cmd = exec.Command("git", "-C", barePath, "rev-parse", candidate+"^{commit}")
+			output, err = cmd.Output()
+			if err == nil {
+				return strings.TrimSpace(string(output)), nil
+			}
+		}
+	}
+
+	// Resolution failed - try to provide helpful suggestions
+	cmd = exec.Command("git", "-C", barePath, "for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/tags/")
+	if output, err := cmd.Output(); err == nil {
+		refs := strings.TrimSpace(string(output))
+		if refs != "" {
+			lines := strings.Split(refs, "\n")
+			// Limit to first 5 suggestions
+			if len(lines) > 5 {
+				lines = lines[:5]
+			}
+			return "", fmt.Errorf("could not resolve version '%s'. Available refs: %s", version, strings.Join(lines, ", "))
+		}
+	}
+	return "", fmt.Errorf("could not resolve version '%s' (tried as tag, commit, and branch)", version)
+}
+
+// createWorktree creates a new worktree at the specified path for the given commit
+func (m *Manager) createWorktree(barePath, worktreePath, commitHash string) error {
+	cmd := exec.Command("git", "-C", barePath, "worktree", "add", worktreePath, commitHash)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree add failed: %w\nOutput: %s", err, string(output))
+	}
+	return nil
 }
 
 func (m *Manager) List() ([]RepoInfo, error) {
@@ -159,20 +276,19 @@ func (m *Manager) List() ([]RepoInfo, error) {
 	var repos []RepoInfo
 	needsSave := false
 	for url, repo := range manifest.Repositories {
-		// Populate shorthand if not already set (for backwards compatibility)
-		if repo.Shorthand == "" {
-			repo.Shorthand = extractShorthand(url)
+		// Migrate old repos: populate BarePath if missing
+		if repo.BarePath == "" {
+			repo.BarePath = m.getLocalPath(url)
 			manifest.Repositories[url] = repo
 			needsSave = true
 		}
 		repos = append(repos, repo)
 	}
 
-	// Save the manifest if we backfilled any shorthands
+	// Save manifest if we migrated any repos
 	if needsSave {
 		if err := m.saveManifest(manifest); err != nil {
-			// Don't fail the list operation if save fails
-			fmt.Fprintf(os.Stderr, "Warning: failed to save backfilled shorthands: %v\n", err)
+			return nil, fmt.Errorf("saving migrated manifest: %w", err)
 		}
 	}
 
@@ -189,34 +305,17 @@ func (m *Manager) Sync() error {
 	}
 
 	for url, info := range manifest.Repositories {
-		if err := m.fetchRepository(info.LocalPath); err != nil {
+		// Fetch latest changes for each bare repository
+		if err := m.fetchRepository(info.BarePath); err != nil {
 			return fmt.Errorf("fetching %s: %w", url, err)
 		}
-
-		if info.PinnedVersion != "" {
-			if err := m.checkoutVersion(info.LocalPath, info.PinnedVersion); err != nil {
-				return fmt.Errorf("checking out %s for %s: %w", info.PinnedVersion, url, err)
-			}
-		}
-
-		resolvedCommit, err := m.getResolvedCommit(info.LocalPath)
-		if err != nil {
-			return fmt.Errorf("getting resolved commit for %s: %w", url, err)
-		}
-
-		info.ResolvedCommit = resolvedCommit
-		info.LastSyncedAt = time.Now()
-		// Populate shorthand if not already set (for backwards compatibility)
-		if info.Shorthand == "" {
-			info.Shorthand = extractShorthand(url)
-		}
-		manifest.Repositories[url] = info
 	}
 
-	return m.saveManifest(manifest)
+	return nil
 }
 
-func (m *Manager) UpdateAuditStatus(repoURL, status string) error {
+// UpdateAuditResult updates the audit status for a specific commit hash
+func (m *Manager) UpdateAuditResult(commitHash, status, reportPath string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -225,40 +324,31 @@ func (m *Manager) UpdateAuditStatus(repoURL, status string) error {
 		return fmt.Errorf("loading manifest: %w", err)
 	}
 
-	info, exists := manifest.Repositories[repoURL]
-	if !exists {
-		return fmt.Errorf("repository %s not found in manifest", repoURL)
+	if manifest.Audits == nil {
+		manifest.Audits = make(map[string]AuditInfo)
 	}
 
-	info.Audit.Status = status
-	info.Audit.AuditedAt = time.Now()
-	info.Audit.AuditedCommit = info.ResolvedCommit
-	manifest.Repositories[repoURL] = info
+	manifest.Audits[commitHash] = AuditInfo{
+		Status:     status,
+		AuditedAt:  time.Now(),
+		ReportPath: reportPath,
+	}
 
 	return m.saveManifest(manifest)
 }
 
-func (m *Manager) UpdateAuditResult(repoURL, status, reportPath string) error {
+// GetAuditInfo returns the audit information for a specific commit hash
+func (m *Manager) GetAuditInfo(commitHash string) (AuditInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	manifest, err := m.loadManifest()
 	if err != nil {
-		return fmt.Errorf("loading manifest: %w", err)
+		return AuditInfo{}, false
 	}
 
-	info, exists := manifest.Repositories[repoURL]
-	if !exists {
-		return fmt.Errorf("repository %s not found in manifest", repoURL)
-	}
-
-	info.Audit.Status = status
-	info.Audit.AuditedAt = time.Now()
-	info.Audit.AuditedCommit = info.ResolvedCommit
-	info.Audit.ReportPath = reportPath
-	manifest.Repositories[repoURL] = info
-
-	return m.saveManifest(manifest)
+	info, exists := manifest.Audits[commitHash]
+	return info, exists
 }
 
 func (m *Manager) getLocalPath(repoURL string) string {
@@ -275,11 +365,11 @@ func (m *Manager) getLocalPath(repoURL string) string {
 	return filepath.Join(m.basePath, dirName)
 }
 
-func (m *Manager) cloneRepository(repoURL, localPath string) error {
-	cmd := exec.Command("git", "clone", repoURL, localPath)
+func (m *Manager) cloneRepository(repoURL, barePath string) error {
+	cmd := exec.Command("git", "clone", "--bare", repoURL, barePath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git clone failed: %w\nOutput: %s", err, string(output))
+		return fmt.Errorf("git clone --bare failed: %w\nOutput: %s", err, string(output))
 	}
 	return nil
 }
@@ -293,23 +383,6 @@ func (m *Manager) fetchRepository(localPath string) error {
 	return nil
 }
 
-func (m *Manager) checkoutVersion(localPath, version string) error {
-	cmd := exec.Command("git", "-C", localPath, "checkout", version)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git checkout failed: %w\nOutput: %s", err, string(output))
-	}
-	return nil
-}
-
-func (m *Manager) getResolvedCommit(localPath string) (string, error) {
-	cmd := exec.Command("git", "-C", localPath, "rev-parse", "HEAD")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git rev-parse failed: %w", err)
-	}
-	return strings.TrimSpace(string(output)), nil
-}
 
 func (m *Manager) LoadManifest() (*Manifest, error) {
 	m.mu.Lock()
