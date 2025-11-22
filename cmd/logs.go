@@ -67,6 +67,12 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	logger := cli.GetLogger(cmd)
 	opts := cli.GetOptions(cmd)
 
+	// Load logging config for component filtering
+	var logCfg logging.Config
+	if cfg, err := config.LoadDefault(); err == nil {
+		_ = cfg.UnmarshalExtension("logging", &logCfg)
+	}
+
 	ecosystem, _ := cmd.Flags().GetBool("ecosystem")
 	wsFilter, _ := cmd.Flags().GetStringSlice("workspaces")
 
@@ -164,6 +170,18 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 
 	// 4. Process and print logs from the channel
 	for tailedLine := range lineChan {
+		// Filter based on component visibility config
+		if logCfg.Show != nil || logCfg.Hide != nil {
+			var logMap map[string]interface{}
+			if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err == nil {
+				if component, ok := logMap["component"].(string); ok {
+					if !logging.IsComponentVisible(component, &logCfg) {
+						continue
+					}
+				}
+			}
+		}
+
 		if jsonOutput || opts.JSONOutput {
 			printLogJSON(tailedLine)
 		} else {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,77 @@ var (
 	loggersMu sync.Mutex
 	initOnce  sync.Once
 )
+
+// resolveFilterSet expands a list of items (which can be component or group names)
+// into a flat set of component names. User-defined groups take precedence over DefaultGroups.
+func resolveFilterSet(items []string, groups map[string][]string) map[string]bool {
+	if len(items) == 0 {
+		return nil
+	}
+	set := make(map[string]bool)
+	for _, item := range items {
+		// Check user-defined groups first
+		if components, ok := groups[item]; ok {
+			for _, c := range components {
+				set[c] = true
+			}
+		} else if components, ok := DefaultGroups[item]; ok {
+			// Fall back to default groups
+			for _, c := range components {
+				set[c] = true
+			}
+		} else {
+			// This is a single component
+			set[item] = true
+		}
+	}
+	return set
+}
+
+// currentProjectName caches the current project name from grove.yml
+var currentProjectName string
+var currentProjectOnce sync.Once
+
+// getCurrentProjectName returns the name of the current project from grove.yml
+func getCurrentProjectName() string {
+	currentProjectOnce.Do(func() {
+		cfg, err := config.LoadDefault()
+		if err == nil {
+			currentProjectName = cfg.Name
+		}
+	})
+	return currentProjectName
+}
+
+// IsComponentVisible determines if a component should be visible in console logs
+// based on the provided configuration. 'show' takes precedence over 'hide'.
+// If ShowCurrentProject is true (default), the current project is always visible.
+// If no show/hide rules are configured, DefaultHide is applied.
+func IsComponentVisible(component string, cfg *Config) bool {
+	// Check if this is the current project and ShowCurrentProject is enabled (default true)
+	showCurrentProject := cfg.ShowCurrentProject == nil || *cfg.ShowCurrentProject
+	if showCurrentProject && component == getCurrentProjectName() {
+		return true
+	}
+
+	showSet := resolveFilterSet(cfg.Show, cfg.Groups)
+	if showSet != nil {
+		return showSet[component]
+	}
+
+	hideSet := resolveFilterSet(cfg.Hide, cfg.Groups)
+	if hideSet != nil {
+		return !hideSet[component]
+	}
+
+	// Apply default hide if no explicit rules are set
+	defaultHideSet := resolveFilterSet(DefaultHide, cfg.Groups)
+	if defaultHideSet != nil {
+		return !defaultHideSet[component]
+	}
+
+	return true
+}
 
 // VersionFields represents the fields logged when a Grove binary starts
 type VersionFields struct {
@@ -190,7 +262,10 @@ func NewLogger(component string) *logrus.Entry {
 		}
 	}
 
-	if shouldLogToStderr {
+	// Check component visibility based on show/hide configuration
+	isVisible := IsComponentVisible(component, &logCfg)
+
+	if shouldLogToStderr && isVisible {
 		logger.SetOutput(os.Stderr)
 	} else {
 		logger.SetOutput(io.Discard)
@@ -212,7 +287,11 @@ func NewLogger(component string) *logrus.Entry {
 		}
 
 		// Use grove-<binary> as component for clearer identification
-		componentName := fmt.Sprintf("grove-%s", binaryName)
+		// Don't prepend grove- if binary name already starts with grove-
+		componentName := binaryName
+		if !strings.HasPrefix(binaryName, "grove-") && binaryName != "grove" {
+			componentName = fmt.Sprintf("grove-%s", binaryName)
+		}
 
 		// Create version fields struct with verbosity tags
 		versionFields := VersionFields{
@@ -284,5 +363,7 @@ func Reset() {
 	defer loggersMu.Unlock()
 	loggers = make(map[string]*logrus.Entry)
 	initOnce = sync.Once{}
+	currentProjectOnce = sync.Once{}
+	currentProjectName = ""
 }
 

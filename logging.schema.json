@@ -59,6 +59,30 @@
     },
     "format": {
       "$ref": "#/$defs/FormatConfig"
+    },
+    "groups": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    },
+    "show": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "hide": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "show_current_project": {
+      "type": "boolean"
     }
   },
   "type": "object",

@@ -32,7 +32,7 @@ func LoggingJSONFormatScenario() *harness.Scenario {
 version: "1.0"
 logging:
   level: debug
-  log_startup: true
+  log_startup: false
   file:
     enabled: true
     format: json

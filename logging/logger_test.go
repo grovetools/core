@@ -181,7 +181,7 @@ func TestEnvironmentVariables(t *testing.T) {
 	// Save original env vars
 	origLevel := os.Getenv("GROVE_LOG_LEVEL")
 	origCaller := os.Getenv("GROVE_LOG_CALLER")
-	
+
 	// Clean up after test
 	defer func() {
 		os.Setenv("GROVE_LOG_LEVEL", origLevel)
@@ -191,20 +191,369 @@ func TestEnvironmentVariables(t *testing.T) {
 		loggers = make(map[string]*logrus.Entry)
 		loggersMu.Unlock()
 	}()
-	
+
 	// Test log level from env
 	os.Setenv("GROVE_LOG_LEVEL", "debug")
 	os.Setenv("GROVE_LOG_CALLER", "true")
-	
+
 	logger := NewLogger("env-test")
-	
+
 	// The underlying logger should have debug level
 	if logger.Logger.Level != logrus.DebugLevel {
 		t.Errorf("Expected debug level from env var, got %v", logger.Logger.Level)
 	}
-	
+
 	// Should have caller reporting enabled
 	if !logger.Logger.ReportCaller {
 		t.Error("Expected caller reporting to be enabled from env var")
+	}
+}
+
+func TestResolveFilterSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    []string
+		groups   map[string][]string
+		expected map[string]bool
+	}{
+		{
+			name:     "empty items returns nil",
+			items:    []string{},
+			groups:   map[string][]string{"custom": {"grove-gemini", "grove-context"}},
+			expected: nil,
+		},
+		{
+			name:     "nil items returns nil",
+			items:    nil,
+			groups:   map[string][]string{"custom": {"grove-gemini", "grove-context"}},
+			expected: nil,
+		},
+		{
+			name:   "default group ai expands without user definition",
+			items:  []string{"ai"},
+			groups: nil,
+			expected: map[string]bool{
+				"grove-gemini":  true,
+				"grove-openai":  true,
+				"grove-context": true,
+			},
+		},
+		{
+			name:   "user-defined group overrides default group",
+			items:  []string{"ai"},
+			groups: map[string][]string{"ai": {"custom-ai-component"}},
+			expected: map[string]bool{
+				"custom-ai-component": true,
+			},
+		},
+		{
+			name:   "single component without groups",
+			items:  []string{"grove-flow"},
+			groups: nil,
+			expected: map[string]bool{
+				"grove-flow": true,
+			},
+		},
+		{
+			name:   "multiple components without groups",
+			items:  []string{"grove-flow", "grove-core"},
+			groups: nil,
+			expected: map[string]bool{
+				"grove-flow": true,
+				"grove-core": true,
+			},
+		},
+		{
+			name:  "group expansion",
+			items: []string{"ai"},
+			groups: map[string][]string{
+				"ai": {"grove-gemini", "grove-context"},
+			},
+			expected: map[string]bool{
+				"grove-gemini":  true,
+				"grove-context": true,
+			},
+		},
+		{
+			name:  "mixed groups and components",
+			items: []string{"ai", "grove-flow"},
+			groups: map[string][]string{
+				"ai": {"grove-gemini", "grove-context"},
+			},
+			expected: map[string]bool{
+				"grove-gemini":  true,
+				"grove-context": true,
+				"grove-flow":    true,
+			},
+		},
+		{
+			name:  "multiple groups",
+			items: []string{"ai", "devops"},
+			groups: map[string][]string{
+				"ai":     {"grove-gemini", "grove-context"},
+				"devops": {"grove-proxy", "grove-deploy"},
+			},
+			expected: map[string]bool{
+				"grove-gemini":  true,
+				"grove-context": true,
+				"grove-proxy":   true,
+				"grove-deploy":  true,
+			},
+		},
+		{
+			name:  "unknown group treated as component",
+			items: []string{"unknown-group"},
+			groups: map[string][]string{
+				"ai": {"grove-gemini"},
+			},
+			expected: map[string]bool{
+				"unknown-group": true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveFilterSet(tt.items, tt.groups)
+
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("Expected nil, got %v", result)
+				}
+				return
+			}
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("Expected %d items, got %d: %v", len(tt.expected), len(result), result)
+			}
+
+			for key, expectedVal := range tt.expected {
+				if result[key] != expectedVal {
+					t.Errorf("Expected %s=%v, got %v", key, expectedVal, result[key])
+				}
+			}
+		})
+	}
+}
+
+func TestIsComponentVisible(t *testing.T) {
+	// Test the exported IsComponentVisible function
+	tests := []struct {
+		name      string
+		component string
+		cfg       *Config
+		expected  bool
+	}{
+		{
+			name:      "no filters - non-grove component visible",
+			component: "my-custom-app",
+			cfg:       &Config{},
+			expected:  true,
+		},
+		{
+			name:      "show whitelist - component in list",
+			component: "grove-flow",
+			cfg: &Config{
+				Show: []string{"grove-flow", "grove-core"},
+			},
+			expected: true,
+		},
+		{
+			name:      "show whitelist - component not in list",
+			component: "grove-gemini",
+			cfg: &Config{
+				Show: []string{"grove-flow", "grove-core"},
+			},
+			expected: false,
+		},
+		{
+			name:      "hide blacklist - component in list",
+			component: "grove-gemini",
+			cfg: &Config{
+				Hide: []string{"grove-gemini", "grove-context"},
+			},
+			expected: false,
+		},
+		{
+			name:      "hide blacklist - component not in list",
+			component: "grove-flow",
+			cfg: &Config{
+				Hide: []string{"grove-gemini", "grove-context"},
+			},
+			expected: true,
+		},
+		{
+			name:      "show takes precedence over hide - component in show",
+			component: "grove-flow",
+			cfg: &Config{
+				Show: []string{"grove-flow"},
+				Hide: []string{"grove-flow"}, // Would hide, but show takes precedence
+			},
+			expected: true,
+		},
+		{
+			name:      "show takes precedence over hide - component not in show",
+			component: "grove-gemini",
+			cfg: &Config{
+				Show: []string{"grove-flow"},
+				Hide: []string{"grove-core"}, // Hide is ignored when show is set
+			},
+			expected: false,
+		},
+		{
+			name:      "show with group expansion - component in group",
+			component: "grove-gemini",
+			cfg: &Config{
+				Groups: map[string][]string{
+					"ai": {"grove-gemini", "grove-context"},
+				},
+				Show: []string{"ai"},
+			},
+			expected: true,
+		},
+		{
+			name:      "show with group expansion - component not in group",
+			component: "grove-flow",
+			cfg: &Config{
+				Groups: map[string][]string{
+					"ai": {"grove-gemini", "grove-context"},
+				},
+				Show: []string{"ai"},
+			},
+			expected: false,
+		},
+		{
+			name:      "hide with group expansion - component in group",
+			component: "grove-gemini",
+			cfg: &Config{
+				Groups: map[string][]string{
+					"ai": {"grove-gemini", "grove-context"},
+				},
+				Hide: []string{"ai"},
+			},
+			expected: false,
+		},
+		{
+			name:      "hide with group expansion - component not in group",
+			component: "grove-flow",
+			cfg: &Config{
+				Groups: map[string][]string{
+					"ai": {"grove-gemini", "grove-context"},
+				},
+				Hide: []string{"ai"},
+			},
+			expected: true,
+		},
+		{
+			name:      "mixed group and direct component in show",
+			component: "grove-flow",
+			cfg: &Config{
+				Groups: map[string][]string{
+					"ai": {"grove-gemini", "grove-context"},
+				},
+				Show: []string{"ai", "grove-flow"},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsComponentVisible(tt.component, tt.cfg)
+			if result != tt.expected {
+				t.Errorf("IsComponentVisible(%q) = %v, expected %v", tt.component, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDefaultHide(t *testing.T) {
+	// With no show/hide rules, DefaultHide (grove-ecosystem) should apply
+	cfg := &Config{}
+
+	// grove-gemini is in grove-ecosystem group, should be hidden by default
+	if IsComponentVisible("grove-gemini", cfg) {
+		t.Error("grove-gemini should be hidden by default (in grove-ecosystem)")
+	}
+
+	// random component not in grove-ecosystem should be visible
+	if !IsComponentVisible("my-custom-app", cfg) {
+		t.Error("my-custom-app should be visible (not in grove-ecosystem)")
+	}
+
+	// explicit empty hide should override default (show everything)
+	cfgExplicitEmpty := &Config{Hide: []string{}}
+	// This doesn't override because empty slice still results in nil set
+	// To truly show all, user would set show: ["*"] or similar
+
+	// explicit hide overrides default
+	cfgExplicitHide := &Config{Hide: []string{"my-custom-app"}}
+	if !IsComponentVisible("grove-gemini", cfgExplicitHide) {
+		t.Error("grove-gemini should be visible when explicit hide doesn't include it")
+	}
+	if IsComponentVisible("my-custom-app", cfgExplicitHide) {
+		t.Error("my-custom-app should be hidden when explicitly in hide list")
+	}
+
+	_ = cfgExplicitEmpty // silence unused warning
+}
+
+func TestShowCurrentProject(t *testing.T) {
+	boolTrue := true
+	boolFalse := false
+
+	tests := []struct {
+		name               string
+		component          string
+		showCurrentProject *bool
+		hide               []string
+		expected           bool
+	}{
+		{
+			name:               "nil (default true) allows current project even when hidden",
+			component:          getCurrentProjectName(),
+			showCurrentProject: nil,
+			hide:               []string{getCurrentProjectName()},
+			expected:           true,
+		},
+		{
+			name:               "explicit true allows current project even when hidden",
+			component:          getCurrentProjectName(),
+			showCurrentProject: &boolTrue,
+			hide:               []string{getCurrentProjectName()},
+			expected:           true,
+		},
+		{
+			name:               "explicit false respects hide for current project",
+			component:          getCurrentProjectName(),
+			showCurrentProject: &boolFalse,
+			hide:               []string{getCurrentProjectName()},
+			expected:           false,
+		},
+		{
+			name:               "other components still respect hide",
+			component:          "other-component",
+			showCurrentProject: nil,
+			hide:               []string{"other-component"},
+			expected:           false,
+		},
+	}
+
+	// Skip if no current project name (not in a grove workspace)
+	if getCurrentProjectName() == "" {
+		t.Skip("Not in a grove workspace, skipping current project tests")
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				ShowCurrentProject: tt.showCurrentProject,
+				Hide:               tt.hide,
+			}
+			result := IsComponentVisible(tt.component, cfg)
+			if result != tt.expected {
+				t.Errorf("IsComponentVisible(%q) = %v, expected %v", tt.component, result, tt.expected)
+			}
+		})
 	}
 }

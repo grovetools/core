@@ -21,6 +21,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hpcloud/tail"
+	"github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-core/tui/components/help"
 	"github.com/mattsolo1/grove-core/tui/components/jsontree"
@@ -56,7 +57,7 @@ func getThemeLevelStyle(level string) lipgloss.Style {
 
 // Implement list.Item interface
 func (i logItem) Title() string {
-	// Compact view: [workspace] [LEVEL] time [component] message
+	// Compact view: [workspace] [LEVEL] date time [component] message
 	wsStyle := getWorkspaceStyle(i.workspace)
 	levelStyle := getThemeLevelStyle(i.level)
 	timeStyle := theme.DefaultTheme.Muted
@@ -65,7 +66,7 @@ func (i logItem) Title() string {
 	return fmt.Sprintf("%s %s %s %s %s",
 		wsStyle.Render(fmt.Sprintf("[%s]", i.workspace)),
 		levelStyle.Render(fmt.Sprintf("[%s]", strings.ToUpper(i.level))),
-		timeStyle.Render(i.timestamp.Format("15:04:05")),
+		timeStyle.Render(i.timestamp.Format("2006-01-02 15:04:05")),
 		componentStyle.Render(fmt.Sprintf("[%s]", i.component)),
 		i.message,
 	)
@@ -369,6 +370,7 @@ type logModel struct {
 	statusMessage string // status message for copy confirmation
 	jsonTree      jsontree.Model
 	jsonView      bool
+	logConfig     *logging.Config // logging config for component filtering
 }
 
 // Messages
@@ -508,6 +510,11 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Allow quitting even in JSON view
 			if key.Matches(msg, logKeys.Base.Quit) {
 				return m, tea.Quit
+			}
+			// ESC exits JSON view
+			if key.Matches(msg, logKeys.Clear) || msg.String() == "esc" {
+				m.jsonView = false
+				return m, nil
 			}
 		case tea.WindowSizeMsg:
 			// Handle window size changes
@@ -702,6 +709,12 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		message, _ := msg.data["msg"].(string)
 		component, _ := msg.data["component"].(string)
 		timeStr, _ := msg.data["time"].(string)
+
+		// Filter based on component visibility config
+		if m.logConfig != nil && !logging.IsComponentVisible(component, m.logConfig) {
+			// Skip this log entry and continue waiting for more logs
+			return m, m.waitForLogs()
+		}
 
 		var logTime time.Time
 		if parsedTime, err := time.Parse(time.RFC3339, timeStr); err == nil {
@@ -918,6 +931,12 @@ func getWorkspaceStyle(workspace string) lipgloss.Style {
 func runLogsTUI(workspaces []string, follow bool) error {
 	logger := logging.NewLogger("logs-tui")
 
+	// Load logging config for component filtering
+	var logCfg logging.Config
+	if cfg, err := config.LoadDefault(); err == nil {
+		_ = cfg.UnmarshalExtension("logging", &logCfg)
+	}
+
 	// Create channel for log lines
 	logChan := make(chan TailedLine, 100)
 
@@ -997,6 +1016,7 @@ func runLogsTUI(workspaces []string, follow bool) error {
 		logChan:         logChan,
 		workspaceColors: make(map[string]lipgloss.Style),
 		ready:           false,
+		logConfig:       &logCfg,
 	}
 
 	// Set the delegate with model reference
