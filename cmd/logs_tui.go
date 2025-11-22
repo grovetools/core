@@ -29,6 +29,14 @@ import (
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
+// paneFocus tracks which pane has focus
+type paneFocus int
+
+const (
+	listPane paneFocus = iota
+	viewportPane
+)
+
 // logItem represents a single log entry
 type logItem struct {
 	workspace string
@@ -270,12 +278,18 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	}
 
 	// Apply highlighting
+	isSelected := index == m.Index()
+	isFocused := d.model == nil || d.model.focus == listPane
+
 	if isVisuallySelected {
 		// Visual selection highlighting
 		str = theme.DefaultTheme.Selected.Copy().Bold(true).Render(str)
-	} else if index == m.Index() {
-		// Normal cursor highlighting
+	} else if isSelected && isFocused {
+		// Normal cursor highlighting (only when list pane is focused)
 		str = theme.DefaultTheme.Selected.Render(str)
+	} else if isSelected && !isFocused {
+		// Dimmed cursor when viewport is focused
+		str = theme.DefaultTheme.Muted.Copy().Underline(true).Render(str)
 	}
 
 	fmt.Fprint(w, str)
@@ -284,17 +298,20 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 // keyMap defines all key bindings for the TUI
 type logKeyMap struct {
 	keymap.Base
-	PageUp   key.Binding
-	PageDown key.Binding
-	HalfUp   key.Binding
-	HalfDown key.Binding
-	GotoTop  key.Binding
-	GotoEnd  key.Binding
-	Expand   key.Binding
-	Search   key.Binding
-	Clear    key.Binding
-	Follow   key.Binding
-	ViewJSON key.Binding
+	PageUp          key.Binding
+	PageDown        key.Binding
+	HalfUp          key.Binding
+	HalfDown        key.Binding
+	GotoTop         key.Binding
+	GotoEnd         key.Binding
+	Expand          key.Binding
+	Search          key.Binding
+	Clear           key.Binding
+	Follow          key.Binding
+	ViewJSON        key.Binding
+	VisualModeStart key.Binding
+	Yank            key.Binding
+	SwitchFocus     key.Binding
 }
 
 var logKeys = logKeyMap{
@@ -343,6 +360,49 @@ var logKeys = logKeyMap{
 		key.WithKeys("J"),
 		key.WithHelp("J", "view json"),
 	),
+	VisualModeStart: key.NewBinding(
+		key.WithKeys("V"),
+		key.WithHelp("V", "visual line mode"),
+	),
+	Yank: key.NewBinding(
+		key.WithKeys("y"),
+		key.WithHelp("y", "yank selection"),
+	),
+	SwitchFocus: key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "switch focus"),
+	),
+}
+
+// ShortHelp returns keybindings to be shown in the mini help view.
+func (k logKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Base.Help, k.Base.Quit, k.Follow, k.Search}
+}
+
+// FullHelp returns keybindings for the expanded help view.
+func (k logKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{ // Navigation column
+			k.Base.Up,
+			k.Base.Down,
+			k.PageUp,
+			k.PageDown,
+			k.HalfUp,
+			k.HalfDown,
+			k.GotoTop,
+			k.GotoEnd,
+		},
+		{ // Actions column
+			k.SwitchFocus,
+			k.Follow,
+			k.Search,
+			k.ViewJSON,
+			k.VisualModeStart,
+			k.Yank,
+			k.Base.Help,
+			k.Base.Quit,
+		},
+	}
 }
 
 // Main TUI model
@@ -364,6 +424,7 @@ type logModel struct {
 	workspaceColors map[string]lipgloss.Style
 	colorIndex    int
 	ready         bool  // viewport ready flag
+	focus         paneFocus // which pane has focus
 	visualMode    bool  // visual selection mode
 	visualStart   int   // start of visual selection
 	visualEnd     int   // end of visual selection
@@ -559,10 +620,34 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 
 			case key.Matches(msg, logKeys.Base.Help):
-				m.help.ShowAll = !m.help.ShowAll
+				m.help.Toggle()
 				return m, nil
 
-			case msg.String() == "V": // Shift+V to start visual mode
+			case key.Matches(msg, logKeys.SwitchFocus):
+				if m.focus == listPane {
+					m.focus = viewportPane
+					// Expand viewport to full height (minus status line)
+					m.viewport.Height = m.height - 3
+				} else {
+					m.focus = listPane
+					// Restore viewport to split height
+					listHeight := m.height / 2
+					m.viewport.Height = m.height - listHeight - 3
+				}
+				return m, nil
+			}
+
+			// Delegate input based on focus
+			if m.focus == viewportPane {
+				// Pass input to the viewport for scrolling
+				var cmd tea.Cmd
+				m.viewport, cmd = m.viewport.Update(msg)
+				return m, cmd
+			}
+
+			// List pane is focused - handle list-specific keys
+			switch {
+			case key.Matches(msg, logKeys.VisualModeStart):
 				if !m.visualMode {
 					m.visualMode = true
 					m.visualStart = m.list.Index()
@@ -577,7 +662,7 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.list.SetDelegate(itemDelegate{model: m})
 				return m, nil
 
-			case msg.String() == "y": // Yank selected lines
+			case key.Matches(msg, logKeys.Yank):
 				if m.visualMode {
 					// Copy selected items to clipboard
 					content := m.getSelectedContent()
@@ -632,7 +717,7 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.list.Select(newIndex)
 				return m, nil
 
-			case msg.String() == "/":
+			case key.Matches(msg, logKeys.Search):
 				// Let the list handle the "/" key to start filtering
 				// Don't return here, let it fall through to list.Update
 
@@ -676,6 +761,9 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+		// Update help model size
+		m.help.SetSize(msg.Width, msg.Height)
 
 		// Split the view: 1/2 for list, 1/2 for details
 		listHeight := m.height / 2
@@ -811,38 +899,7 @@ func (m *logModel) View() string {
 		return "Initializing..."
 	}
 
-	// Main list view with error recovery
-	var listView string
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// If list view panics, show an error message
-				listView = fmt.Sprintf("Error rendering list: %v", r)
-			}
-		}()
-		listView = m.list.View()
-	}()
-
-	// Separator between list and details
-	separatorStyle := theme.DefaultTheme.Muted.Copy().
-		Border(lipgloss.NormalBorder(), true, false, false, false)
-	separator := separatorStyle.Render(strings.Repeat("─", m.width-2))
-
-	// Details view with border
-	detailsStyle := theme.DefaultTheme.Muted.Copy().
-		Padding(0, 2).
-		BorderStyle(lipgloss.RoundedBorder())
-
-	var detailsContent string
-	if m.jsonView {
-		detailsContent = m.jsonTree.View()
-	} else {
-		detailsContent = m.viewport.View()
-	}
-
-	detailsView := detailsStyle.Render(detailsContent)
-
-	// Status line
+	// Status line components
 	statusStyle := theme.DefaultTheme.Muted
 
 	followIndicator := ""
@@ -889,6 +946,8 @@ func (m *logModel) View() string {
 	modeIndicator := ""
 	if m.jsonView {
 		modeIndicator = " [JSON VIEW - esc to exit]"
+	} else if m.focus == viewportPane {
+		modeIndicator = " [SCROLLING - tab to return]"
 	} else if m.visualMode {
 		modeIndicator = " [VISUAL]"
 	} else if m.statusMessage != "" {
@@ -897,6 +956,61 @@ func (m *logModel) View() string {
 
 	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s | ? for help | q to quit",
 		position, followIndicator, filterIndicator, modeIndicator))
+
+	// Full-screen details view when viewport is focused
+	if m.focus == viewportPane {
+		detailsStyle := theme.DefaultTheme.Muted.Copy().
+			Padding(0, 2).
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(theme.DefaultTheme.Highlight.GetForeground())
+
+		var detailsContent string
+		if m.jsonView {
+			detailsContent = m.jsonTree.View()
+		} else {
+			detailsContent = m.viewport.View()
+		}
+
+		detailsView := detailsStyle.Render(detailsContent)
+
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			detailsView,
+			status,
+		)
+	}
+
+	// Split view when list is focused
+	// Main list view with error recovery
+	var listView string
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// If list view panics, show an error message
+				listView = fmt.Sprintf("Error rendering list: %v", r)
+			}
+		}()
+		listView = m.list.View()
+	}()
+
+	// Separator between list and details
+	separatorStyle := theme.DefaultTheme.Muted.Copy().
+		Border(lipgloss.NormalBorder(), true, false, false, false)
+	separator := separatorStyle.Render(strings.Repeat("─", m.width-2))
+
+	// Details view with border
+	detailsStyle := theme.DefaultTheme.Muted.Copy().
+		Padding(0, 2).
+		BorderStyle(lipgloss.RoundedBorder())
+
+	var detailsContent string
+	if m.jsonView {
+		detailsContent = m.jsonTree.View()
+	} else {
+		detailsContent = m.viewport.View()
+	}
+
+	detailsView := detailsStyle.Render(detailsContent)
 
 	// Combine all views
 	return lipgloss.JoinVertical(
