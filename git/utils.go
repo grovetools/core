@@ -131,6 +131,28 @@ func GetSuperprojectRoot(dir string) (string, error) {
 		// Not in a submodule, return regular git root
 		return GetGitRoot(dir)
 	}
-	
+
 	return superprojectRoot, nil
+}
+
+// ResolveRef resolves a git ref (branch name, tag, or commit) to its full commit hash.
+// Returns empty string and error if resolution fails.
+func ResolveRef(dir, ref string) (string, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-parse", ref)
+	if err != nil {
+		return "", fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = dir
+	output, err := execCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve ref %s: %w", ref, err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// GetHeadCommit returns the current HEAD commit hash for a repository.
+func GetHeadCommit(dir string) (string, error) {
+	return ResolveRef(dir, "HEAD")
 }
