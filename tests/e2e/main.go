@@ -24,6 +24,12 @@ func main() {
 		NotebooksConfigIsolationScenario(),
 		NotebooksLocalModeScenario(),
 		NotebooksXDGConfigHomeScenario(),
+		// Logging scenarios
+		LoggingJSONFormatScenario(),
+		LoggingJSONFieldsScenario(),
+		LoggingNestedJSONScenario(),
+		LoggingLevelFilterScenario(),
+		JSONTreeComponentScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

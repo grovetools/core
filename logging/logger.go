@@ -276,3 +276,13 @@ func expandPath(path string) string {
 	return path
 }
 
+// Reset clears the logger cache and resets the init state.
+// This is primarily useful for testing when you need to reinitialize
+// loggers with different configurations.
+func Reset() {
+	loggersMu.Lock()
+	defer loggersMu.Unlock()
+	loggers = make(map[string]*logrus.Entry)
+	initOnce = sync.Once{}
+}
+

@@ -23,6 +23,7 @@ import (
 	"github.com/hpcloud/tail"
 	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-core/tui/components/help"
+	"github.com/mattsolo1/grove-core/tui/components/jsontree"
 	"github.com/mattsolo1/grove-core/tui/keymap"
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
@@ -158,6 +159,14 @@ func (i logItem) FormatDetails() string {
 			// Format the value
 			var formattedValue string
 			switch v := value.(type) {
+			case map[string]interface{}, []interface{}:
+				jsonBytes, err := json.MarshalIndent(v, "", "  ")
+				if err == nil {
+					// Prepend newline to push JSON block below the field key
+					formattedValue = "\n" + string(jsonBytes)
+				} else {
+					formattedValue = fmt.Sprintf("%v", v) // Fallback
+				}
 			case string:
 				formattedValue = v
 			case float64:
@@ -284,6 +293,7 @@ type logKeyMap struct {
 	Search   key.Binding
 	Clear    key.Binding
 	Follow   key.Binding
+	ViewJSON key.Binding
 }
 
 var logKeys = logKeyMap{
@@ -328,6 +338,10 @@ var logKeys = logKeyMap{
 		key.WithKeys("f"),
 		key.WithHelp("f", "toggle follow"),
 	),
+	ViewJSON: key.NewBinding(
+		key.WithKeys("J"),
+		key.WithHelp("J", "view json"),
+	),
 }
 
 // Main TUI model
@@ -353,6 +367,8 @@ type logModel struct {
 	visualStart   int   // start of visual selection
 	visualEnd     int   // end of visual selection
 	statusMessage string // status message for copy confirmation
+	jsonTree      jsontree.Model
+	jsonView      bool
 }
 
 // Messages
@@ -479,6 +495,31 @@ func (m *logModel) waitForLogs() tea.Cmd {
 func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	// Handle jsontree.BackMsg to exit JSON view
+	if _, ok := msg.(jsontree.BackMsg); ok {
+		m.jsonView = false
+		return m, nil
+	}
+
+	// If in JSON view, delegate updates to the JSON tree component
+	if m.jsonView {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			// Allow quitting even in JSON view
+			if key.Matches(msg, logKeys.Base.Quit) {
+				return m, tea.Quit
+			}
+		case tea.WindowSizeMsg:
+			// Handle window size changes
+			listHeight := m.height / 2
+			viewportHeight := m.height - listHeight - 3
+			m.jsonTree.SetSize(msg.Width-4, viewportHeight)
+		}
+		newTree, cmd := m.jsonTree.Update(msg)
+		m.jsonTree = newTree.(jsontree.Model)
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Don't intercept keys when filtering is active except for our special ones
@@ -590,6 +631,37 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case key.Matches(msg, logKeys.Follow):
 				m.followMode = !m.followMode
+				return m, nil
+
+			case key.Matches(msg, logKeys.ViewJSON):
+				// Enter JSON view mode
+				if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+					if logItem, ok := selectedItem.(logItem); ok {
+						// Find the first JSON-like object to display
+						var jsonData interface{}
+						for _, v := range logItem.rawData {
+							switch v.(type) {
+							case map[string]interface{}, []interface{}:
+								jsonData = v
+								break
+							}
+							if jsonData != nil {
+								break
+							}
+						}
+
+						if jsonData != nil {
+							m.jsonTree = jsontree.New(jsonData)
+							listHeight := m.height / 2
+							viewportHeight := m.height - listHeight - 3
+							m.jsonTree.SetSize(m.width-4, viewportHeight)
+							m.jsonView = true
+						} else {
+							m.statusMessage = "No JSON data in this log entry"
+							return m, m.clearStatusMessageAfter(2 * time.Second)
+						}
+					}
+				}
 				return m, nil
 			}
 		}
@@ -748,7 +820,14 @@ func (m *logModel) View() string {
 		Padding(0, 2).
 		BorderStyle(lipgloss.RoundedBorder())
 
-	detailsView := detailsStyle.Render(m.viewport.View())
+	var detailsContent string
+	if m.jsonView {
+		detailsContent = m.jsonTree.View()
+	} else {
+		detailsContent = m.viewport.View()
+	}
+
+	detailsView := detailsStyle.Render(detailsContent)
 
 	// Status line
 	statusStyle := theme.DefaultTheme.Muted
@@ -795,7 +874,9 @@ func (m *logModel) View() string {
 
 	// Add visual mode or status message
 	modeIndicator := ""
-	if m.visualMode {
+	if m.jsonView {
+		modeIndicator = " [JSON VIEW - esc to exit]"
+	} else if m.visualMode {
 		modeIndicator = " [VISUAL]"
 	} else if m.statusMessage != "" {
 		modeIndicator = fmt.Sprintf(" [%s]", m.statusMessage)
