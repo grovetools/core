@@ -8,135 +8,141 @@ import (
 
 // Nerd Font Icons (Private Constants)
 const (
-	nerdIconTree                   = "" // fa-tree (U+F1BB)
-	nerdIconProject                = "" // cod-project (U+EB30)
-	nerdIconRepo                   = "" // cod-repo (U+EA62)
-	nerdIconWorktree               = "" // oct-workflow (U+F52E)
-	nerdIconEcosystem              = "" // fa-folder_tree (U+EF81)
-	nerdIconGitBranch              = "" // dev-git_branch (U+E725)
-	nerdIconSuccess                = "󰄬" // md-check (U+F012C)
-	nerdIconError                  = "" // cod-error (U+EA87)
-	nerdIconWarning                = "" // fa-warning (U+F071)
-	nerdIconInfo                   = "󰋼" // md-information (U+F02FC)
-	nerdIconRunning                = "" // fa-refresh (U+F021)
-	nerdIconPending                = "󰦖" // md-progress_clock (U+F0996)
-	nerdIconSelect                 = "󰱒" // md-checkbox_outline (U+F0C52)
-	nerdIconUnselect              = "󰄱" // md-checkbox_blank_outline (U+F0131)
-	nerdIconArrow                  = "󰁔" // md-arrow_right (U+F0054)
-	nerdIconBullet                 = "" // oct-dot_fill (U+F444)
-	nerdIconNote                   = "󰎚" // md-note (U+F039A)
-	nerdIconPlan                   = "󰠡" // md-floor_plan (U+F0821)
-	nerdIconChat                   = "󰭹" // md-chat (U+F0B79)
-	nerdIconOneshot                = "" // fa-bullseye (U+F140)
-	nerdIconInteractiveAgent       = "" // fa-robot (U+EE0D)
-	nerdIconHeadlessAgent          = "󰭆" // md-robot_industrial (U+F0B46)
-	nerdIconShell                  = "" // seti-shell (U+E691)
-	nerdIconStatusCompleted        = "󰄳" // md-checkbox_marked_circle (U+F0133)
-	nerdIconStatusRunning          = "󰔟" // md-timer_sand (U+F051F)
-	nerdIconStatusFailed           = "" // oct-x (U+F467)
-	nerdIconStatusBlocked          = "" // oct-blocked (U+F479)
-	nerdIconStatusNeedsReview      = "" // oct-code_review (U+F4AF)
-	nerdIconStatusPendingUser      = "󰭻" // md-chat_processing (U+F0B7B)
-	nerdIconStatusHold             = "󰏧" // md-pause_octagon (U+F03E7)
-	nerdIconStatusTodo             = "󰄱" // md-checkbox_blank_outline (U+F0131)
-	nerdIconStatusAbandoned        = "󰩹" // md-trash_can (U+F0A79)
-	nerdIconStatusInterrupted      = "" // pom-external_interruption (U+E00A)
+	nerdIconTree              = "" // fa-tree (U+F1BB)
+	nerdIconProject           = "" // cod-project (U+EB30)
+	nerdIconRepo              = "" // cod-repo (U+EA62)
+	nerdIconWorktree          = "" // oct-workflow (U+F52E)
+	nerdIconEcosystem         = "" // fa-folder_tree (U+EF81)
+	nerdIconGitBranch         = "" // dev-git_branch (U+E725)
+	nerdIconSuccess           = "󰄬" // md-check (U+F012C)
+	nerdIconError             = "" // cod-error (U+EA87)
+	nerdIconWarning           = "" // fa-warning (U+F071)
+	nerdIconInfo              = "󰋼" // md-information (U+F02FC)
+	nerdIconRunning           = "" // fa-refresh (U+F021)
+	nerdIconPending           = "󰦖" // md-progress_clock (U+F0996)
+	nerdIconSelect            = "󰱒" // md-checkbox_outline (U+F0C52)
+	nerdIconUnselect          = "󰄱" // md-checkbox_blank_outline (U+F0131)
+	nerdIconArrow             = "󰁔" // md-arrow_right (U+F0054)
+	nerdIconBullet            = "" // oct-dot_fill (U+F444)
+	nerdIconNote              = "󰎚" // md-note (U+F039A)
+	nerdIconPlan              = "󰠡" // md-floor_plan (U+F0821)
+	nerdIconChat              = "󰭹" // md-chat (U+F0B79)
+	nerdIconOneshot           = "" // fa-bullseye (U+F140)
+	nerdIconInteractiveAgent  = "" // fa-robot (U+EE0D)
+	nerdIconHeadlessAgent     = "󰭆" // md-robot_industrial (U+F0B46)
+	nerdIconShell             = "" // seti-shell (U+E691)
+	nerdIconStatusCompleted   = "󰄳" // md-checkbox_marked_circle (U+F0133)
+	nerdIconStatusRunning     = "󰔟" // md-timer_sand (U+F051F)
+	nerdIconStatusFailed      = "" // oct-x (U+F467)
+	nerdIconStatusBlocked     = "" // oct-blocked (U+F479)
+	nerdIconStatusNeedsReview = "" // oct-code_review (U+F4AF)
+	nerdIconStatusPendingUser = "󰭻" // md-chat_processing (U+F0B7B)
+	nerdIconStatusHold        = "󰏧" // md-pause_octagon (U+F03E7)
+	nerdIconStatusTodo        = "󰄱" // md-checkbox_blank_outline (U+F0131)
+	nerdIconStatusAbandoned   = "󰩹" // md-trash_can (U+F0A79)
+	nerdIconStatusInterrupted = "" // pom-external_interruption (U+E00A)
 
-	nerdIconArchive                = "󰀼" // md-archive (U+F003C)
-	nerdIconArrowLeft              = "󰁍" // md-arrow_left (U+F004D)
-	nerdIconArrowLeftBold          = "󰜱" // md-arrow_left_bold (U+F0731)
-	nerdIconArrowRightBold         = "󰜴" // md-arrow_right_bold (U+F0734)
-	nerdIconFilter                 = "󱣬" // md-filter_check (U+F18EC)
-	nerdIconSave                   = "󰉉" // md-floppy (U+F0249)
-	nerdIconSelectAll              = "󰒆" // md-select_all (U+F0486)
-	nerdIconAudited                = "󰳈" // md-shield_check_outline (U+F0CC8)
+	nerdIconArchive        = "󰀼" // md-archive (U+F003C)
+	nerdIconArrowLeft      = "󰁍" // md-arrow_left (U+F004D)
+	nerdIconArrowLeftBold  = "󰜱" // md-arrow_left_bold (U+F0731)
+	nerdIconArrowRightBold = "󰜴" // md-arrow_right_bold (U+F0734)
+	nerdIconFilter         = "󱣬" // md-filter_check (U+F18EC)
+	nerdIconSave           = "󰉉" // md-floppy (U+F0249)
+	nerdIconSelectAll      = "󰒆" // md-select_all (U+F0486)
+	nerdIconAudited        = "󰳈" // md-shield_check_outline (U+F0CC8)
 
-	nerdIconPullRequest            = "" // cod-git_pull_request (U+EA64)
-	nerdIconPullRequestClosed      = "" // cod-git_pull_request_closed (U+EBDA)
-	nerdIconPullRequestCreate      = "" // cod-git_pull_request_create (U+EBBC)
-	nerdIconPullRequestDraft       = "" // cod-git_pull_request_draft (U+EBDB)
-	nerdIconPullRequestNewChanges  = "" // cod-git_pull_request_new_changes (U+EC0C)
-	nerdIconGithubAction           = "" // cod-github_action (U+EAFF)
-	nerdIconGitCompare             = "" // dev-git_compare (U+E728)
-	nerdIconGit                    = "󰊢" // md-git (U+F02A2)
-	nerdIconInbox                  = "󰚇" // md-inbox (U+F0687)
-	nerdIconLightbulb              = "󰌵" // md-lightbulb (U+F0335)
-	nerdIconMerge                  = "󰽜" // md-merge (U+F0F5C)
-	nerdIconHome                   = "󰋜" // md-home (U+F02DC)
-	nerdIconRobot                  = "󰚩" // md-robot (U+F06A9)
-	nerdIconTrophy                 = "" // fa-trophy (U+F091)
-	nerdIconChart                  = "󰄨" // md-chart_bar (U+F0128)
-	nerdIconSnowflake              = "" // fa-snowflake (U+F2DC)
-	nerdIconClock                  = "󰥔" // md-clock (U+F0954)
-	nerdIconMoney                  = "" // fa-sack_dollar (U+EF8D)
-	nerdIconSync                   = "󰓦" // md-sync (U+F04E6)
-	nerdIconHelp                   = "󰋗" // md-help_circle (U+F02D7)
-	nerdIconBuild                  = "󰣪" // md-hammer (U+F08EA)
-	nerdIconStop                   = "󰙦" // md-stop_circle (U+F0666)
+	nerdIconPullRequest           = "" // cod-git_pull_request (U+EA64)
+	nerdIconPullRequestClosed     = "" // cod-git_pull_request_closed (U+EBDA)
+	nerdIconPullRequestCreate     = "" // cod-git_pull_request_create (U+EBBC)
+	nerdIconPullRequestDraft      = "" // cod-git_pull_request_draft (U+EBDB)
+	nerdIconPullRequestNewChanges = "" // cod-git_pull_request_new_changes (U+EC0C)
+	nerdIconGithubAction          = "" // cod-github_action (U+EAFF)
+	nerdIconGitCompare            = "" // dev-git_compare (U+E728)
+	nerdIconGit                   = "󰊢" // md-git (U+F02A2)
+	nerdIconInbox                 = "󰚇" // md-inbox (U+F0687)
+	nerdIconLightbulb             = "󰌵" // md-lightbulb (U+F0335)
+	nerdIconMerge                 = "󰽜" // md-merge (U+F0F5C)
+	nerdIconHome                  = "󰋜" // md-home (U+F02DC)
+	nerdIconRobot                 = "󰚩" // md-robot (U+F06A9)
+	nerdIconTrophy                = "" // fa-trophy (U+F091)
+	nerdIconChart                 = "󰄨" // md-chart_bar (U+F0128)
+	nerdIconSnowflake             = "" // fa-snowflake (U+F2DC)
+	nerdIconClock                 = "󰥔" // md-clock (U+F0954)
+	nerdIconMoney                 = "" // fa-sack_dollar (U+EF8D)
+	nerdIconSync                  = "󰓦" // md-sync (U+F04E6)
+	nerdIconHelp                  = "󰋗" // md-help_circle (U+F02D7)
+	nerdIconBuild                 = "󰣪" // md-hammer (U+F08EA)
+	nerdIconStop                  = "󰙦" // md-stop_circle (U+F0666)
 
-	nerdIconArrowDown              = "󰁅" // md-arrow_down (U+F0045)
-	nerdIconArrowDownBold          = "󰜮" // md-arrow_down_bold (U+F072E)
-	nerdIconArrowUp                = "󰁝" // md-arrow_up (U+F005D)
-	nerdIconArrowUpBold            = "󰜷" // md-arrow_up_bold (U+F0737)
-	nerdIconArrowUpDownBold        = "󰹺" // md-arrow_up_down_bold (U+F0E7A)
+	nerdIconArrowDown       = "󰁅" // md-arrow_down (U+F0045)
+	nerdIconArrowDownBold   = "󰜮" // md-arrow_down_bold (U+F072E)
+	nerdIconArrowUp         = "󰁝" // md-arrow_up (U+F005D)
+	nerdIconArrowUpBold     = "󰜷" // md-arrow_up_bold (U+F0737)
+	nerdIconArrowUpDownBold = "󰹺" // md-arrow_up_down_bold (U+F0E7A)
 
-	nerdIconChecklist              = "" // cod-checklist (U+EAB3)
-	nerdIconArchitecture           = "" // fa-building_columns (U+F19C)
-	nerdIconCalendar               = "󰃭" // md-calendar (U+F00ED)
-	nerdIconChatQuestion           = "󱜸" // md-chat_question (U+F1738)
-	nerdIconClockFast              = "󰅒" // md-clock_fast (U+F0152)
-	nerdIconLoading                = "󰝲" // md-loading (U+F0772)
-	nerdIconRss                    = "󰑫" // md-rss (U+F046B)
-	nerdIconSchool                 = "󰑴" // md-school (U+F0474)
-	nerdIconIssueClosed            = "" // oct-issue_closed (U+F41D)
-	nerdIconIssueOpened            = "" // oct-issue_opened (U+F41B)
-	nerdIconNoteCurrent            = "󰅒" // md-clock_fast (U+F0152)
-	nerdIconNoteIssues             = "" // oct-issue_opened (U+F41B)
-	nerdIconNoteInbox              = "󰚇" // md-inbox (U+F0687)
-	nerdIconNoteCompleted          = "󰄳" // md-checkbox_marked_circle (U+F0133)
-	nerdIconNoteReview             = "" // oct-code_review (U+F4AF)
-	nerdIconNoteInProgress         = "󰔟" // md-timer_sand (U+F051F)
+	nerdIconChecklist      = "" // cod-checklist (U+EAB3)
+	nerdIconArchitecture   = "" // fa-building_columns (U+F19C)
+	nerdIconCalendar       = "󰃭" // md-calendar (U+F00ED)
+	nerdIconChatQuestion   = "󱜸" // md-chat_question (U+F1738)
+	nerdIconClockFast      = "󰅒" // md-clock_fast (U+F0152)
+	nerdIconLoading        = "󰝲" // md-loading (U+F0772)
+	nerdIconRss            = "󰑫" // md-rss (U+F046B)
+	nerdIconSchool         = "󰑴" // md-school (U+F0474)
+	nerdIconIssueClosed    = "" // oct-issue_closed (U+F41D)
+	nerdIconIssueOpened    = "" // oct-issue_opened (U+F41B)
+	nerdIconNoteCurrent    = "󰅒" // md-clock_fast (U+F0152)
+	nerdIconNoteIssues     = "" // oct-issue_opened (U+F41B)
+	nerdIconNoteInbox      = "󰚇" // md-inbox (U+F0687)
+	nerdIconNoteCompleted  = "󰄳" // md-checkbox_marked_circle (U+F0133)
+	nerdIconNoteReview     = "" // oct-code_review (U+F4AF)
+	nerdIconNoteInProgress = "󰔟" // md-timer_sand (U+F051F)
 
-	nerdIconSparkle                    = "" // cod-sparkle (U+EC10)
-	nerdIconCode                       = "" // fa-code (U+F121)
-	nerdIconNotebook                   = "󰠮" // md-notebook (U+F082E)
-	nerdIconDocs                       = "󰡯" // md-file_question (U+F086F)
+	nerdIconSparkle  = "" // cod-sparkle (U+EC10)
+	nerdIconCode     = "" // fa-code (U+F121)
+	nerdIconNotebook = "󰠮" // md-notebook (U+F082E)
+	nerdIconDocs     = "󰡯" // md-file_question (U+F086F)
 
-	nerdIconFileTree               = "󰙅" // md-file_tree (U+F0645)
-	nerdIconPineTreeBox            = "󰐆" // md-pine_tree_box (U+F0406)
-	nerdIconViewDashboard          = "󰕮" // md-view_dashboard (U+F056E)
+	nerdIconFileTree      = "󰙅" // md-file_tree (U+F0645)
+	nerdIconPineTreeBox   = "󰐆" // md-pine_tree_box (U+F0406)
+	nerdIconViewDashboard = "󰕮" // md-view_dashboard (U+F056E)
 
-	nerdIconFolderMinus            = "" // fa-folder_minus (U+EEC6)
-	nerdIconFolderOpen             = "" // fa-folder_open (U+F07C)
-	nerdIconFolderOpenO            = "" // fa-folder_open_o (U+F115)
-	nerdIconFolderPlus             = "" // fa-folder_plus (U+EEC7)
-	nerdIconFolderTree             = "" // fa-folder_tree (U+EF81)
-	nerdIconFile                   = "󰈔" // md-file (U+F0214)
-	nerdIconFileCancel             = "󰷆" // md-file_cancel (U+F0DC6)
-	nerdIconFileKey                = "󱆄" // md-file_key (U+F1184)
-	nerdIconFileLock               = "󰈡" // md-file_lock (U+F0221)
-	nerdIconFilePlus               = "󰝒" // md-file_plus (U+F0752)
-	nerdIconFire                   = "󰈸" // md-fire (U+F0238)
-	nerdIconFolder                 = "󰉋" // md-folder (U+F024B)
-	nerdIconFolderCheck            = "󱥾" // md-folder_check (U+F197E)
-	nerdIconFolderEye              = "󱞊" // md-folder_eye (U+F178A)
-	nerdIconFolderLock             = "󰉐" // md-folder_lock (U+F0250)
-	nerdIconFolderMultiple         = "󰉓" // md-folder_multiple (U+F0253)
-	nerdIconFolderMultiplePlus     = "󱑾" // md-folder_multiple_plus (U+F147E)
-	nerdIconFolderOff              = "󱧸" // md-folder_off (U+F19F8)
-	nerdIconFolderOpenMd           = "󰝰" // md-folder_open (U+F0770)
-	nerdIconFolderPlusMd           = "󰉗" // md-folder_plus (U+F0257)
-	nerdIconFolderQuestion         = "󱧊" // md-folder_question (U+F19CA)
-	nerdIconFolderRemove           = "󰉘" // md-folder_remove (U+F0258)
-	nerdIconFolderSearch           = "󰥨" // md-folder_search (U+F0968)
-	nerdIconFolderStar             = "󰚝" // md-folder_star (U+F069D)
-	nerdIconFolderSync             = "󰴋" // md-folder_sync (U+F0D0B)
-	nerdIconFileDirectoryFill      = "" // oct-file_directory_fill (U+F4D3)
+	nerdIconFolderMinus        = "" // fa-folder_minus (U+EEC6)
+	nerdIconFolderOpen         = "" // fa-folder_open (U+F07C)
+	nerdIconFolderOpenO        = "" // fa-folder_open_o (U+F115)
+	nerdIconFolderPlus         = "" // fa-folder_plus (U+EEC7)
+	nerdIconFolderTree         = "" // fa-folder_tree (U+EF81)
+	nerdIconFile               = "󰈔" // md-file (U+F0214)
+	nerdIconFileCancel         = "󰷆" // md-file_cancel (U+F0DC6)
+	nerdIconFileKey            = "󱆄" // md-file_key (U+F1184)
+	nerdIconFileLock           = "󰈡" // md-file_lock (U+F0221)
+	nerdIconFilePlus           = "󰝒" // md-file_plus (U+F0752)
+	nerdIconFire               = "󰈸" // md-fire (U+F0238)
+	nerdIconFolder             = "󰉋" // md-folder (U+F024B)
+	nerdIconFolderCheck        = "󱥾" // md-folder_check (U+F197E)
+	nerdIconFolderEye          = "󱞊" // md-folder_eye (U+F178A)
+	nerdIconFolderLock         = "󰉐" // md-folder_lock (U+F0250)
+	nerdIconFolderMultiple     = "󰉓" // md-folder_multiple (U+F0253)
+	nerdIconFolderMultiplePlus = "󱑾" // md-folder_multiple_plus (U+F147E)
+	nerdIconFolderOff          = "󱧸" // md-folder_off (U+F19F8)
+	nerdIconFolderOpenMd       = "󰝰" // md-folder_open (U+F0770)
+	nerdIconFolderPlusMd       = "󰉗" // md-folder_plus (U+F0257)
+	nerdIconFolderQuestion     = "󱧊" // md-folder_question (U+F19CA)
+	nerdIconFolderRemove       = "󰉘" // md-folder_remove (U+F0258)
+	nerdIconFolderSearch       = "󰥨" // md-folder_search (U+F0968)
+	nerdIconFolderStar         = "󰚝" // md-folder_star (U+F069D)
+	nerdIconFolderSync         = "󰴋" // md-folder_sync (U+F0D0B)
+	nerdIconFileDirectoryFill  = "" // oct-file_directory_fill (U+F4D3)
+	nerdIconDebug              = "" // cod-debug (U+EAD8)
+	nerdIconDebugConsole       = "" // cod-debug_console (U+EB9B)
+	nerdIconDebugStart         = "" // cod-debug_start (U+EAD3)
+	nerdIconPass               = "" // cod-pass (U+EBA4)
+	nerdIconScriptText         = "󰯂" // md-script_text (U+F0BC2)
+	nerdIconTestTube           = "󰙨" // md-test_tube (U+F0668)
 )
 
 // ASCII Fallback Icons (Private Constants)
 const (
-	asciiIconTree                  = "[T]" // Tree
+	asciiIconTree              = "[T]" // Tree
 	asciiIconProject           = "◆"
 	asciiIconRepo              = "●"
 	asciiIconWorktree          = "⑂"
@@ -162,104 +168,110 @@ const (
 	asciiIconStatusCompleted   = "●"
 	asciiIconStatusRunning     = "◐"
 	asciiIconStatusFailed      = "✗"
-	asciiIconStatusBlocked         = "[X]" // Blocked
-	asciiIconStatusNeedsReview     = "[?]"
+	asciiIconStatusBlocked     = "[X]" // Blocked
+	asciiIconStatusNeedsReview = "[?]"
 	asciiIconStatusPendingUser = "○"
-	asciiIconStatusHold            = "[H]"
+	asciiIconStatusHold        = "[H]"
 	asciiIconStatusTodo        = "○"
-	asciiIconStatusAbandoned       = "[D]" // Abandoned
+	asciiIconStatusAbandoned   = "[D]" // Abandoned
 	asciiIconStatusInterrupted = "⊗"
 
-	asciiIconArchive               = "[A]" // Archive
-	asciiIconArrowLeft             = "←" // Arrow left
-	asciiIconArrowLeftBold         = "<=" //  Arrow left bold
-	asciiIconArrowRightBold        = "=>" //  Arrow right bold
-	asciiIconFilter                = "⊲" // Filter
-	asciiIconSave                  = "[S]" // Save
-	asciiIconSelectAll             = "[*]" //  Select all
-	asciiIconAudited               = "✓" // Audited
+	asciiIconArchive        = "[A]" // Archive
+	asciiIconArrowLeft      = "←"   // Arrow left
+	asciiIconArrowLeftBold  = "<="  //  Arrow left bold
+	asciiIconArrowRightBold = "=>"  //  Arrow right bold
+	asciiIconFilter         = "⊲"   // Filter
+	asciiIconSave           = "[S]" // Save
+	asciiIconSelectAll      = "[*]" //  Select all
+	asciiIconAudited        = "✓"   // Audited
 
-	asciiIconPullRequest           = "PR" // Pull request
+	asciiIconPullRequest           = "PR"    // Pull request
 	asciiIconPullRequestClosed     = "[x]PR" // PR closed
 	asciiIconPullRequestCreate     = "[+]PR" // PR create
 	asciiIconPullRequestDraft      = "[~]PR" // PR draft
 	asciiIconPullRequestNewChanges = "[!]PR" // PR new changes
-	asciiIconGithubAction          = "[A]" // GitHub action
-	asciiIconGitCompare            = "<>" // Git compare
-	asciiIconGit                   = "git" // Git
-	asciiIconInbox                 = "[I]" //  Inbox
-	asciiIconLightbulb             = "[*]" //  Lightbulb
-	asciiIconMerge                 = "><" // Merge
-	asciiIconHome                   = "[H]" // Home
-	asciiIconRobot                  = "[R]" // Robot
-	asciiIconTrophy                 = "[T]" // Trophy
-	asciiIconChart                  = "[C]" // Chart/Statistics
-	asciiIconSnowflake              = "[*]" // Snowflake
-	asciiIconClock                  = "[C]" // Clock
-	asciiIconMoney                  = "[$]" // Money
-	asciiIconSync                   = "[~]" // Sync
-	asciiIconHelp                   = "[?]" // Help
-	asciiIconBuild                  = "[B]" // Build/Hammer
-	asciiIconStop                   = "[S]" // Stop
+	asciiIconGithubAction          = "[A]"   // GitHub action
+	asciiIconGitCompare            = "<>"    // Git compare
+	asciiIconGit                   = "git"   // Git
+	asciiIconInbox                 = "[I]"   //  Inbox
+	asciiIconLightbulb             = "[*]"   //  Lightbulb
+	asciiIconMerge                 = "><"    // Merge
+	asciiIconHome                  = "[H]"   // Home
+	asciiIconRobot                 = "[R]"   // Robot
+	asciiIconTrophy                = "[T]"   // Trophy
+	asciiIconChart                 = "[C]"   // Chart/Statistics
+	asciiIconSnowflake             = "[*]"   // Snowflake
+	asciiIconClock                 = "[C]"   // Clock
+	asciiIconMoney                 = "[$]"   // Money
+	asciiIconSync                  = "[~]"   // Sync
+	asciiIconHelp                  = "[?]"   // Help
+	asciiIconBuild                 = "[B]"   // Build/Hammer
+	asciiIconStop                  = "[S]"   // Stop
 
-	asciiIconArrowDown             = "↓" // Arrow down
-	asciiIconArrowDownBold         = "vv" // Arrow down bold
-	asciiIconArrowUp               = "↑" // Arrow up
-	asciiIconArrowUpBold           = "^^" // Arrow up bold
-	asciiIconArrowUpDownBold       = "<>" // Arrow up/down bold
+	asciiIconArrowDown       = "↓"  // Arrow down
+	asciiIconArrowDownBold   = "vv" // Arrow down bold
+	asciiIconArrowUp         = "↑"  // Arrow up
+	asciiIconArrowUpBold     = "^^" // Arrow up bold
+	asciiIconArrowUpDownBold = "<>" // Arrow up/down bold
 
-	asciiIconChecklist             = "[]" // Checklist/todo
-	asciiIconArchitecture          = "[A]" // Architecture
-	asciiIconCalendar              = "[C]" // Calendar/daily note
-	asciiIconChatQuestion          = "[?]" // Chat question/prompt
-	asciiIconClockFast             = "[Q]" // Quick note
-	asciiIconLoading               = "..." // Loading
-	asciiIconRss                   = "[R]" // RSS/blog
-	asciiIconSchool                = "[L]" // School/learn
-	asciiIconIssueClosed           = "[x]" // Issue closed
-	asciiIconIssueOpened           = "[!]" // Issue opened
-	asciiIconNoteCurrent           = "[>]" // Current note
-	asciiIconNoteIssues            = "[!]" // Issues notes
-	asciiIconNoteInbox             = "[I]" // Inbox notes
-	asciiIconNoteCompleted         = "[✓]" // Completed notes
-	asciiIconNoteReview            = "[R]" // Review notes
-	asciiIconNoteInProgress        = "[~]" // In-progress notes
+	asciiIconChecklist      = "[]"  // Checklist/todo
+	asciiIconArchitecture   = "[A]" // Architecture
+	asciiIconCalendar       = "[C]" // Calendar/daily note
+	asciiIconChatQuestion   = "[?]" // Chat question/prompt
+	asciiIconClockFast      = "[Q]" // Quick note
+	asciiIconLoading        = "..." // Loading
+	asciiIconRss            = "[R]" // RSS/blog
+	asciiIconSchool         = "[L]" // School/learn
+	asciiIconIssueClosed    = "[x]" // Issue closed
+	asciiIconIssueOpened    = "[!]" // Issue opened
+	asciiIconNoteCurrent    = "[>]" // Current note
+	asciiIconNoteIssues     = "[!]" // Issues notes
+	asciiIconNoteInbox      = "[I]" // Inbox notes
+	asciiIconNoteCompleted  = "[✓]" // Completed notes
+	asciiIconNoteReview     = "[R]" // Review notes
+	asciiIconNoteInProgress = "[~]" // In-progress notes
 
-	asciiIconSparkle                   = "[+]" // New
-	asciiIconCode                      = "</>" // Code
-	asciiIconNotebook                  = "[N]" // Notebook
-	asciiIconDocs                      = "[D]" // Docs
+	asciiIconSparkle  = "[+]" // New
+	asciiIconCode     = "</>" // Code
+	asciiIconNotebook = "[N]" // Notebook
+	asciiIconDocs     = "[D]" // Docs
 
-	asciiIconFileTree              = "[F]" // File tree
-	asciiIconPineTreeBox           = "[P]" // Pine tree box
-	asciiIconViewDashboard         = "[W]" // View dashboard/workspace
+	asciiIconFileTree      = "[F]" // File tree
+	asciiIconPineTreeBox   = "[P]" // Pine tree box
+	asciiIconViewDashboard = "[W]" // View dashboard/workspace
 
-	asciiIconFolderMinus           = "[-]" // Folder minus
-	asciiIconFolderOpen            = "[o]" // Folder open
-	asciiIconFolderOpenO           = "(o)" // Folder open outline
-	asciiIconFolderPlus            = "[+]" // Folder plus
-	asciiIconFolderTree            = "[T]" // Folder tree
-	asciiIconFile                  = "[ ]" // File
-	asciiIconFileCancel            = "[x]" // File cancel
-	asciiIconFileKey               = "[K]" // File key
-	asciiIconFileLock              = "[#]" // File lock
-	asciiIconFilePlus              = "[+]" // File plus
-	asciiIconFire                  = "[*]" // Fire
-	asciiIconFolder                = "[ ]" // Folder
-	asciiIconFolderCheck           = "[✓]" // Folder check
-	asciiIconFolderEye             = "[E]" // Folder eye
-	asciiIconFolderLock            = "[#]" // Folder lock
-	asciiIconFolderMultiple        = "[=]" // Folder multiple
-	asciiIconFolderMultiplePlus    = "[+]" // Folder multiple plus
-	asciiIconFolderOff             = "[-]" // Folder off
-	asciiIconFolderOpenMd          = "(o)" // Folder open (md)
-	asciiIconFolderPlusMd          = "[+]" // Folder plus (md)
-	asciiIconFolderQuestion        = "[?]" // Folder question
-	asciiIconFolderRemove          = "[-]" // Folder remove
-	asciiIconFolderSearch          = "[/]" // Folder search
-	asciiIconFolderStar            = "[*]" // Folder star
-	asciiIconFolderSync            = "[~]" // Folder sync
-	asciiIconFileDirectoryFill     = "[D]" // File directory fill
+	asciiIconFolderMinus        = "[-]" // Folder minus
+	asciiIconFolderOpen         = "[o]" // Folder open
+	asciiIconFolderOpenO        = "(o)" // Folder open outline
+	asciiIconFolderPlus         = "[+]" // Folder plus
+	asciiIconFolderTree         = "[T]" // Folder tree
+	asciiIconFile               = "[ ]" // File
+	asciiIconFileCancel         = "[x]" // File cancel
+	asciiIconFileKey            = "[K]" // File key
+	asciiIconFileLock           = "[#]" // File lock
+	asciiIconFilePlus           = "[+]" // File plus
+	asciiIconFire               = "[*]" // Fire
+	asciiIconFolder             = "[ ]" // Folder
+	asciiIconFolderCheck        = "[✓]" // Folder check
+	asciiIconFolderEye          = "[E]" // Folder eye
+	asciiIconFolderLock         = "[#]" // Folder lock
+	asciiIconFolderMultiple     = "[=]" // Folder multiple
+	asciiIconFolderMultiplePlus = "[+]" // Folder multiple plus
+	asciiIconFolderOff          = "[-]" // Folder off
+	asciiIconFolderOpenMd       = "(o)" // Folder open (md)
+	asciiIconFolderPlusMd       = "[+]" // Folder plus (md)
+	asciiIconFolderQuestion     = "[?]" // Folder question
+	asciiIconFolderRemove       = "[-]" // Folder remove
+	asciiIconFolderSearch       = "[/]" // Folder search
+	asciiIconFolderStar         = "[*]" // Folder star
+	asciiIconFolderSync         = "[~]" // Folder sync
+	asciiIconFileDirectoryFill  = "[D]" // File directory fill
+	asciiIconDebug              = "[D]" // Debug
+	asciiIconDebugConsole       = "[D]" // DebugConsole
+	asciiIconDebugStart         = "[D]" // DebugStart
+	asciiIconPass               = "[P]" // Pass
+	asciiIconScriptText         = "[S]" // ScriptText
+	asciiIconTestTube           = "[T]" // TestTube
 )
 
 // Public Icon Variables
@@ -277,7 +289,7 @@ var (
 	IconRunning           string
 	IconPending           string
 	IconSelect            string
-	IconUnselect              string
+	IconUnselect          string
 	IconArrow             string
 	IconBullet            string
 	IconNote              string
@@ -298,96 +310,102 @@ var (
 	IconStatusAbandoned   string
 	IconStatusInterrupted string
 
-	IconArchive                    string
-	IconArrowLeft                  string
-	IconArrowLeftBold              string
-	IconArrowRightBold             string
-	IconFilter                     string
-	IconSave                       string
-	IconSelectAll                  string
-	IconAudited                    string
+	IconArchive        string
+	IconArrowLeft      string
+	IconArrowLeftBold  string
+	IconArrowRightBold string
+	IconFilter         string
+	IconSave           string
+	IconSelectAll      string
+	IconAudited        string
 
-	IconPullRequest                string
-	IconPullRequestClosed          string
-	IconPullRequestCreate          string
-	IconPullRequestDraft           string
-	IconPullRequestNewChanges      string
-	IconGithubAction               string
-	IconGitCompare                 string
-	IconGit                        string
-	IconInbox                      string
-	IconLightbulb                  string
-	IconMerge                      string
-	IconHome                          string
-	IconRobot                         string
-	IconTrophy                        string
-	IconChart                         string
-	IconSnowflake                     string
-	IconClock                         string
-	IconMoney                         string
-	IconSync                          string
-	IconHelp                          string
-	IconBuild                         string
-	IconStop                          string
+	IconPullRequest           string
+	IconPullRequestClosed     string
+	IconPullRequestCreate     string
+	IconPullRequestDraft      string
+	IconPullRequestNewChanges string
+	IconGithubAction          string
+	IconGitCompare            string
+	IconGit                   string
+	IconInbox                 string
+	IconLightbulb             string
+	IconMerge                 string
+	IconHome                  string
+	IconRobot                 string
+	IconTrophy                string
+	IconChart                 string
+	IconSnowflake             string
+	IconClock                 string
+	IconMoney                 string
+	IconSync                  string
+	IconHelp                  string
+	IconBuild                 string
+	IconStop                  string
 
-	IconArrowDown                  string
-	IconArrowDownBold              string
-	IconArrowUp                    string
-	IconArrowUpBold                string
-	IconArrowUpDownBold            string
+	IconArrowDown       string
+	IconArrowDownBold   string
+	IconArrowUp         string
+	IconArrowUpBold     string
+	IconArrowUpDownBold string
 
-	IconChecklist                  string
-	IconArchitecture               string
-	IconCalendar                   string
-	IconChatQuestion               string
-	IconClockFast                  string
-	IconLoading                    string
-	IconRss                        string
-	IconSchool                     string
-	IconIssueClosed                string
-	IconIssueOpened                string
-	IconNoteCurrent                string
-	IconNoteIssues                 string
-	IconNoteInbox                  string
-	IconNoteCompleted              string
-	IconNoteReview                 string
-	IconNoteInProgress             string
+	IconChecklist      string
+	IconArchitecture   string
+	IconCalendar       string
+	IconChatQuestion   string
+	IconClockFast      string
+	IconLoading        string
+	IconRss            string
+	IconSchool         string
+	IconIssueClosed    string
+	IconIssueOpened    string
+	IconNoteCurrent    string
+	IconNoteIssues     string
+	IconNoteInbox      string
+	IconNoteCompleted  string
+	IconNoteReview     string
+	IconNoteInProgress string
 
-	IconSparkle                        string
-	IconCode                           string
-	IconNotebook                       string
-	IconDocs                           string
+	IconSparkle  string
+	IconCode     string
+	IconNotebook string
+	IconDocs     string
 
-	IconFileTree                   string
-	IconPineTreeBox                string
-	IconViewDashboard              string
+	IconFileTree      string
+	IconPineTreeBox   string
+	IconViewDashboard string
 
-	IconFolderMinus                string
-	IconFolderOpen                 string
-	IconFolderOpenO                string
-	IconFolderPlus                 string
-	IconFolderTree                 string
-	IconFile                       string
-	IconFileCancel                 string
-	IconFileKey                    string
-	IconFileLock                   string
-	IconFilePlus                   string
-	IconFire                       string
-	IconFolder                     string
-	IconFolderCheck                string
-	IconFolderEye                  string
-	IconFolderLock                 string
-	IconFolderMultiple             string
-	IconFolderMultiplePlus         string
-	IconFolderOff                  string
-	IconFolderOpenMd               string
-	IconFolderPlusMd               string
-	IconFolderQuestion             string
-	IconFolderRemove               string
-	IconFolderSearch               string
-	IconFolderStar                 string
-	IconFolderSync                 string
-	IconFileDirectoryFill          string
+	IconFolderMinus        string
+	IconFolderOpen         string
+	IconFolderOpenO        string
+	IconFolderPlus         string
+	IconFolderTree         string
+	IconFile               string
+	IconFileCancel         string
+	IconFileKey            string
+	IconFileLock           string
+	IconFilePlus           string
+	IconFire               string
+	IconFolder             string
+	IconFolderCheck        string
+	IconFolderEye          string
+	IconFolderLock         string
+	IconFolderMultiple     string
+	IconFolderMultiplePlus string
+	IconFolderOff          string
+	IconFolderOpenMd       string
+	IconFolderPlusMd       string
+	IconFolderQuestion     string
+	IconFolderRemove       string
+	IconFolderSearch       string
+	IconFolderStar         string
+	IconFolderSync         string
+	IconFileDirectoryFill  string
+	IconDebug              string
+	IconDebugConsole       string
+	IconDebugStart         string
+	IconPass               string
+	IconScriptText         string
+	IconTestTube           string
 )
 
 // init function determines which icon set to use
@@ -524,6 +542,12 @@ func init() {
 		IconFolderStar = asciiIconFolderStar
 		IconFolderSync = asciiIconFolderSync
 		IconFileDirectoryFill = asciiIconFileDirectoryFill
+		IconDebug = asciiIconDebug
+		IconDebugConsole = asciiIconDebugConsole
+		IconDebugStart = asciiIconDebugStart
+		IconPass = asciiIconPass
+		IconScriptText = asciiIconScriptText
+		IconTestTube = asciiIconTestTube
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -643,5 +667,11 @@ func init() {
 		IconFolderStar = nerdIconFolderStar
 		IconFolderSync = nerdIconFolderSync
 		IconFileDirectoryFill = nerdIconFileDirectoryFill
+		IconDebug = nerdIconDebug
+		IconDebugConsole = nerdIconDebugConsole
+		IconDebugStart = nerdIconDebugStart
+		IconPass = nerdIconPass
+		IconScriptText = nerdIconScriptText
+		IconTestTube = nerdIconTestTube
 	}
 }
