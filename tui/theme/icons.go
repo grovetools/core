@@ -106,38 +106,48 @@ const (
 	nerdIconPineTreeBox   = "󰐆" // md-pine_tree_box (U+F0406)
 	nerdIconViewDashboard = "󰕮" // md-view_dashboard (U+F056E)
 
-	nerdIconFolderMinus        = "" // fa-folder_minus (U+EEC6)
-	nerdIconFolderOpen         = "" // fa-folder_open (U+F07C)
-	nerdIconFolderOpenO        = "" // fa-folder_open_o (U+F115)
-	nerdIconFolderPlus         = "" // fa-folder_plus (U+EEC7)
-	nerdIconFolderTree         = "" // fa-folder_tree (U+EF81)
-	nerdIconFile               = "󰈔" // md-file (U+F0214)
-	nerdIconFileCancel         = "󰷆" // md-file_cancel (U+F0DC6)
-	nerdIconFileKey            = "󱆄" // md-file_key (U+F1184)
-	nerdIconFileLock           = "󰈡" // md-file_lock (U+F0221)
-	nerdIconFilePlus           = "󰝒" // md-file_plus (U+F0752)
-	nerdIconFire               = "󰈸" // md-fire (U+F0238)
-	nerdIconFolder             = "󰉋" // md-folder (U+F024B)
-	nerdIconFolderCheck        = "󱥾" // md-folder_check (U+F197E)
-	nerdIconFolderEye          = "󱞊" // md-folder_eye (U+F178A)
-	nerdIconFolderLock         = "󰉐" // md-folder_lock (U+F0250)
-	nerdIconFolderMultiple     = "󰉓" // md-folder_multiple (U+F0253)
-	nerdIconFolderMultiplePlus = "󱑾" // md-folder_multiple_plus (U+F147E)
-	nerdIconFolderOff          = "󱧸" // md-folder_off (U+F19F8)
-	nerdIconFolderOpenMd       = "󰝰" // md-folder_open (U+F0770)
-	nerdIconFolderPlusMd       = "󰉗" // md-folder_plus (U+F0257)
-	nerdIconFolderQuestion     = "󱧊" // md-folder_question (U+F19CA)
-	nerdIconFolderRemove       = "󰉘" // md-folder_remove (U+F0258)
-	nerdIconFolderSearch       = "󰥨" // md-folder_search (U+F0968)
-	nerdIconFolderStar         = "󰚝" // md-folder_star (U+F069D)
-	nerdIconFolderSync         = "󰴋" // md-folder_sync (U+F0D0B)
-	nerdIconFileDirectoryFill  = "" // oct-file_directory_fill (U+F4D3)
-	nerdIconDebug              = "" // cod-debug (U+EAD8)
-	nerdIconDebugConsole       = "" // cod-debug_console (U+EB9B)
-	nerdIconDebugStart         = "" // cod-debug_start (U+EAD3)
-	nerdIconPass               = "" // cod-pass (U+EBA4)
-	nerdIconScriptText         = "󰯂" // md-script_text (U+F0BC2)
-	nerdIconTestTube           = "󰙨" // md-test_tube (U+F0668)
+	nerdIconFolderMinus            = "" // fa-folder_minus (U+EEC6)
+	nerdIconFolderOpen             = "" // fa-folder_open (U+F07C)
+	nerdIconFolderOpenO            = "" // fa-folder_open_o (U+F115)
+	nerdIconFolderPlus             = "" // fa-folder_plus (U+EEC7)
+	nerdIconFolderTree             = "" // fa-folder_tree (U+EF81)
+	nerdIconFile                   = "󰈔" // md-file (U+F0214)
+	nerdIconFileCancel             = "󰷆" // md-file_cancel (U+F0DC6)
+	nerdIconFileKey                = "󱆄" // md-file_key (U+F1184)
+	nerdIconFileLock               = "󰈡" // md-file_lock (U+F0221)
+	nerdIconFilePlus               = "󰝒" // md-file_plus (U+F0752)
+	nerdIconFire                   = "󰈸" // md-fire (U+F0238)
+	nerdIconFolder                 = "󰉋" // md-folder (U+F024B)
+	nerdIconFolderCheck            = "󱥾" // md-folder_check (U+F197E)
+	nerdIconFolderEye              = "󱞊" // md-folder_eye (U+F178A)
+	nerdIconFolderLock             = "󰉐" // md-folder_lock (U+F0250)
+	nerdIconFolderMultiple         = "󰉓" // md-folder_multiple (U+F0253)
+	nerdIconFolderMultiplePlus     = "󱑾" // md-folder_multiple_plus (U+F147E)
+	nerdIconFolderOff              = "󱧸" // md-folder_off (U+F19F8)
+	nerdIconFolderOpenMd           = "󰝰" // md-folder_open (U+F0770)
+	nerdIconFolderPlusMd           = "󰉗" // md-folder_plus (U+F0257)
+	nerdIconFolderQuestion         = "󱧊" // md-folder_question (U+F19CA)
+	nerdIconFolderRemove           = "󰉘" // md-folder_remove (U+F0258)
+	nerdIconFolderSearch           = "󰥨" // md-folder_search (U+F0968)
+	nerdIconFolderStar             = "󰚝" // md-folder_star (U+F069D)
+	nerdIconFolderSync             = "󰴋" // md-folder_sync (U+F0D0B)
+	nerdIconFileDirectoryFill      = "" // oct-file_directory_fill (U+F4D3)
+	nerdIconDebug                  = "" // cod-debug (U+EAD8)
+	nerdIconDebugConsole           = "" // cod-debug_console (U+EB9B)
+	nerdIconDebugStart             = "" // cod-debug_start (U+EAD3)
+	nerdIconPass                   = "" // cod-pass (U+EBA4)
+	nerdIconScriptText             = "󰯂" // md-script_text (U+F0BC2)
+	nerdIconTestTube               = "󰙨" // md-test_tube (U+F0668)
+	nerdIconNumeric1CircleOutline  = "󰲡" // md-numeric_1_circle_outline (U+F0CA1)
+	nerdIconNumeric2CircleOutline  = "󰲣" // md-numeric_2_circle_outline (U+F0CA3)
+	nerdIconNumeric3CircleOutline  = "󰲥" // md-numeric_3_circle_outline (U+F0CA5)
+	nerdIconNumeric4CircleOutline  = "󰲧" // md-numeric_4_circle_outline (U+F0CA7)
+	nerdIconNumeric5CircleOutline  = "󰲩" // md-numeric_5_circle_outline (U+F0CA9)
+	nerdIconNumeric6CircleOutline  = "󰲫" // md-numeric_6_circle_outline (U+F0CAB)
+	nerdIconNumeric7CircleOutline  = "󰲭" // md-numeric_7_circle_outline (U+F0CAD)
+	nerdIconNumeric8CircleOutline  = "󰲯" // md-numeric_8_circle_outline (U+F0CAF)
+	nerdIconNumeric9CircleOutline  = "󰲱" // md-numeric_9_circle_outline (U+F0CB1)
+	nerdIconNumeric10CircleOutline = "󰿭" // md-numeric_10_circle_outline (U+F0FED)
 )
 
 // ASCII Fallback Icons (Private Constants)
@@ -240,38 +250,48 @@ const (
 	asciiIconPineTreeBox   = "[P]" // Pine tree box
 	asciiIconViewDashboard = "[W]" // View dashboard/workspace
 
-	asciiIconFolderMinus        = "[-]" // Folder minus
-	asciiIconFolderOpen         = "[o]" // Folder open
-	asciiIconFolderOpenO        = "(o)" // Folder open outline
-	asciiIconFolderPlus         = "[+]" // Folder plus
-	asciiIconFolderTree         = "[T]" // Folder tree
-	asciiIconFile               = "[ ]" // File
-	asciiIconFileCancel         = "[x]" // File cancel
-	asciiIconFileKey            = "[K]" // File key
-	asciiIconFileLock           = "[#]" // File lock
-	asciiIconFilePlus           = "[+]" // File plus
-	asciiIconFire               = "[*]" // Fire
-	asciiIconFolder             = "[ ]" // Folder
-	asciiIconFolderCheck        = "[✓]" // Folder check
-	asciiIconFolderEye          = "[E]" // Folder eye
-	asciiIconFolderLock         = "[#]" // Folder lock
-	asciiIconFolderMultiple     = "[=]" // Folder multiple
-	asciiIconFolderMultiplePlus = "[+]" // Folder multiple plus
-	asciiIconFolderOff          = "[-]" // Folder off
-	asciiIconFolderOpenMd       = "(o)" // Folder open (md)
-	asciiIconFolderPlusMd       = "[+]" // Folder plus (md)
-	asciiIconFolderQuestion     = "[?]" // Folder question
-	asciiIconFolderRemove       = "[-]" // Folder remove
-	asciiIconFolderSearch       = "[/]" // Folder search
-	asciiIconFolderStar         = "[*]" // Folder star
-	asciiIconFolderSync         = "[~]" // Folder sync
-	asciiIconFileDirectoryFill  = "[D]" // File directory fill
-	asciiIconDebug              = "[D]" // Debug
-	asciiIconDebugConsole       = "[D]" // DebugConsole
-	asciiIconDebugStart         = "[D]" // DebugStart
-	asciiIconPass               = "[P]" // Pass
-	asciiIconScriptText         = "[S]" // ScriptText
-	asciiIconTestTube           = "[T]" // TestTube
+	asciiIconFolderMinus            = "[-]"  // Folder minus
+	asciiIconFolderOpen             = "[o]"  // Folder open
+	asciiIconFolderOpenO            = "(o)"  // Folder open outline
+	asciiIconFolderPlus             = "[+]"  // Folder plus
+	asciiIconFolderTree             = "[T]"  // Folder tree
+	asciiIconFile                   = "[ ]"  // File
+	asciiIconFileCancel             = "[x]"  // File cancel
+	asciiIconFileKey                = "[K]"  // File key
+	asciiIconFileLock               = "[#]"  // File lock
+	asciiIconFilePlus               = "[+]"  // File plus
+	asciiIconFire                   = "[*]"  // Fire
+	asciiIconFolder                 = "[ ]"  // Folder
+	asciiIconFolderCheck            = "[✓]"  // Folder check
+	asciiIconFolderEye              = "[E]"  // Folder eye
+	asciiIconFolderLock             = "[#]"  // Folder lock
+	asciiIconFolderMultiple         = "[=]"  // Folder multiple
+	asciiIconFolderMultiplePlus     = "[+]"  // Folder multiple plus
+	asciiIconFolderOff              = "[-]"  // Folder off
+	asciiIconFolderOpenMd           = "(o)"  // Folder open (md)
+	asciiIconFolderPlusMd           = "[+]"  // Folder plus (md)
+	asciiIconFolderQuestion         = "[?]"  // Folder question
+	asciiIconFolderRemove           = "[-]"  // Folder remove
+	asciiIconFolderSearch           = "[/]"  // Folder search
+	asciiIconFolderStar             = "[*]"  // Folder star
+	asciiIconFolderSync             = "[~]"  // Folder sync
+	asciiIconFileDirectoryFill      = "[D]"  // File directory fill
+	asciiIconDebug                  = "[D]"  // Debug
+	asciiIconDebugConsole           = "[D]"  // DebugConsole
+	asciiIconDebugStart             = "[D]"  // DebugStart
+	asciiIconPass                   = "[P]"  // Pass
+	asciiIconScriptText             = "[S]"  // ScriptText
+	asciiIconTestTube               = "[T]"  // TestTube
+	asciiIconNumeric1CircleOutline  = "(1)"  // Numeric1CircleOutline
+	asciiIconNumeric2CircleOutline  = "(2)"  // Numeric2CircleOutline
+	asciiIconNumeric3CircleOutline  = "(3)"  // Numeric3CircleOutline
+	asciiIconNumeric4CircleOutline  = "(4)"  // Numeric4CircleOutline
+	asciiIconNumeric5CircleOutline  = "(5)"  // Numeric5CircleOutline
+	asciiIconNumeric6CircleOutline  = "(6)"  // Numeric6CircleOutline
+	asciiIconNumeric7CircleOutline  = "(7)"  // Numeric7CircleOutline
+	asciiIconNumeric8CircleOutline  = "(8)"  // Numeric8CircleOutline
+	asciiIconNumeric9CircleOutline  = "(9)"  // Numeric9CircleOutline
+	asciiIconNumeric10CircleOutline = "(10)" // Numeric10CircleOutline
 )
 
 // Public Icon Variables
@@ -374,38 +394,48 @@ var (
 	IconPineTreeBox   string
 	IconViewDashboard string
 
-	IconFolderMinus        string
-	IconFolderOpen         string
-	IconFolderOpenO        string
-	IconFolderPlus         string
-	IconFolderTree         string
-	IconFile               string
-	IconFileCancel         string
-	IconFileKey            string
-	IconFileLock           string
-	IconFilePlus           string
-	IconFire               string
-	IconFolder             string
-	IconFolderCheck        string
-	IconFolderEye          string
-	IconFolderLock         string
-	IconFolderMultiple     string
-	IconFolderMultiplePlus string
-	IconFolderOff          string
-	IconFolderOpenMd       string
-	IconFolderPlusMd       string
-	IconFolderQuestion     string
-	IconFolderRemove       string
-	IconFolderSearch       string
-	IconFolderStar         string
-	IconFolderSync         string
-	IconFileDirectoryFill  string
-	IconDebug              string
-	IconDebugConsole       string
-	IconDebugStart         string
-	IconPass               string
-	IconScriptText         string
-	IconTestTube           string
+	IconFolderMinus            string
+	IconFolderOpen             string
+	IconFolderOpenO            string
+	IconFolderPlus             string
+	IconFolderTree             string
+	IconFile                   string
+	IconFileCancel             string
+	IconFileKey                string
+	IconFileLock               string
+	IconFilePlus               string
+	IconFire                   string
+	IconFolder                 string
+	IconFolderCheck            string
+	IconFolderEye              string
+	IconFolderLock             string
+	IconFolderMultiple         string
+	IconFolderMultiplePlus     string
+	IconFolderOff              string
+	IconFolderOpenMd           string
+	IconFolderPlusMd           string
+	IconFolderQuestion         string
+	IconFolderRemove           string
+	IconFolderSearch           string
+	IconFolderStar             string
+	IconFolderSync             string
+	IconFileDirectoryFill      string
+	IconDebug                  string
+	IconDebugConsole           string
+	IconDebugStart             string
+	IconPass                   string
+	IconScriptText             string
+	IconTestTube               string
+	IconNumeric1CircleOutline  string
+	IconNumeric2CircleOutline  string
+	IconNumeric3CircleOutline  string
+	IconNumeric4CircleOutline  string
+	IconNumeric5CircleOutline  string
+	IconNumeric6CircleOutline  string
+	IconNumeric7CircleOutline  string
+	IconNumeric8CircleOutline  string
+	IconNumeric9CircleOutline  string
+	IconNumeric10CircleOutline string
 )
 
 // init function determines which icon set to use
@@ -548,6 +578,16 @@ func init() {
 		IconPass = asciiIconPass
 		IconScriptText = asciiIconScriptText
 		IconTestTube = asciiIconTestTube
+		IconNumeric1CircleOutline = asciiIconNumeric1CircleOutline
+		IconNumeric2CircleOutline = asciiIconNumeric2CircleOutline
+		IconNumeric3CircleOutline = asciiIconNumeric3CircleOutline
+		IconNumeric4CircleOutline = asciiIconNumeric4CircleOutline
+		IconNumeric5CircleOutline = asciiIconNumeric5CircleOutline
+		IconNumeric6CircleOutline = asciiIconNumeric6CircleOutline
+		IconNumeric7CircleOutline = asciiIconNumeric7CircleOutline
+		IconNumeric8CircleOutline = asciiIconNumeric8CircleOutline
+		IconNumeric9CircleOutline = asciiIconNumeric9CircleOutline
+		IconNumeric10CircleOutline = asciiIconNumeric10CircleOutline
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -673,5 +713,15 @@ func init() {
 		IconPass = nerdIconPass
 		IconScriptText = nerdIconScriptText
 		IconTestTube = nerdIconTestTube
+		IconNumeric1CircleOutline = nerdIconNumeric1CircleOutline
+		IconNumeric2CircleOutline = nerdIconNumeric2CircleOutline
+		IconNumeric3CircleOutline = nerdIconNumeric3CircleOutline
+		IconNumeric4CircleOutline = nerdIconNumeric4CircleOutline
+		IconNumeric5CircleOutline = nerdIconNumeric5CircleOutline
+		IconNumeric6CircleOutline = nerdIconNumeric6CircleOutline
+		IconNumeric7CircleOutline = nerdIconNumeric7CircleOutline
+		IconNumeric8CircleOutline = nerdIconNumeric8CircleOutline
+		IconNumeric9CircleOutline = nerdIconNumeric9CircleOutline
+		IconNumeric10CircleOutline = nerdIconNumeric10CircleOutline
 	}
 }
