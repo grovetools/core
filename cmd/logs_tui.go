@@ -672,7 +672,35 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Delegate input based on focus
 			if m.focus == viewportPane {
-				// Pass input to the viewport for scrolling
+				// Allow J to enter JSON view from full-screen viewport
+				if key.Matches(msg, logKeys.ViewJSON) {
+					if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+						if logItem, ok := selectedItem.(logItem); ok {
+							// Find the first JSON-like object to display
+							var jsonData interface{}
+							for _, v := range logItem.rawData {
+								switch v.(type) {
+								case map[string]interface{}, []interface{}:
+									jsonData = v
+									break
+								}
+								if jsonData != nil {
+									break
+								}
+							}
+							if jsonData != nil {
+								m.jsonTree = jsontree.New(jsonData)
+								// Use full-screen size since we're in viewportPane
+								m.jsonTree.SetSize(m.width-4, m.height-3)
+								m.jsonView = true
+							} else {
+								m.statusMessage = "No JSON data in this log entry"
+							}
+						}
+					}
+					return m, nil
+				}
+				// Pass other input to the viewport for scrolling
 				var cmd tea.Cmd
 				m.viewport, cmd = m.viewport.Update(msg)
 				return m, cmd
