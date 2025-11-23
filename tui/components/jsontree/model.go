@@ -153,11 +153,28 @@ func flattenTree(root *node) []*node {
 		}
 	}
 
-	// Skip root if it's just a wrapper (don't show root brackets)
+	// For root wrapper, show opening bracket, children, then closing bracket
 	if root.key == "root" && (root.valueType == "object" || root.valueType == "array") {
+		// Add opening bracket
+		openingNode := &node{
+			key:       "",
+			depth:     0,
+			valueType: "opening_" + root.valueType,
+		}
+		nodes = append(nodes, openingNode)
+
+		// Add children
 		for _, child := range root.children {
 			flatten(child)
 		}
+
+		// Add closing bracket
+		closingNode := &node{
+			key:       "",
+			depth:     0,
+			valueType: "closing_" + root.valueType,
+		}
+		nodes = append(nodes, closingNode)
 	} else {
 		flatten(root)
 	}
@@ -357,6 +374,22 @@ func (m *Model) renderNode(n *node, selected bool) string {
 	// Build indentation
 	indent := strings.Repeat("  ", n.depth)
 	valueStyle := theme.DefaultTheme.Muted
+
+	// Handle opening brackets
+	if n.valueType == "opening_object" {
+		line := indent + valueStyle.Render("{")
+		if selected {
+			line = theme.DefaultTheme.Selected.Render(line)
+		}
+		return line
+	}
+	if n.valueType == "opening_array" {
+		line := indent + valueStyle.Render("[")
+		if selected {
+			line = theme.DefaultTheme.Selected.Render(line)
+		}
+		return line
+	}
 
 	// Handle closing brackets
 	if n.valueType == "closing_object" {
