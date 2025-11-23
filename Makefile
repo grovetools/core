@@ -97,16 +97,12 @@ build-all:
 	done
 
 # --- E2E Testing ---
-# Build the custom tend binary for grove-core E2E tests.
-test-e2e-build:
-	@echo "Building E2E test binary $(E2E_BINARY_NAME)..."
-	@go build $(LDFLAGS) -o $(BIN_DIR)/$(E2E_BINARY_NAME) ./tests/e2e
-
-# Run E2E tests. Depends on the main 'core' binary and the test runner.
-# Pass arguments via ARGS, e.g., make test-e2e ARGS="run -i"
-test-e2e: build test-e2e-build
+# Run E2E tests. Depends on the main 'core' binary.
+# The global tend binary will automatically build the project-specific test runner.
+# Pass arguments via ARGS, e.g., make test-e2e ARGS="-i"
+test-e2e: build
 	@echo "Running E2E tests..."
-	@PATH=$(CURDIR)/bin:$(PATH) $(BIN_DIR)/$(E2E_BINARY_NAME) run $(ARGS)
+	@tend run $(ARGS)
 
 # Show available targets
 help:
@@ -122,5 +118,4 @@ help:
 	@echo "  make check       - Run all checks"
 	@echo "  make dev         - Build with race detector"
 	@echo "  make build-all   - Build for multiple platforms"
-	@echo "  make test-e2e-build   - Build the E2E test runner binary"
-	@echo "  make test-e2e ARGS=...- Run E2E tests (e.g., ARGS=\"run -i core-config-layering\")"
+	@echo "  make test-e2e ARGS=...- Run E2E tests (e.g., ARGS=\"-i core-config-layering\")"
