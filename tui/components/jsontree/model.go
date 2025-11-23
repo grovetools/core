@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
@@ -26,15 +25,17 @@ type node struct {
 
 // Model is the Bubble Tea model for the JSON tree viewer.
 type Model struct {
-	viewport   viewport.Model
-	root       *node
-	nodes      []*node // A flattened list of visible nodes for rendering
-	cursor     int
-	keys       KeyMap
-	width      int
-	height     int
-	ready      bool
-	lastZPress time.Time // For detecting zR/zM sequences
+	viewport        viewport.Model
+	root            *node
+	nodes           []*node // A flattened list of visible nodes for rendering
+	cursor          int
+	keys            KeyMap
+	width           int
+	height          int
+	ready           bool
+	lastZPress      time.Time // For detecting zR/zM sequences
+	lastGPress      time.Time // For detecting gg sequence
+	renderedContent string    // Cached rendered content for direct display
 }
 
 // BackMsg is sent when the user wants to exit the JSON viewer
@@ -120,6 +121,12 @@ func buildTree(key string, value interface{}, depth int) *node {
 	return n
 }
 
+// closingBracket is a pseudo-node for rendering closing brackets
+type closingBracket struct {
+	depth     int
+	bracket   string // "}" or "]"
+}
+
 // flattenTree creates a flattened list of visible nodes for rendering.
 func flattenTree(root *node) []*node {
 	if root == nil {
@@ -134,10 +141,19 @@ func flattenTree(root *node) []*node {
 			for _, child := range n.children {
 				flatten(child)
 			}
+			// Add closing bracket node after children
+			if n.valueType == "object" || n.valueType == "array" {
+				closingNode := &node{
+					key:       "", // empty key indicates closing bracket
+					depth:     n.depth,
+					valueType: "closing_" + n.valueType,
+				}
+				nodes = append(nodes, closingNode)
+			}
 		}
 	}
 
-	// Skip root if it's just a wrapper
+	// Skip root if it's just a wrapper (don't show root brackets)
 	if root.key == "root" && (root.valueType == "object" || root.valueType == "array") {
 		for _, child := range root.children {
 			flatten(child)
@@ -182,6 +198,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Handle gg sequence (go to top)
+		if keyStr == "g" {
+			if time.Since(m.lastGPress) < 500*time.Millisecond {
+				// Double 'g' pressed - go to top
+				m.cursor = 0
+				m.updateContent()
+				m.lastGPress = time.Time{}
+				return m, nil
+			}
+			m.lastGPress = time.Now()
+			return m, nil
+		}
+
 		switch {
 		case key.Matches(msg, m.keys.Up):
 			if m.cursor > 0 {
@@ -195,6 +224,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 				m.updateContent()
 			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.HalfPageUp):
+			// Move cursor up by half page
+			halfPage := m.viewport.Height / 2
+			m.cursor -= halfPage
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.updateContent()
+			return m, nil
+
+		case key.Matches(msg, m.keys.HalfPageDown):
+			// Move cursor down by half page
+			halfPage := m.viewport.Height / 2
+			m.cursor += halfPage
+			if m.cursor >= len(m.nodes) {
+				m.cursor = len(m.nodes) - 1
+			}
+			m.updateContent()
+			return m, nil
+
+		case key.Matches(msg, m.keys.GotoEnd):
+			// G - go to end
+			m.cursor = len(m.nodes) - 1
+			m.updateContent()
 			return m, nil
 
 		case key.Matches(msg, m.keys.Toggle):
@@ -272,8 +327,10 @@ func (m *Model) updateContent() {
 		lines = append(lines, line)
 	}
 
+	// Join lines without extra spacing
 	content := strings.Join(lines, "\n")
 	m.viewport.SetContent(content)
+	m.renderedContent = content // Cache for direct access
 
 	// Auto-scroll to keep cursor visible
 	if m.cursor < m.viewport.YOffset {
@@ -287,6 +344,23 @@ func (m *Model) updateContent() {
 func (m *Model) renderNode(n *node, selected bool) string {
 	// Build indentation
 	indent := strings.Repeat("  ", n.depth)
+	valueStyle := theme.DefaultTheme.Muted
+
+	// Handle closing brackets
+	if n.valueType == "closing_object" {
+		line := indent + valueStyle.Render("}")
+		if selected {
+			line = theme.DefaultTheme.Selected.Render(line)
+		}
+		return line
+	}
+	if n.valueType == "closing_array" {
+		line := indent + valueStyle.Render("]")
+		if selected {
+			line = theme.DefaultTheme.Selected.Render(line)
+		}
+		return line
+	}
 
 	// Build prefix (fold icon or bullet)
 	var prefix string
@@ -306,7 +380,6 @@ func (m *Model) renderNode(n *node, selected bool) string {
 
 	// Build value display
 	var valueDisplay string
-	valueStyle := theme.DefaultTheme.Muted
 
 	switch n.valueType {
 	case "object":
@@ -366,18 +439,6 @@ func (m Model) View() string {
 		return theme.DefaultTheme.Muted.Render("No JSON data to display")
 	}
 
-	// Header
-	headerStyle := lipgloss.NewStyle().Bold(true).MarginBottom(1)
-	header := headerStyle.Render("JSON Viewer (j/k to navigate, space to toggle, zR/zM expand/collapse all, esc to exit)")
-
-	// Viewport with tree
-	viewportStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(theme.DefaultColors.Border)
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		viewportStyle.Render(m.viewport.View()),
-	)
+	// Just return viewport content - the logs_tui handles outer styling
+	return m.viewport.View()
 }

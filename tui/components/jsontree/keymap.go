@@ -6,6 +6,10 @@ import "github.com/charmbracelet/bubbles/key"
 type KeyMap struct {
 	Up          key.Binding
 	Down        key.Binding
+	HalfPageUp  key.Binding
+	HalfPageDown key.Binding
+	GotoTop     key.Binding
+	GotoEnd     key.Binding
 	Toggle      key.Binding
 	ExpandAll   key.Binding
 	CollapseAll key.Binding
@@ -17,11 +21,27 @@ func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		Up: key.NewBinding(
 			key.WithKeys("up", "k"),
-			key.WithHelp("k/up", "up"),
+			key.WithHelp("k/↑", "up"),
 		),
 		Down: key.NewBinding(
 			key.WithKeys("down", "j"),
-			key.WithHelp("j/down", "down"),
+			key.WithHelp("j/↓", "down"),
+		),
+		HalfPageUp: key.NewBinding(
+			key.WithKeys("ctrl+u"),
+			key.WithHelp("ctrl+u", "half page up"),
+		),
+		HalfPageDown: key.NewBinding(
+			key.WithKeys("ctrl+d"),
+			key.WithHelp("ctrl+d", "half page down"),
+		),
+		GotoTop: key.NewBinding(
+			key.WithKeys("g"),
+			key.WithHelp("gg", "go to top"),
+		),
+		GotoEnd: key.NewBinding(
+			key.WithKeys("G"),
+			key.WithHelp("G", "go to end"),
 		),
 		Toggle: key.NewBinding(
 			key.WithKeys("space", "enter", "l"),
