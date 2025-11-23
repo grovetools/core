@@ -62,7 +62,7 @@ func (c *Client) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, wi
 		}
 
 		// Ensure it's at the correct index
-		if windowIndex >= 0 {
+		if windowIndex > 0 {
 			if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
 				// Log the error but don't fail - window is still usable
 				fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
@@ -82,7 +82,7 @@ func (c *Client) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, wi
 			return fmt.Errorf("failed to create new window '%s': %w", windowName, err)
 		}
 
-		if windowIndex >= 0 {
+		if windowIndex > 0 {
 			if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
 				// Log the error but don't fail - window is still usable
 				fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
@@ -185,7 +185,7 @@ func (c *Client) FocusOrRunCommandInWindow(ctx context.Context, command, windowN
 	}
 
 	// If an index is specified, move the window to that position.
-	if windowIndex >= 0 {
+	if windowIndex > 0 {
 		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
 			// Log the error but don't fail - window is still usable
 			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
@@ -241,7 +241,7 @@ func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, wi
 	}
 
 	// If an index is specified, move the window to that position.
-	if windowIndex >= 0 {
+	if windowIndex > 0 {
 		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
 			// Log the error but don't fail - window is still usable
 			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
