@@ -564,6 +564,20 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// If help is showing, handle ESC to close it
+	if m.help.ShowAll {
+		if msg, ok := msg.(tea.KeyMsg); ok {
+			if key.Matches(msg, logKeys.Base.Quit) {
+				return m, tea.Quit
+			}
+			if key.Matches(msg, logKeys.Clear) || msg.String() == "esc" {
+				m.help.Toggle()
+				return m, nil
+			}
+		}
+		return m, nil
+	}
+
 	// If in JSON view, delegate updates to the JSON tree component
 	if m.jsonView {
 		switch msg := msg.(type) {
@@ -773,12 +787,14 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetSize(msg.Width, listHeight)
 
 		// Update viewport size
+		// Account for: border (2), padding (4), margins (6) = 12 total horizontal
+		viewportWidth := msg.Width - 12
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width-4, viewportHeight) // -4 for padding
+			m.viewport = viewport.New(viewportWidth, viewportHeight)
 			m.viewport.YPosition = listHeight + 1
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width - 4
+			m.viewport.Width = viewportWidth
 			m.viewport.Height = viewportHeight
 		}
 
@@ -993,14 +1009,11 @@ func (m *logModel) View() string {
 		listView = m.list.View()
 	}()
 
-	// Separator between list and details
-	separatorStyle := theme.DefaultTheme.Muted.Copy().
-		Border(lipgloss.NormalBorder(), true, false, false, false)
-	separator := separatorStyle.Render(strings.Repeat("─", m.width-2))
-
-	// Details view with border
+	// Details view with rounded border (serves as visual separation from list)
 	detailsStyle := theme.DefaultTheme.Muted.Copy().
 		Padding(0, 2).
+		MarginLeft(1).
+		Width(m.width - 3).
 		BorderStyle(lipgloss.RoundedBorder())
 
 	var detailsContent string
@@ -1016,7 +1029,6 @@ func (m *logModel) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		listView,
-		separator,
 		detailsView,
 		status,
 	)
