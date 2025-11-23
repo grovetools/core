@@ -4,7 +4,7 @@ type LaunchOptions struct {
 	SessionName      string
 	WorkingDirectory string
 	WindowName       string
-	WindowIndex      int // Window index to position the window at (0 = no move, 1+ = target index)
+	WindowIndex      int // Window index to position the window at (-1 = no specific index)
 	Panes            []PaneOptions
 }
 

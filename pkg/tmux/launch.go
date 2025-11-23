@@ -28,8 +28,8 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 		}
 	}
 
-	// Move window to specified index if provided (0 = no move, 1+ = target index)
-	if opts.WindowIndex > 0 {
+	// Move window to specified index if provided
+	if opts.WindowIndex >= 0 {
 		windowToMove := opts.WindowName
 		if windowToMove == "" {
 			// If no name, the first window has the same name as the session
