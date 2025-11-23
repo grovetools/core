@@ -350,3 +350,43 @@ func (c *Client) SplitWindow(ctx context.Context, target string, horizontal bool
 	}
 	return strings.TrimSpace(output), nil
 }
+
+// GetWindowPaneID returns the active pane ID for a given window target.
+func (c *Client) GetWindowPaneID(ctx context.Context, windowTarget string) (string, error) {
+	output, err := c.run(ctx, "display-message", "-p", "-t", windowTarget, "#{pane_id}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// SetPaneEnvironment sets environment variables for a specific pane by sending export commands.
+// This affects the shell running in the pane for its entire lifetime.
+// Commands are prefixed with a space to prevent shell history pollution.
+func (c *Client) SetPaneEnvironment(ctx context.Context, paneTarget string, env map[string]string) error {
+	for key, value := range env {
+		// Use %q to safely quote the value for the shell.
+		// Prepend space to prevent shell history pollution (bash, zsh, fish).
+		exportCmd := fmt.Sprintf(" export %s=%q", key, value)
+		if err := c.SendKeys(ctx, paneTarget, exportCmd, "C-m"); err != nil {
+			return fmt.Errorf("failed to send export command for %s to pane %s: %w", key, paneTarget, err)
+		}
+	}
+	return nil
+}
+
+// NewWindowWithOptions creates a new window with extended options.
+func (c *Client) NewWindowWithOptions(ctx context.Context, opts NewWindowOptions) error {
+	args := []string{"new-window", "-t", opts.Target, "-n", opts.WindowName}
+	if opts.WorkingDir != "" {
+		args = append(args, "-c", opts.WorkingDir)
+	}
+	for _, e := range opts.Env {
+		args = append(args, "-e", e)
+	}
+	if opts.Command != "" {
+		args = append(args, opts.Command)
+	}
+	_, err := c.run(ctx, args...)
+	return err
+}

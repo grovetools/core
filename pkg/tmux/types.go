@@ -23,3 +23,12 @@ type Window struct {
 	Command  string `json:"command"` // Active pane's command
 	PID      int    `json:"pid"`     // Active pane's PID
 }
+
+// NewWindowOptions provides detailed options for creating a new window.
+type NewWindowOptions struct {
+	Target     string
+	WindowName string
+	Command    string
+	WorkingDir string
+	Env        []string // Environment variables in "KEY=VALUE" format
+}
