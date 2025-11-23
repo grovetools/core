@@ -30,6 +30,9 @@ func main() {
 		LoggingNestedJSONScenario(),
 		LoggingLevelFilterScenario(),
 		JSONTreeComponentScenario(),
+		// TUI scenarios
+		LoggingTUITestScenario(),
+		LoggingTUIVimNavigationScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.
