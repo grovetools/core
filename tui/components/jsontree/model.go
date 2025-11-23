@@ -267,6 +267,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case key.Matches(msg, m.keys.Fold):
+			// h - fold/collapse current node (vim-style)
+			if m.cursor < len(m.nodes) {
+				n := m.nodes[m.cursor]
+				if len(n.children) > 0 && !n.collapsed {
+					n.collapsed = true
+					m.nodes = flattenTree(m.root)
+					m.updateContent()
+				}
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Back):
 			return m, func() tea.Msg { return BackMsg{} }
 		}

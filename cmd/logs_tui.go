@@ -591,11 +591,30 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.jsonView = false
 				return m, nil
 			}
+			// Tab switches focus (full-screen toggle) in JSON view too
+			if key.Matches(msg, logKeys.SwitchFocus) {
+				if m.focus == listPane {
+					m.focus = viewportPane
+					// Expand JSON tree to full height
+					m.jsonTree.SetSize(m.width-4, m.height-3)
+				} else {
+					m.focus = listPane
+					// Restore JSON tree to split height
+					listHeight := m.height / 2
+					viewportHeight := m.height - listHeight - 3
+					m.jsonTree.SetSize(m.width-4, viewportHeight)
+				}
+				return m, nil
+			}
 		case tea.WindowSizeMsg:
 			// Handle window size changes
-			listHeight := m.height / 2
-			viewportHeight := m.height - listHeight - 3
-			m.jsonTree.SetSize(msg.Width-4, viewportHeight)
+			if m.focus == viewportPane {
+				m.jsonTree.SetSize(msg.Width-4, m.height-3)
+			} else {
+				listHeight := m.height / 2
+				viewportHeight := m.height - listHeight - 3
+				m.jsonTree.SetSize(msg.Width-4, viewportHeight)
+			}
 		}
 		newTree, cmd := m.jsonTree.Update(msg)
 		m.jsonTree = newTree.(jsontree.Model)

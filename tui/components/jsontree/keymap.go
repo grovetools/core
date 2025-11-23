@@ -11,6 +11,7 @@ type KeyMap struct {
 	GotoTop     key.Binding
 	GotoEnd     key.Binding
 	Toggle      key.Binding
+	Fold        key.Binding
 	ExpandAll   key.Binding
 	CollapseAll key.Binding
 	Back        key.Binding
@@ -45,7 +46,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		Toggle: key.NewBinding(
 			key.WithKeys("space", "enter", "l"),
-			key.WithHelp("space/enter", "toggle fold"),
+			key.WithHelp("space/l", "expand"),
 		),
 		ExpandAll: key.NewBinding(
 			key.WithKeys("z"),
@@ -56,8 +57,12 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("zM", "collapse all"),
 		),
 		Back: key.NewBinding(
-			key.WithKeys("esc", "q", "h"),
+			key.WithKeys("esc", "q"),
 			key.WithHelp("esc/q", "back"),
+		),
+		Fold: key.NewBinding(
+			key.WithKeys("h"),
+			key.WithHelp("h", "fold"),
 		),
 	}
 }
