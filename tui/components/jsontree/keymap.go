@@ -20,6 +20,7 @@ type KeyMap struct {
 	PrevResult   key.Binding
 	YankValue    key.Binding
 	YankAll      key.Binding
+	VisualMode   key.Binding
 }
 
 // DefaultKeyMap returns the default keybindings for the component.
@@ -89,6 +90,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("Y"),
 			key.WithHelp("Y", "yank all"),
 		),
+		VisualMode: key.NewBinding(
+			key.WithKeys("V"),
+			key.WithHelp("V", "visual mode"),
+		),
 	}
 }
 
@@ -103,6 +108,6 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Toggle},
 		{k.ExpandAll, k.CollapseAll, k.Back},
 		{k.Search, k.NextResult, k.PrevResult},
-		{k.YankValue, k.YankAll},
+		{k.VisualMode, k.YankValue, k.YankAll},
 	}
 }

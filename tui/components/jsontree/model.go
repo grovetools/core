@@ -54,6 +54,11 @@ type Model struct {
 
 	// Original data for YankAll
 	originalData interface{}
+
+	// Visual mode state
+	visualMode  bool
+	visualStart int
+	visualEnd   int
 }
 
 // BackMsg is sent when the user wants to exit the JSON viewer
@@ -312,8 +317,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case key.Matches(msg, m.keys.VisualMode):
+			// Toggle visual mode
+			if !m.visualMode {
+				m.visualMode = true
+				m.visualStart = m.cursor
+				m.visualEnd = m.cursor
+				m.statusMessage = "-- VISUAL --"
+			} else {
+				m.visualMode = false
+				m.statusMessage = ""
+			}
+			m.updateContent()
+			return m, nil
+
 		case key.Matches(msg, m.keys.YankValue):
-			// Copy current node's value to clipboard
+			// Copy visual selection or current node's value to clipboard
+			if m.visualMode {
+				// Yank visual selection
+				content := m.getVisualSelectionString()
+				if err := m.copyToClipboard(content); err != nil {
+					m.statusMessage = fmt.Sprintf("Copy failed: %v", err)
+				} else {
+					minIdx, maxIdx := m.visualStart, m.visualEnd
+					if minIdx > maxIdx {
+						minIdx, maxIdx = maxIdx, minIdx
+					}
+					count := maxIdx - minIdx + 1
+					m.statusMessage = fmt.Sprintf("Copied %d nodes", count)
+				}
+				m.visualMode = false
+				m.updateContent()
+				return m, m.clearStatusAfter()
+			}
+			// Single node yank
 			if m.cursor < len(m.nodes) {
 				n := m.nodes[m.cursor]
 				content := m.getNodeValueString(n)
@@ -343,6 +380,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Up):
 			if m.cursor > 0 {
 				m.cursor--
+				if m.visualMode {
+					m.visualEnd = m.cursor
+				}
 				m.updateContent()
 			}
 			return m, nil
@@ -350,6 +390,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Down):
 			if m.cursor < len(m.nodes)-1 {
 				m.cursor++
+				if m.visualMode {
+					m.visualEnd = m.cursor
+				}
 				m.updateContent()
 			}
 			return m, nil
@@ -416,6 +459,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Back):
+			// If in visual mode, exit visual mode first
+			if m.visualMode {
+				m.visualMode = false
+				m.statusMessage = ""
+				m.updateContent()
+				return m, nil
+			}
 			// Clear search when exiting
 			m.searchQuery = ""
 			m.searchResults = nil
@@ -580,6 +630,56 @@ func (m *Model) getNodeValueString(n *node) string {
 	}
 }
 
+// getVisualSelectionString returns the string representation of the visual selection as valid JSON.
+func (m *Model) getVisualSelectionString() string {
+	minIdx, maxIdx := m.visualStart, m.visualEnd
+	if minIdx > maxIdx {
+		minIdx, maxIdx = maxIdx, minIdx
+	}
+
+	// Collect selected nodes into a map/slice for JSON serialization
+	result := make(map[string]interface{})
+	for i := minIdx; i <= maxIdx && i < len(m.nodes); i++ {
+		n := m.nodes[i]
+		// Skip bracket-only nodes
+		if strings.HasPrefix(n.valueType, "opening_") || strings.HasPrefix(n.valueType, "closing_") {
+			continue
+		}
+		// Use the node's value directly for proper JSON types
+		if n.value != nil {
+			result[n.key] = n.value
+		}
+	}
+
+	// Marshal to pretty JSON
+	jsonBytes, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		// Fallback to simple format
+		var lines []string
+		for i := minIdx; i <= maxIdx && i < len(m.nodes); i++ {
+			n := m.nodes[i]
+			if strings.HasPrefix(n.valueType, "opening_") || strings.HasPrefix(n.valueType, "closing_") {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("%s: %v", n.key, m.getNodeValueString(n)))
+		}
+		return strings.Join(lines, "\n")
+	}
+	return string(jsonBytes)
+}
+
+// isVisuallySelected checks if a node index is in the visual selection range.
+func (m *Model) isVisuallySelected(idx int) bool {
+	if !m.visualMode {
+		return false
+	}
+	minIdx, maxIdx := m.visualStart, m.visualEnd
+	if minIdx > maxIdx {
+		minIdx, maxIdx = maxIdx, minIdx
+	}
+	return idx >= minIdx && idx <= maxIdx
+}
+
 // truncateString truncates a string to maxLen and adds ellipsis if needed.
 func truncateString(s string, maxLen int) string {
 	// Remove newlines for display
@@ -609,7 +709,8 @@ func (m *Model) updateContent() {
 	var lines []string
 	for i, n := range m.nodes {
 		isResult := m.isSearchResult(i)
-		line := m.renderNode(n, i == m.cursor, isResult)
+		isVisual := m.isVisuallySelected(i)
+		line := m.renderNode(n, i == m.cursor, isResult, isVisual)
 		lines = append(lines, line)
 	}
 
@@ -627,22 +728,32 @@ func (m *Model) updateContent() {
 }
 
 // renderNode renders a single node line.
-func (m *Model) renderNode(n *node, selected bool, isResult bool) string {
+func (m *Model) renderNode(n *node, selected bool, isResult bool, isVisual bool) string {
 	// Build indentation
 	indent := strings.Repeat("  ", n.depth)
 	valueStyle := theme.DefaultTheme.Muted
 
+	// Visual selection style - distinct violet background
+	visualStyle := lipgloss.NewStyle().
+		Background(theme.DefaultTheme.Colors.Violet).
+		Foreground(theme.DefaultTheme.Colors.DarkText).
+		Bold(true)
+
 	// Handle opening brackets
 	if n.valueType == "opening_object" {
 		line := indent + valueStyle.Render("{")
-		if selected {
+		if isVisual {
+			line = visualStyle.Render(indent + "{")
+		} else if selected {
 			line = theme.DefaultTheme.Selected.Render(line)
 		}
 		return line
 	}
 	if n.valueType == "opening_array" {
 		line := indent + valueStyle.Render("[")
-		if selected {
+		if isVisual {
+			line = visualStyle.Render(indent + "[")
+		} else if selected {
 			line = theme.DefaultTheme.Selected.Render(line)
 		}
 		return line
@@ -651,14 +762,18 @@ func (m *Model) renderNode(n *node, selected bool, isResult bool) string {
 	// Handle closing brackets
 	if n.valueType == "closing_object" {
 		line := indent + valueStyle.Render("}")
-		if selected {
+		if isVisual {
+			line = visualStyle.Render(indent + "}")
+		} else if selected {
 			line = theme.DefaultTheme.Selected.Render(line)
 		}
 		return line
 	}
 	if n.valueType == "closing_array" {
 		line := indent + valueStyle.Render("]")
-		if selected {
+		if isVisual {
+			line = visualStyle.Render(indent + "]")
+		} else if selected {
 			line = theme.DefaultTheme.Selected.Render(line)
 		}
 		return line
@@ -744,8 +859,10 @@ func (m *Model) renderNode(n *node, selected bool, isResult bool) string {
 	// Combine parts
 	line := fmt.Sprintf("%s%s%s: %s", indent, prefix, keyDisplay, valueDisplay)
 
-	// Apply selection styling
-	if selected {
+	// Apply selection styling - visual mode takes priority
+	if isVisual {
+		line = visualStyle.Render(line)
+	} else if selected {
 		line = theme.DefaultTheme.Selected.Render(line)
 	}
 
@@ -786,7 +903,15 @@ func (m Model) View() string {
 
 	// Build the status/search bar
 	var statusBar string
-	if m.statusMessage != "" {
+	if m.visualMode {
+		// Show visual mode indicator with selection count
+		minIdx, maxIdx := m.visualStart, m.visualEnd
+		if minIdx > maxIdx {
+			minIdx, maxIdx = maxIdx, minIdx
+		}
+		count := maxIdx - minIdx + 1
+		statusBar = theme.DefaultTheme.Warning.Render(fmt.Sprintf("-- VISUAL -- (%d selected, y to yank, Esc to cancel)", count))
+	} else if m.statusMessage != "" {
 		// Show status message (yank confirmation, etc.)
 		statusBar = theme.DefaultTheme.Success.Render(m.statusMessage)
 	} else if m.isSearching {
