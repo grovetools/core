@@ -164,6 +164,10 @@ type Theme struct {
 	Selected    lipgloss.Style
 	SelectedRow lipgloss.Style
 
+	// Selection styles
+	SelectedUnfocused lipgloss.Style // Selected item in unfocused pane
+	VisualSelection   lipgloss.Style // Visual selection mode highlight
+
 	// Table styles
 	TableHeader        lipgloss.Style
 	TableRow           lipgloss.Style
@@ -171,8 +175,9 @@ type Theme struct {
 	UseAlternatingRows bool // Whether to use alternating row backgrounds in tables
 
 	// Container styles
-	Box  lipgloss.Style
-	Code lipgloss.Style
+	Box        lipgloss.Style
+	Code       lipgloss.Style
+	DetailsBox lipgloss.Style // Bordered panel for details views
 
 	// Interactive elements
 	Input       lipgloss.Style
@@ -187,6 +192,9 @@ type Theme struct {
 	WorkspaceEcosystem lipgloss.Style // Bold - for ecosystem workspaces
 	WorkspaceStandard  lipgloss.Style // Default - for standard workspaces
 	WorkspaceWorktree  lipgloss.Style // Faint - for worktree branches
+
+	// Dynamic color palette for components
+	AccentColors []lipgloss.TerminalColor
 }
 
 var themeRegistry = map[string]func() Colors{
@@ -310,6 +318,13 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 		SelectedRow: lipgloss.NewStyle().
 			Background(colors.SelectedBackground),
 
+		SelectedUnfocused: lipgloss.NewStyle().
+			Faint(true).
+			Underline(true),
+
+		VisualSelection: lipgloss.NewStyle().
+			Reverse(true),
+
 		TableHeader: lipgloss.NewStyle().
 			Bold(true).
 			BorderStyle(lipgloss.NormalBorder()).
@@ -329,6 +344,11 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 			BorderForeground(colors.Border).
 			Padding(1, 2).
 			Margin(1, 0),
+
+		DetailsBox: lipgloss.NewStyle().
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(colors.Violet).
+			Padding(0, 1),
 
 		Code: lipgloss.NewStyle().
 			Background(colors.SubtleBackground).
@@ -363,6 +383,15 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 
 		WorkspaceWorktree: lipgloss.NewStyle().
 			Faint(true),
+
+		AccentColors: []lipgloss.TerminalColor{
+			colors.Cyan,
+			colors.Blue,
+			colors.Violet,
+			colors.Pink,
+			colors.Green,
+			colors.Orange,
+		},
 	}
 }
 

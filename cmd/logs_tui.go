@@ -282,18 +282,14 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	isFocused := d.model == nil || d.model.focus == listPane
 
 	if isVisuallySelected {
-		// Visual selection highlighting - use distinct violet background
-		visualStyle := lipgloss.NewStyle().
-			Background(theme.DefaultTheme.Colors.Violet).
-			Foreground(theme.DefaultTheme.Colors.DarkText).
-			Bold(true)
-		str = visualStyle.Render(str)
+		// Visual selection highlighting - use theme style
+		str = theme.DefaultTheme.VisualSelection.Render(str)
 	} else if isSelected && isFocused {
 		// Normal cursor highlighting (only when list pane is focused)
 		str = theme.DefaultTheme.Selected.Render(str)
 	} else if isSelected && !isFocused {
 		// Dimmed cursor when viewport is focused
-		str = theme.DefaultTheme.Muted.Copy().Underline(true).Render(str)
+		str = theme.DefaultTheme.SelectedUnfocused.Render(str)
 	}
 
 	fmt.Fprint(w, str)
@@ -590,9 +586,9 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key.Matches(msg, logKeys.Base.Quit) {
 				return m, tea.Quit
 			}
-			// ESC exits JSON view
-			if key.Matches(msg, logKeys.Clear) || msg.String() == "esc" {
-				m.jsonView = false
+			// Allow help in JSON view
+			if key.Matches(msg, logKeys.Base.Help) {
+				m.help.Toggle()
 				return m, nil
 			}
 			// Tab switches focus (full-screen toggle) in JSON view too
@@ -610,6 +606,7 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+			// Pass ESC and other keys to JSON tree - it will send BackMsg when ready to exit
 		case tea.WindowSizeMsg:
 			// Handle window size changes
 			if m.focus == viewportPane {
@@ -660,7 +657,7 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.help.Toggle()
 				return m, nil
 
-			case key.Matches(msg, logKeys.SwitchFocus):
+			case key.Matches(msg, logKeys.SwitchFocus) || msg.String() == "enter":
 				if m.focus == listPane {
 					m.focus = viewportPane
 					// Expand viewport to full height (minus status line)
@@ -676,6 +673,14 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Delegate input based on focus
 			if m.focus == viewportPane {
+				// ESC returns focus to list pane
+				if key.Matches(msg, logKeys.Clear) || msg.String() == "esc" {
+					m.focus = listPane
+					// Restore viewport to split height
+					listHeight := m.height / 2
+					m.viewport.Height = m.height - listHeight - 3
+					return m, nil
+				}
 				// Allow J to enter JSON view from full-screen viewport
 				if key.Matches(msg, logKeys.ViewJSON) {
 					if selectedItem := m.list.SelectedItem(); selectedItem != nil {
@@ -976,7 +981,7 @@ func (m *logModel) View() string {
 	}
 
 	filterIndicator := ""
-	searchStyle := theme.DefaultTheme.Warning.Copy().Bold(true)
+	searchStyle := theme.DefaultTheme.Warning
 	if m.list.FilterState() == list.Filtering {
 		filterTerm := m.list.FilterValue()
 		if filterTerm == "" {
@@ -1027,9 +1032,8 @@ func (m *logModel) View() string {
 
 	// Full-screen details view when viewport is focused
 	if m.focus == viewportPane {
-		detailsStyle := theme.DefaultTheme.Muted.Copy().
+		detailsStyle := theme.DefaultTheme.DetailsBox.Copy().
 			Padding(0, 2).
-			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(theme.DefaultTheme.Highlight.GetForeground())
 
 		var detailsContent string
@@ -1062,11 +1066,10 @@ func (m *logModel) View() string {
 	}()
 
 	// Details view with rounded border (serves as visual separation from list)
-	detailsStyle := theme.DefaultTheme.Muted.Copy().
+	detailsStyle := theme.DefaultTheme.DetailsBox.Copy().
 		Padding(0, 2).
 		MarginLeft(1).
-		Width(m.width - 3).
-		BorderStyle(lipgloss.RoundedBorder())
+		Width(m.width - 3)
 
 	var detailsContent string
 	if m.jsonView {
@@ -1087,8 +1090,7 @@ func (m *logModel) View() string {
 }
 
 
-// Workspace color management
-var workspaceColorPalette = []lipgloss.Color{"39", "45", "51", "81", "117", "153", "189", "225"}
+// Workspace color management - uses theme's AccentColors palette
 var workspaceColorMap = make(map[string]lipgloss.Style)
 var workspaceColorIndex = 0
 
@@ -1097,7 +1099,7 @@ func getWorkspaceStyle(workspace string) lipgloss.Style {
 		return style
 	}
 
-	color := workspaceColorPalette[workspaceColorIndex%len(workspaceColorPalette)]
+	color := theme.DefaultTheme.AccentColors[workspaceColorIndex%len(theme.DefaultTheme.AccentColors)]
 	style := lipgloss.NewStyle().Foreground(color).Bold(true)
 	workspaceColorMap[workspace] = style
 	workspaceColorIndex++

@@ -733,11 +733,8 @@ func (m *Model) renderNode(n *node, selected bool, isResult bool, isVisual bool)
 	indent := strings.Repeat("  ", n.depth)
 	valueStyle := theme.DefaultTheme.Muted
 
-	// Visual selection style - distinct violet background
-	visualStyle := lipgloss.NewStyle().
-		Background(theme.DefaultTheme.Colors.Violet).
-		Foreground(theme.DefaultTheme.Colors.DarkText).
-		Bold(true)
+	// Visual selection style from theme
+	visualStyle := theme.DefaultTheme.VisualSelection
 
 	// Handle opening brackets
 	if n.valueType == "opening_object" {
@@ -779,53 +776,76 @@ func (m *Model) renderNode(n *node, selected bool, isResult bool, isVisual bool)
 		return line
 	}
 
-	// Build prefix (fold icon or bullet)
+	// Build prefix (chevron for expandable nodes)
 	var prefix string
 	if len(n.children) > 0 {
 		if n.collapsed {
-			prefix = theme.IconFolderPlus + " "
+			prefix = "▶ "
 		} else {
-			prefix = theme.IconFolderOpen + " "
+			prefix = "▼ "
 		}
 	} else {
 		prefix = "  " // Two spaces for leaf alignment
 	}
 
-	// Build key display - highlight search matches
-	keyStyle := theme.DefaultTheme.Info
-	keyDisplay := n.key
-	if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(n.key), strings.ToLower(m.searchQuery)) {
+	// Build key display - highlight search matches (skip styling if visual mode)
+	// Use non-bold style for cleaner JSON display
+	keyStyle := lipgloss.NewStyle().Foreground(theme.DefaultTheme.Colors.Cyan)
+	var keyDisplay string
+	if isVisual {
+		keyDisplay = n.key
+	} else if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(n.key), strings.ToLower(m.searchQuery)) {
 		keyDisplay = m.highlightMatch(n.key, m.searchQuery, keyStyle)
 	} else {
 		keyDisplay = keyStyle.Render(n.key)
 	}
 
-	// Build value display
+	// Build value display (skip styling if visual mode for uniform highlight)
 	var valueDisplay string
 
 	switch n.valueType {
 	case "object":
 		if n.collapsed {
-			valueDisplay = valueStyle.Render(fmt.Sprintf("{...} (%d fields)", len(n.children)))
+			valStr := fmt.Sprintf("{...} (%d fields)", len(n.children))
+			if isVisual {
+				valueDisplay = valStr
+			} else {
+				valueDisplay = valueStyle.Render(valStr)
+			}
 		} else {
-			valueDisplay = valueStyle.Render("{")
+			if isVisual {
+				valueDisplay = "{"
+			} else {
+				valueDisplay = valueStyle.Render("{")
+			}
 		}
 	case "array":
 		if n.collapsed {
-			valueDisplay = valueStyle.Render(fmt.Sprintf("[...] (%d items)", len(n.children)))
+			valStr := fmt.Sprintf("[...] (%d items)", len(n.children))
+			if isVisual {
+				valueDisplay = valStr
+			} else {
+				valueDisplay = valueStyle.Render(valStr)
+			}
 		} else {
-			valueDisplay = valueStyle.Render("[")
+			if isVisual {
+				valueDisplay = "["
+			} else {
+				valueDisplay = valueStyle.Render("[")
+			}
 		}
 	case "string":
-		stringStyle := theme.DefaultTheme.Success
+		stringStyle := lipgloss.NewStyle().Foreground(theme.DefaultTheme.Colors.Green)
 		valStr := fmt.Sprintf("\"%v\"", n.value)
-		if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
+		if isVisual {
+			valueDisplay = valStr
+		} else if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
 			valueDisplay = m.highlightMatch(valStr, m.searchQuery, stringStyle)
 		} else {
 			valueDisplay = stringStyle.Render(valStr)
 		}
 	case "number":
-		numStyle := theme.DefaultTheme.Warning
+		numStyle := lipgloss.NewStyle().Foreground(theme.DefaultTheme.Colors.Yellow)
 		var valStr string
 		if v, ok := n.value.(float64); ok {
 			if v == float64(int64(v)) {
@@ -836,24 +856,37 @@ func (m *Model) renderNode(n *node, selected bool, isResult bool, isVisual bool)
 		} else {
 			valStr = fmt.Sprintf("%v", n.value)
 		}
-		if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
+		if isVisual {
+			valueDisplay = valStr
+		} else if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
 			valueDisplay = m.highlightMatch(valStr, m.searchQuery, numStyle)
 		} else {
 			valueDisplay = numStyle.Render(valStr)
 		}
 	case "boolean":
-		boolStyle := theme.DefaultTheme.Accent
+		boolStyle := lipgloss.NewStyle().Foreground(theme.DefaultTheme.Colors.Violet)
 		valStr := fmt.Sprintf("%v", n.value)
-		if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
+		if isVisual {
+			valueDisplay = valStr
+		} else if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
 			valueDisplay = m.highlightMatch(valStr, m.searchQuery, boolStyle)
 		} else {
 			valueDisplay = boolStyle.Render(valStr)
 		}
 	case "null":
-		nullStyle := theme.DefaultTheme.Error
-		valueDisplay = nullStyle.Render("null")
+		nullStyle := lipgloss.NewStyle().Foreground(theme.DefaultTheme.Colors.Red)
+		if isVisual {
+			valueDisplay = "null"
+		} else {
+			valueDisplay = nullStyle.Render("null")
+		}
 	default:
-		valueDisplay = valueStyle.Render(fmt.Sprintf("%v", n.value))
+		valStr := fmt.Sprintf("%v", n.value)
+		if isVisual {
+			valueDisplay = valStr
+		} else {
+			valueDisplay = valueStyle.Render(valStr)
+		}
 	}
 
 	// Combine parts

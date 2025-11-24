@@ -98,6 +98,19 @@ logging:
 
 				return nil
 			}),
+			harness.NewStep("Verify ANSI color codes are present", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+				// Capture raw output to check for ANSI escape codes
+				content, err := session.Capture(tui.WithRawOutput())
+				if err != nil {
+					return fmt.Errorf("failed to capture raw output: %w", err)
+				}
+				// Check for the common ANSI escape sequence prefix
+				if !strings.Contains(content, "\x1b[") {
+					return fmt.Errorf("no ANSI escape codes found in TUI output; styles are not being applied")
+				}
+				return nil
+			}),
 			harness.NewStep("Verify list navigation", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
