@@ -28,10 +28,6 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		provider = NewProvider(result)
 	}
 
-	cmdCheckout := exec.CommandContext(ctx, "git", "checkout", "HEAD", "--", ".")
-	cmdCheckout.Dir = worktreePath
-	cmdCheckout.CombinedOutput() // Ignore error
-
 	gitmodulesPath := filepath.Join(worktreePath, ".gitmodules")
 	hasGitmodules := true
 	if _, err := os.Stat(gitmodulesPath); os.IsNotExist(err) {
