@@ -35,6 +35,7 @@ func main() {
 		LoggingTUIVimNavigationScenario(),
 		LoggingTUIJsonSearchScenario(),
 		LoggingTUIVisualModeYankScenario(),
+		LoggingTUIExistingLogsScenario(),
 		LoggingTUINewFilesScenario(),
 	}
 

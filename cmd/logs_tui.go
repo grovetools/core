@@ -1159,24 +1159,33 @@ func runLogsTUI(workspaces []string, follow bool) error {
 		}()
 	}
 
-	// Start watching for log files (including new ones)
+	// Helper to discover and tail log files for all workspaces
+	discoverAndTailFiles := func() {
+		for _, ws := range workspaces {
+			logDir := filepath.Join(ws, ".grove", "logs")
+			files, err := filepath.Glob(filepath.Join(logDir, "*.log"))
+			if err != nil {
+				continue
+			}
+
+			for _, file := range files {
+				startTailing(file, filepath.Base(ws))
+			}
+		}
+	}
+
+	// Perform initial file discovery BEFORE starting the TUI
+	// This ensures existing log files are loaded immediately
+	discoverAndTailFiles()
+
+	// Start watching for NEW log files that may be created later
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
 		for {
-			for _, ws := range workspaces {
-				logDir := filepath.Join(ws, ".grove", "logs")
-				files, err := filepath.Glob(filepath.Join(logDir, "*.log"))
-				if err != nil {
-					continue
-				}
-
-				for _, file := range files {
-					startTailing(file, filepath.Base(ws))
-				}
-			}
 			<-ticker.C
+			discoverAndTailFiles()
 		}
 	}()
 

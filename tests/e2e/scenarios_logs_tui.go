@@ -800,6 +800,87 @@ logging:
 	}
 }
 
+// LoggingTUIExistingLogsScenario tests that the TUI loads all existing logs on startup.
+func LoggingTUIExistingLogsScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-logs-tui-existing-logs",
+		Description: "Tests that the logs TUI correctly loads multiple pre-existing log files on startup.",
+		Tags:        []string{"core", "logging", "tui", "regression"},
+		LocalOnly:   true,
+		Steps: []harness.Step{
+			harness.NewStep("Setup with multiple existing log files", func(ctx *harness.Context) error {
+				projectDir := ctx.RootDir
+				groveYAML := `name: existing-logs-test
+logging:
+  file: { enabled: true, format: json }`
+				if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), groveYAML); err != nil {
+					return err
+				}
+
+				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				if err := os.MkdirAll(logsDir, 0755); err != nil {
+					return err
+				}
+
+				// Create first log file
+				logContent1 := `{"level":"info","component":"first-log","msg":"Message from first log file","time":"2024-01-01T10:00:00Z"}` + "\n"
+				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-01.log"), logContent1); err != nil {
+					return err
+				}
+
+				// Create second log file
+				logContent2 := `{"level":"warn","component":"second-log","msg":"Message from second log file","time":"2024-01-02T11:00:00Z"}` + "\n"
+				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-02.log"), logContent2); err != nil {
+					return err
+				}
+
+				return nil
+			}),
+			harness.NewStep("Launch logs TUI", func(ctx *harness.Context) error {
+				coreBinary, err := findCoreBinary()
+				if err != nil {
+					return err
+				}
+				session, err := ctx.StartTUI(coreBinary, []string{"logs", "-i"})
+				if err != nil {
+					return err
+				}
+				ctx.Set("tui_session", session)
+				return nil
+			}),
+			harness.NewStep("Verify content from both logs is loaded", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				if err := session.WaitForText("Logs:", 10*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("TUI did not load: %w\nContent: %s", err, content)
+				}
+
+				if err := session.AssertContains("Message from first log file"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("missing content from first log file: %w\nContent: %s", err, content)
+				}
+
+				if err := session.AssertContains("Message from second log file"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("missing content from second log file: %w\nContent: %s", err, content)
+				}
+
+				// Verify the status bar shows the correct total count of log entries.
+				if err := session.AssertContains("2/2"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("log count in status bar is incorrect, should be 2/2: %w\nContent: %s", err, content)
+				}
+				return nil
+			}),
+			harness.NewStep("Quit TUI", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+				return session.SendKeys("q")
+			}),
+		},
+	}
+}
+
 // LoggingTUINewFilesScenario tests that the TUI picks up new log files after launch.
 func LoggingTUINewFilesScenario() *harness.Scenario {
 	return &harness.Scenario{
