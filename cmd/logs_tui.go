@@ -282,8 +282,12 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	isFocused := d.model == nil || d.model.focus == listPane
 
 	if isVisuallySelected {
-		// Visual selection highlighting
-		str = theme.DefaultTheme.Selected.Copy().Bold(true).Render(str)
+		// Visual selection highlighting - use distinct violet background
+		visualStyle := lipgloss.NewStyle().
+			Background(theme.DefaultTheme.Colors.Violet).
+			Foreground(theme.DefaultTheme.Colors.DarkText).
+			Bold(true)
+		str = visualStyle.Render(str)
 	} else if isSelected && isFocused {
 		// Normal cursor highlighting (only when list pane is focused)
 		str = theme.DefaultTheme.Selected.Render(str)
@@ -713,14 +717,15 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.visualMode = true
 					m.visualStart = m.list.Index()
 					m.visualEnd = m.list.Index()
-					m.statusMessage = "-- VISUAL LINE --"
 				} else {
 					// Exit visual mode
 					m.visualMode = false
-					m.statusMessage = ""
 				}
 				// Force list to re-render with new highlighting
 				m.list.SetDelegate(itemDelegate{model: m})
+				// Force a full refresh by re-setting items
+				items := m.list.Items()
+				m.list.SetItems(items)
 				return m, nil
 
 			case key.Matches(msg, logKeys.Yank):

@@ -1,14 +1,19 @@
 package jsontree
 
 import (
+	"encoding/json"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattsolo1/grove-core/tui/theme"
 )
 
@@ -36,6 +41,19 @@ type Model struct {
 	lastZPress      time.Time // For detecting zR/zM sequences
 	lastGPress      time.Time // For detecting gg sequence
 	renderedContent string    // Cached rendered content for direct display
+
+	// Search state
+	isSearching   bool
+	searchInput   textinput.Model
+	searchQuery   string // The active search query (after Enter)
+	searchResults []int  // Indices of nodes matching the search
+	currentResult int    // Index into searchResults (-1 if no results)
+
+	// Status message for yank confirmations
+	statusMessage string
+
+	// Original data for YankAll
+	originalData interface{}
 }
 
 // BackMsg is sent when the user wants to exit the JSON viewer
@@ -43,9 +61,19 @@ type BackMsg struct{}
 
 // New creates a new JSON tree model.
 func New(data interface{}) Model {
+	// Initialize search input
+	ti := textinput.New()
+	ti.Placeholder = "Search..."
+	ti.Prompt = "/"
+	ti.CharLimit = 100
+	ti.Width = 30
+
 	m := Model{
-		keys:   DefaultKeyMap(),
-		cursor: 0,
+		keys:          DefaultKeyMap(),
+		cursor:        0,
+		searchInput:   ti,
+		currentResult: -1,
+		originalData:  data,
 	}
 
 	if data != nil {
@@ -189,6 +217,34 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages and user input.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// Handle search input mode
+	if m.isSearching {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEnter:
+				// Perform search and exit search input mode
+				m.searchQuery = m.searchInput.Value()
+				m.performSearch()
+				m.isSearching = false
+				m.updateContent()
+				return m, nil
+			case tea.KeyEsc:
+				// Cancel search
+				m.isSearching = false
+				m.searchInput.SetValue("")
+				return m, nil
+			}
+		}
+		// Update text input
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		cmds = append(cmds, cmd)
+		return m, tea.Batch(cmds...)
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		keyStr := msg.String()
@@ -229,6 +285,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch {
+		case key.Matches(msg, m.keys.Search):
+			// Enter search mode
+			m.isSearching = true
+			m.searchInput.Focus()
+			return m, textinput.Blink
+
+		case key.Matches(msg, m.keys.NextResult):
+			// Jump to next search result
+			if len(m.searchResults) > 0 {
+				m.currentResult = (m.currentResult + 1) % len(m.searchResults)
+				m.cursor = m.searchResults[m.currentResult]
+				m.updateContent()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PrevResult):
+			// Jump to previous search result
+			if len(m.searchResults) > 0 {
+				m.currentResult--
+				if m.currentResult < 0 {
+					m.currentResult = len(m.searchResults) - 1
+				}
+				m.cursor = m.searchResults[m.currentResult]
+				m.updateContent()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.YankValue):
+			// Copy current node's value to clipboard
+			if m.cursor < len(m.nodes) {
+				n := m.nodes[m.cursor]
+				content := m.getNodeValueString(n)
+				if err := m.copyToClipboard(content); err != nil {
+					m.statusMessage = fmt.Sprintf("Copy failed: %v", err)
+				} else {
+					m.statusMessage = fmt.Sprintf("Copied: %s", truncateString(content, 30))
+				}
+				m.updateContent()
+				return m, m.clearStatusAfter()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.YankAll):
+			// Copy entire JSON to clipboard
+			content, err := json.MarshalIndent(m.originalData, "", "  ")
+			if err != nil {
+				m.statusMessage = fmt.Sprintf("Marshal failed: %v", err)
+			} else if err := m.copyToClipboard(string(content)); err != nil {
+				m.statusMessage = fmt.Sprintf("Copy failed: %v", err)
+			} else {
+				m.statusMessage = "Copied entire JSON to clipboard"
+			}
+			m.updateContent()
+			return m, m.clearStatusAfter()
+
 		case key.Matches(msg, m.keys.Up):
 			if m.cursor > 0 {
 				m.cursor--
@@ -279,6 +390,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.cursor >= len(m.nodes) {
 						m.cursor = len(m.nodes) - 1
 					}
+					// Re-run search to update result indices after tree change
+					if m.searchQuery != "" {
+						m.performSearch()
+					}
 					m.updateContent()
 				}
 			}
@@ -291,17 +406,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(n.children) > 0 && !n.collapsed {
 					n.collapsed = true
 					m.nodes = flattenTree(m.root)
+					// Re-run search to update result indices after tree change
+					if m.searchQuery != "" {
+						m.performSearch()
+					}
 					m.updateContent()
 				}
 			}
 			return m, nil
 
 		case key.Matches(msg, m.keys.Back):
+			// Clear search when exiting
+			m.searchQuery = ""
+			m.searchResults = nil
+			m.currentResult = -1
+			m.searchInput.SetValue("")
 			return m, func() tea.Msg { return BackMsg{} }
 		}
 
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
+		return m, nil
+
+	case clearStatusMsg:
+		m.statusMessage = ""
 		return m, nil
 	}
 
@@ -340,8 +468,136 @@ func (m *Model) collapseAll() {
 		m.nodes = flattenTree(m.root)
 		// Reset cursor to start
 		m.cursor = 0
+		// Re-run search to update result indices after tree change
+		if m.searchQuery != "" {
+			m.performSearch()
+		}
 		m.updateContent()
 	}
+}
+
+// performSearch finds all nodes matching the current search query.
+func (m *Model) performSearch() {
+	query := strings.ToLower(m.searchQuery)
+	if query == "" {
+		m.searchResults = nil
+		m.currentResult = -1
+		return
+	}
+
+	m.searchResults = nil
+	for i, n := range m.nodes {
+		// Skip bracket nodes
+		if strings.HasPrefix(n.valueType, "opening_") || strings.HasPrefix(n.valueType, "closing_") {
+			continue
+		}
+
+		// Check if key matches
+		if strings.Contains(strings.ToLower(n.key), query) {
+			m.searchResults = append(m.searchResults, i)
+			continue
+		}
+
+		// Check if value matches (for leaf nodes)
+		if n.value != nil {
+			valueStr := fmt.Sprintf("%v", n.value)
+			if strings.Contains(strings.ToLower(valueStr), query) {
+				m.searchResults = append(m.searchResults, i)
+			}
+		}
+	}
+
+	// Jump to first result if we have any
+	if len(m.searchResults) > 0 {
+		m.currentResult = 0
+		m.cursor = m.searchResults[0]
+	} else {
+		m.currentResult = -1
+	}
+}
+
+// isSearchResult checks if a node index is a search result.
+func (m *Model) isSearchResult(idx int) bool {
+	for _, r := range m.searchResults {
+		if r == idx {
+			return true
+		}
+	}
+	return false
+}
+
+// copyToClipboard writes the given string to the system clipboard.
+func (m *Model) copyToClipboard(content string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		} else if _, err := exec.LookPath("xsel"); err == nil {
+			cmd = exec.Command("xsel", "--clipboard", "--input")
+		} else {
+			return fmt.Errorf("no clipboard utility found (install xclip or xsel)")
+		}
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "clip")
+	default:
+		return fmt.Errorf("unsupported platform")
+	}
+
+	cmd.Stdin = strings.NewReader(content)
+	return cmd.Run()
+}
+
+// getNodeValueString returns a string representation of a node's value.
+func (m *Model) getNodeValueString(n *node) string {
+	if n == nil {
+		return ""
+	}
+
+	switch n.valueType {
+	case "object", "array":
+		// For collapsed containers, marshal the entire subtree
+		if n.value != nil {
+			jsonBytes, err := json.MarshalIndent(n.value, "", "  ")
+			if err == nil {
+				return string(jsonBytes)
+			}
+		}
+		return fmt.Sprintf("%v", n.value)
+	case "string":
+		return fmt.Sprintf("%v", n.value)
+	case "number", "boolean", "null":
+		return fmt.Sprintf("%v", n.value)
+	case "opening_object", "closing_object":
+		return "{}"
+	case "opening_array", "closing_array":
+		return "[]"
+	default:
+		return fmt.Sprintf("%v", n.value)
+	}
+}
+
+// truncateString truncates a string to maxLen and adds ellipsis if needed.
+func truncateString(s string, maxLen int) string {
+	// Remove newlines for display
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// clearStatusMsg is sent to clear the status message after a delay.
+type clearStatusMsg struct{}
+
+// clearStatusAfter returns a command that clears the status after 2 seconds.
+func (m *Model) clearStatusAfter() tea.Cmd {
+	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+		return clearStatusMsg{}
+	})
 }
 
 // updateContent renders the tree and updates the viewport.
@@ -352,7 +608,8 @@ func (m *Model) updateContent() {
 
 	var lines []string
 	for i, n := range m.nodes {
-		line := m.renderNode(n, i == m.cursor)
+		isResult := m.isSearchResult(i)
+		line := m.renderNode(n, i == m.cursor, isResult)
 		lines = append(lines, line)
 	}
 
@@ -370,7 +627,7 @@ func (m *Model) updateContent() {
 }
 
 // renderNode renders a single node line.
-func (m *Model) renderNode(n *node, selected bool) string {
+func (m *Model) renderNode(n *node, selected bool, isResult bool) string {
 	// Build indentation
 	indent := strings.Repeat("  ", n.depth)
 	valueStyle := theme.DefaultTheme.Muted
@@ -419,9 +676,14 @@ func (m *Model) renderNode(n *node, selected bool) string {
 		prefix = "  " // Two spaces for leaf alignment
 	}
 
-	// Build key display
+	// Build key display - highlight search matches
 	keyStyle := theme.DefaultTheme.Info
-	keyDisplay := keyStyle.Render(n.key)
+	keyDisplay := n.key
+	if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(n.key), strings.ToLower(m.searchQuery)) {
+		keyDisplay = m.highlightMatch(n.key, m.searchQuery, keyStyle)
+	} else {
+		keyDisplay = keyStyle.Render(n.key)
+	}
 
 	// Build value display
 	var valueDisplay string
@@ -441,21 +703,37 @@ func (m *Model) renderNode(n *node, selected bool) string {
 		}
 	case "string":
 		stringStyle := theme.DefaultTheme.Success
-		valueDisplay = stringStyle.Render(fmt.Sprintf("\"%v\"", n.value))
+		valStr := fmt.Sprintf("\"%v\"", n.value)
+		if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
+			valueDisplay = m.highlightMatch(valStr, m.searchQuery, stringStyle)
+		} else {
+			valueDisplay = stringStyle.Render(valStr)
+		}
 	case "number":
 		numStyle := theme.DefaultTheme.Warning
+		var valStr string
 		if v, ok := n.value.(float64); ok {
 			if v == float64(int64(v)) {
-				valueDisplay = numStyle.Render(fmt.Sprintf("%.0f", v))
+				valStr = fmt.Sprintf("%.0f", v)
 			} else {
-				valueDisplay = numStyle.Render(fmt.Sprintf("%v", v))
+				valStr = fmt.Sprintf("%v", v)
 			}
 		} else {
-			valueDisplay = numStyle.Render(fmt.Sprintf("%v", n.value))
+			valStr = fmt.Sprintf("%v", n.value)
+		}
+		if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
+			valueDisplay = m.highlightMatch(valStr, m.searchQuery, numStyle)
+		} else {
+			valueDisplay = numStyle.Render(valStr)
 		}
 	case "boolean":
 		boolStyle := theme.DefaultTheme.Accent
-		valueDisplay = boolStyle.Render(fmt.Sprintf("%v", n.value))
+		valStr := fmt.Sprintf("%v", n.value)
+		if isResult && m.searchQuery != "" && strings.Contains(strings.ToLower(valStr), strings.ToLower(m.searchQuery)) {
+			valueDisplay = m.highlightMatch(valStr, m.searchQuery, boolStyle)
+		} else {
+			valueDisplay = boolStyle.Render(valStr)
+		}
 	case "null":
 		nullStyle := theme.DefaultTheme.Error
 		valueDisplay = nullStyle.Render("null")
@@ -474,6 +752,28 @@ func (m *Model) renderNode(n *node, selected bool) string {
 	return line
 }
 
+// highlightMatch highlights the matching substring in the text.
+func (m *Model) highlightMatch(text, query string, baseStyle lipgloss.Style) string {
+	lowerText := strings.ToLower(text)
+	lowerQuery := strings.ToLower(query)
+	highlightStyle := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
+
+	var result strings.Builder
+	start := 0
+	for {
+		idx := strings.Index(lowerText[start:], lowerQuery)
+		if idx == -1 {
+			result.WriteString(baseStyle.Render(text[start:]))
+			break
+		}
+		actualIdx := start + idx
+		result.WriteString(baseStyle.Render(text[start:actualIdx]))
+		result.WriteString(highlightStyle.Render(text[actualIdx : actualIdx+len(query)]))
+		start = actualIdx + len(query)
+	}
+	return result.String()
+}
+
 // View renders the JSON tree.
 func (m Model) View() string {
 	if !m.ready {
@@ -482,6 +782,28 @@ func (m Model) View() string {
 
 	if m.root == nil {
 		return theme.DefaultTheme.Muted.Render("No JSON data to display")
+	}
+
+	// Build the status/search bar
+	var statusBar string
+	if m.statusMessage != "" {
+		// Show status message (yank confirmation, etc.)
+		statusBar = theme.DefaultTheme.Success.Render(m.statusMessage)
+	} else if m.isSearching {
+		statusBar = m.searchInput.View()
+	} else if m.searchQuery != "" {
+		if len(m.searchResults) > 0 {
+			statusBar = fmt.Sprintf("/%s [%d/%d] (n/N to navigate, / to search again)",
+				m.searchQuery, m.currentResult+1, len(m.searchResults))
+		} else {
+			statusBar = fmt.Sprintf("/%s (no results)", m.searchQuery)
+		}
+		statusBar = theme.DefaultTheme.Muted.Render(statusBar)
+	}
+
+	// Combine viewport and status bar
+	if statusBar != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, m.viewport.View(), statusBar)
 	}
 
 	// Just return viewport content - the logs_tui handles outer styling

@@ -33,6 +33,8 @@ func main() {
 		// TUI scenarios
 		LoggingTUITestScenario(),
 		LoggingTUIVimNavigationScenario(),
+		LoggingTUIJsonSearchScenario(),
+		LoggingTUIVisualModeYankScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

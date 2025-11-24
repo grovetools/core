@@ -545,3 +545,244 @@ logging:
 		},
 	}
 }
+
+// LoggingTUIJsonSearchScenario tests the JSON viewer search functionality.
+func LoggingTUIJsonSearchScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-logs-tui-json-search",
+		Description: "Tests the JSON viewer search functionality with / key, n/N navigation.",
+		Tags:        []string{"core", "logging", "tui", "json", "search"},
+		LocalOnly:   true,
+		Steps: []harness.Step{
+			harness.NewStep("Setup log files with JSON data", func(ctx *harness.Context) error {
+				projectDir := ctx.RootDir
+
+				groveYAML := `name: json-search-test
+version: "1.0"
+logging:
+  level: debug
+  file:
+    enabled: true
+    format: json
+`
+				if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), groveYAML); err != nil {
+					return err
+				}
+
+				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				if err := os.MkdirAll(logsDir, 0755); err != nil {
+					return err
+				}
+
+				// Create a log entry with deeply nested JSON for search testing
+				logContent := `{"level":"info","component":"search-test","msg":"Test entry with nested data","time":"2024-01-01T10:00:00Z","data":{"searchable":"findme","nested":{"deep_value":"needleinstack","array":["alpha","beta","gamma"]},"numbers":{"count":42,"total":100}}}
+`
+				logFile := filepath.Join(logsDir, "workspace-2024-01-01.log")
+				if err := fs.WriteString(logFile, logContent); err != nil {
+					return err
+				}
+
+				return nil
+			}),
+			harness.NewStep("Launch logs TUI", func(ctx *harness.Context) error {
+				coreBinary, err := findCoreBinary()
+				if err != nil {
+					return err
+				}
+				session, err := ctx.StartTUI(coreBinary, []string{"logs", "-i"})
+				if err != nil {
+					return err
+				}
+				ctx.Set("tui_session", session)
+				return session.WaitForText("Logs:", 10*time.Second)
+			}),
+			harness.NewStep("Open JSON viewer", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Press 'J' to view JSON tree
+				if err := session.SendKeys("J"); err != nil {
+					return fmt.Errorf("failed to send J key: %w", err)
+				}
+
+				// Wait for JSON view indicator
+				if err := session.WaitForText("JSON VIEW", 5*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("JSON tree view did not appear: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Search for value in JSON", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Press '/' to start search
+				if err := session.SendKeys("/"); err != nil {
+					return fmt.Errorf("failed to send / key: %w", err)
+				}
+
+				// Type search term
+				if err := session.SendKeys("needle"); err != nil {
+					return fmt.Errorf("failed to type search term: %w", err)
+				}
+
+				// Press Enter to execute search
+				if err := session.SendKeys("Enter"); err != nil {
+					return fmt.Errorf("failed to press Enter: %w", err)
+				}
+
+				if err := session.WaitStable(); err != nil {
+					return fmt.Errorf("UI did not stabilize after search: %w", err)
+				}
+
+				// Verify search results indicator
+				if err := session.AssertContains("[1/1]"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("search result indicator not found: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Close JSON viewer and quit", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Press Escape to close JSON view
+				if err := session.SendKeys("Escape"); err != nil {
+					return err
+				}
+
+				// Wait for logs list to reappear
+				if err := session.WaitForText("Logs:", 2*time.Second); err != nil {
+					return err
+				}
+
+				return session.SendKeys("q")
+			}),
+		},
+	}
+}
+
+// LoggingTUIVisualModeYankScenario tests visual mode and yank-to-clipboard functionality.
+func LoggingTUIVisualModeYankScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-logs-tui-visual-yank",
+		Description: "Tests visual line mode (V) and yank to clipboard (y) in the logs TUI.",
+		Tags:        []string{"core", "logging", "tui", "visual", "yank"},
+		LocalOnly:   true,
+		Steps: []harness.Step{
+			harness.NewStep("Setup log files", func(ctx *harness.Context) error {
+				projectDir := ctx.RootDir
+
+				groveYAML := `name: visual-yank-test
+version: "1.0"
+logging:
+  level: debug
+  file:
+    enabled: true
+    format: json
+`
+				if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), groveYAML); err != nil {
+					return err
+				}
+
+				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				if err := os.MkdirAll(logsDir, 0755); err != nil {
+					return err
+				}
+
+				// Create multiple log entries for visual selection
+				logContent := `{"level":"info","component":"yank-test","msg":"First entry to copy","time":"2024-01-01T10:00:00Z"}
+{"level":"info","component":"yank-test","msg":"Second entry to copy","time":"2024-01-01T10:00:01Z"}
+{"level":"info","component":"yank-test","msg":"Third entry to copy","time":"2024-01-01T10:00:02Z"}
+`
+				logFile := filepath.Join(logsDir, "workspace-2024-01-01.log")
+				if err := fs.WriteString(logFile, logContent); err != nil {
+					return err
+				}
+
+				return nil
+			}),
+			harness.NewStep("Launch logs TUI", func(ctx *harness.Context) error {
+				coreBinary, err := findCoreBinary()
+				if err != nil {
+					return err
+				}
+				session, err := ctx.StartTUI(coreBinary, []string{"logs", "-i"})
+				if err != nil {
+					return err
+				}
+				ctx.Set("tui_session", session)
+				return session.WaitForText("Logs:", 10*time.Second)
+			}),
+			harness.NewStep("Enter visual mode and verify status", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Verify we're NOT in visual mode initially
+				if err := session.AssertNotContains("[VISUAL]"); err == nil {
+					// Good - no VISUAL indicator yet
+				}
+
+				// Press 'V' to enter visual mode
+				if err := session.SendKeys("V"); err != nil {
+					return fmt.Errorf("failed to send V key: %w", err)
+				}
+
+				// Wait for visual mode indicator in status bar
+				if err := session.WaitForText("[VISUAL]", 2*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("visual mode indicator [VISUAL] not found in status bar: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Extend selection and verify", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Press 'j' to extend selection to next line
+				if err := session.SendKeys("j"); err != nil {
+					return fmt.Errorf("failed to send j key: %w", err)
+				}
+
+				if err := session.WaitStable(); err != nil {
+					return fmt.Errorf("UI did not stabilize after extending selection: %w", err)
+				}
+
+				// Verify still in visual mode after navigation
+				if err := session.AssertContains("[VISUAL]"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("visual mode should persist after j navigation: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Yank selection and verify exit", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Press 'y' to yank selection
+				if err := session.SendKeys("y"); err != nil {
+					return fmt.Errorf("failed to send y key: %w", err)
+				}
+
+				// Wait for copy confirmation message
+				if err := session.WaitForText("Copied 2 log entries", 2*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("copy confirmation not found: %w\nContent: %s", err, content)
+				}
+
+				// Verify visual mode exited after yank
+				if err := session.WaitStable(); err != nil {
+					return err
+				}
+				if err := session.AssertNotContains("[VISUAL]"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("visual mode should exit after yank: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Quit TUI", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+				return session.SendKeys("q")
+			}),
+		},
+	}
+}
