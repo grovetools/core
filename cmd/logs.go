@@ -107,12 +107,9 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to get current directory: %w", err)
 		}
 
-		// Check if current directory is a workspace (has grove.yml)
-		if _, err := os.Stat(filepath.Join(cwd, "grove.yml")); err != nil {
-			return fmt.Errorf("current directory is not a Grove workspace (no grove.yml found)")
-		}
-
 		// Create a WorkspaceNode for the current workspace
+		// Note: We don't require grove.yml to exist here - findLogFileForWorkspace
+		// handles missing configs gracefully by falling back to .grove/logs/
 		workspaces = []*workspace.WorkspaceNode{
 			{
 				Path: cwd,
@@ -147,8 +144,20 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
 	for _, ws := range workspaces {
-		logFile, err := findLogFileForWorkspace(ws)
+		logFile, logsDir, err := findLogFileForWorkspace(ws)
 		if err != nil {
+			// If following and we have a logs directory path, use tailDirectory
+			// to wait for files to appear
+			if follow && logsDir != "" {
+				logger.WithFields(logrus.Fields{
+					"workspace": ws.Name,
+					"logs_dir":  logsDir,
+				}).Debug("Waiting for log files in directory")
+
+				wg.Add(1)
+				go tailDirectory(ws.Name, logsDir, lineChan, &wg, follow, tail)
+				continue
+			}
 			logger.WithField("workspace", ws.Name).Debugf("Skipping: %v", err)
 			continue
 		}
@@ -159,7 +168,12 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}).Debug("Tailing log file")
 
 		wg.Add(1)
-		go tailFile(ws.Name, logFile, lineChan, &wg, follow, tail)
+		// Use tailDirectory to handle file rotation/switching
+		if follow {
+			go tailDirectory(ws.Name, logsDir, lineChan, &wg, follow, tail)
+		} else {
+			go tailFile(ws.Name, logFile, lineChan, &wg, follow, tail)
+		}
 	}
 
 	// Close channel when all tailing goroutines are done
@@ -193,29 +207,36 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 }
 
 // findLogFileForWorkspace determines the log file path for a given workspace.
-func findLogFileForWorkspace(ws *workspace.WorkspaceNode) (string, error) {
-	cfg, err := config.LoadFrom(ws.Path)
-	if err != nil {
+// Returns the log file path and the logs directory path.
+func findLogFileForWorkspace(ws *workspace.WorkspaceNode) (logFile string, logsDir string, err error) {
+	cfg, cfgErr := config.LoadFrom(ws.Path)
+	if cfgErr != nil {
 		// A config might not exist, but we can still check default log path.
 	}
 
 	var logCfg logging.Config
 	if cfg != nil {
-		if err := cfg.UnmarshalExtension("logging", &logCfg); err != nil {
+		if unmarshalErr := cfg.UnmarshalExtension("logging", &logCfg); unmarshalErr != nil {
 			// Continue with default config if parsing fails.
 		}
 	}
 
 	if logCfg.File.Enabled && logCfg.File.Path != "" {
-		return pathutil.Expand(logCfg.File.Path)
+		expanded, expandErr := pathutil.Expand(logCfg.File.Path)
+		if expandErr != nil {
+			return "", "", expandErr
+		}
+		return expanded, filepath.Dir(expanded), nil
 	}
 
 	// Default path logic
-	logsDir := filepath.Join(ws.Path, ".grove", "logs")
-	return findLatestLogFile(logsDir)
+	logsDir = filepath.Join(ws.Path, ".grove", "logs")
+	logFile, err = findLatestLogFile(logsDir)
+	return logFile, logsDir, err
 }
 
-// findLatestLogFile finds the most recently modified file in a directory.
+// findLatestLogFile finds the most recently modified non-empty file in a directory.
+// Prefers files with content over empty files.
 func findLatestLogFile(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -224,17 +245,33 @@ func findLatestLogFile(dir string) (string, error) {
 
 	var latestFile os.FileInfo
 	var latestPath string
+	var latestNonEmptyFile os.FileInfo
+	var latestNonEmptyPath string
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			info, err := entry.Info()
 			if err != nil {
 				continue
 			}
+			// Track latest file overall
 			if latestFile == nil || info.ModTime().After(latestFile.ModTime()) {
 				latestFile = info
 				latestPath = filepath.Join(dir, entry.Name())
 			}
+			// Track latest non-empty file
+			if info.Size() > 0 {
+				if latestNonEmptyFile == nil || info.ModTime().After(latestNonEmptyFile.ModTime()) {
+					latestNonEmptyFile = info
+					latestNonEmptyPath = filepath.Join(dir, entry.Name())
+				}
+			}
 		}
+	}
+
+	// Prefer non-empty files
+	if latestNonEmptyFile != nil {
+		return latestNonEmptyPath, nil
 	}
 
 	if latestFile == nil {
@@ -300,6 +337,106 @@ func tailFile(wsName, path string, lineChan chan<- TailedLine, wg *sync.WaitGrou
 		if err != nil {
 			break
 		}
+	}
+}
+
+// tailDirectory watches a log directory for files and tails them.
+// It handles the case where the directory or files don't exist yet.
+func tailDirectory(wsName, logsDir string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
+	defer wg.Done()
+
+	var currentFile string
+	var f *os.File
+	var reader *bufio.Reader
+	var fileOffset int64
+
+	// Wait for directory and files to appear
+	for {
+		logFile, err := findLatestLogFile(logsDir)
+		if err == nil {
+			currentFile = logFile
+			break
+		}
+		if !follow {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Open the initial file
+	f, err := os.Open(currentFile)
+	if err != nil {
+		return
+	}
+
+	reader = bufio.NewReader(f)
+
+	// Handle initial tail lines
+	if tailLines >= 0 {
+		allLines, _ := io.ReadAll(reader)
+		lines := strings.Split(string(allLines), "\n")
+		start := len(lines) - tailLines - 1
+		if tailLines == 0 {
+			start = 0
+		}
+		if start < 0 {
+			start = 0
+		}
+		for _, line := range lines[start:] {
+			if line != "" {
+				lineChan <- TailedLine{Workspace: wsName, Line: line}
+			}
+		}
+		if !follow {
+			f.Close()
+			return
+		}
+		// Seek to end for following
+		f.Close()
+		f, _ = os.Open(currentFile)
+		fileOffset, _ = f.Seek(0, io.SeekEnd)
+		reader = bufio.NewReader(f)
+	}
+
+	checkInterval := time.NewTicker(500 * time.Millisecond)
+	defer checkInterval.Stop()
+
+	for {
+		// Read any available lines
+		for {
+			line, err := reader.ReadString('\n')
+			if len(line) > 0 {
+				lineChan <- TailedLine{Workspace: wsName, Line: strings.TrimSpace(line)}
+				fileOffset += int64(len(line))
+			}
+			if err != nil {
+				break
+			}
+		}
+
+		if !follow {
+			break
+		}
+
+		<-checkInterval.C
+
+		// Check for newer log file
+		latestFile, err := findLatestLogFile(logsDir)
+		if err == nil && latestFile != currentFile {
+			// Switch to the newer file
+			f.Close()
+			currentFile = latestFile
+			f, err = os.Open(currentFile)
+			if err != nil {
+				continue
+			}
+			reader = bufio.NewReader(f)
+			fileOffset = 0
+		}
+	}
+
+	if f != nil {
+		f.Close()
 	}
 }
 
