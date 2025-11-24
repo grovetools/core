@@ -799,3 +799,120 @@ logging:
 		},
 	}
 }
+
+// LoggingTUINewFilesScenario tests that the TUI picks up new log files after launch.
+func LoggingTUINewFilesScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-logs-tui-new-files",
+		Description: "Tests that the logs TUI detects and displays logs from files created after the TUI launches.",
+		Tags:        []string{"core", "logging", "tui", "watch"},
+		LocalOnly:   true,
+		Steps: []harness.Step{
+			harness.NewStep("Setup workspace without logs", func(ctx *harness.Context) error {
+				projectDir := ctx.RootDir
+
+				// Create grove.yml
+				groveYAML := `name: new-files-test
+version: "1.0"
+logging:
+  level: debug
+  file:
+    enabled: true
+    format: json
+`
+				if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), groveYAML); err != nil {
+					return fmt.Errorf("failed to write grove.yml: %w", err)
+				}
+
+				// Create empty logs directory (no log files yet)
+				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				if err := os.MkdirAll(logsDir, 0755); err != nil {
+					return fmt.Errorf("failed to create logs directory: %w", err)
+				}
+
+				ctx.Set("logs_dir", logsDir)
+				return nil
+			}),
+			harness.NewStep("Launch logs TUI before logs exist", func(ctx *harness.Context) error {
+				coreBinary, err := findCoreBinary()
+				if err != nil {
+					return fmt.Errorf("failed to find core binary: %w", err)
+				}
+
+				session, err := ctx.StartTUI(coreBinary, []string{"logs", "-i"})
+				if err != nil {
+					return fmt.Errorf("failed to start TUI: %w", err)
+				}
+				ctx.Set("tui_session", session)
+
+				// Wait for TUI to load (shows "No items" when empty)
+				if err := session.WaitForText("Logs:", 10*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("TUI did not load: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Create log file after TUI launch", func(ctx *harness.Context) error {
+				logsDir := ctx.Get("logs_dir").(string)
+
+				// Create a log file after the TUI has started
+				logContent := `{"level":"info","component":"new-file-test","msg":"Log from new file","time":"2024-01-01T10:00:00Z"}
+{"level":"error","component":"new-file-test","msg":"Error from new file","time":"2024-01-01T10:00:01Z"}
+`
+				logFile := filepath.Join(logsDir, "workspace-2024-01-01.log")
+				if err := fs.WriteString(logFile, logContent); err != nil {
+					return fmt.Errorf("failed to write log file: %w", err)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Verify TUI picks up new logs", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Wait for the new log content to appear (with timeout)
+				if err := session.WaitForText("Log from new file", 5*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("new log content did not appear: %w\nContent: %s", err, content)
+				}
+
+				// Also verify the error log appeared
+				if err := session.AssertContains("Error from new file"); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("error log not found: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Append more logs and verify", func(ctx *harness.Context) error {
+				logsDir := ctx.Get("logs_dir").(string)
+				session := ctx.Get("tui_session").(*tui.Session)
+
+				// Append additional logs to the file
+				logFile := filepath.Join(logsDir, "workspace-2024-01-01.log")
+				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+				if err != nil {
+					return fmt.Errorf("failed to open log file for append: %w", err)
+				}
+				_, err = f.WriteString(`{"level":"info","component":"new-file-test","msg":"Appended log entry","time":"2024-01-01T10:00:02Z"}
+`)
+				f.Close()
+				if err != nil {
+					return fmt.Errorf("failed to append to log file: %w", err)
+				}
+
+				// Wait for appended content to appear
+				if err := session.WaitForText("Appended log entry", 5*time.Second); err != nil {
+					content, _ := session.Capture()
+					return fmt.Errorf("appended log did not appear: %w\nContent: %s", err, content)
+				}
+
+				return nil
+			}),
+			harness.NewStep("Quit TUI", func(ctx *harness.Context) error {
+				session := ctx.Get("tui_session").(*tui.Session)
+				return session.SendKeys("q")
+			}),
+		},
+	}
+}

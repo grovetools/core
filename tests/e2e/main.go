@@ -35,6 +35,7 @@ func main() {
 		LoggingTUIVimNavigationScenario(),
 		LoggingTUIJsonSearchScenario(),
 		LoggingTUIVisualModeYankScenario(),
+		LoggingTUINewFilesScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

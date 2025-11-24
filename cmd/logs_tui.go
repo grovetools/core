@@ -1120,48 +1120,64 @@ func runLogsTUI(workspaces []string, follow bool) error {
 	// Create channel for log lines
 	logChan := make(chan TailedLine, 100)
 
-	// Start tailing log files
-	var wg sync.WaitGroup
-	for _, ws := range workspaces {
-		logDir := filepath.Join(ws, ".grove", "logs")
-		files, err := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
-		if err != nil {
-			continue
+	// Track which files we're already tailing
+	tailedFiles := make(map[string]bool)
+	var tailedFilesMu sync.Mutex
+
+	// Helper to start tailing a file
+	startTailing := func(path, wsName string) {
+		tailedFilesMu.Lock()
+		if tailedFiles[path] {
+			tailedFilesMu.Unlock()
+			return
 		}
+		tailedFiles[path] = true
+		tailedFilesMu.Unlock()
 
-		for _, file := range files {
-			wg.Add(1)
-			go func(path, wsName string) {
-				defer wg.Done()
-				config := tail.Config{
-					Follow: true,
-					ReOpen: true,
-					// Always start from beginning to get all logs
-					Location: &tail.SeekInfo{Offset: 0, Whence: io.SeekStart},
-					Logger:   stdlog.New(ioutil.Discard, "", 0), // Suppress tail library debug output
-				}
+		go func() {
+			config := tail.Config{
+				Follow: true,
+				ReOpen: true,
+				// Always start from beginning to get all logs
+				Location: &tail.SeekInfo{Offset: 0, Whence: io.SeekStart},
+				Logger:   stdlog.New(ioutil.Discard, "", 0), // Suppress tail library debug output
+			}
 
-				t, err := tail.TailFile(path, config)
-				if err != nil {
-					logger.Debugf("Cannot tail file %s: %v", path, err)
-					return
-				}
+			t, err := tail.TailFile(path, config)
+			if err != nil {
+				logger.Debugf("Cannot tail file %s: %v", path, err)
+				return
+			}
 
-				for line := range t.Lines {
-					if line.Err != nil {
-						logger.Debugf("Error reading line from %s: %v", path, line.Err)
-						continue
-					}
-					logChan <- TailedLine{Workspace: wsName, Line: line.Text}
+			for line := range t.Lines {
+				if line.Err != nil {
+					logger.Debugf("Error reading line from %s: %v", path, line.Err)
+					continue
 				}
-			}(file, filepath.Base(ws))
-		}
+				logChan <- TailedLine{Workspace: wsName, Line: line.Text}
+			}
+		}()
 	}
 
-	// Close channel when all tailers are done
+	// Start watching for log files (including new ones)
 	go func() {
-		wg.Wait()
-		close(logChan)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			for _, ws := range workspaces {
+				logDir := filepath.Join(ws, ".grove", "logs")
+				files, err := filepath.Glob(filepath.Join(logDir, "*.log"))
+				if err != nil {
+					continue
+				}
+
+				for _, file := range files {
+					startTailing(file, filepath.Base(ws))
+				}
+			}
+			<-ticker.C
+		}
 	}()
 
 	// Create list
