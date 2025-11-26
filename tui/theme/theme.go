@@ -169,10 +169,9 @@ type Theme struct {
 	VisualSelection   lipgloss.Style // Visual selection mode highlight
 
 	// Table styles
-	TableHeader        lipgloss.Style
-	TableRow           lipgloss.Style
-	TableBorder        lipgloss.Style
-	UseAlternatingRows bool // Whether to use alternating row backgrounds in tables
+	TableHeader lipgloss.Style
+	TableRow    lipgloss.Style
+	TableBorder lipgloss.Style
 
 	// Container styles
 	Box        lipgloss.Style
@@ -269,10 +268,6 @@ func newThemeFromName(name string) *Theme {
 }
 
 func newThemeFromColors(colors Colors, themeName string) *Theme {
-	// Determine if we should use alternating rows based on theme
-	// Disable for terminal theme since we can't control ANSI color appearance
-	normalizedName := normalizeThemeName(themeName)
-	useAlternatingRows := normalizedName != "terminal"
 	return &Theme{
 		Colors: colors,
 
@@ -336,8 +331,6 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 		TableBorder: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(colors.Border),
-
-		UseAlternatingRows: useAlternatingRows,
 
 		Box: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

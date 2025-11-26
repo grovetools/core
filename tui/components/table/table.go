@@ -21,13 +21,8 @@ func NewStyledTable() *ltable.Table {
 				// Header row with padding
 				return t.TableHeader.Padding(0, 1)
 			}
-			// Regular rows with subtle alternating background
-			baseStyle := lipgloss.NewStyle().Padding(0, 1)
-			if row%2 == 0 {
-				// Very subtle alternating background that won't interfere with text colors
-				return baseStyle.Background(theme.VerySubtleBackground)
-			}
-			return baseStyle
+			// Regular rows inherit the terminal's background color
+			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
 	return table
@@ -39,7 +34,6 @@ type Options struct {
 	Bordered       bool
 	HeaderStyle    lipgloss.Style
 	RowStyle       lipgloss.Style
-	AlternateRows  bool
 	Theme          *theme.Theme
 }
 
@@ -50,7 +44,6 @@ func DefaultOptions() Options {
 		Bordered:       true,
 		HeaderStyle:    theme.DefaultTheme.TableHeader,
 		RowStyle:       theme.DefaultTheme.TableRow,
-		AlternateRows:  true, // Subtle alternating with VerySubtleBackground
 		Theme:          theme.DefaultTheme,
 	}
 }
@@ -79,11 +72,6 @@ func NewStyledTableWithOptions(opts Options) *ltable.Table {
 
 		// Data rows
 		style := opts.RowStyle
-
-		// Add alternating row colors if enabled
-		if opts.AlternateRows && row%2 == 0 {
-			style = style.Background(theme.VerySubtleBackground)
-		}
 
 		// Highlight row numbers if enabled
 		if opts.ShowRowNumbers && col == 0 {
@@ -130,12 +118,6 @@ func (b *Builder) WithRowNumbers(show bool) *Builder {
 	return b
 }
 
-// WithAlternateRows enables or disables alternating row colors
-func (b *Builder) WithAlternateRows(alternate bool) *Builder {
-	b.options.AlternateRows = alternate
-	return b
-}
-
 // WithHeaders sets the table headers
 func (b *Builder) WithHeaders(headers ...string) *Builder {
 	b.table = b.table.Headers(headers...)
@@ -179,10 +161,6 @@ func (b *Builder) Build() *ltable.Table {
 
 		style := b.options.RowStyle
 
-		if b.options.AlternateRows && row%2 == 0 {
-			style = style.Background(theme.VerySubtleBackground)
-		}
-
 		if b.options.ShowRowNumbers && col == 0 {
 			style = style.Foreground(theme.MutedText)
 		}
@@ -209,7 +187,6 @@ func SimpleTable(headers []string, rows [][]string) string {
 func StatusTable(items [][]string) string {
 	table := NewBuilder().
 		WithBorder(false).
-		WithAlternateRows(false).
 		Build()
 
 	for _, item := range items {
@@ -256,16 +233,9 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 	// So: row 0 = first data row, row 1 = second data row, etc.
 	table = table.StyleFunc(func(row, col int) lipgloss.Style {
 		// Regular data rows with padding
-		style := t.TableRow.Copy().Padding(0, 1)
-
-		// Note: HighlightColumn feature removed - all columns use same style
-
-		// Apply alternating background for even data rows (2nd, 4th, etc.)
-		// Only if the theme supports it (disabled for terminal theme)
-		if t.UseAlternatingRows && row%2 == 1 {
-			style = style.Background(theme.VerySubtleBackground)
-		}
-		return style
+		// The logic for alternating row backgrounds has been removed to ensure
+		// readability across all terminal themes by inheriting the default background.
+		return t.TableRow.Copy().Padding(0, 1)
 	})
 
 	// Add rows
