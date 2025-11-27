@@ -13,6 +13,7 @@ import (
 type Registry interface {
 	Register(metadata SessionMetadata) error
 	IsAlive(sessionID string) (bool, error)
+	Find(jobID string) (*SessionMetadata, error)
 }
 
 // FileSystemRegistry implements Registry using the filesystem at ~/.grove/hooks/sessions/
@@ -91,4 +92,41 @@ func (r *FileSystemRegistry) IsAlive(sessionID string) (bool, error) {
 	// On Unix systems, sending signal 0 checks if the process exists
 	err = process.Signal(os.Signal(nil))
 	return err == nil, nil
+}
+
+// Find searches for a session by Grove job ID in the SessionMetadata.
+func (r *FileSystemRegistry) Find(jobID string) (*SessionMetadata, error) {
+	// List all session directories
+	entries, err := os.ReadDir(r.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("no sessions found")
+		}
+		return nil, fmt.Errorf("failed to read sessions directory: %w", err)
+	}
+
+	// Search through all session metadata files
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		metadataFile := filepath.Join(r.baseDir, entry.Name(), "metadata.json")
+		metadataBytes, err := os.ReadFile(metadataFile)
+		if err != nil {
+			continue // Skip sessions without metadata
+		}
+
+		var metadata SessionMetadata
+		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+			continue // Skip invalid metadata
+		}
+
+		// Check if this session matches the job ID
+		if metadata.SessionID == jobID {
+			return &metadata, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no session found for job ID: %s", jobID)
 }
