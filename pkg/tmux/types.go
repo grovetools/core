@@ -12,6 +12,7 @@ type PaneOptions struct {
 	Command          string
 	WorkingDirectory string
 	SendKeys         string
+	Env              map[string]string // Environment variables to set in the pane
 }
 
 // Window holds detailed information about a tmux window.

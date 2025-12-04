@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (c *Client) SessionExists(ctx context.Context, sessionName string) (bool, error) {
@@ -371,6 +372,9 @@ func (c *Client) SetPaneEnvironment(ctx context.Context, paneTarget string, env 
 		if err := c.SendKeys(ctx, paneTarget, exportCmd, "C-m"); err != nil {
 			return fmt.Errorf("failed to send export command for %s to pane %s: %w", key, paneTarget, err)
 		}
+		// Small delay between exports to let shell process each one
+		// This is especially important for fish shell with long values
+		time.Sleep(50 * time.Millisecond)
 	}
 	return nil
 }

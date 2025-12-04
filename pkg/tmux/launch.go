@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 )
 
 func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
@@ -44,7 +45,27 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 
 	for i, pane := range opts.Panes {
 		if i == 0 {
+			target := opts.SessionName
+			// Set environment variables before running the command
+			if pane.Env != nil && len(pane.Env) > 0 {
+				if err := c.SetPaneEnvironment(ctx, target, pane.Env); err != nil {
+					return fmt.Errorf("failed to set environment for first pane: %w", err)
+				}
+				// Give the shell a moment to process all the export commands
+				// This is especially important for fish shell which echoes each command
+				// and needs time for output to settle before the next command
+				time.Sleep(1 * time.Second)
+			}
 			if pane.Command != "" {
+				// Debug: print the command being sent
+				fmt.Fprintf(os.Stderr, "DEBUG: Sending command to pane: %q\n", pane.Command)
+				// Send an extra Enter to ensure we have a fresh prompt
+				// This helps with fish shell after setting many env vars
+				_, err = c.run(ctx, "send-keys", "-t", opts.SessionName, "C-m")
+				if err != nil {
+					return fmt.Errorf("failed to send newline before command: %w", err)
+				}
+				time.Sleep(100 * time.Millisecond)
 				_, err = c.run(ctx, "send-keys", "-t", opts.SessionName, pane.Command, "Enter")
 				if err != nil {
 					return fmt.Errorf("failed to send command to first pane: %w", err)
@@ -68,6 +89,12 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 			}
 
 			target := fmt.Sprintf("%s.%d", opts.SessionName, i)
+			// Set environment variables before running the command
+			if pane.Env != nil && len(pane.Env) > 0 {
+				if err := c.SetPaneEnvironment(ctx, target, pane.Env); err != nil {
+					return fmt.Errorf("failed to set environment for pane %d: %w", i, err)
+				}
+			}
 			if pane.Command != "" {
 				_, err = c.run(ctx, "send-keys", "-t", target, pane.Command, "Enter")
 				if err != nil {
