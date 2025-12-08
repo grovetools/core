@@ -249,12 +249,12 @@ func (i logItem) FormatDetails() string {
 }
 
 // Custom item delegate for rendering
-type itemDelegate struct{
+type itemDelegate struct {
 	model *logModel
 }
 
-func (d itemDelegate) Height() int                              { return 1 }
-func (d itemDelegate) Spacing() int                             { return 0 }
+func (d itemDelegate) Height() int                               { return 1 }
+func (d itemDelegate) Spacing() int                              { return 0 }
 func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
 
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -407,31 +407,31 @@ func (k logKeyMap) FullHelp() [][]key.Binding {
 
 // Main TUI model
 type logModel struct {
-	list          list.Model
-	items         []logItem
-	keys          logKeyMap
-	spinner       spinner.Model
-	viewport      viewport.Model
-	help          help.Model
-	loading       bool
-	err           error
-	width         int
-	height        int
-	followMode    bool
-	logChan       chan TailedLine
-	mu            sync.Mutex
-	lastGotoG     time.Time
+	list            list.Model
+	items           []logItem
+	keys            logKeyMap
+	spinner         spinner.Model
+	viewport        viewport.Model
+	help            help.Model
+	loading         bool
+	err             error
+	width           int
+	height          int
+	followMode      bool
+	logChan         chan TailedLine
+	mu              sync.Mutex
+	lastGotoG       time.Time
 	workspaceColors map[string]lipgloss.Style
-	colorIndex    int
-	ready         bool  // viewport ready flag
-	focus         paneFocus // which pane has focus
-	visualMode    bool  // visual selection mode
-	visualStart   int   // start of visual selection
-	visualEnd     int   // end of visual selection
-	statusMessage string // status message for copy confirmation
-	jsonTree      jsontree.Model
-	jsonView      bool
-	logConfig     *logging.Config // logging config for component filtering
+	colorIndex      int
+	ready           bool      // viewport ready flag
+	focus           paneFocus // which pane has focus
+	visualMode      bool      // visual selection mode
+	visualStart     int       // start of visual selection
+	visualEnd       int       // end of visual selection
+	statusMessage   string    // status message for copy confirmation
+	jsonTree        jsontree.Model
+	jsonView        bool
+	logConfig       *logging.Config // logging config for component filtering
 }
 
 // Messages
@@ -673,6 +673,38 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Delegate input based on focus
 			if m.focus == viewportPane {
+				// Allow h/l to navigate to prev/next log entry when viewport is focused
+				if key.Matches(msg, logKeys.Base.Left) {
+					currentIndex := m.list.Index()
+					if currentIndex > 0 {
+						m.list.Select(currentIndex - 1)
+						// Update viewport with new selection
+						if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+							if logItem, ok := selectedItem.(logItem); ok {
+								m.viewport.SetContent(logItem.FormatDetails())
+								m.viewport.GotoTop()
+							}
+						}
+					}
+					return m, nil
+				}
+
+				if key.Matches(msg, logKeys.Base.Right) {
+					currentIndex := m.list.Index()
+					visibleItems := len(m.list.VisibleItems())
+					if currentIndex < visibleItems-1 {
+						m.list.Select(currentIndex + 1)
+						// Update viewport with new selection
+						if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+							if logItem, ok := selectedItem.(logItem); ok {
+								m.viewport.SetContent(logItem.FormatDetails())
+								m.viewport.GotoTop()
+							}
+						}
+					}
+					return m, nil
+				}
+
 				// ESC returns focus to list pane
 				if key.Matches(msg, logKeys.Clear) || msg.String() == "esc" {
 					m.focus = listPane
@@ -1089,10 +1121,11 @@ func (m *logModel) View() string {
 	)
 }
 
-
 // Workspace color management - uses theme's AccentColors palette
-var workspaceColorMap = make(map[string]lipgloss.Style)
-var workspaceColorIndex = 0
+var (
+	workspaceColorMap   = make(map[string]lipgloss.Style)
+	workspaceColorIndex = 0
+)
 
 func getWorkspaceStyle(workspace string) lipgloss.Style {
 	if style, ok := workspaceColorMap[workspace]; ok {
@@ -1196,8 +1229,8 @@ func runLogsTUI(workspaces []string, follow bool) error {
 	l.SetShowTitle(false)
 	l.SetShowHelp(false)
 	// Don't disable filtering - we want to toggle it with '/'
-	l.SetShowPagination(true)  // Show pagination to help track position
-	l.InfiniteScrolling = false  // Disable infinite scrolling for better control
+	l.SetShowPagination(true)   // Show pagination to help track position
+	l.InfiniteScrolling = false // Disable infinite scrolling for better control
 	l.DisableQuitKeybindings()  // We handle quit ourselves
 
 	// Configure pagination style
