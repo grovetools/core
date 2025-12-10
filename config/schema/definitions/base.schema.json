@@ -92,7 +92,8 @@
             "$ref": "#/$defs/NoteTypeConfig"
           },
           "type": "object"
-        }
+        },
+        "sync": true
       },
       "additionalProperties": false,
       "type": "object",

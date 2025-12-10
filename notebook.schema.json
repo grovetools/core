@@ -35,7 +35,8 @@
         "$ref": "#/$defs/NoteTypeConfig"
       },
       "type": "object"
-    }
+    },
+    "sync": true
   },
   "type": "object",
   "title": "Grove Notebook Configuration",
