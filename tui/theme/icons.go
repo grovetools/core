@@ -58,6 +58,7 @@ const (
 	nerdIconPullRequestNewChanges = "" // cod-git_pull_request_new_changes (U+EC0C)
 	nerdIconGithubAction          = "" // cod-github_action (U+EAFF)
 	nerdIconGitCompare            = "" // dev-git_compare (U+E728)
+	nerdIconDiff                  = "" // cod-diff (U+EAE1)
 	nerdIconGit                   = "󰊢" // md-git (U+F02A2)
 	nerdIconInbox                 = "󰚇" // md-inbox (U+F0687)
 	nerdIconLightbulb             = "󰌵" // md-lightbulb (U+F0335)
@@ -116,6 +117,7 @@ const (
 	nerdIconFileKey                = "󱆄" // md-file_key (U+F1184)
 	nerdIconFileLock               = "󰈡" // md-file_lock (U+F0221)
 	nerdIconFilePlus               = "󰝒" // md-file_plus (U+F0752)
+	nerdIconFish                   = "󰈺" // md-fish (U+F023A)
 	nerdIconFire                   = "󰈸" // md-fire (U+F0238)
 	nerdIconFolder                 = "󰉋" // md-folder (U+F024B)
 	nerdIconFolderCheck            = "󱥾" // md-folder_check (U+F197E)
@@ -202,6 +204,7 @@ const (
 	asciiIconPullRequestNewChanges = "[!]PR" // PR new changes
 	asciiIconGithubAction          = "[A]"   // GitHub action
 	asciiIconGitCompare            = "<>"    // Git compare
+	asciiIconDiff                  = "[±]"   // Diff
 	asciiIconGit                   = "git"   // Git
 	asciiIconInbox                 = "[I]"   //  Inbox
 	asciiIconLightbulb             = "[*]"   //  Lightbulb
@@ -246,9 +249,10 @@ const (
 	asciiIconNotebook = "[N]" // Notebook
 	asciiIconDocs     = "[D]" // Docs
 
-	asciiIconFileTree      = "[F]" // File tree
-	asciiIconPineTreeBox   = "[P]" // Pine tree box
-	asciiIconViewDashboard = "[W]" // View dashboard/workspace
+	asciiIconFileTree      = "[F]"   // File tree
+	asciiIconFish          = "[><>]" // Fish
+	asciiIconPineTreeBox   = "[P]"   // Pine tree box
+	asciiIconViewDashboard = "[W]"   // View dashboard/workspace
 
 	asciiIconFolderMinus            = "[-]"  // Folder minus
 	asciiIconFolderOpen             = "[o]"  // Folder open
@@ -346,6 +350,7 @@ var (
 	IconPullRequestNewChanges string
 	IconGithubAction          string
 	IconGitCompare            string
+	IconDiff                  string
 	IconGit                   string
 	IconInbox                 string
 	IconLightbulb             string
@@ -391,6 +396,7 @@ var (
 	IconDocs     string
 
 	IconFileTree      string
+	IconFish          string
 	IconPineTreeBox   string
 	IconViewDashboard string
 
@@ -502,6 +508,7 @@ func init() {
 		IconPullRequestDraft = asciiIconPullRequestDraft
 		IconPullRequestNewChanges = asciiIconPullRequestNewChanges
 		IconGithubAction = asciiIconGithubAction
+		IconDiff = asciiIconDiff
 		IconGitCompare = asciiIconGitCompare
 		IconGit = asciiIconGit
 		IconInbox = asciiIconInbox
@@ -544,6 +551,7 @@ func init() {
 		IconNotebook = asciiIconNotebook
 		IconDocs = asciiIconDocs
 		IconFileTree = asciiIconFileTree
+		IconFish = asciiIconFish
 		IconPineTreeBox = asciiIconPineTreeBox
 		IconViewDashboard = asciiIconViewDashboard
 		IconFolderMinus = asciiIconFolderMinus
@@ -636,6 +644,7 @@ func init() {
 		IconPullRequestCreate = nerdIconPullRequestCreate
 		IconPullRequestDraft = nerdIconPullRequestDraft
 		IconPullRequestNewChanges = nerdIconPullRequestNewChanges
+		IconDiff = nerdIconDiff
 		IconGithubAction = nerdIconGithubAction
 		IconGitCompare = nerdIconGitCompare
 		IconGit = nerdIconGit
@@ -679,6 +688,7 @@ func init() {
 		IconNotebook = nerdIconNotebook
 		IconDocs = nerdIconDocs
 		IconFileTree = nerdIconFileTree
+		IconFish = nerdIconFish
 		IconPineTreeBox = nerdIconPineTreeBox
 		IconViewDashboard = nerdIconViewDashboard
 		IconFolderMinus = nerdIconFolderMinus
