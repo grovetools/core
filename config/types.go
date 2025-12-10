@@ -79,6 +79,10 @@ type Notebook struct {
 	// Types defines a map of user-configurable note types.
 	// This will override the hardcoded defaults in grove-notebook if provided.
 	Types map[string]*NoteTypeConfig `yaml:"types,omitempty"`
+
+	// Sync defines the synchronization configuration for this notebook.
+	// This is a list of sync provider configurations.
+	Sync interface{} `yaml:"sync,omitempty"`
 }
 
 // Config represents the grove.yml configuration
