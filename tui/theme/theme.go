@@ -83,22 +83,23 @@ const (
 )
 
 // --- Terminal (ANSI-friendly) palette ---
+// Uses only the 16 standard ANSI colors to match terminal color schemes
 const (
-	terminalGreen                = "2"
-	terminalYellow               = "3"
-	terminalRed                  = "1"
-	terminalOrange               = "208"
-	terminalCyan                 = "6"
-	terminalBlue                 = "4"
-	terminalViolet               = "5"
-	terminalPink                 = "13"
-	terminalLightText            = "7"
-	terminalMutedText            = "8"
-	terminalDarkText             = "0"
-	terminalBorder               = "8"
-	terminalSelectedBackground   = "8"
-	terminalSubtleBackground     = "0"
-	terminalVerySubtleBackground = "0"
+	terminalGreen                = "2"  // Green
+	terminalYellow               = "3"  // Yellow
+	terminalRed                  = "1"  // Red
+	terminalOrange               = "11" // Bright Yellow (often appears orange)
+	terminalCyan                 = "6"  // Cyan
+	terminalBlue                 = "4"  // Blue
+	terminalViolet               = "5"  // Magenta
+	terminalPink                 = "13" // Bright Magenta
+	terminalLightText            = "7"  // White
+	terminalMutedText            = "8"  // Bright Black (gray)
+	terminalDarkText             = "0"  // Black
+	terminalBorder               = "8"  // Bright Black (gray)
+	terminalSelectedBackground   = "8"  // Bright Black (gray)
+	terminalSubtleBackground     = "0"  // Black
+	terminalVerySubtleBackground = "0"  // Black
 )
 
 // Colors encapsulates the palette used by a theme. lipgloss.TerminalColor
@@ -433,14 +434,13 @@ func getThemeName() string {
 
 	cfg, err := config.LoadDefault()
 	if err != nil || cfg == nil {
+		// Config loading failed or returned nil - use default
 		return defaultThemeName
 	}
 
-	var tuiCfg struct {
-		Theme string `yaml:"theme"`
-	}
-	if err := cfg.UnmarshalExtension("tui", &tuiCfg); err == nil {
-		if theme := normalizeThemeName(tuiCfg.Theme); theme != "" {
+	// Check if TUI config exists and has a theme set
+	if cfg.TUI != nil && cfg.TUI.Theme != "" {
+		if theme := normalizeThemeName(cfg.TUI.Theme); theme != "" {
 			return theme
 		}
 	}

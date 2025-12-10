@@ -61,6 +61,7 @@ type NotebooksConfig struct {
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
 	Icons string `yaml:"icons,omitempty"` // Can be "nerd" or "ascii"
+	Theme string `yaml:"theme,omitempty"` // Color theme: "kanagawa", "gruvbox", or "terminal"
 }
 
 // Notebook defines the configuration for a single, named notebook system.
