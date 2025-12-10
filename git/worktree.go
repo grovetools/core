@@ -193,9 +193,10 @@ func (m *WorktreeManager) GetWorktreeRoot(ctx context.Context, path string) (str
 
 // GetOrPrepareWorktree gets an existing worktree or creates a new one
 // This method is used by orchestration executors to ensure a consistent worktree setup
-func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, worktreeName, branchName string) (string, error) {
+// Returns the worktree path, a boolean indicating if it was newly created, and an error
+func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, worktreeName, branchName string) (string, bool, error) {
 	if worktreeName == "" {
-		return "", fmt.Errorf("worktree name cannot be empty")
+		return "", false, fmt.Errorf("worktree name cannot be empty")
 	}
 
 	// Define standardized paths
@@ -210,13 +211,13 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 	// Need to find the git root for worktree operations
 	gitRoot, err := GetGitRoot(basePath)
 	if err != nil {
-		return "", fmt.Errorf("get git root: %w", err)
+		return "", false, fmt.Errorf("get git root: %w", err)
 	}
 
 	// Check if worktree already exists
 	worktrees, err := m.ListWorktrees(ctx, gitRoot)
 	if err != nil {
-		return "", fmt.Errorf("list worktrees: %w", err)
+		return "", false, fmt.Errorf("list worktrees: %w", err)
 	}
 
 	for _, wt := range worktrees {
@@ -224,14 +225,14 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 		if wt.Branch == branchName {
 			// Verify the directory actually exists
 			if _, err := os.Stat(wt.Path); err == nil {
-				return wt.Path, nil // Branch already checked out in existing worktree
+				return wt.Path, false, nil // Branch already checked out in existing worktree
 			}
 		}
 
 		if wt.Path == worktreePath {
 			// Verify the directory actually exists
 			if _, err := os.Stat(worktreePath); err == nil {
-				return wt.Path, nil // Worktree exists and directory is present
+				return wt.Path, false, nil // Worktree exists and directory is present
 			}
 			// Directory doesn't exist, need to remove stale worktree entry
 			if err := m.RemoveWorktree(ctx, gitRoot, worktreePath); err != nil {
@@ -243,7 +244,7 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 
 	// Ensure the base directory exists
 	if err := os.MkdirAll(worktreesBaseDir, 0o755); err != nil {
-		return "", fmt.Errorf("create worktrees base directory: %w", err)
+		return "", false, fmt.Errorf("create worktrees base directory: %w", err)
 	}
 
 	// Create the worktree with a new branch
@@ -251,12 +252,12 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 		// If branch already exists, try to create worktree using existing branch
 		if strings.Contains(err.Error(), "already exists") {
 			if err := m.CreateWorktree(ctx, gitRoot, worktreePath, branchName, false); err != nil {
-				return "", fmt.Errorf("create worktree with existing branch: %w", err)
+				return "", false, fmt.Errorf("create worktree with existing branch: %w", err)
 			}
 		} else {
-			return "", fmt.Errorf("create worktree: %w", err)
+			return "", false, fmt.Errorf("create worktree: %w", err)
 		}
 	}
 
-	return worktreePath, nil
+	return worktreePath, true, nil
 }
