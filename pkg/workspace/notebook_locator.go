@@ -499,3 +499,69 @@ func (l *NotebookLocator) ScanForAllChats(provider *Provider) ([]ScannedDir, err
 	}
 	return chatDirs, nil
 }
+
+// ScanForAllNotes discovers all notes directories across all known workspaces.
+// It returns a list of ScannedDir structs, linking each directory to its owner.
+func (l *NotebookLocator) ScanForAllNotes(provider *Provider) ([]ScannedDir, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("workspace provider is required")
+	}
+
+	// Map of directory path -> owner node. We'll use this to deduplicate and prefer main projects.
+	dirOwners := make(map[string]*WorkspaceNode)
+	seenGroupKeys := make(map[string]bool)
+
+	for _, node := range provider.All() {
+		// We only need to check the root of a project group (not every worktree)
+		// as they share the same notes directory.
+		groupKey := node.GetGroupingKey()
+		if seenGroupKeys[groupKey] {
+			continue
+		}
+
+		// Use the node representing the group key to resolve the path.
+		// Prefer the main project node over worktree nodes.
+		groupNode := provider.FindByPath(groupKey)
+		if groupNode == nil {
+			continue // Should not happen
+		}
+
+		// If FindByPath returned a worktree, look for the main project instead
+		if groupNode.IsWorktree() {
+			// Find the main project with this exact path
+			for _, n := range provider.All() {
+				if n.Path == groupKey && !n.IsWorktree() {
+					groupNode = n
+					break
+				}
+			}
+		}
+
+		// Get the parent notes directory by finding inbox and going up one level
+		notesInboxDir, err := l.GetNotesDir(groupNode, "inbox")
+		if err != nil {
+			continue // Skip if we can't get notes directory
+		}
+		notesRootDir := filepath.Dir(notesInboxDir)
+
+		if _, err := os.Stat(notesRootDir); err == nil {
+			// Check if we've already seen this directory path
+			if existingOwner, exists := dirOwners[notesRootDir]; exists {
+				// Prefer main projects over worktrees
+				if existingOwner.IsWorktree() && !groupNode.IsWorktree() {
+					dirOwners[notesRootDir] = groupNode
+				}
+			} else {
+				dirOwners[notesRootDir] = groupNode
+			}
+		}
+		seenGroupKeys[groupKey] = true
+	}
+
+	// Convert map to slice
+	var noteDirs []ScannedDir
+	for dir, owner := range dirOwners {
+		noteDirs = append(noteDirs, ScannedDir{Path: dir, Owner: owner})
+	}
+	return noteDirs, nil
+}
