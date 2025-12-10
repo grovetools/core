@@ -16,9 +16,9 @@ import (
 	"github.com/mattsolo1/grove-core/cli"
 	"github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/logging"
+	"github.com/mattsolo1/grove-core/pkg/logging/logutil"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"github.com/mattsolo1/grove-core/tui/theme"
-	"github.com/mattsolo1/grove-core/util/pathutil"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -144,7 +144,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
 	for _, ws := range workspaces {
-		logFile, logsDir, err := findLogFileForWorkspace(ws)
+		logFile, logsDir, err := logutil.FindLogFileForWorkspace(ws)
 		if err != nil {
 			// If following and we have a logs directory path, use tailDirectory
 			// to wait for files to appear
@@ -206,80 +206,6 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// findLogFileForWorkspace determines the log file path for a given workspace.
-// Returns the log file path and the logs directory path.
-func findLogFileForWorkspace(ws *workspace.WorkspaceNode) (logFile string, logsDir string, err error) {
-	cfg, cfgErr := config.LoadFrom(ws.Path)
-	if cfgErr != nil {
-		// A config might not exist, but we can still check default log path.
-	}
-
-	var logCfg logging.Config
-	if cfg != nil {
-		if unmarshalErr := cfg.UnmarshalExtension("logging", &logCfg); unmarshalErr != nil {
-			// Continue with default config if parsing fails.
-		}
-	}
-
-	if logCfg.File.Enabled && logCfg.File.Path != "" {
-		expanded, expandErr := pathutil.Expand(logCfg.File.Path)
-		if expandErr != nil {
-			return "", "", expandErr
-		}
-		return expanded, filepath.Dir(expanded), nil
-	}
-
-	// Default path logic
-	logsDir = filepath.Join(ws.Path, ".grove", "logs")
-	logFile, err = findLatestLogFile(logsDir)
-	return logFile, logsDir, err
-}
-
-// findLatestLogFile finds the most recently modified non-empty file in a directory.
-// Prefers files with content over empty files.
-func findLatestLogFile(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", fmt.Errorf("could not read log directory %s: %w", dir, err)
-	}
-
-	var latestFile os.FileInfo
-	var latestPath string
-	var latestNonEmptyFile os.FileInfo
-	var latestNonEmptyPath string
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			// Track latest file overall
-			if latestFile == nil || info.ModTime().After(latestFile.ModTime()) {
-				latestFile = info
-				latestPath = filepath.Join(dir, entry.Name())
-			}
-			// Track latest non-empty file
-			if info.Size() > 0 {
-				if latestNonEmptyFile == nil || info.ModTime().After(latestNonEmptyFile.ModTime()) {
-					latestNonEmptyFile = info
-					latestNonEmptyPath = filepath.Join(dir, entry.Name())
-				}
-			}
-		}
-	}
-
-	// Prefer non-empty files
-	if latestNonEmptyFile != nil {
-		return latestNonEmptyPath, nil
-	}
-
-	if latestFile == nil {
-		return "", fmt.Errorf("no log files found in %s", dir)
-	}
-
-	return latestPath, nil
-}
 
 // tailFile reads a file and sends new lines to a channel.
 func tailFile(wsName, path string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
@@ -352,7 +278,7 @@ func tailDirectory(wsName, logsDir string, lineChan chan<- TailedLine, wg *sync.
 
 	// Wait for directory and files to appear
 	for {
-		logFile, err := findLatestLogFile(logsDir)
+		logFile, err := logutil.FindLatestLogFile(logsDir)
 		if err == nil {
 			currentFile = logFile
 			break
@@ -421,7 +347,7 @@ func tailDirectory(wsName, logsDir string, lineChan chan<- TailedLine, wg *sync.
 		<-checkInterval.C
 
 		// Check for newer log file
-		latestFile, err := findLatestLogFile(logsDir)
+		latestFile, err := logutil.FindLatestLogFile(logsDir)
 		if err == nil && latestFile != currentFile {
 			// Switch to the newer file
 			f.Close()
