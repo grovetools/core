@@ -15,6 +15,8 @@ const (
 	defaultNotesPathTemplate       = "workspaces/{{ .Workspace.Name }}/{{ .NoteType }}"
 	defaultPlansPathTemplate       = "workspaces/{{ .Workspace.Name }}/plans"
 	defaultChatsPathTemplate       = "workspaces/{{ .Workspace.Name }}/chats"
+	defaultTemplatesPathTemplate   = "workspaces/{{ .Workspace.Name }}/templates"
+	defaultRecipesPathTemplate     = "workspaces/{{ .Workspace.Name }}/recipes"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -123,33 +125,7 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 	}
 
 	// Determine the correct workspace name for different node kinds
-	contextNode := node
-
-	// For worktrees, we need to use the parent project/ecosystem name
-	if node.IsWorktree() {
-		if node.Kind == KindEcosystemWorktree {
-			// This is an ecosystem worktree. It acts as a container.
-			// Its notebook context is that of the root ecosystem.
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.RootEcosystemPath),
-				Path:                node.RootEcosystemPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		} else if node.ParentProjectPath != "" {
-			// This correctly handles all other worktree kinds that are children of a project:
-			// - KindStandaloneProjectWorktree
-			// - KindEcosystemSubProjectWorktree
-			// - KindEcosystemWorktreeSubProjectWorktree
-			// In all these cases, the notebook context belongs to the parent project.
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.ParentProjectPath),
-				Path:                node.ParentProjectPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		}
-	}
+	contextNode := getContextNodeForPath(node)
 
 	data := struct {
 		Workspace *WorkspaceNode
@@ -199,26 +175,7 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 	}
 
 	// Determine the correct workspace name for different node kinds
-	contextNode := node
-
-	// For worktrees, we need to use the parent project/ecosystem name
-	if node.IsWorktree() {
-		if node.Kind == KindEcosystemWorktree {
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.RootEcosystemPath),
-				Path:                node.RootEcosystemPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		} else if node.ParentProjectPath != "" {
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.ParentProjectPath),
-				Path:                node.ParentProjectPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		}
-	}
+	contextNode := getContextNodeForPath(node)
 
 	data := struct {
 		Workspace *WorkspaceNode
@@ -274,26 +231,7 @@ func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (str
 	}
 
 	// Determine the correct workspace name for different node kinds
-	contextNode := node
-
-	// For worktrees, we need to use the parent project/ecosystem name
-	if node.IsWorktree() {
-		if node.Kind == KindEcosystemWorktree {
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.RootEcosystemPath),
-				Path:                node.RootEcosystemPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		} else if node.ParentProjectPath != "" {
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.ParentProjectPath),
-				Path:                node.ParentProjectPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		}
-	}
+	contextNode := getContextNodeForPath(node)
 
 	data := struct {
 		Workspace *WorkspaceNode
@@ -564,4 +502,98 @@ func (l *NotebookLocator) ScanForAllNotes(provider *Provider) ([]ScannedDir, err
 		noteDirs = append(noteDirs, ScannedDir{Path: dir, Owner: owner})
 	}
 	return noteDirs, nil
+}
+
+// getContextNodeForPath is a helper to determine the correct context node for path rendering.
+func getContextNodeForPath(node *WorkspaceNode) *WorkspaceNode {
+	contextNode := node
+	// For worktrees, we need to use the parent project/ecosystem name
+	if node.IsWorktree() {
+		if node.Kind == KindEcosystemWorktree {
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.RootEcosystemPath),
+				Path:                node.RootEcosystemPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
+			}
+		} else if node.ParentProjectPath != "" {
+			contextNode = &WorkspaceNode{
+				Name:                filepath.Base(node.ParentProjectPath),
+				Path:                node.ParentProjectPath,
+				ParentEcosystemPath: node.ParentEcosystemPath,
+				RootEcosystemPath:   node.RootEcosystemPath,
+			}
+		}
+	}
+	return contextNode
+}
+
+// GetTemplatesDir is analogous to GetPlansDir but for templates.
+func (l *NotebookLocator) GetTemplatesDir(node *WorkspaceNode) (string, error) {
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
+		// Local Mode: Templates are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "templates"), nil
+	}
+
+	// Centralized Mode
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+
+	tplStr := notebook.TemplatesPathTemplate
+	if tplStr == "" {
+		tplStr = defaultTemplatesPathTemplate
+	}
+
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
+// GetRecipesDir is analogous to GetPlansDir but for recipes.
+func (l *NotebookLocator) GetRecipesDir(node *WorkspaceNode) (string, error) {
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
+		// Local Mode: Recipes are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "recipes"), nil
+	}
+
+	// Centralized Mode
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+
+	tplStr := notebook.RecipesPathTemplate
+	if tplStr == "" {
+		tplStr = defaultRecipesPathTemplate
+	}
+
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, renderedPath), nil
 }

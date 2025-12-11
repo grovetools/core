@@ -73,9 +73,11 @@ type Notebook struct {
 
 	// Path templates for customizing directory structure in Centralized Mode.
 	// These are optional and have sensible defaults.
-	NotesPathTemplate string `yaml:"notes_path_template,omitempty"`
-	PlansPathTemplate string `yaml:"plans_path_template,omitempty"`
-	ChatsPathTemplate string `yaml:"chats_path_template,omitempty"`
+	NotesPathTemplate     string `yaml:"notes_path_template,omitempty"`
+	PlansPathTemplate     string `yaml:"plans_path_template,omitempty"`
+	ChatsPathTemplate     string `yaml:"chats_path_template,omitempty"`
+	TemplatesPathTemplate string `yaml:"templates_path_template,omitempty"`
+	RecipesPathTemplate   string `yaml:"recipes_path_template,omitempty"`
 
 	// Types defines a map of user-configurable note types.
 	// This will override the hardcoded defaults in grove-notebook if provided.

@@ -97,6 +97,12 @@ func mergeConfigs(base, override *Config) *Config {
 						if v.ChatsPathTemplate != "" {
 							merged.ChatsPathTemplate = v.ChatsPathTemplate
 						}
+						if v.TemplatesPathTemplate != "" {
+							merged.TemplatesPathTemplate = v.TemplatesPathTemplate
+						}
+						if v.RecipesPathTemplate != "" {
+							merged.RecipesPathTemplate = v.RecipesPathTemplate
+						}
 						if v.Types != nil {
 							if merged.Types == nil {
 								merged.Types = make(map[string]*NoteTypeConfig)

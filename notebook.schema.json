@@ -30,6 +30,12 @@
     "chats_path_template": {
       "type": "string"
     },
+    "templates_path_template": {
+      "type": "string"
+    },
+    "recipes_path_template": {
+      "type": "string"
+    },
     "types": {
       "additionalProperties": {
         "$ref": "#/$defs/NoteTypeConfig"
