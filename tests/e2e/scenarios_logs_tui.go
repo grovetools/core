@@ -264,20 +264,20 @@ logging:
 			harness.NewStep("Verify follow mode toggle", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Press 'f' to toggle follow mode on
-				if err := session.SendKeys("f"); err != nil {
-					return fmt.Errorf("failed to send f key: %w", err)
+				// Press 'F' to toggle follow mode on
+				if err := session.SendKeys("F"); err != nil {
+					return fmt.Errorf("failed to send F key: %w", err)
 				}
 
 				// Wait for the follow indicator
-				if err := session.WaitForText("[FOLLOWING]", 2*time.Second); err != nil {
+				if err := session.WaitForText("[Follow:ON]", 2*time.Second); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("follow mode indicator did not appear: %w\nContent: %s", err, content)
 				}
 
-				// Press 'f' again to toggle it off
-				if err := session.SendKeys("f"); err != nil {
-					return fmt.Errorf("failed to send f key again: %w", err)
+				// Press 'F' again to toggle it off
+				if err := session.SendKeys("F"); err != nil {
+					return fmt.Errorf("failed to send F key again: %w", err)
 				}
 
 				// Wait for UI to stabilize
@@ -285,10 +285,10 @@ logging:
 					return fmt.Errorf("UI did not stabilize after toggling follow off: %w", err)
 				}
 
-				// Verify follow indicator is gone
-				if err := session.AssertNotContains("[FOLLOWING]"); err != nil {
+				// Verify follow indicator shows OFF
+				if err := session.WaitForText("[Follow:OFF]", 2*time.Second); err != nil {
 					content, _ := session.Capture()
-					return fmt.Errorf("follow mode indicator should be gone: %w\nContent: %s", err, content)
+					return fmt.Errorf("follow mode indicator should show OFF: %w\nContent: %s", err, content)
 				}
 
 				return nil

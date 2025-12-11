@@ -35,6 +35,8 @@ func main() {
 		LoggingComponentFilterShowScenario(),
 		LoggingComponentFilterHideScenario(),
 		LoggingComponentFilterConsistencyScenario(),
+		// CLI filtering flags scenario
+		LogsCLIFilteringScenario(),
 		// TUI scenarios
 		LoggingTUITestScenario(),
 		LoggingTUIVimNavigationScenario(),
@@ -42,6 +44,7 @@ func main() {
 		LoggingTUIVisualModeYankScenario(),
 		LoggingTUIExistingLogsScenario(),
 		LoggingTUINewFilesScenario(),
+		LoggingTUIFilteringTestScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

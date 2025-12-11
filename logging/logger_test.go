@@ -354,7 +354,9 @@ func TestIsComponentVisible(t *testing.T) {
 			name:      "show whitelist - component in list",
 			component: "grove-flow",
 			cfg: &Config{
-				Show: []string{"grove-flow", "grove-core"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"grove-flow", "grove-core"},
+				},
 			},
 			expected: true,
 		},
@@ -362,7 +364,9 @@ func TestIsComponentVisible(t *testing.T) {
 			name:      "show whitelist - component not in list",
 			component: "grove-gemini",
 			cfg: &Config{
-				Show: []string{"grove-flow", "grove-core"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"grove-flow", "grove-core"},
+				},
 			},
 			expected: false,
 		},
@@ -370,7 +374,9 @@ func TestIsComponentVisible(t *testing.T) {
 			name:      "hide blacklist - component in list",
 			component: "grove-gemini",
 			cfg: &Config{
-				Hide: []string{"grove-gemini", "grove-context"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"grove-gemini", "grove-context"},
+				},
 			},
 			expected: false,
 		},
@@ -378,7 +384,9 @@ func TestIsComponentVisible(t *testing.T) {
 			name:      "hide blacklist - component not in list",
 			component: "grove-flow",
 			cfg: &Config{
-				Hide: []string{"grove-gemini", "grove-context"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"grove-gemini", "grove-context"},
+				},
 			},
 			expected: true,
 		},
@@ -386,19 +394,23 @@ func TestIsComponentVisible(t *testing.T) {
 			name:      "show takes precedence over hide - component in show",
 			component: "grove-flow",
 			cfg: &Config{
-				Show: []string{"grove-flow"},
-				Hide: []string{"grove-flow"}, // Would hide, but show takes precedence
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"grove-flow"},
+					Hide: []string{"grove-flow"}, // Would hide, but show takes precedence
+				},
 			},
 			expected: true,
 		},
 		{
-			name:      "show takes precedence over hide - component not in show",
+			name:      "component visible when not in show or hide",
 			component: "grove-gemini",
 			cfg: &Config{
-				Show: []string{"grove-flow"},
-				Hide: []string{"grove-core"}, // Hide is ignored when show is set
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"grove-flow"},
+					Hide: []string{"grove-core"},
+				},
 			},
-			expected: false,
+			expected: true, // grove-gemini is not hidden, and explicit hide overrides default
 		},
 		{
 			name:      "show with group expansion - component in group",
@@ -407,7 +419,9 @@ func TestIsComponentVisible(t *testing.T) {
 				Groups: map[string][]string{
 					"ai": {"grove-gemini", "grove-context"},
 				},
-				Show: []string{"ai"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"ai"},
+				},
 			},
 			expected: true,
 		},
@@ -418,7 +432,9 @@ func TestIsComponentVisible(t *testing.T) {
 				Groups: map[string][]string{
 					"ai": {"grove-gemini", "grove-context"},
 				},
-				Show: []string{"ai"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"ai"},
+				},
 			},
 			expected: false,
 		},
@@ -429,7 +445,9 @@ func TestIsComponentVisible(t *testing.T) {
 				Groups: map[string][]string{
 					"ai": {"grove-gemini", "grove-context"},
 				},
-				Hide: []string{"ai"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"ai"},
+				},
 			},
 			expected: false,
 		},
@@ -440,7 +458,9 @@ func TestIsComponentVisible(t *testing.T) {
 				Groups: map[string][]string{
 					"ai": {"grove-gemini", "grove-context"},
 				},
-				Hide: []string{"ai"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"ai"},
+				},
 			},
 			expected: true,
 		},
@@ -451,7 +471,9 @@ func TestIsComponentVisible(t *testing.T) {
 				Groups: map[string][]string{
 					"ai": {"grove-gemini", "grove-context"},
 				},
-				Show: []string{"ai", "grove-flow"},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"ai", "grove-flow"},
+				},
 			},
 			expected: true,
 		},
@@ -482,12 +504,20 @@ func TestDefaultHide(t *testing.T) {
 	}
 
 	// explicit empty hide should override default (show everything)
-	cfgExplicitEmpty := &Config{Hide: []string{}}
+	cfgExplicitEmpty := &Config{
+		ComponentFiltering: &ComponentFilteringConfig{
+			Hide: []string{},
+		},
+	}
 	// This doesn't override because empty slice still results in nil set
 	// To truly show all, user would set show: ["*"] or similar
 
 	// explicit hide overrides default
-	cfgExplicitHide := &Config{Hide: []string{"my-custom-app"}}
+	cfgExplicitHide := &Config{
+		ComponentFiltering: &ComponentFilteringConfig{
+			Hide: []string{"my-custom-app"},
+		},
+	}
 	if !IsComponentVisible("grove-gemini", cfgExplicitHide) {
 		t.Error("grove-gemini should be visible when explicit hide doesn't include it")
 	}
@@ -548,11 +578,257 @@ func TestShowCurrentProject(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
 				ShowCurrentProject: tt.showCurrentProject,
-				Hide:               tt.hide,
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: tt.hide,
+				},
 			}
 			result := IsComponentVisible(tt.component, cfg)
 			if result != tt.expected {
 				t.Errorf("IsComponentVisible(%q) = %v, expected %v", tt.component, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetComponentVisibility provides comprehensive tests for the new log filtering logic.
+func TestGetComponentVisibility(t *testing.T) {
+	testCases := []struct {
+		name             string
+		component        string
+		config           *Config
+		overrides        *OverrideOptions
+		expectedVisible  bool
+		expectedReason   VisibilityReason
+		expectedRuleSize int // We check size because slice content can be complex
+	}{
+		// --- Basic Config Rules ---
+		{
+			name:            "Default visible when no rules match",
+			component:       "api",
+			config:          &Config{},
+			overrides:       &OverrideOptions{},
+			expectedVisible: true,
+			expectedReason:  ReasonVisibleDefault,
+		},
+		{
+			name:      "Hidden by 'hide' rule",
+			component: "cache",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"cache"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  false,
+			expectedReason:   ReasonHiddenByHide,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "Visible by 'show' rule, overriding 'hide'",
+			component: "cache",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"cache"},
+					Hide: []string{"cache"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByShow,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "Visible by 'only' rule",
+			component: "api",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Only: []string{"api", "db"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOnly,
+			expectedRuleSize: 2,
+		},
+		{
+			name:      "Hidden by 'only' rule",
+			component: "frontend",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Only: []string{"api", "db"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  false,
+			expectedReason:   ReasonHiddenByOnly,
+			expectedRuleSize: 2,
+		},
+		{
+			name:             "Hidden by default 'grove-ecosystem' rule",
+			component:        "grove-mcp",
+			config:           &Config{},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  false,
+			expectedReason:   ReasonHiddenByDefault,
+			expectedRuleSize: 1,
+		},
+		// --- CLI Overrides ---
+		{
+			name:      "--show-all overrides 'hide' rule",
+			component: "cache",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"cache"},
+				},
+			},
+			overrides:       &OverrideOptions{ShowAll: true},
+			expectedVisible: true,
+			expectedReason:  ReasonVisibleByOverrideShowAll,
+		},
+		{
+			name:             "--component acts as a strict whitelist (shows component)",
+			component:        "api",
+			config:           &Config{},
+			overrides:        &OverrideOptions{ShowOnly: []string{"api"}},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOverrideShowOnly,
+			expectedRuleSize: 1,
+		},
+		{
+			name:             "--component acts as a strict whitelist (hides other components)",
+			component:        "db",
+			config:           &Config{},
+			overrides:        &OverrideOptions{ShowOnly: []string{"api"}},
+			expectedVisible:  false,
+			expectedReason:   ReasonHiddenByOverrideShowOnly,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "--also-show overrides 'hide' rule",
+			component: "cache",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"cache"},
+				},
+			},
+			overrides:        &OverrideOptions{AlsoShow: []string{"cache"}},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOverrideAlsoShow,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "--ignore-hide overrides 'hide' rule",
+			component: "cache",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"cache"},
+				},
+			},
+			overrides:        &OverrideOptions{IgnoreHide: []string{"cache"}},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOverrideIgnore,
+			expectedRuleSize: 1,
+		},
+		// --- Precedence Rules ---
+		{
+			name:      "--component overrides config 'only'",
+			component: "frontend",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Only: []string{"api", "db"},
+				},
+			},
+			overrides:        &OverrideOptions{ShowOnly: []string{"frontend"}},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOverrideShowOnly,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "config 'show' overrides config 'hide'",
+			component: "metrics",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"metrics"},
+					Hide: []string{"metrics"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByShow,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "config 'only' takes precedence over 'hide'",
+			component: "api",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Only: []string{"api"},
+					Hide: []string{"api"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOnly,
+			expectedRuleSize: 1,
+		},
+		// --- Group Expansion ---
+		{
+			name:      "Hidden by group in 'hide' rule",
+			component: "db",
+			config: &Config{
+				Groups: map[string][]string{"backend": {"api", "db"}},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Hide: []string{"backend"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  false,
+			expectedReason:   ReasonHiddenByHide,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "Visible by group in 'only' rule",
+			component: "api",
+			config: &Config{
+				Groups: map[string][]string{"backend": {"api", "db"}},
+				ComponentFiltering: &ComponentFilteringConfig{
+					Only: []string{"backend"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByOnly,
+			expectedRuleSize: 1,
+		},
+		{
+			name:      "Visible by default 'grove-ecosystem' group in 'show' rule",
+			component: "grove-mcp",
+			config: &Config{
+				ComponentFiltering: &ComponentFilteringConfig{
+					Show: []string{"grove-ecosystem"},
+				},
+			},
+			overrides:        &OverrideOptions{},
+			expectedVisible:  true,
+			expectedReason:   ReasonVisibleByShow,
+			expectedRuleSize: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := GetComponentVisibility(tc.component, tc.config, tc.overrides)
+
+			if result.Visible != tc.expectedVisible {
+				t.Errorf("Visibility mismatch: got %v, want %v", result.Visible, tc.expectedVisible)
+			}
+			if result.Reason != tc.expectedReason {
+				t.Errorf("Reason mismatch: got %v, want %v", result.Reason, tc.expectedReason)
+			}
+			if tc.expectedRuleSize > 0 {
+				if len(result.Rule) != tc.expectedRuleSize {
+					t.Errorf("Rule size mismatch: got %d, want %d", len(result.Rule), tc.expectedRuleSize)
+				}
 			}
 		})
 	}

@@ -60,7 +60,21 @@ Examples:
 	cmd.Flags().BoolP("follow", "f", false, "Follow log output")
 	cmd.Flags().Int("tail", -1, "Number of lines to show from the end of the logs (default: all)")
 
+	cmd.Flags().Bool("show-all", false, "Show all logs, ignoring any configured show/hide rules")
+	cmd.Flags().StringSlice("component", []string{}, "Show logs only from these components (acts as a strict whitelist)")
+	cmd.Flags().StringSlice("also-show", []string{}, "Temporarily show components/groups, overriding hide rules")
+	cmd.Flags().StringSlice("ignore-hide", []string{}, "Temporarily show components/groups that would be hidden by config")
+
 	return cmd
+}
+
+// filterStats holds counters for logging statistics.
+type filterStats struct {
+	total      int
+	shown      int
+	hidden     int
+	lastReason logging.VisibilityReason
+	lastRule   []string
 }
 
 func runLogsE(cmd *cobra.Command, args []string) error {
@@ -72,6 +86,20 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
 	}
+
+	// --- Filter Overrides & Statistics ---
+	showAll, _ := cmd.Flags().GetBool("show-all")
+	showOnly, _ := cmd.Flags().GetStringSlice("component")
+	alsoShow, _ := cmd.Flags().GetStringSlice("also-show")
+	ignoreHide, _ := cmd.Flags().GetStringSlice("ignore-hide")
+
+	overrideOpts := &logging.OverrideOptions{
+		ShowAll:    showAll,
+		ShowOnly:   showOnly,
+		AlsoShow:   alsoShow,
+		IgnoreHide: ignoreHide,
+	}
+	stats := &filterStats{}
 
 	ecosystem, _ := cmd.Flags().GetBool("ecosystem")
 	wsFilter, _ := cmd.Flags().GetStringSlice("workspaces")
@@ -184,20 +212,37 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 
 	// 4. Process and print logs from the channel
 	for tailedLine := range lineChan {
+		stats.total++
 		// Filter based on component visibility config
 		var logMap map[string]interface{}
 		if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err == nil {
 			if component, ok := logMap["component"].(string); ok {
-				if !logging.IsComponentVisible(component, &logCfg) {
+				result := logging.GetComponentVisibility(component, &logCfg, overrideOpts)
+				if !result.Visible {
+					stats.hidden++
+					stats.lastReason = result.Reason
+					stats.lastRule = result.Rule
 					continue
 				}
 			}
 		}
+		stats.shown++
 
 		if jsonOutput || opts.JSONOutput {
 			printLogJSON(tailedLine)
 		} else {
 			printLogText(tailedLine)
+		}
+	}
+
+	// For non-follow commands, print filter statistics at the end.
+	if !follow && stats.hidden > 0 {
+		reasonStr := strings.ReplaceAll(string(stats.lastReason), "_", " ")
+		ruleStr := strings.Join(stats.lastRule, ", ")
+		if len(stats.lastRule) > 0 {
+			fmt.Fprintf(os.Stderr, "\n[%d log entries hidden by %s rule: [%s]]\n", stats.hidden, reasonStr, ruleStr)
+		} else {
+			fmt.Fprintf(os.Stderr, "\n[%d log entries hidden by %s]\n", stats.hidden, reasonStr)
 		}
 	}
 

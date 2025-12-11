@@ -307,7 +307,8 @@ type logKeyMap struct {
 	Expand          key.Binding
 	Search          key.Binding
 	Clear           key.Binding
-	Follow          key.Binding
+	ToggleFollow    key.Binding
+	ToggleFilters   key.Binding
 	ViewJSON        key.Binding
 	VisualModeStart key.Binding
 	Yank            key.Binding
@@ -352,9 +353,13 @@ var logKeys = logKeyMap{
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "clear search"),
 	),
-	Follow: key.NewBinding(
+	ToggleFollow: key.NewBinding(
+		key.WithKeys("F"),
+		key.WithHelp("F", "toggle follow"),
+	),
+	ToggleFilters: key.NewBinding(
 		key.WithKeys("f"),
-		key.WithHelp("f", "toggle follow"),
+		key.WithHelp("f", "toggle filters"),
 	),
 	ViewJSON: key.NewBinding(
 		key.WithKeys("J"),
@@ -376,7 +381,7 @@ var logKeys = logKeyMap{
 
 // ShortHelp returns keybindings to be shown in the mini help view.
 func (k logKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Base.Help, k.Base.Quit, k.Follow, k.Search}
+	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleFollow, k.ToggleFilters, k.Search}
 }
 
 // FullHelp returns keybindings for the expanded help view.
@@ -394,7 +399,8 @@ func (k logKeyMap) FullHelp() [][]key.Binding {
 		},
 		{ // Actions column
 			k.SwitchFocus,
-			k.Follow,
+			k.ToggleFollow,
+			k.ToggleFilters,
 			k.Search,
 			k.ViewJSON,
 			k.VisualModeStart,
@@ -418,6 +424,8 @@ type logModel struct {
 	width           int
 	height          int
 	followMode      bool
+	filtersEnabled  bool // Whether component filters are active
+	filteredCount   int  // Count of logs hidden by filters
 	logChan         chan TailedLine
 	mu              sync.Mutex
 	lastGotoG       time.Time
@@ -824,9 +832,24 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Let the list handle the "/" key to start filtering
 				// Don't return here, let it fall through to list.Update
 
-			case key.Matches(msg, logKeys.Follow):
+			case key.Matches(msg, logKeys.ToggleFollow):
 				m.followMode = !m.followMode
-				return m, nil
+				if m.followMode {
+					m.statusMessage = "Follow mode enabled"
+				} else {
+					m.statusMessage = "Follow mode disabled"
+				}
+				return m, m.clearStatusMessageAfter(2 * time.Second)
+
+			case key.Matches(msg, logKeys.ToggleFilters):
+				m.filtersEnabled = !m.filtersEnabled
+				if m.filtersEnabled {
+					m.statusMessage = "Filters enabled"
+				} else {
+					m.statusMessage = "Filters disabled (showing all)"
+				}
+				// Note: This does not re-process old logs, only affects new ones.
+				return m, m.clearStatusMessageAfter(2 * time.Second)
 
 			case key.Matches(msg, logKeys.ViewJSON):
 				// Enter JSON view mode
@@ -903,10 +926,17 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		component, _ := msg.data["component"].(string)
 		timeStr, _ := msg.data["time"].(string)
 
-		// Filter based on component visibility config
-		if m.logConfig != nil && !logging.IsComponentVisible(component, m.logConfig) {
-			// Skip this log entry and continue waiting for more logs
-			return m, m.waitForLogs()
+		// Filter based on component visibility config if filters are enabled
+		if m.filtersEnabled {
+			if m.logConfig != nil {
+				// We pass nil for overrides; TUI doesn't support them yet.
+				visibilityResult := logging.GetComponentVisibility(component, m.logConfig, nil)
+				if !visibilityResult.Visible {
+					m.filteredCount++
+					// Skip this log entry and continue waiting for more logs
+					return m, m.waitForLogs()
+				}
+			}
 		}
 
 		var logTime time.Time
@@ -1007,9 +1037,19 @@ func (m *logModel) View() string {
 	// Status line components
 	statusStyle := theme.DefaultTheme.Muted
 
-	followIndicator := ""
+	followIndicator := " [Follow:OFF]"
 	if m.followMode {
-		followIndicator = " [FOLLOWING]"
+		followIndicator = " [Follow:ON]"
+	}
+
+	filtersIndicator := " [Filters:OFF]"
+	if m.filtersEnabled {
+		filtersIndicator = " [Filters:ON]"
+	}
+
+	filteredCountIndicator := ""
+	if m.filteredCount > 0 {
+		filteredCountIndicator = fmt.Sprintf(" [%d hidden]", m.filteredCount)
 	}
 
 	filterIndicator := ""
@@ -1059,8 +1099,8 @@ func (m *logModel) View() string {
 		modeIndicator = fmt.Sprintf(" [%s]", m.statusMessage)
 	}
 
-	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s | ? for help | q to quit",
-		position, followIndicator, filterIndicator, modeIndicator))
+	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s | ? for help | q to quit",
+		position, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
 
 	// Full-screen details view when viewport is focused
 	if m.focus == viewportPane {
@@ -1251,6 +1291,7 @@ func runLogsTUI(workspaces []string, follow bool) error {
 		help:            help.New(logKeys),
 		loading:         true,
 		followMode:      follow,
+		filtersEnabled:  false, // Filters are off by default for backward compatibility
 		logChan:         logChan,
 		workspaceColors: make(map[string]lipgloss.Style),
 		ready:           false,

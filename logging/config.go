@@ -36,6 +36,20 @@ var DefaultGroups = map[string][]string{
 	},
 }
 
+// ComponentFilteringConfig defines rules for showing/hiding logs from components.
+type ComponentFilteringConfig struct {
+	// Only is a strict whitelist. If set, only logs from these components/groups will be shown.
+	Only []string `yaml:"only,omitempty"`
+
+	// Show ensures logs from these components/groups are visible, overriding any 'hide' rules.
+	// It does not act as a whitelist.
+	Show []string `yaml:"show,omitempty"`
+
+	// Hide is a blacklist of components or groups to silence.
+	// This is ignored if 'only' is set. 'show' overrides 'hide'.
+	Hide []string `yaml:"hide,omitempty"`
+}
+
 // Config defines the structure for logging configuration in grove.yml.
 type Config struct {
 	// Level is the minimum log level to output (e.g., "debug", "info", "warn", "error").
@@ -63,13 +77,8 @@ type Config struct {
 	//     devops: [grove-proxy, grove-deploy]
 	Groups map[string][]string `yaml:"groups,omitempty"`
 
-	// Show is a whitelist of components or groups to display in console logs.
-	// If this is set, all other components will be silenced. Takes precedence over 'hide'.
-	Show []string `yaml:"show,omitempty"`
-
-	// Hide is a blacklist of components or groups to silence in console logs.
-	// This is ignored if 'show' is set.
-	Hide []string `yaml:"hide,omitempty"`
+	// ComponentFiltering contains all rules for filtering logs by component.
+	ComponentFiltering *ComponentFilteringConfig `yaml:"component_filtering,omitempty"`
 
 	// ShowCurrentProject, if true (default), always shows logs from the current project
 	// regardless of show/hide settings. The current project is determined from grove.yml name.

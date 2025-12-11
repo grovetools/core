@@ -53,6 +53,51 @@ func resolveFilterSet(items []string, groups map[string][]string) map[string]boo
 var currentProjectName string
 var currentProjectOnce sync.Once
 
+// VisibilityReason provides a clear reason for a filtering decision.
+type VisibilityReason string
+
+const (
+	// ReasonVisibleDefault is for components visible because no rules hid them.
+	ReasonVisibleDefault VisibilityReason = "visible_default"
+	// ReasonVisibleByShow is for components visible due to a 'show' rule.
+	ReasonVisibleByShow VisibilityReason = "visible_by_show"
+	// ReasonVisibleByOnly is for components visible due to an 'only' whitelist rule.
+	ReasonVisibleByOnly VisibilityReason = "visible_by_only"
+	// ReasonVisibleByProject is for components visible because they are the current project.
+	ReasonVisibleByProject VisibilityReason = "visible_by_project"
+	// ReasonHiddenByHide is for components hidden by a 'hide' rule.
+	ReasonHiddenByHide VisibilityReason = "hidden_by_hide"
+	// ReasonHiddenByOnly is for components hidden by an 'only' whitelist.
+	ReasonHiddenByOnly VisibilityReason = "hidden_by_only"
+	// ReasonHiddenByDefault is for components hidden by the default 'grove-ecosystem' hide rule.
+	ReasonHiddenByDefault VisibilityReason = "hidden_by_default"
+	// ReasonVisibleByOverrideShowAll is for components visible due to --show-all override.
+	ReasonVisibleByOverrideShowAll VisibilityReason = "visible_by_override_show_all"
+	// ReasonVisibleByOverrideShowOnly is for components visible due to --component override.
+	ReasonVisibleByOverrideShowOnly VisibilityReason = "visible_by_override_show_only"
+	// ReasonVisibleByOverrideAlsoShow is for components visible due to --also-show override.
+	ReasonVisibleByOverrideAlsoShow VisibilityReason = "visible_by_override_also_show"
+	// ReasonVisibleByOverrideIgnore is for components visible due to --ignore-hide override.
+	ReasonVisibleByOverrideIgnore VisibilityReason = "visible_by_override_ignore_hide"
+	// ReasonHiddenByOverrideShowOnly is for components hidden by --component override.
+	ReasonHiddenByOverrideShowOnly VisibilityReason = "hidden_by_override_show_only"
+)
+
+// VisibilityResult holds the outcome of a component visibility check.
+type VisibilityResult struct {
+	Visible bool
+	Reason  VisibilityReason
+	Rule    []string // The config rule that was matched, e.g., ["grove-ecosystem"]
+}
+
+// OverrideOptions holds runtime filter settings from CLI flags.
+type OverrideOptions struct {
+	ShowAll    bool
+	ShowOnly   []string // For --component
+	AlsoShow   []string // For --also-show
+	IgnoreHide []string // For --ignore-hide
+}
+
 // getCurrentProjectName returns the name of the current project from grove.yml
 func getCurrentProjectName() string {
 	currentProjectOnce.Do(func() {
@@ -65,39 +110,85 @@ func getCurrentProjectName() string {
 }
 
 // IsComponentVisible determines if a component should be visible in console logs
-// based on the provided configuration. 'show' takes precedence over 'hide'.
-// By default, if no 'show' or 'hide' rules are configured, all logs are shown.
-// If ShowCurrentProject is true (default), the current project is always visible.
-// If 'hide' rules are used, DefaultHide is applied as a baseline.
+// based on the provided configuration.
 func IsComponentVisible(component string, cfg *Config) bool {
-	// Check if this is the current project and ShowCurrentProject is enabled (default true)
+	// Call the new detailed function with no overrides for backward compatibility.
+	return GetComponentVisibility(component, cfg, nil).Visible
+}
+
+// GetComponentVisibility determines if a component's logs should be visible based on a hierarchy of rules.
+func GetComponentVisibility(component string, cfg *Config, overrides *OverrideOptions) VisibilityResult {
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	if cfg.ComponentFiltering == nil {
+		cfg.ComponentFiltering = &ComponentFilteringConfig{}
+	}
+	if overrides == nil {
+		overrides = &OverrideOptions{}
+	}
+
+	// 1. --show-all override
+	if overrides.ShowAll {
+		return VisibilityResult{Visible: true, Reason: ReasonVisibleByOverrideShowAll}
+	}
+
+	// 2. --component override (acts as a strict 'only' whitelist)
+	if len(overrides.ShowOnly) > 0 {
+		showOnlySet := resolveFilterSet(overrides.ShowOnly, cfg.Groups)
+		if showOnlySet[component] {
+			return VisibilityResult{Visible: true, Reason: ReasonVisibleByOverrideShowOnly, Rule: overrides.ShowOnly}
+		}
+		return VisibilityResult{Visible: false, Reason: ReasonHiddenByOverrideShowOnly, Rule: overrides.ShowOnly}
+	}
+
+	// 3. show_current_project config
 	showCurrentProject := cfg.ShowCurrentProject == nil || *cfg.ShowCurrentProject
 	if showCurrentProject && component == getCurrentProjectName() {
-		return true
+		return VisibilityResult{Visible: true, Reason: ReasonVisibleByProject}
 	}
 
-	// If no explicit show/hide rules are configured by the user, show all logs.
-	if cfg.Show == nil && cfg.Hide == nil {
-		return true
+	// 4. --also-show and config 'show' rules (force visibility)
+	alsoShowSet := resolveFilterSet(overrides.AlsoShow, cfg.Groups)
+	if alsoShowSet[component] {
+		return VisibilityResult{Visible: true, Reason: ReasonVisibleByOverrideAlsoShow, Rule: overrides.AlsoShow}
+	}
+	showSet := resolveFilterSet(cfg.ComponentFiltering.Show, cfg.Groups)
+	if showSet[component] {
+		return VisibilityResult{Visible: true, Reason: ReasonVisibleByShow, Rule: cfg.ComponentFiltering.Show}
 	}
 
-	showSet := resolveFilterSet(cfg.Show, cfg.Groups)
-	if showSet != nil {
-		return showSet[component]
+	// 5. Config 'only' rules (strict whitelist)
+	onlySet := resolveFilterSet(cfg.ComponentFiltering.Only, cfg.Groups)
+	if onlySet != nil {
+		if onlySet[component] {
+			return VisibilityResult{Visible: true, Reason: ReasonVisibleByOnly, Rule: cfg.ComponentFiltering.Only}
+		}
+		return VisibilityResult{Visible: false, Reason: ReasonHiddenByOnly, Rule: cfg.ComponentFiltering.Only}
 	}
 
-	hideSet := resolveFilterSet(cfg.Hide, cfg.Groups)
-	if hideSet != nil {
-		return !hideSet[component]
+	// 6. --ignore-hide override (prevents subsequent hide rules from applying)
+	ignoreHideSet := resolveFilterSet(overrides.IgnoreHide, cfg.Groups)
+	if ignoreHideSet[component] {
+		return VisibilityResult{Visible: true, Reason: ReasonVisibleByOverrideIgnore, Rule: overrides.IgnoreHide}
 	}
 
-	// Apply default hide if no explicit rules are set
-	defaultHideSet := resolveFilterSet(DefaultHide, cfg.Groups)
-	if defaultHideSet != nil {
-		return !defaultHideSet[component]
+	// 7. Config 'hide' rules
+	hideSet := resolveFilterSet(cfg.ComponentFiltering.Hide, cfg.Groups)
+	if hideSet[component] {
+		return VisibilityResult{Visible: false, Reason: ReasonHiddenByHide, Rule: cfg.ComponentFiltering.Hide}
 	}
 
-	return true
+	// 8. Default 'hide' rule for grove-ecosystem
+	if len(cfg.ComponentFiltering.Hide) == 0 {
+		defaultHideSet := resolveFilterSet(DefaultHide, cfg.Groups)
+		if defaultHideSet[component] {
+			return VisibilityResult{Visible: false, Reason: ReasonHiddenByDefault, Rule: DefaultHide}
+		}
+	}
+
+	// 9. If no rules matched, default to visible.
+	return VisibilityResult{Visible: true, Reason: ReasonVisibleDefault}
 }
 
 // VersionFields represents the fields logged when a Grove binary starts

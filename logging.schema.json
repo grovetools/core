@@ -2,6 +2,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/mattsolo1/grove-core/logging/config",
   "$defs": {
+    "ComponentFilteringConfig": {
+      "properties": {
+        "only": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "show": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "hide": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "FileSinkConfig": {
       "properties": {
         "enabled": {
@@ -69,17 +92,8 @@
       },
       "type": "object"
     },
-    "show": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "hide": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
+    "component_filtering": {
+      "$ref": "#/$defs/ComponentFilteringConfig"
     },
     "show_current_project": {
       "type": "boolean"
