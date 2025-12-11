@@ -66,12 +66,18 @@ func getCurrentProjectName() string {
 
 // IsComponentVisible determines if a component should be visible in console logs
 // based on the provided configuration. 'show' takes precedence over 'hide'.
+// By default, if no 'show' or 'hide' rules are configured, all logs are shown.
 // If ShowCurrentProject is true (default), the current project is always visible.
-// If no show/hide rules are configured, DefaultHide is applied.
+// If 'hide' rules are used, DefaultHide is applied as a baseline.
 func IsComponentVisible(component string, cfg *Config) bool {
 	// Check if this is the current project and ShowCurrentProject is enabled (default true)
 	showCurrentProject := cfg.ShowCurrentProject == nil || *cfg.ShowCurrentProject
 	if showCurrentProject && component == getCurrentProjectName() {
+		return true
+	}
+
+	// If no explicit show/hide rules are configured by the user, show all logs.
+	if cfg.Show == nil && cfg.Hide == nil {
 		return true
 	}
 

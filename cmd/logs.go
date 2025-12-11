@@ -185,13 +185,11 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	// 4. Process and print logs from the channel
 	for tailedLine := range lineChan {
 		// Filter based on component visibility config
-		if logCfg.Show != nil || logCfg.Hide != nil {
-			var logMap map[string]interface{}
-			if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err == nil {
-				if component, ok := logMap["component"].(string); ok {
-					if !logging.IsComponentVisible(component, &logCfg) {
-						continue
-					}
+		var logMap map[string]interface{}
+		if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err == nil {
+			if component, ok := logMap["component"].(string); ok {
+				if !logging.IsComponentVisible(component, &logCfg) {
+					continue
 				}
 			}
 		}

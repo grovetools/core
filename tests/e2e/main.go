@@ -30,6 +30,11 @@ func main() {
 		LoggingNestedJSONScenario(),
 		LoggingLevelFilterScenario(),
 		JSONTreeComponentScenario(),
+		// Component filtering scenarios
+		LoggingComponentFilterDefaultScenario(),
+		LoggingComponentFilterShowScenario(),
+		LoggingComponentFilterHideScenario(),
+		LoggingComponentFilterConsistencyScenario(),
 		// TUI scenarios
 		LoggingTUITestScenario(),
 		LoggingTUIVimNavigationScenario(),

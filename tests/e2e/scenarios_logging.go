@@ -615,3 +615,429 @@ func JSONTreeComponentScenario() *harness.Scenario {
 		},
 	}
 }
+
+// LoggingComponentFilterDefaultScenario tests that logs are shown by default when no show/hide rules exist.
+func LoggingComponentFilterDefaultScenario() *harness.Scenario {
+	var projectDir string
+	var origDir string
+
+	return &harness.Scenario{
+		Name:        "core-logging-filter-default",
+		Description: "Verifies that all logs are shown by default when no show/hide rules are configured.",
+		Tags:        []string{"core", "logging", "filter", "default"},
+		Steps: []harness.Step{
+			{
+				Name: "Create grove.yml without show/hide config",
+				Func: func(ctx *harness.Context) error {
+					projectDir = ctx.NewDir("filter-default-test")
+
+					projectYAML := `name: filter-default-test
+version: "1.0"
+logging:
+  level: debug
+  file:
+    enabled: true
+    format: json
+`
+					return fs.WriteString(filepath.Join(projectDir, "grove.yml"), projectYAML)
+				},
+			},
+			{
+				Name: "Change to project directory and reset logger",
+				Func: func(ctx *harness.Context) error {
+					var err error
+					origDir, err = os.Getwd()
+					if err != nil {
+						return fmt.Errorf("failed to get current dir: %w", err)
+					}
+
+					if err := os.Chdir(projectDir); err != nil {
+						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
+					}
+
+					logging.Reset()
+					return nil
+				},
+			},
+			{
+				Name: "Write logs from multiple components",
+				Func: func(ctx *harness.Context) error {
+					logger1 := logging.NewLogger("component-a")
+					logger1.Info("Log from component A")
+
+					logger2 := logging.NewLogger("component-b")
+					logger2.Info("Log from component B")
+
+					logger3 := logging.NewLogger("component-c")
+					logger3.Info("Log from component C")
+
+					return nil
+				},
+			},
+			{
+				Name: "Verify all component logs appear in file",
+				Func: func(ctx *harness.Context) error {
+					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
+					if len(logFiles) == 0 {
+						return fmt.Errorf("no log files found")
+					}
+
+					logContent, err := fs.ReadString(logFiles[0])
+					if err != nil {
+						return fmt.Errorf("failed to read log file: %w", err)
+					}
+
+					lines := strings.Split(strings.TrimSpace(logContent), "\n")
+					foundA, foundB, foundC := false, false, false
+
+					for _, line := range lines {
+						if line == "" {
+							continue
+						}
+						var entry map[string]interface{}
+						if err := json.Unmarshal([]byte(line), &entry); err != nil {
+							continue
+						}
+
+						component, _ := entry["component"].(string)
+						if component == "component-a" {
+							foundA = true
+						}
+						if component == "component-b" {
+							foundB = true
+						}
+						if component == "component-c" {
+							foundC = true
+						}
+					}
+
+					if !foundA || !foundB || !foundC {
+						return fmt.Errorf("not all components found in logs (A:%v B:%v C:%v)", foundA, foundB, foundC)
+					}
+					return nil
+				},
+			},
+			{
+				Name: "Cleanup: restore original directory",
+				Func: func(ctx *harness.Context) error {
+					if origDir != "" {
+						return os.Chdir(origDir)
+					}
+					return nil
+				},
+			},
+		},
+	}
+}
+
+// LoggingComponentFilterShowScenario tests that 'show' rules work correctly.
+func LoggingComponentFilterShowScenario() *harness.Scenario {
+	var projectDir string
+	var origDir string
+
+	return &harness.Scenario{
+		Name:        "core-logging-filter-show",
+		Description: "Verifies that 'show' rules correctly filter visible components.",
+		Tags:        []string{"core", "logging", "filter", "show"},
+		Steps: []harness.Step{
+			{
+				Name: "Create grove.yml with show config",
+				Func: func(ctx *harness.Context) error {
+					projectDir = ctx.NewDir("filter-show-test")
+
+					projectYAML := `name: filter-show-test
+version: "1.0"
+logging:
+  level: debug
+  show: ["component-a", "component-c"]
+  file:
+    enabled: true
+    format: json
+`
+					return fs.WriteString(filepath.Join(projectDir, "grove.yml"), projectYAML)
+				},
+			},
+			{
+				Name: "Change to project directory and reset logger",
+				Func: func(ctx *harness.Context) error {
+					var err error
+					origDir, err = os.Getwd()
+					if err != nil {
+						return fmt.Errorf("failed to get current dir: %w", err)
+					}
+
+					if err := os.Chdir(projectDir); err != nil {
+						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
+					}
+
+					logging.Reset()
+					return nil
+				},
+			},
+			{
+				Name: "Write logs from multiple components",
+				Func: func(ctx *harness.Context) error {
+					logger1 := logging.NewLogger("component-a")
+					logger1.Info("Log from component A")
+
+					logger2 := logging.NewLogger("component-b")
+					logger2.Info("Log from component B")
+
+					logger3 := logging.NewLogger("component-c")
+					logger3.Info("Log from component C")
+
+					return nil
+				},
+			},
+			{
+				Name: "Run core logs command and verify only shown components appear",
+				Func: func(ctx *harness.Context) error {
+					coreBinary, err := findCoreBinary()
+					if err != nil {
+						return err
+					}
+
+					cmd := ctx.Command(coreBinary, "logs")
+					result := cmd.Run()
+
+					if result.ExitCode != 0 {
+						return fmt.Errorf("core logs command failed with exit code %d: %s", result.ExitCode, result.Stderr)
+					}
+
+					output := result.Stdout
+					hasA := strings.Contains(output, "component-a")
+					hasB := strings.Contains(output, "component-b")
+					hasC := strings.Contains(output, "component-c")
+
+					if !hasA {
+						return fmt.Errorf("component-a should be visible but is not")
+					}
+					if hasB {
+						return fmt.Errorf("component-b should not be visible but is")
+					}
+					if !hasC {
+						return fmt.Errorf("component-c should be visible but is not")
+					}
+
+					return nil
+				},
+			},
+			{
+				Name: "Cleanup: restore original directory",
+				Func: func(ctx *harness.Context) error {
+					if origDir != "" {
+						return os.Chdir(origDir)
+					}
+					return nil
+				},
+			},
+		},
+	}
+}
+
+// LoggingComponentFilterHideScenario tests that 'hide' rules work correctly.
+func LoggingComponentFilterHideScenario() *harness.Scenario {
+	var projectDir string
+	var origDir string
+
+	return &harness.Scenario{
+		Name:        "core-logging-filter-hide",
+		Description: "Verifies that 'hide' rules correctly filter out components.",
+		Tags:        []string{"core", "logging", "filter", "hide"},
+		Steps: []harness.Step{
+			{
+				Name: "Create grove.yml with hide config",
+				Func: func(ctx *harness.Context) error {
+					projectDir = ctx.NewDir("filter-hide-test")
+
+					projectYAML := `name: filter-hide-test
+version: "1.0"
+logging:
+  level: debug
+  hide: ["component-b"]
+  file:
+    enabled: true
+    format: json
+`
+					return fs.WriteString(filepath.Join(projectDir, "grove.yml"), projectYAML)
+				},
+			},
+			{
+				Name: "Change to project directory and reset logger",
+				Func: func(ctx *harness.Context) error {
+					var err error
+					origDir, err = os.Getwd()
+					if err != nil {
+						return fmt.Errorf("failed to get current dir: %w", err)
+					}
+
+					if err := os.Chdir(projectDir); err != nil {
+						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
+					}
+
+					logging.Reset()
+					return nil
+				},
+			},
+			{
+				Name: "Write logs from multiple components",
+				Func: func(ctx *harness.Context) error {
+					logger1 := logging.NewLogger("component-a")
+					logger1.Info("Log from component A")
+
+					logger2 := logging.NewLogger("component-b")
+					logger2.Info("Log from component B")
+
+					logger3 := logging.NewLogger("component-c")
+					logger3.Info("Log from component C")
+
+					return nil
+				},
+			},
+			{
+				Name: "Run core logs command and verify hidden component is filtered",
+				Func: func(ctx *harness.Context) error {
+					coreBinary, err := findCoreBinary()
+					if err != nil {
+						return err
+					}
+
+					cmd := ctx.Command(coreBinary, "logs")
+					result := cmd.Run()
+
+					if result.ExitCode != 0 {
+						return fmt.Errorf("core logs command failed with exit code %d: %s", result.ExitCode, result.Stderr)
+					}
+
+					output := result.Stdout
+					hasA := strings.Contains(output, "component-a")
+					hasB := strings.Contains(output, "component-b")
+					hasC := strings.Contains(output, "component-c")
+
+					if !hasA {
+						return fmt.Errorf("component-a should be visible but is not")
+					}
+					if hasB {
+						return fmt.Errorf("component-b should be hidden but is visible")
+					}
+					if !hasC {
+						return fmt.Errorf("component-c should be visible but is not")
+					}
+
+					return nil
+				},
+			},
+			{
+				Name: "Cleanup: restore original directory",
+				Func: func(ctx *harness.Context) error {
+					if origDir != "" {
+						return os.Chdir(origDir)
+					}
+					return nil
+				},
+			},
+		},
+	}
+}
+
+// LoggingComponentFilterConsistencyScenario tests that filtering behavior is consistent.
+func LoggingComponentFilterConsistencyScenario() *harness.Scenario {
+	var projectDir string
+	var origDir string
+
+	return &harness.Scenario{
+		Name:        "core-logging-filter-consistency",
+		Description: "Verifies that filtering behavior is consistent between different invocations.",
+		Tags:        []string{"core", "logging", "filter", "consistency"},
+		Steps: []harness.Step{
+			{
+				Name: "Create grove.yml with show config",
+				Func: func(ctx *harness.Context) error {
+					projectDir = ctx.NewDir("filter-consistency-test")
+
+					projectYAML := `name: filter-consistency-test
+version: "1.0"
+logging:
+  level: debug
+  show: ["visible-component"]
+  file:
+    enabled: true
+    format: json
+`
+					return fs.WriteString(filepath.Join(projectDir, "grove.yml"), projectYAML)
+				},
+			},
+			{
+				Name: "Change to project directory and reset logger",
+				Func: func(ctx *harness.Context) error {
+					var err error
+					origDir, err = os.Getwd()
+					if err != nil {
+						return fmt.Errorf("failed to get current dir: %w", err)
+					}
+
+					if err := os.Chdir(projectDir); err != nil {
+						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
+					}
+
+					logging.Reset()
+					return nil
+				},
+			},
+			{
+				Name: "Write logs from visible and hidden components",
+				Func: func(ctx *harness.Context) error {
+					logger1 := logging.NewLogger("visible-component")
+					logger1.Info("This should be visible")
+
+					logger2 := logging.NewLogger("hidden-component")
+					logger2.Info("This should be hidden")
+
+					return nil
+				},
+			},
+			{
+				Name: "Run core logs command multiple times and verify consistency",
+				Func: func(ctx *harness.Context) error {
+					coreBinary, err := findCoreBinary()
+					if err != nil {
+						return err
+					}
+
+					// Run the command multiple times
+					for i := 0; i < 3; i++ {
+						cmd := ctx.Command(coreBinary, "logs")
+						result := cmd.Run()
+
+						if result.ExitCode != 0 {
+							return fmt.Errorf("run %d: core logs command failed with exit code %d: %s", i+1, result.ExitCode, result.Stderr)
+						}
+
+						output := result.Stdout
+						hasVisible := strings.Contains(output, "visible-component")
+						hasHidden := strings.Contains(output, "hidden-component")
+
+						if !hasVisible {
+							return fmt.Errorf("run %d: visible-component should appear but doesn't", i+1)
+						}
+						if hasHidden {
+							return fmt.Errorf("run %d: hidden-component should not appear but does", i+1)
+						}
+					}
+
+					return nil
+				},
+			},
+			{
+				Name: "Cleanup: restore original directory",
+				Func: func(ctx *harness.Context) error {
+					if origDir != "" {
+						return os.Chdir(origDir)
+					}
+					return nil
+				},
+			},
+		},
+	}
+}
