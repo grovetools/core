@@ -3,7 +3,6 @@ package logging
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -50,7 +49,7 @@ func DefaultPrettyStyles() PrettyStyles {
 // NewPrettyLogger creates a pretty logger wrapper
 func NewPrettyLogger() *PrettyLogger {
 	return &PrettyLogger{
-		writer: os.Stderr,
+		writer: GetGlobalOutput(),
 		styles: DefaultPrettyStyles(),
 	}
 }

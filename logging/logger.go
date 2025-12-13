@@ -362,8 +362,9 @@ func NewLogger(component string) *logrus.Entry {
 	// Check component visibility based on show/hide configuration
 	isVisible := IsComponentVisible(component, &logCfg)
 
+	// Use the global writer instead of os.Stderr to support TUI redirection
 	if shouldLogToStderr && isVisible {
-		logger.SetOutput(os.Stderr)
+		logger.SetOutput(GetGlobalOutput())
 	} else {
 		logger.SetOutput(io.Discard)
 	}
