@@ -137,20 +137,22 @@ func (m Model) View() string {
 	if !m.ready {
 		return "Initializing log viewer..."
 	}
-	status := "Follow: ON"
-	if !m.follow {
-		status = "Follow: OFF"
-	}
-	return lipgloss.JoinVertical(lipgloss.Left,
-		m.viewport.View(),
-		theme.DefaultTheme.Muted.Render(status),
-	)
+	return m.viewport.View()
+}
+
+// IsFollowing returns whether the log viewer is in follow mode.
+func (m Model) IsFollowing() bool {
+	return m.follow
 }
 
 // formatLogLine is a simplified log formatter for the TUI component.
 func formatLogLine(workspace, line string) string {
 	var logMap map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &logMap); err != nil {
+		// Pass through raw output without adding prefixes for Job Output and System
+		if workspace == "Job Output" || workspace == "System" {
+			return line
+		}
 		return fmt.Sprintf("[%s] %s", theme.DefaultTheme.Accent.Render(workspace), line)
 	}
 
