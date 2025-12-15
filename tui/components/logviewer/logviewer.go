@@ -113,6 +113,25 @@ func (m *Model) GotoBottom() {
 	m.viewport.GotoBottom()
 }
 
+// GetScrollInfo returns current scroll position information.
+func (m *Model) GetScrollInfo() (currentLine, totalLines int) {
+	totalLines = len(m.lines)
+	if totalLines == 0 {
+		return 0, 0
+	}
+	// YOffset is the top line being displayed
+	currentLine = m.viewport.YOffset + 1 // +1 for human-readable (1-indexed)
+	return currentLine, totalLines
+}
+
+// GetScrollPercent returns the scroll position as a percentage.
+func (m *Model) GetScrollPercent() float64 {
+	if len(m.lines) == 0 {
+		return 0
+	}
+	return m.viewport.ScrollPercent()
+}
+
 func (m *Model) waitForLogLine() tea.Cmd {
 	return func() tea.Msg {
 		return <-m.logChannel
