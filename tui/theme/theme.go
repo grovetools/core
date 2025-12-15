@@ -160,6 +160,7 @@ type Theme struct {
 
 	// Text styles - visual hierarchy
 	Bold        lipgloss.Style // Emphasized text
+	Italic      lipgloss.Style // Italic text
 	Normal      lipgloss.Style // Regular terminal default text
 	Muted       lipgloss.Style // De-emphasized text
 	Selected    lipgloss.Style
@@ -301,6 +302,9 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 		// Text hierarchy: Bold → Normal → Muted
 		Bold: lipgloss.NewStyle().
 			Bold(true),
+
+		Italic: lipgloss.NewStyle().
+			Italic(true),
 
 		Normal: lipgloss.NewStyle(),
 
