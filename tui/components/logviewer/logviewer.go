@@ -88,6 +88,31 @@ func (m *Model) Stop() {
 	m.tails = nil
 }
 
+// SetContent displays static content, stopping any live tailing.
+func (m *Model) SetContent(content string) {
+	m.Stop()
+	m.lines = strings.Split(content, "\n")
+	m.viewport.SetContent(strings.Join(m.lines, "\n"))
+	m.viewport.GotoBottom()
+}
+
+// Clear stops tailing and clears the viewer's content.
+func (m *Model) Clear() {
+	m.Stop()
+	m.lines = []string{}
+	m.viewport.SetContent("")
+}
+
+// GotoTop scrolls to the top of the log content.
+func (m *Model) GotoTop() {
+	m.viewport.GotoTop()
+}
+
+// GotoBottom scrolls to the bottom of the log content.
+func (m *Model) GotoBottom() {
+	m.viewport.GotoBottom()
+}
+
 func (m *Model) waitForLogLine() tea.Cmd {
 	return func() tea.Msg {
 		return <-m.logChannel
