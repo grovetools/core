@@ -45,6 +45,10 @@ func main() {
 		LoggingTUIExistingLogsScenario(),
 		LoggingTUINewFilesScenario(),
 		LoggingTUIFilteringTestScenario(),
+		// Nvim component scenarios
+		NvimDemoScenario(),
+		NvimDemoFileBrowserScenario(),
+		NvimDemoFileOpenScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

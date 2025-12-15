@@ -6,3 +6,7 @@ binary:
 
 context:
   default_rules_path: .cx/dev-no-tests.rules
+
+tui:
+  nvim_embed:
+    user_config: true  # Load user's personal Neovim config when running nvim-demo

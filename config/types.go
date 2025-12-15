@@ -58,10 +58,16 @@ type NotebooksConfig struct {
 	Rules       *NotebookRules       `yaml:"rules,omitempty"`
 }
 
+// NvimEmbedConfig holds settings for the embedded Neovim component.
+type NvimEmbedConfig struct {
+	UserConfig bool `yaml:"user_config"` // If true, loads the user's default Neovim config (~/.config/nvim)
+}
+
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
-	Icons string `yaml:"icons,omitempty"` // Can be "nerd" or "ascii"
-	Theme string `yaml:"theme,omitempty"` // Color theme: "kanagawa", "gruvbox", or "terminal"
+	Icons     string           `yaml:"icons,omitempty"`      // Can be "nerd" or "ascii"
+	Theme     string           `yaml:"theme,omitempty"`      // Color theme: "kanagawa", "gruvbox", or "terminal"
+	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty"` // Embedded Neovim configuration
 }
 
 // Notebook defines the configuration for a single, named notebook system.

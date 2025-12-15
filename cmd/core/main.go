@@ -21,6 +21,7 @@ func main() {
 	rootCmd.AddCommand(cmd.NewOpenInWindowCmd())
 	rootCmd.AddCommand(cmd.NewTmuxCmd())
 	rootCmd.AddCommand(cmd.NewLogsCmd())
+	rootCmd.AddCommand(cmd.NewNvimDemoCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
