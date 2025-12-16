@@ -247,18 +247,6 @@ func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, wi
 		return fmt.Errorf("failed to create new window '%s': %w", windowName, err)
 	}
 
-	// If an index is specified, move the window to that position.
-	if windowIndex >= 0 {
-		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
-			// Log the error but don't fail - window is still usable
-			log.WithError(err).WithFields(map[string]interface{}{
-				"window": windowName,
-				"index":  windowIndex,
-			}).Warn("Failed to move tmux window to specified index")
-			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
-		}
-	}
-
 	// Switch the client to the new window to make it active.
 	if err := c.SwitchClient(ctx, windowTarget); err != nil {
 		log.WithError(err).WithField("window", windowName).Error("Failed to switch to newly created tmux window")

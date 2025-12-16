@@ -140,7 +140,7 @@ func NewTmuxEditorCmd() *cobra.Command {
 	cmd.Flags().String("cmd", "", "Custom editor command to execute. The file path will be appended if provided. Defaults to $EDITOR or 'nvim'.")
 	cmd.Flags().Bool("reset", false, "If the editor window exists, kill it and start a fresh session.")
 	cmd.Flags().String("window-name", "editor", "Name of the target tmux window.")
-	cmd.Flags().Int("window-index", 1, "Index (position) for the editor window.")
+	cmd.Flags().Int("window-index", -1, "Index (position) for the editor window. -1 means no positioning.")
 	cmd.Flags().String("vim-cmd", "", "Vim command to execute. If editor is already running, sends as :command. Otherwise starts with -c flag.")
 
 	return cmd
