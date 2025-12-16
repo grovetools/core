@@ -258,3 +258,246 @@ groves:
 		},
 	}
 }
+
+// CoreConfigGlobalOverrideScenario tests that global override config is loaded and displayed.
+func CoreConfigGlobalOverrideScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-config-global-override",
+		Description: "Verifies that grove.override.yml in global config directory is loaded and displayed.",
+		Tags:        []string{"core", "config", "global-override"},
+		Steps: []harness.Step{
+			{
+				Name: "Setup global and global override configs and verify both are displayed",
+				Func: func(ctx *harness.Context) error {
+					projectDir := ctx.NewDir("global-override-test")
+					if err := fs.CreateDir(projectDir); err != nil {
+						return fmt.Errorf("failed to create project dir: %w", err)
+					}
+					globalConfigDir := filepath.Join(ctx.HomeDir(), ".config", "grove")
+					if err := fs.CreateDir(globalConfigDir); err != nil {
+						return fmt.Errorf("failed to create global config dir: %w", err)
+					}
+
+					// Create Global Config
+					globalYAML := `name: global-name
+logging:
+  level: info
+groves:
+  global_grove:
+    path: /global/path
+    enabled: true
+`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.yml"), globalYAML); err != nil {
+						return err
+					}
+
+					// Create Global Override Config
+					globalOverrideYAML := `name: global-override-name
+logging:
+  level: debug
+extensions:
+  global_extension:
+    enabled: true
+`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.override.yml"), globalOverrideYAML); err != nil {
+						return err
+					}
+
+					coreBinary, err := findCoreBinary()
+					if err != nil {
+						return err
+					}
+
+					cmd := ctx.Command(coreBinary, "config-layers").Dir(projectDir)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core config-layers` failed: %w", result.Error)
+					}
+
+					output := result.Stdout
+					// Verify both global and global override sections are displayed
+					if err := assert.Contains(output, "GLOBAL CONFIG", "global config section should exist"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "GLOBAL OVERRIDE CONFIG", "global override config section should exist"); err != nil {
+						return err
+					}
+					// Verify global override values take precedence in final config
+					if err := assert.Contains(output, "name: global-override-name", "global override name should be in final config"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "level: debug", "global override logging level should be in final config"); err != nil {
+						return err
+					}
+					// Verify global config values are still merged (not overridden)
+					if err := assert.Contains(output, "global_grove:", "global grove should be in final config"); err != nil {
+						return err
+					}
+					// Verify global override-specific values are present
+					if err := assert.Contains(output, "global_extension:", "global override extension should be in final config"); err != nil {
+						return err
+					}
+
+					return nil
+				},
+			},
+		},
+	}
+}
+
+// CoreConfigGlobalOverridePrecedenceScenario tests the precedence order with global override.
+func CoreConfigGlobalOverridePrecedenceScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-config-global-override-precedence",
+		Description: "Verifies that global override takes precedence over global but not over project configs.",
+		Tags:        []string{"core", "config", "global-override", "precedence"},
+		Steps: []harness.Step{
+			{
+				Name: "Setup all config layers and verify precedence order",
+				Func: func(ctx *harness.Context) error {
+					projectDir := ctx.NewDir("precedence-test")
+					if err := fs.CreateDir(projectDir); err != nil {
+						return fmt.Errorf("failed to create project dir: %w", err)
+					}
+					globalConfigDir := filepath.Join(ctx.HomeDir(), ".config", "grove")
+					if err := fs.CreateDir(globalConfigDir); err != nil {
+						return fmt.Errorf("failed to create global config dir: %w", err)
+					}
+
+					// Create Global Config
+					globalYAML := `name: global-name
+logging:
+  level: info
+groves:
+  test_grove:
+    path: /global/path
+    enabled: false
+`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.yml"), globalYAML); err != nil {
+						return err
+					}
+
+					// Create Global Override Config
+					globalOverrideYAML := `name: global-override-name
+logging:
+  level: warn
+groves:
+  test_grove:
+    path: /global-override/path
+    enabled: true
+`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.override.yml"), globalOverrideYAML); err != nil {
+						return err
+					}
+
+					// Create Project Config (should override both global and global override)
+					projectYAML := `name: project-name
+logging:
+  level: debug
+`
+					if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), projectYAML); err != nil {
+						return err
+					}
+
+					coreBinary, err := findCoreBinary()
+					if err != nil {
+						return err
+					}
+
+					cmd := ctx.Command(coreBinary, "config-layers").Dir(projectDir)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core config-layers` failed: %w", result.Error)
+					}
+
+					output := result.Stdout
+					// Verify project config takes highest precedence for name and logging level
+					if err := assert.Contains(output, "name: project-name", "project name should override global override and global"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "level: debug", "project logging level should override global override and global"); err != nil {
+						return err
+					}
+					// Verify global override takes precedence over global for grove settings
+					// (project doesn't define groves, so global override values should win)
+					if err := assert.Contains(output, "path: /global-override/path", "global override grove path should override global"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "enabled: true", "global override grove enabled should override global"); err != nil {
+						return err
+					}
+
+					return nil
+				},
+			},
+		},
+	}
+}
+
+// CoreConfigGlobalOverrideYamlExtensionScenario tests that .yaml extension is also supported.
+func CoreConfigGlobalOverrideYamlExtensionScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-config-global-override-yaml-extension",
+		Description: "Verifies that grove.override.yaml (with .yaml extension) is also supported.",
+		Tags:        []string{"core", "config", "global-override"},
+		Steps: []harness.Step{
+			{
+				Name: "Setup global override with .yaml extension and verify it's loaded",
+				Func: func(ctx *harness.Context) error {
+					projectDir := ctx.NewDir("yaml-extension-test")
+					if err := fs.CreateDir(projectDir); err != nil {
+						return fmt.Errorf("failed to create project dir: %w", err)
+					}
+					globalConfigDir := filepath.Join(ctx.HomeDir(), ".config", "grove")
+					if err := fs.CreateDir(globalConfigDir); err != nil {
+						return fmt.Errorf("failed to create global config dir: %w", err)
+					}
+
+					// Create Global Config
+					globalYAML := `name: global-name`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.yml"), globalYAML); err != nil {
+						return err
+					}
+
+					// Create Global Override Config with .yaml extension
+					globalOverrideYAML := `name: override-from-yaml-ext
+extensions:
+  yaml_test:
+    enabled: true
+`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.override.yaml"), globalOverrideYAML); err != nil {
+						return err
+					}
+
+					coreBinary, err := findCoreBinary()
+					if err != nil {
+						return err
+					}
+
+					cmd := ctx.Command(coreBinary, "config-layers").Dir(projectDir)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core config-layers` failed: %w", result.Error)
+					}
+
+					output := result.Stdout
+					// Verify .yaml extension is loaded
+					if err := assert.Contains(output, "GLOBAL OVERRIDE CONFIG", "global override config section should exist"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "name: override-from-yaml-ext", "override name from .yaml file should be in final config"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "yaml_test:", "extension from .yaml file should be in final config"); err != nil {
+						return err
+					}
+
+					return nil
+				},
+			},
+		},
+	}
+}

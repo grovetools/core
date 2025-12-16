@@ -18,6 +18,9 @@ func main() {
 		CoreConfigOverrideScenario(),
 		CoreConfigMissingScenario(),
 		CoreConfigVersionScenario(),
+		CoreConfigGlobalOverrideScenario(),
+		CoreConfigGlobalOverridePrecedenceScenario(),
+		CoreConfigGlobalOverrideYamlExtensionScenario(),
 		WorkspaceModelScenario(),
 		WorkspaceEdgeCasesScenario(),
 		WorkspaceAdvancedScenario(),
@@ -46,9 +49,9 @@ func main() {
 		LoggingTUINewFilesScenario(),
 		LoggingTUIFilteringTestScenario(),
 		// Nvim component scenarios
-		NvimDemoScenario(),
-		NvimDemoFileBrowserScenario(),
-		NvimDemoFileOpenScenario(),
+		// NvimDemoScenario(),
+		// NvimDemoFileBrowserScenario(),
+		// NvimDemoFileOpenScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.

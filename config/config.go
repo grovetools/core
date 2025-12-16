@@ -82,6 +82,38 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 	}
 
+	// Load global override if it exists
+	if globalPath != "" {
+		globalDir := filepath.Dir(globalPath)
+		overrideFiles := []string{
+			filepath.Join(globalDir, "grove.override.yml"),
+			filepath.Join(globalDir, "grove.override.yaml"),
+		}
+
+		for _, overridePath := range overrideFiles {
+			if _, err := os.Stat(overridePath); err == nil {
+				logger.WithField("path", overridePath).Debug("Loading global override configuration")
+				overrideData, err := os.ReadFile(overridePath)
+				if err != nil {
+					logger.WithError(err).Warn("Failed to read global override file, skipping")
+					continue
+				}
+				expanded := expandEnvVars(string(overrideData))
+				var overrideConfig Config
+				if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err != nil {
+					logger.WithError(err).Warn("Failed to parse global override file, skipping")
+					continue
+				}
+				if finalConfig == nil {
+					finalConfig = &overrideConfig
+				} else {
+					finalConfig = mergeConfigs(finalConfig, &overrideConfig)
+				}
+				break // Only load one
+			}
+		}
+	}
+
 	if projectPath != "" {
 		logger.WithField("path", projectPath).Debug("Loading project configuration")
 		// 2. Load and merge project config - also without defaults/validation
@@ -392,6 +424,32 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 	}
 
+	// 2.5. Load Global Override layer (optional)
+	if globalPath != "" {
+		globalDir := filepath.Dir(globalPath)
+		overrideFiles := []string{
+			filepath.Join(globalDir, "grove.override.yml"),
+			filepath.Join(globalDir, "grove.override.yaml"),
+		}
+		for _, overridePath := range overrideFiles {
+			if _, err := os.Stat(overridePath); err == nil {
+				overrideData, err := os.ReadFile(overridePath)
+				if err == nil {
+					expanded := expandEnvVars(string(overrideData))
+					var overrideConfig Config
+					if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err == nil {
+						layeredConfig.GlobalOverride = &OverrideSource{
+							Path:   overridePath,
+							Config: &overrideConfig,
+						}
+						layeredConfig.FilePaths[SourceGlobalOverride] = overridePath
+						break // Only load the first one found
+					}
+				}
+			}
+		}
+	}
+
 	// 3. Load Project layer (optional)
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
@@ -469,6 +527,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	// Start with global if it exists
 	if layeredConfig.Global != nil {
 		finalConfig = layeredConfig.Global
+	}
+
+	// Merge global override
+	if layeredConfig.GlobalOverride != nil {
+		finalConfig = mergeConfigs(finalConfig, layeredConfig.GlobalOverride.Config)
 	}
 
 	// Merge ecosystem config (after global, before project)
