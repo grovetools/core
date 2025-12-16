@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/mattsolo1/grove-core/logging"
 )
 
 // OpenInEditorWindow finds or creates a window with a given name and opens a file.
@@ -204,8 +206,11 @@ func (c *Client) FocusOrRunCommandInWindow(ctx context.Context, command, windowN
 // If the window exists, it focuses it. If not, it creates the window and runs the command.
 // If the command fails, it displays the error and opens a shell for debugging.
 func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, windowName string, windowIndex int) error {
+	log := logging.NewLogger("tmux")
+
 	session, err := c.GetCurrentSession(ctx)
 	if err != nil {
+		log.WithError(err).Error("Failed to get current tmux session")
 		return fmt.Errorf("failed to get current session: %w", err)
 	}
 
@@ -215,28 +220,30 @@ func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, wi
 	err = c.SelectWindow(ctx, windowTarget)
 	if err == nil {
 		// Window exists, just switch to it (don't kill it - preserve work in progress)
+		log.WithFields(map[string]interface{}{
+			"window": windowName,
+			"target": windowTarget,
+		}).Debug("Switching to existing tmux window")
 		if err := c.SwitchClient(ctx, windowTarget); err != nil {
+			log.WithError(err).WithField("window", windowName).Error("Failed to switch to tmux window")
 			return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
 		}
 		return nil
 	}
 
-	// Determine the shell to use for error handling
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "sh"
-	}
+	log.WithFields(map[string]interface{}{
+		"window":  windowName,
+		"command": command,
+		"index":   windowIndex,
+	}).Debug("Creating new tmux window for TUI")
 
-	// Wrap the command with error handling that keeps the window open
-	wrappedCommand := fmt.Sprintf(`%s -c '%s || { echo; echo "Command failed with exit code $?"; echo "Command: %s"; echo; echo "Press Enter to open a shell for debugging, or Ctrl+C to close..."; read; exec %s; }'`,
-		shell,
-		strings.ReplaceAll(command, "'", `'\''`), // Escape single quotes in command
-		strings.ReplaceAll(command, "'", `'\''`), // Escape for display
-		shell,
-	)
-
-	// Window doesn't exist, create it with the wrapped command
-	if err := c.NewWindow(ctx, session+":", windowName, wrappedCommand); err != nil {
+	// Window doesn't exist, create it with the command
+	// Run the TUI command directly so it manages its own lifecycle
+	if err := c.NewWindow(ctx, session+":", windowName, command); err != nil {
+		log.WithError(err).WithFields(map[string]interface{}{
+			"window":  windowName,
+			"command": command,
+		}).Error("Failed to create tmux window for TUI")
 		return fmt.Errorf("failed to create new window '%s': %w", windowName, err)
 	}
 
@@ -244,14 +251,20 @@ func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, wi
 	if windowIndex >= 0 {
 		if err := c.InsertWindowAt(ctx, session, windowName, windowIndex); err != nil {
 			// Log the error but don't fail - window is still usable
+			log.WithError(err).WithFields(map[string]interface{}{
+				"window": windowName,
+				"index":  windowIndex,
+			}).Warn("Failed to move tmux window to specified index")
 			fmt.Fprintf(os.Stderr, "Warning: failed to move window '%s' to index %d: %v\n", windowName, windowIndex, err)
 		}
 	}
 
 	// Switch the client to the new window to make it active.
 	if err := c.SwitchClient(ctx, windowTarget); err != nil {
+		log.WithError(err).WithField("window", windowName).Error("Failed to switch to newly created tmux window")
 		return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
 	}
 
+	log.WithField("window", windowName).Info("Successfully opened TUI in tmux window")
 	return nil
 }
