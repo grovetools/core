@@ -59,6 +59,9 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Version != "" {
 		result.Version = override.Version
 	}
+	if override.BuildCmd != "" {
+		result.BuildCmd = override.BuildCmd
+	}
 
 	// Merge slice fields (replace if present)
 	if override.Workspaces != nil {

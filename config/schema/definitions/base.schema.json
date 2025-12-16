@@ -151,6 +151,10 @@
       "type": "array",
       "description": "List of workspace directories in this ecosystem"
     },
+    "build_cmd": {
+      "type": "string",
+      "description": "Custom command for 'grove build' (e.g."
+    },
     "notebooks": {
       "$ref": "#/$defs/NotebooksConfig",
       "description": "Configuration for notebooks"

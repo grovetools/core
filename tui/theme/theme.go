@@ -157,6 +157,7 @@ type Theme struct {
 	Error   lipgloss.Style
 	Warning lipgloss.Style
 	Info    lipgloss.Style
+	Magenta lipgloss.Style // Magenta/violet for special statuses like interrupted
 
 	// Text styles - visual hierarchy
 	Bold        lipgloss.Style // Emphasized text
@@ -297,6 +298,10 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 
 		Info: lipgloss.NewStyle().
 			Foreground(colors.Cyan).
+			Bold(true),
+
+		Magenta: lipgloss.NewStyle().
+			Foreground(colors.Violet).
 			Bold(true),
 
 		// Text hierarchy: Bold → Normal → Muted
