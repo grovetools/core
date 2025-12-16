@@ -276,6 +276,14 @@ func (m *Model) OpenFile(filepath string) {
 	go m.v.Command(fmt.Sprintf("edit %s", filepath))
 }
 
+// Save saves the current buffer and waits for completion.
+func (m *Model) Save() error {
+	if m.v != nil {
+		return m.v.Command("write")
+	}
+	return nil
+}
+
 // Close closes the Neovim process.
 func (m *Model) Close() error {
 	if m.v != nil {
