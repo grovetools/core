@@ -250,17 +250,22 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		configDir = s.configPath
 	}
 	layeredCfg, err := config.LoadLayered(configDir)
-	if err != nil || layeredCfg.Global == nil {
-		s.logger.Warn("No global grove.yml found or failed to load. No 'groves' to scan.")
+	if err != nil {
+		s.logger.Warnf("Failed to load layered config: %v. No 'groves' to scan.", err)
 		return result, nil // Not a fatal error, just means no paths to scan.
+	}
+	if layeredCfg.Global == nil {
+		s.logger.Warn("No global grove.yml found. No 'groves' to scan.")
+		return result, nil
 	}
 
 	// Support both Groves (new) and SearchPaths (legacy)
-	groves := layeredCfg.Global.Groves
-	if len(groves) == 0 && len(layeredCfg.Global.SearchPaths) > 0 {
+	// Use Final config to include global overrides
+	groves := layeredCfg.Final.Groves
+	if len(groves) == 0 && len(layeredCfg.Final.SearchPaths) > 0 {
 		// Fallback to SearchPaths for backward compatibility
 		groves = make(map[string]config.GroveSourceConfig)
-		for k, v := range layeredCfg.Global.SearchPaths {
+		for k, v := range layeredCfg.Final.SearchPaths {
 			groves[k] = config.GroveSourceConfig{
 				Path:        v.Path,
 				Enabled:     v.Enabled,
@@ -444,9 +449,9 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		}
 	}
 
-	// 4. Process explicit projects from global config
-	if layeredCfg.Global != nil {
-		for _, ep := range layeredCfg.Global.ExplicitProjects {
+	// 4. Process explicit projects from global config (use Final to include overrides)
+	if layeredCfg.Final != nil {
+		for _, ep := range layeredCfg.Final.ExplicitProjects {
 			if !ep.Enabled {
 				continue
 			}
