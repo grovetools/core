@@ -279,19 +279,16 @@ func (m Model) View() string {
 	// Get the viewport content (already wrapped to width - 1 in setWrappedContent)
 	content := m.viewport.View()
 
-	// Generate scrollbar for the viewport height
-	scrollbar := m.generateScrollbar(m.viewport.Height)
-
 	// Split content into lines
 	lines := strings.Split(content, "\n")
+
+	// Generate scrollbar for the actual number of lines displayed
+	scrollbar := m.generateScrollbar(len(lines))
 
 	// Overlay scrollbar on the right side of each line
 	var result []string
 	for i := 0; i < len(lines); i++ {
-		line := ""
-		if i < len(lines) {
-			line = lines[i]
-		}
+		line := lines[i]
 
 		scrollbarChar := " "
 		if i < len(scrollbar) {
