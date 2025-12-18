@@ -120,8 +120,8 @@ func (m *Model) generateScrollbar(height int) []string {
 
 	scrollbar := make([]string, height)
 
-	// Get total lines from our stored lines
-	totalLines := len(m.lines)
+	// Get total lines from the viewport's total line count.
+	totalLines := m.viewport.TotalLineCount()
 	if totalLines == 0 {
 		// No content, show empty scrollbar
 		for i := 0; i < height; i++ {
