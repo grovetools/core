@@ -95,8 +95,14 @@ func (m *Model) setWrappedContent() {
 		return
 	}
 
-	// Use a lipgloss style for wrapping. Subtract width for padding/scrollbar.
-	wrapStyle := lipgloss.NewStyle().Width(m.width - 2)
+	// Wrap to viewport width - 1 for scrollbar.
+	// The viewport itself is set to m.width, but we need room for the scrollbar.
+	wrapWidth := m.viewport.Width - 1
+	if wrapWidth < 1 {
+		wrapWidth = 1
+	}
+
+	wrapStyle := lipgloss.NewStyle().Width(wrapWidth)
 
 	var wrappedLines []string
 	for _, line := range m.lines {
@@ -104,6 +110,75 @@ func (m *Model) setWrappedContent() {
 	}
 
 	m.viewport.SetContent(strings.Join(wrappedLines, "\n"))
+}
+
+// generateScrollbar creates a visual scrollbar based on viewport position.
+func (m *Model) generateScrollbar(height int) []string {
+	if !m.ready || height <= 0 {
+		return []string{}
+	}
+
+	scrollbar := make([]string, height)
+
+	// Get total lines from our stored lines
+	totalLines := len(m.lines)
+	if totalLines == 0 {
+		// No content, show empty scrollbar
+		for i := 0; i < height; i++ {
+			scrollbar[i] = theme.DefaultTheme.Muted.Render(" ")
+		}
+		return scrollbar
+	}
+
+	// If content fits entirely in view, show all thumb
+	if totalLines <= m.viewport.Height {
+		for i := 0; i < height; i++ {
+			scrollbar[i] = theme.DefaultTheme.Muted.Render("█")
+		}
+		return scrollbar
+	}
+
+	// Calculate scrollbar thumb size proportional to visible content
+	thumbSize := max(1, (height*m.viewport.Height)/totalLines)
+
+	// Calculate scroll position (0.0 to 1.0)
+	scrollPercent := m.viewport.ScrollPercent()
+	if scrollPercent < 0 {
+		scrollPercent = 0
+	}
+	if scrollPercent > 1 {
+		scrollPercent = 1
+	}
+
+	// Calculate thumb position in scrollbar
+	maxThumbStart := height - thumbSize
+	thumbStart := int(float64(maxThumbStart)*scrollPercent + 0.5)
+
+	// Ensure thumb doesn't go out of bounds
+	if thumbStart < 0 {
+		thumbStart = 0
+	}
+	if thumbStart > maxThumbStart {
+		thumbStart = maxThumbStart
+	}
+
+	// Generate scrollbar characters
+	for i := 0; i < height; i++ {
+		if i >= thumbStart && i < thumbStart+thumbSize {
+			scrollbar[i] = theme.DefaultTheme.Muted.Render("█") // Thumb
+		} else {
+			scrollbar[i] = theme.DefaultTheme.Muted.Render("░") // Track
+		}
+	}
+
+	return scrollbar
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // SetContent displays static content, stopping any live tailing.
@@ -195,12 +270,39 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// View renders the log viewer.
+// View renders the log viewer with scrollbar.
 func (m Model) View() string {
 	if !m.ready {
 		return "Initializing log viewer..."
 	}
-	return m.viewport.View()
+
+	// Get the viewport content (already wrapped to width - 1 in setWrappedContent)
+	content := m.viewport.View()
+
+	// Generate scrollbar for the viewport height
+	scrollbar := m.generateScrollbar(m.viewport.Height)
+
+	// Split content into lines
+	lines := strings.Split(content, "\n")
+
+	// Overlay scrollbar on the right side of each line
+	var result []string
+	for i := 0; i < len(lines); i++ {
+		line := ""
+		if i < len(lines) {
+			line = lines[i]
+		}
+
+		scrollbarChar := " "
+		if i < len(scrollbar) {
+			scrollbarChar = scrollbar[i]
+		}
+
+		// Simply append scrollbar - content is already wrapped to the correct width
+		result = append(result, line+scrollbarChar)
+	}
+
+	return strings.Join(result, "\n")
 }
 
 // IsFollowing returns whether the log viewer is in follow mode.
