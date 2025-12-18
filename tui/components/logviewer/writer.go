@@ -11,10 +11,11 @@ import (
 // It buffers partial lines until a newline is encountered, ensuring that log lines are not split
 // in the middle when streaming output.
 type StreamWriter struct {
-	program   *tea.Program
-	workspace string
-	buffer    strings.Builder
-	mu        sync.Mutex
+	program           *tea.Program
+	workspace         string
+	buffer            strings.Builder
+	mu                sync.Mutex
+	NoWorkspacePrefix bool // If true, LogLineMsg will have NoPrefix set
 }
 
 // NewStreamWriter creates a new StreamWriter that sends log lines to the given TUI program.
@@ -51,6 +52,7 @@ func (w *StreamWriter) Write(p []byte) (n int, err error) {
 				w.program.Send(LogLineMsg{
 					Workspace: w.workspace,
 					Line:      lines[i],
+					NoPrefix:  w.NoWorkspacePrefix,
 				})
 			}
 		}

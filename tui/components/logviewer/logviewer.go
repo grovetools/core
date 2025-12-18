@@ -20,6 +20,7 @@ import (
 type LogLineMsg struct {
 	Workspace string
 	Line      string
+	NoPrefix  bool // If true, formatLogLine will not add a workspace prefix
 }
 
 // Model is the TUI component for viewing logs.
@@ -155,7 +156,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - 1
 		m.ready = true
 	case LogLineMsg:
-		formattedLine := formatLogLine(msg.Workspace, msg.Line)
+		formattedLine := formatLogLine(msg.Workspace, msg.Line, msg.NoPrefix)
 		m.lines = append(m.lines, formattedLine)
 		m.viewport.SetContent(strings.Join(m.lines, "\n"))
 		if m.follow {
@@ -190,9 +191,13 @@ func (m Model) IsFollowing() bool {
 }
 
 // formatLogLine is a simplified log formatter for the TUI component.
-func formatLogLine(workspace, line string) string {
+func formatLogLine(workspace, line string, noPrefix bool) string {
 	var logMap map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &logMap); err != nil {
+		// If no prefix is requested, just return the raw line.
+		if noPrefix {
+			return line
+		}
 		// Pass through raw output without adding prefixes for Job Output and System
 		if workspace == "Job Output" || workspace == "System" {
 			return line
@@ -224,18 +229,16 @@ func formatLogLine(workspace, line string) string {
 		levelStyle = theme.DefaultTheme.Info
 	}
 
+	// Build the final log line parts
+	var parts []string
 	if timeStr != "" {
-		return fmt.Sprintf("%s [%s] %s: %s",
-			timeStr,
-			theme.DefaultTheme.Accent.Render(workspace),
-			levelStyle.Render(strings.ToUpper(level)),
-			msg,
-		)
+		parts = append(parts, timeStr)
 	}
+	if !noPrefix {
+		parts = append(parts, fmt.Sprintf("[%s]", theme.DefaultTheme.Accent.Render(workspace)))
+	}
+	parts = append(parts, levelStyle.Render(strings.ToUpper(level))+":")
+	parts = append(parts, msg)
 
-	return fmt.Sprintf("[%s] %s: %s",
-		theme.DefaultTheme.Accent.Render(workspace),
-		levelStyle.Render(strings.ToUpper(level)),
-		msg,
-	)
+	return strings.Join(parts, " ")
 }
