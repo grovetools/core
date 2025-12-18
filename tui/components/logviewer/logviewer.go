@@ -89,11 +89,28 @@ func (m *Model) Stop() {
 	m.tails = nil
 }
 
+// setWrappedContent wraps the content to the viewport's current width.
+func (m *Model) setWrappedContent() {
+	if !m.ready {
+		return
+	}
+
+	// Use a lipgloss style for wrapping. Subtract width for padding/scrollbar.
+	wrapStyle := lipgloss.NewStyle().Width(m.width - 2)
+
+	var wrappedLines []string
+	for _, line := range m.lines {
+		wrappedLines = append(wrappedLines, wrapStyle.Render(line))
+	}
+
+	m.viewport.SetContent(strings.Join(wrappedLines, "\n"))
+}
+
 // SetContent displays static content, stopping any live tailing.
 func (m *Model) SetContent(content string) {
 	m.Stop()
 	m.lines = strings.Split(content, "\n")
-	m.viewport.SetContent(strings.Join(m.lines, "\n"))
+	m.setWrappedContent()
 	m.viewport.GotoBottom()
 }
 
@@ -155,10 +172,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - 1
 		m.ready = true
+		m.setWrappedContent()
 	case LogLineMsg:
 		formattedLine := formatLogLine(msg.Workspace, msg.Line, msg.NoPrefix)
 		m.lines = append(m.lines, formattedLine)
-		m.viewport.SetContent(strings.Join(m.lines, "\n"))
+		m.setWrappedContent()
 		if m.follow {
 			m.viewport.GotoBottom()
 		}
