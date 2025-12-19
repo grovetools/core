@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hpcloud/tail"
 	"github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/mattsolo1/grove-core/tui/utils/scrollbar"
 )
 
 // LogLineMsg is sent when a new log line is received.
@@ -113,72 +114,12 @@ func (m *Model) setWrappedContent() {
 }
 
 // generateScrollbar creates a visual scrollbar based on viewport position.
+// Deprecated: Use scrollbar.Generate directly instead.
 func (m *Model) generateScrollbar(height int) []string {
-	if !m.ready || height <= 0 {
+	if !m.ready {
 		return []string{}
 	}
-
-	scrollbar := make([]string, height)
-
-	// Get total lines from the viewport's total line count.
-	totalLines := m.viewport.TotalLineCount()
-	if totalLines == 0 {
-		// No content, show empty scrollbar
-		for i := 0; i < height; i++ {
-			scrollbar[i] = theme.DefaultTheme.Muted.Render(" ")
-		}
-		return scrollbar
-	}
-
-	// If content fits entirely in view, show all thumb
-	if totalLines <= m.viewport.Height {
-		for i := 0; i < height; i++ {
-			scrollbar[i] = theme.DefaultTheme.Muted.Render("█")
-		}
-		return scrollbar
-	}
-
-	// Calculate scrollbar thumb size proportional to visible content
-	thumbSize := max(1, (height*m.viewport.Height)/totalLines)
-
-	// Calculate scroll position (0.0 to 1.0)
-	scrollPercent := m.viewport.ScrollPercent()
-	if scrollPercent < 0 {
-		scrollPercent = 0
-	}
-	if scrollPercent > 1 {
-		scrollPercent = 1
-	}
-
-	// Calculate thumb position in scrollbar
-	maxThumbStart := height - thumbSize
-	thumbStart := int(float64(maxThumbStart)*scrollPercent + 0.5)
-
-	// Ensure thumb doesn't go out of bounds
-	if thumbStart < 0 {
-		thumbStart = 0
-	}
-	if thumbStart > maxThumbStart {
-		thumbStart = maxThumbStart
-	}
-
-	// Generate scrollbar characters
-	for i := 0; i < height; i++ {
-		if i >= thumbStart && i < thumbStart+thumbSize {
-			scrollbar[i] = theme.DefaultTheme.Muted.Render("█") // Thumb
-		} else {
-			scrollbar[i] = theme.DefaultTheme.Muted.Render("░") // Track
-		}
-	}
-
-	return scrollbar
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return scrollbar.Generate(&m.viewport, height)
 }
 
 // SetContent displays static content, stopping any live tailing.
