@@ -21,7 +21,7 @@ type SearchPathConfig struct {
 // GroveSourceConfig defines the configuration for a single grove source.
 type GroveSourceConfig struct {
 	Path        string `yaml:"path"`
-	Enabled     bool   `yaml:"enabled"`
+	Enabled     *bool  `yaml:"enabled,omitempty"`
 	Description string `yaml:"description,omitempty"`
 	Notebook    string `yaml:"notebook,omitempty"`
 }
@@ -169,9 +169,17 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		// Migrate old `search_paths` key to new `groves`
 		c.Groves = make(map[string]GroveSourceConfig)
 		for k, v := range raw.SearchPaths {
+			var enabledPtr *bool
+			if v.Enabled {
+				trueVal := true
+				enabledPtr = &trueVal
+			} else {
+				falseVal := false
+				enabledPtr = &falseVal
+			}
 			c.Groves[k] = GroveSourceConfig{
 				Path:        v.Path,
-				Enabled:     v.Enabled,
+				Enabled:     enabledPtr,
 				Description: v.Description,
 			}
 		}
@@ -252,6 +260,15 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 func (c *Config) SetDefaults() {
 	if c.Version == "" {
 		c.Version = "1.0"
+	}
+
+	// Set default Enabled=true for all grove sources that don't explicitly set it
+	for key, grove := range c.Groves {
+		if grove.Enabled == nil {
+			trueVal := true
+			grove.Enabled = &trueVal
+			c.Groves[key] = grove
+		}
 	}
 }
 

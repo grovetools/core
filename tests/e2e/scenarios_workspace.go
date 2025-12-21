@@ -42,10 +42,11 @@ func setupTestEnvironment(ctx *harness.Context) error {
 		return err
 	}
 
+	trueVal := true
 	globalCfg := &config.Config{
 		Groves: map[string]config.GroveSourceConfig{
-			"work": {Path: "~/work", Enabled: true},
-			"play": {Path: "~/play", Enabled: true},
+			"work": {Path: "~/work", Enabled: &trueVal},
+			"play": {Path: "~/play", Enabled: &trueVal},
 		},
 	}
 	data, err := yaml.Marshal(globalCfg)

@@ -266,9 +266,17 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		// Fallback to SearchPaths for backward compatibility
 		groves = make(map[string]config.GroveSourceConfig)
 		for k, v := range layeredCfg.Final.SearchPaths {
+			var enabledPtr *bool
+			if v.Enabled {
+				trueVal := true
+				enabledPtr = &trueVal
+			} else {
+				falseVal := false
+				enabledPtr = &falseVal
+			}
 			groves[k] = config.GroveSourceConfig{
 				Path:        v.Path,
-				Enabled:     v.Enabled,
+				Enabled:     enabledPtr,
 				Description: v.Description,
 			}
 		}
@@ -304,7 +312,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}()
 
 	for key, groveCfg := range groves {
-		if !groveCfg.Enabled {
+		if groveCfg.Enabled != nil && !*groveCfg.Enabled {
 			continue
 		}
 

@@ -48,12 +48,13 @@ func setupAdvancedEnvironment(ctx *harness.Context) error {
 	}
 
 	// Create global config with overlapping groves
+	trueVal := true
 	globalCfg := &config.Config{
 		Groves: map[string]config.GroveSourceConfig{
-			"work":      {Path: "~/work", Enabled: true},
-			"play":      {Path: "~/play", Enabled: true},
-			"code":      {Path: "~/code", Enabled: true},
-			"code-work": {Path: "~/code/work", Enabled: true}, // Overlaps with "code"
+			"work":      {Path: "~/work", Enabled: &trueVal},
+			"play":      {Path: "~/play", Enabled: &trueVal},
+			"code":      {Path: "~/code", Enabled: &trueVal},
+			"code-work": {Path: "~/code/work", Enabled: &trueVal}, // Overlaps with "code"
 		},
 	}
 	data, err := yaml.Marshal(globalCfg)

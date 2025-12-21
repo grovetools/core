@@ -57,11 +57,13 @@ func setupEdgeCasesEnvironment(ctx *harness.Context) error {
 	}
 
 	// Create global config with one disabled grove
+	trueVal := true
+	falseVal := false
 	globalCfg := &config.Config{
 		Groves: map[string]config.GroveSourceConfig{
-			"work":     {Path: "~/work", Enabled: true},
-			"play":     {Path: "~/play", Enabled: true},
-			"disabled": {Path: "~/disabled", Enabled: false},
+			"work":     {Path: "~/work", Enabled: &trueVal},
+			"play":     {Path: "~/play", Enabled: &trueVal},
+			"disabled": {Path: "~/disabled", Enabled: &falseVal},
 		},
 	}
 	data, err := yaml.Marshal(globalCfg)
