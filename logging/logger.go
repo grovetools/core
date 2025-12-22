@@ -13,6 +13,7 @@ import (
 
 	"github.com/mattn/go-isatty"
 	"github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"github.com/mattsolo1/grove-core/version"
 	"github.com/sirupsen/logrus"
 )
@@ -303,12 +304,23 @@ func NewLogger(component string) *logrus.Entry {
 			// Use explicitly configured path
 			logFilePath = expandPath(logCfg.File.Path)
 		} else {
-			// Default to .grove/logs/workspace-<date>.log in the current working directory
+			// Default to .grove/logs/workspace-<date>.log in the project root
+			// Use workspace-aware path resolution to find the correct project root
 			cwd, err := os.Getwd()
 			if err == nil {
+				// Determine the log base path using workspace discovery
+				logBasePath := cwd // fallback to cwd if not in a workspace
+
+				// Try to find the workspace containing the current directory
+				node, err := workspace.GetProjectByPath(cwd)
+				if err == nil && node != nil {
+					// Use the workspace root path for logs
+					logBasePath = node.Path
+				}
+
 				now := time.Now()
 				dateStr := now.Format("2006-01-02")
-				logFilePath = filepath.Join(cwd, ".grove", "logs", fmt.Sprintf("workspace-%s.log", dateStr))
+				logFilePath = filepath.Join(logBasePath, ".grove", "logs", fmt.Sprintf("workspace-%s.log", dateStr))
 			}
 		}
 

@@ -29,6 +29,8 @@ func main() {
 		NotebooksXDGConfigHomeScenario(),
 		// Logging scenarios
 		WorkspaceLogCreationScenario(),
+		WorkspaceRootLogPlacementScenario(),
+		EcosystemLogPlacementScenario(),
 		LoggingJSONFormatScenario(),
 		LoggingJSONFieldsScenario(),
 		LoggingNestedJSONScenario(),
