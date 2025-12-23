@@ -161,7 +161,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		for i, ws := range workspaces {
 			workspacePaths[i] = ws.Path
 		}
-		return runLogsTUI(workspacePaths, follow)
+		return runLogsTUI(workspacePaths, follow, overrideOpts)
 	}
 
 	// 3. Find log files and start tailing

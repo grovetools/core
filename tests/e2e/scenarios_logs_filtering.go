@@ -19,19 +19,20 @@ func LogsCLIFilteringScenario() *harness.Scenario {
 			harness.NewStep("Setup test logs and config", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				// Create grove.yml with component filtering
+							// Create grove.yml with component filtering
 				groveYML := `name: log-filtering-test
 version: "1.0"
-extensions:
-  logging:
-    file:
-      enabled: true
-      format: json
-    groups:
-      backend: [api, db]
-    component_filtering:
-      hide:
-        - cache
+logging:
+  file:
+    enabled: true
+    format: json
+  groups:
+    backend: [api, db]
+  component_filtering:
+    hide:
+      - cache
+      - grove-ecosystem
+  show_current_project: false
 `
 				if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), groveYML); err != nil {
 					return fmt.Errorf("failed to write grove.yml: %w", err)
@@ -57,20 +58,15 @@ extensions:
 				return nil
 			}),
 			harness.NewStep("Test default filtering", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
 				// Run logs command - should hide 'cache' and 'grove-mcp'
-				cmd := ctx.Command(coreBinary, "logs", "--json")
+				cmd := ctx.Bin("logs", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
 					return fmt.Errorf("logs command failed with exit code %d: %s", result.ExitCode, result.Stderr)
 				}
 
-				output := result.Stdout
+					output := result.Stdout
 
 				// Verify visible logs
 				if !strings.Contains(output, `"component":"api"`) {
@@ -94,12 +90,7 @@ extensions:
 				return nil
 			}),
 			harness.NewStep("Test --show-all flag", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
-				cmd := ctx.Command(coreBinary, "logs", "--show-all", "--json")
+				cmd := ctx.Bin( "logs", "--show-all", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -119,12 +110,7 @@ extensions:
 				return nil
 			}),
 			harness.NewStep("Test --component flag", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
-				cmd := ctx.Command(coreBinary, "logs", "--component", "db,frontend", "--json")
+				cmd := ctx.Bin( "logs", "--component", "db,frontend", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -150,12 +136,7 @@ extensions:
 				return nil
 			}),
 			harness.NewStep("Test --also-show flag", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
-				cmd := ctx.Command(coreBinary, "logs", "--also-show", "cache", "--json")
+				cmd := ctx.Bin( "logs", "--also-show", "cache", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -176,12 +157,7 @@ extensions:
 				return nil
 			}),
 			harness.NewStep("Test --also-show with group", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
-				cmd := ctx.Command(coreBinary, "logs", "--also-show", "grove-ecosystem", "--json")
+				cmd := ctx.Bin( "logs", "--also-show", "grove-ecosystem", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -200,30 +176,24 @@ extensions:
 			harness.NewStep("Test 'only' config rule", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				// Update grove.yml to use 'only' rule
+					// Update grove.yml to use 'only' rule
 				groveYML := `name: log-filtering-test
 version: "1.0"
-extensions:
-  logging:
-    file:
-      enabled: true
-      format: json
-    groups:
-      backend: [api, db]
-    component_filtering:
-      only:
-        - backend
+logging:
+  file:
+    enabled: true
+    format: json
+  groups:
+    backend: [api, db]
+  component_filtering:
+    only:
+      - backend
 `
 				if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), groveYML); err != nil {
 					return fmt.Errorf("failed to write grove.yml: %w", err)
 				}
 
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
-				cmd := ctx.Command(coreBinary, "logs", "--json")
+				cmd := ctx.Bin( "logs", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -246,12 +216,7 @@ extensions:
 				return nil
 			}),
 			harness.NewStep("Test --component overrides config 'only'", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
-				if err != nil {
-					return err
-				}
-
-				cmd := ctx.Command(coreBinary, "logs", "--component", "frontend", "--json")
+				cmd := ctx.Bin( "logs", "--component", "frontend", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {

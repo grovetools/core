@@ -440,6 +440,7 @@ type logModel struct {
 	jsonTree        jsontree.Model
 	jsonView        bool
 	logConfig       *logging.Config // logging config for component filtering
+	overrideOpts    *logging.OverrideOptions
 }
 
 // Messages
@@ -929,8 +930,8 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Filter based on component visibility config if filters are enabled
 		if m.filtersEnabled {
 			if m.logConfig != nil {
-				// We pass nil for overrides; TUI doesn't support them yet.
-				visibilityResult := logging.GetComponentVisibility(component, m.logConfig, nil)
+				// Pass CLI override options to the visibility check.
+				visibilityResult := logging.GetComponentVisibility(component, m.logConfig, m.overrideOpts)
 				if !visibilityResult.Visible {
 					m.filteredCount++
 					// Skip this log entry and continue waiting for more logs
@@ -1181,7 +1182,7 @@ func getWorkspaceStyle(workspace string) lipgloss.Style {
 }
 
 // Run the logs TUI
-func runLogsTUI(workspaces []string, follow bool) error {
+func runLogsTUI(workspaces []string, follow bool, overrideOpts *logging.OverrideOptions) error {
 	logger := logging.NewLogger("logs-tui")
 
 	// Load logging config for component filtering
@@ -1296,6 +1297,7 @@ func runLogsTUI(workspaces []string, follow bool) error {
 		workspaceColors: make(map[string]lipgloss.Style),
 		ready:           false,
 		logConfig:       &logCfg,
+		overrideOpts:    overrideOpts,
 	}
 
 	// Set the delegate with model reference

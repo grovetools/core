@@ -750,7 +750,8 @@ func LoggingComponentFilterShowScenario() *harness.Scenario {
 version: "1.0"
 logging:
   level: debug
-  show: ["component-a", "component-c"]
+  component_filtering:
+    only: ["component-a", "component-c"]
   file:
     enabled: true
     format: json
@@ -793,12 +794,7 @@ logging:
 			{
 				Name: "Run core logs command and verify only shown components appear",
 				Func: func(ctx *harness.Context) error {
-					coreBinary, err := findCoreBinary()
-					if err != nil {
-						return err
-					}
-
-					cmd := ctx.Command(coreBinary, "logs")
+					cmd := ctx.Bin("logs").Dir(projectDir)
 					result := cmd.Run()
 
 					if result.ExitCode != 0 {
@@ -855,7 +851,8 @@ func LoggingComponentFilterHideScenario() *harness.Scenario {
 version: "1.0"
 logging:
   level: debug
-  hide: ["component-b"]
+  component_filtering:
+    hide: ["component-b"]
   file:
     enabled: true
     format: json
@@ -898,12 +895,7 @@ logging:
 			{
 				Name: "Run core logs command and verify hidden component is filtered",
 				Func: func(ctx *harness.Context) error {
-					coreBinary, err := findCoreBinary()
-					if err != nil {
-						return err
-					}
-
-					cmd := ctx.Command(coreBinary, "logs")
+					cmd := ctx.Bin("logs").Dir(projectDir)
 					result := cmd.Run()
 
 					if result.ExitCode != 0 {
@@ -960,7 +952,8 @@ func LoggingComponentFilterConsistencyScenario() *harness.Scenario {
 version: "1.0"
 logging:
   level: debug
-  show: ["visible-component"]
+  component_filtering:
+    only: ["visible-component"]
   file:
     enabled: true
     format: json
@@ -1000,14 +993,9 @@ logging:
 			{
 				Name: "Run core logs command multiple times and verify consistency",
 				Func: func(ctx *harness.Context) error {
-					coreBinary, err := findCoreBinary()
-					if err != nil {
-						return err
-					}
-
 					// Run the command multiple times
 					for i := 0; i < 3; i++ {
-						cmd := ctx.Command(coreBinary, "logs")
+						cmd := ctx.Bin("logs").Dir(projectDir)
 						result := cmd.Run()
 
 						if result.ExitCode != 0 {
