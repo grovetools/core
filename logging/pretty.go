@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -60,108 +61,179 @@ func (p *PrettyLogger) WithWriter(w io.Writer) *PrettyLogger {
 	return p
 }
 
-// Success logs a success message with a checkmark
-func (p *PrettyLogger) Success(message string) {
-	// Pretty print to console
-	fmt.Fprintf(p.writer, "%s %s\n",
+// SuccessCtx logs a success message to the writer from the context.
+func (p *PrettyLogger) SuccessCtx(ctx context.Context, message string) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s %s\n",
 		p.styles.Success.Render(theme.IconSuccess),
 		p.styles.Success.Render(message))
 }
 
-// InfoPretty logs an info message with pretty formatting
-func (p *PrettyLogger) InfoPretty(message string) {
-	// Pretty print to console
-	fmt.Fprintf(p.writer, "%s\n", p.styles.Info.Render(message))
+// Success logs a success message with a checkmark
+func (p *PrettyLogger) Success(message string) {
+	p.SuccessCtx(context.Background(), message)
 }
 
-// WarnPretty logs a warning with pretty formatting
-func (p *PrettyLogger) WarnPretty(message string) {
-	// Pretty print to console
-	fmt.Fprintf(p.writer, "%s %s\n",
+// InfoPrettyCtx logs an info message with pretty formatting to the writer from the context.
+func (p *PrettyLogger) InfoPrettyCtx(ctx context.Context, message string) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s\n", p.styles.Info.Render(message))
+}
+
+// InfoPretty logs an info message with pretty formatting
+func (p *PrettyLogger) InfoPretty(message string) {
+	p.InfoPrettyCtx(context.Background(), message)
+}
+
+// WarnPrettyCtx logs a warning with pretty formatting to the writer from the context.
+func (p *PrettyLogger) WarnPrettyCtx(ctx context.Context, message string) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s %s\n",
 		p.styles.Warning.Render(theme.IconWarning),
 		p.styles.Warning.Render(message))
 }
 
-// ErrorPretty logs an error with pretty formatting
-func (p *PrettyLogger) ErrorPretty(message string, err error) {
-	// Pretty print to console
-	fmt.Fprintf(p.writer, "%s %s",
+// WarnPretty logs a warning with pretty formatting
+func (p *PrettyLogger) WarnPretty(message string) {
+	p.WarnPrettyCtx(context.Background(), message)
+}
+
+// ErrorPrettyCtx logs an error with pretty formatting to the writer from the context.
+func (p *PrettyLogger) ErrorPrettyCtx(ctx context.Context, message string, err error) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s %s",
 		p.styles.Error.Render(theme.IconError),
 		p.styles.Error.Render(message))
 	if err != nil {
-		fmt.Fprintf(p.writer, ": %s", p.styles.Error.Render(err.Error()))
+		fmt.Fprintf(writer, ": %s", p.styles.Error.Render(err.Error()))
 	}
-	fmt.Fprintln(p.writer)
+	fmt.Fprintln(writer)
 }
 
-// Field logs a key-value pair with pretty formatting
-func (p *PrettyLogger) Field(key string, value interface{}) {
-	// Pretty print
-	fmt.Fprintf(p.writer, "%s: %s\n",
+// ErrorPretty logs an error with pretty formatting
+func (p *PrettyLogger) ErrorPretty(message string, err error) {
+	p.ErrorPrettyCtx(context.Background(), message, err)
+}
+
+// FieldCtx logs a key-value pair with pretty formatting to the writer from the context.
+func (p *PrettyLogger) FieldCtx(ctx context.Context, key string, value interface{}) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s: %s\n",
 		p.styles.Key.Render(key),
 		p.styles.Value.Render(fmt.Sprint(value)))
 }
 
-// Path logs a file path with special formatting
-func (p *PrettyLogger) Path(label string, path string) {
-	// Pretty print
-	fmt.Fprintf(p.writer, "%s: %s\n",
+// Field logs a key-value pair with pretty formatting
+func (p *PrettyLogger) Field(key string, value interface{}) {
+	p.FieldCtx(context.Background(), key, value)
+}
+
+// PathCtx logs a file path with special formatting to the writer from the context.
+func (p *PrettyLogger) PathCtx(ctx context.Context, label string, path string) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s: %s\n",
 		p.styles.Key.Render(label),
 		p.styles.Path.Render(path))
 }
 
-// Code logs code or command output
-func (p *PrettyLogger) Code(content string) {
-	// Pretty print with indentation
+// Path logs a file path with special formatting
+func (p *PrettyLogger) Path(label string, path string) {
+	p.PathCtx(context.Background(), label, path)
+}
+
+// CodeCtx logs code or command output to the writer from the context.
+func (p *PrettyLogger) CodeCtx(ctx context.Context, content string) {
+	writer := GetWriter(ctx)
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
-		fmt.Fprintf(p.writer, "  %s\n", p.styles.Code.Render(line))
+		fmt.Fprintf(writer, "  %s\n", p.styles.Code.Render(line))
 	}
+}
+
+// Code logs code or command output
+func (p *PrettyLogger) Code(content string) {
+	p.CodeCtx(context.Background(), content)
+}
+
+// DividerCtx prints a visual divider to the writer from the context.
+func (p *PrettyLogger) DividerCtx(ctx context.Context) {
+	writer := GetWriter(ctx)
+	divider := strings.Repeat("─", 60)
+	fmt.Fprintln(writer, p.styles.Key.Render(divider))
 }
 
 // Divider prints a visual divider
 func (p *PrettyLogger) Divider() {
-	divider := strings.Repeat("─", 60)
-	fmt.Fprintln(p.writer, p.styles.Key.Render(divider))
+	p.DividerCtx(context.Background())
+}
+
+// BlankCtx prints a blank line to the writer from the context.
+func (p *PrettyLogger) BlankCtx(ctx context.Context) {
+	writer := GetWriter(ctx)
+	fmt.Fprintln(writer)
 }
 
 // Blank prints a blank line
 func (p *PrettyLogger) Blank() {
-	fmt.Fprintln(p.writer)
+	p.BlankCtx(context.Background())
 }
 
-// Section prints a section header with the Grove theme
-func (p *PrettyLogger) Section(title string) {
-	fmt.Fprintf(p.writer, "\n%s %s\n\n",
+// SectionCtx prints a section header with the Grove theme to the writer from the context.
+func (p *PrettyLogger) SectionCtx(ctx context.Context, title string) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "\n%s %s\n\n",
 		theme.DefaultTheme.Header.Render(theme.IconTree),
 		theme.DefaultTheme.Header.Render(title))
 }
 
-// Progress logs a progress message
-func (p *PrettyLogger) Progress(message string) {
-	fmt.Fprintf(p.writer, "%s %s\n",
+// Section prints a section header with the Grove theme
+func (p *PrettyLogger) Section(title string) {
+	p.SectionCtx(context.Background(), title)
+}
+
+// ProgressCtx logs a progress message to the writer from the context.
+func (p *PrettyLogger) ProgressCtx(ctx context.Context, message string) {
+	writer := GetWriter(ctx)
+	fmt.Fprintf(writer, "%s %s\n",
 		p.styles.Info.Render(theme.IconRunning),
 		p.styles.Info.Render(message))
 }
 
-// KeyValue logs multiple key-value pairs
-func (p *PrettyLogger) KeyValues(pairs map[string]interface{}) {
+// Progress logs a progress message
+func (p *PrettyLogger) Progress(message string) {
+	p.ProgressCtx(context.Background(), message)
+}
+
+// KeyValuesCtx logs multiple key-value pairs to the writer from the context.
+func (p *PrettyLogger) KeyValuesCtx(ctx context.Context, pairs map[string]interface{}) {
 	for key, value := range pairs {
-		p.Field(key, value)
+		p.FieldCtx(ctx, key, value)
 	}
 }
 
-// List logs a list of items
-func (p *PrettyLogger) List(items []string) {
+// KeyValue logs multiple key-value pairs
+func (p *PrettyLogger) KeyValues(pairs map[string]interface{}) {
+	p.KeyValuesCtx(context.Background(), pairs)
+}
+
+// ListCtx logs a list of items to the writer from the context.
+func (p *PrettyLogger) ListCtx(ctx context.Context, items []string) {
+	writer := GetWriter(ctx)
 	for _, item := range items {
-		fmt.Fprintf(p.writer, "  %s %s\n",
+		fmt.Fprintf(writer, "  %s %s\n",
 			theme.DefaultTheme.Highlight.Render(theme.IconBullet),
 			item)
 	}
 }
 
-// Box prints content in a styled box
-func (p *PrettyLogger) Box(title, content string) {
+// List logs a list of items
+func (p *PrettyLogger) List(items []string) {
+	p.ListCtx(context.Background(), items)
+}
+
+// BoxCtx prints content in a styled box to the writer from the context.
+func (p *PrettyLogger) BoxCtx(ctx context.Context, title, content string) {
+	writer := GetWriter(ctx)
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Border).
@@ -169,13 +241,19 @@ func (p *PrettyLogger) Box(title, content string) {
 		Width(60)
 
 	if title != "" {
-		fmt.Fprintf(p.writer, "%s\n", theme.DefaultTheme.Header.Render(title))
+		fmt.Fprintf(writer, "%s\n", theme.DefaultTheme.Header.Render(title))
 	}
-	fmt.Fprintf(p.writer, "%s\n", boxStyle.Render(content))
+	fmt.Fprintf(writer, "%s\n", boxStyle.Render(content))
 }
 
-// Status logs a status with an appropriate icon
-func (p *PrettyLogger) Status(status, message string) {
+// Box prints content in a styled box
+func (p *PrettyLogger) Box(title, content string) {
+	p.BoxCtx(context.Background(), title, content)
+}
+
+// StatusCtx logs a status with an appropriate icon to the writer from the context.
+func (p *PrettyLogger) StatusCtx(ctx context.Context, status, message string) {
+	writer := GetWriter(ctx)
 	var icon string
 	var style lipgloss.Style
 
@@ -203,5 +281,10 @@ func (p *PrettyLogger) Status(status, message string) {
 		style = lipgloss.NewStyle()
 	}
 
-	fmt.Fprintf(p.writer, "%s %s\n", style.Render(icon), style.Render(message))
+	fmt.Fprintf(writer, "%s %s\n", style.Render(icon), style.Render(message))
+}
+
+// Status logs a status with an appropriate icon
+func (p *PrettyLogger) Status(status, message string) {
+	p.StatusCtx(context.Background(), status, message)
 }
