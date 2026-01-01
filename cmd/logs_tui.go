@@ -955,7 +955,20 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.mu.Lock()
-		m.items = append(m.items, newItem)
+		// Find insertion point to maintain sorted order by timestamp.
+		// `sort.Search` finds the first index `i` where m.items[i].timestamp is after newItem.timestamp.
+		i := sort.Search(len(m.items), func(j int) bool {
+			return m.items[j].timestamp.After(newItem.timestamp)
+		})
+
+		// Insert newItem at the correct position 'i'.
+		if i == len(m.items) {
+			m.items = append(m.items, newItem)
+		} else {
+			m.items = append(m.items, logItem{}) // Grow slice by one.
+			copy(m.items[i+1:], m.items[i:])     // Shift elements to the right.
+			m.items[i] = newItem                 // Insert the new item.
+		}
 
 		// Update list items
 		items := make([]list.Item, len(m.items))

@@ -51,6 +51,10 @@ func main() {
 		LoggingTUIExistingLogsScenario(),
 		LoggingTUINewFilesScenario(),
 		LoggingTUIFilteringTestScenario(),
+		// TUI sorting scenarios
+		LoggingTUIChronologicalSortingScenario(),
+		LoggingTUILiveUpdateSortingScenario(),
+		LoggingTUIFollowModeSortingScenario(),
 		// Nvim component scenarios
 		// NvimDemoScenario(),
 		// NvimDemoFileBrowserScenario(),
