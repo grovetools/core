@@ -74,6 +74,7 @@ const (
 	nerdIconHelp                  = "󰋗" // md-help_circle (U+F02D7)
 	nerdIconBuild                 = "󰣪" // md-hammer (U+F08EA)
 	nerdIconStop                  = "󰙦" // md-stop_circle (U+F0666)
+	nerdIconEarth                 = "󰇧" // md-earth (U+F01E7)
 
 	nerdIconArrowDown       = "󰁅" // md-arrow_down (U+F0045)
 	nerdIconArrowDownBold   = "󰜮" // md-arrow_down_bold (U+F072E)
@@ -220,6 +221,7 @@ const (
 	asciiIconHelp                  = "[?]"   // Help
 	asciiIconBuild                 = "[B]"   // Build/Hammer
 	asciiIconStop                  = "[S]"   // Stop
+	asciiIconEarth                 = "⨁"     // Earth
 
 	asciiIconArrowDown       = "↓"  // Arrow down
 	asciiIconArrowDownBold   = "vv" // Arrow down bold
@@ -366,6 +368,7 @@ var (
 	IconHelp                  string
 	IconBuild                 string
 	IconStop                  string
+	IconEarth                 string
 
 	IconArrowDown       string
 	IconArrowDownBold   string
@@ -525,6 +528,7 @@ func init() {
 		IconHelp = asciiIconHelp
 		IconBuild = asciiIconBuild
 		IconStop = asciiIconStop
+		IconEarth = asciiIconEarth
 		IconArrowDown = asciiIconArrowDown
 		IconArrowDownBold = asciiIconArrowDownBold
 		IconArrowUp = asciiIconArrowUp
@@ -662,6 +666,7 @@ func init() {
 		IconHelp = nerdIconHelp
 		IconBuild = nerdIconBuild
 		IconStop = nerdIconStop
+		IconEarth = nerdIconEarth
 		IconArrowDown = nerdIconArrowDown
 		IconArrowDownBold = nerdIconArrowDownBold
 		IconArrowUp = nerdIconArrowUp
