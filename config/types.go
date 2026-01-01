@@ -39,6 +39,14 @@ type NoteTypeConfig struct {
 	Description    string `yaml:"description,omitempty"`
 	TemplatePath   string `yaml:"template_path,omitempty"`
 	FilenameFormat string `yaml:"filename_format,omitempty"` // e.g., "date-title", "timestamp-title", "title"
+	// Icon specifies the icon for TUI display (e.g., from theme.Icon... constants)
+	Icon string `yaml:"icon,omitempty"`
+	// IconColor specifies the lipgloss color for the icon in the TUI
+	IconColor string `yaml:"icon_color,omitempty"`
+	// DefaultExpand determines if this group is expanded by default in the TUI
+	DefaultExpand bool `yaml:"default_expand,omitempty"`
+	// SortOrder is used for sorting groups in the TUI (lower numbers appear first)
+	SortOrder int `yaml:"sort_order,omitempty"`
 }
 
 // GlobalNotebookConfig defines the configuration for the system-wide global notebook.
@@ -79,11 +87,13 @@ type Notebook struct {
 
 	// Path templates for customizing directory structure in Centralized Mode.
 	// These are optional and have sensible defaults.
-	NotesPathTemplate     string `yaml:"notes_path_template,omitempty"`
-	PlansPathTemplate     string `yaml:"plans_path_template,omitempty"`
-	ChatsPathTemplate     string `yaml:"chats_path_template,omitempty"`
-	TemplatesPathTemplate string `yaml:"templates_path_template,omitempty"`
-	RecipesPathTemplate   string `yaml:"recipes_path_template,omitempty"`
+	NotesPathTemplate      string `yaml:"notes_path_template,omitempty"`
+	PlansPathTemplate      string `yaml:"plans_path_template,omitempty"`
+	ChatsPathTemplate      string `yaml:"chats_path_template,omitempty"`
+	TemplatesPathTemplate  string `yaml:"templates_path_template,omitempty"`
+	RecipesPathTemplate    string `yaml:"recipes_path_template,omitempty"`
+	InProgressPathTemplate string `yaml:"in_progress_path_template,omitempty"`
+	CompletedPathTemplate  string `yaml:"completed_path_template,omitempty"`
 
 	// Types defines a map of user-configurable note types.
 	// This will override the hardcoded defaults in grove-notebook if provided.

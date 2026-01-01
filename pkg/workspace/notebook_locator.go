@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/mattsolo1/grove-core/config"
@@ -17,6 +18,8 @@ const (
 	defaultChatsPathTemplate       = "workspaces/{{ .Workspace.Name }}/chats"
 	defaultTemplatesPathTemplate   = "workspaces/{{ .Workspace.Name }}/templates"
 	defaultRecipesPathTemplate     = "workspaces/{{ .Workspace.Name }}/recipes"
+	defaultInProgressPathTemplate  = "workspaces/{{ .Workspace.Name }}/in_progress"
+	defaultCompletedPathTemplate   = "workspaces/{{ .Workspace.Name }}/completed"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -596,4 +599,105 @@ func (l *NotebookLocator) GetRecipesDir(node *WorkspaceNode) (string, error) {
 	}
 
 	return filepath.Join(rootDir, renderedPath), nil
+}
+
+// GetInProgressDir is analogous to GetPlansDir but for in_progress notes.
+func (l *NotebookLocator) GetInProgressDir(node *WorkspaceNode) (string, error) {
+	if !l.isCentralized(node) {
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "in_progress"), nil
+	}
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+	tplStr := notebook.InProgressPathTemplate
+	if tplStr == "" {
+		tplStr = defaultInProgressPathTemplate
+	}
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
+// GetCompletedDir is analogous to GetPlansDir but for completed notes.
+func (l *NotebookLocator) GetCompletedDir(node *WorkspaceNode) (string, error) {
+	if !l.isCentralized(node) {
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "completed"), nil
+	}
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+	tplStr := notebook.CompletedPathTemplate
+	if tplStr == "" {
+		tplStr = defaultCompletedPathTemplate
+	}
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
+// GetGroupDir resolves the absolute path for any group directory (e.g., "inbox", "plans", "plans/my-feature").
+// This is the centralized method for resolving all note-related directory paths.
+func (l *NotebookLocator) GetGroupDir(node *WorkspaceNode, groupName string) (string, error) {
+	parts := strings.SplitN(groupName, "/", 2)
+	baseType := parts[0]
+	subPath := ""
+	if len(parts) > 1 {
+		subPath = parts[1]
+	}
+
+	var basePath string
+	var err error
+
+	switch baseType {
+	case "plans":
+		basePath, err = l.GetPlansDir(node)
+	case "chats":
+		basePath, err = l.GetChatsDir(node)
+	case "templates":
+		basePath, err = l.GetTemplatesDir(node)
+	case "recipes":
+		basePath, err = l.GetRecipesDir(node)
+	case "in_progress":
+		basePath, err = l.GetInProgressDir(node)
+	case "completed":
+		basePath, err = l.GetCompletedDir(node)
+	default:
+		// For all other types, it's a subdirectory under the main notes directory.
+		basePath, err = l.GetNotesDir(node, groupName)
+		// Since GetNotesDir already includes the full groupName, we don't need to join subPath.
+		if err != nil {
+			return "", err
+		}
+		return basePath, nil
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	if subPath != "" {
+		return filepath.Join(basePath, subPath), nil
+	}
+
+	return basePath, nil
 }
