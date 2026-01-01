@@ -12,6 +12,18 @@
         },
         "filename_format": {
           "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "icon_color": {
+          "type": "string"
+        },
+        "default_expand": {
+          "type": "boolean"
+        },
+        "sort_order": {
+          "type": "integer"
         }
       },
       "type": "object"
@@ -34,6 +46,12 @@
       "type": "string"
     },
     "recipes_path_template": {
+      "type": "string"
+    },
+    "in_progress_path_template": {
+      "type": "string"
+    },
+    "completed_path_template": {
       "type": "string"
     },
     "types": {
