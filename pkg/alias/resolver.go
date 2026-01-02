@@ -10,7 +10,6 @@ import (
 	"github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/pkg/profiling"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-core/util/pathutil"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,11 +29,12 @@ type aliasLineParts struct {
 
 // AliasResolver discovers available workspaces and resolves aliases to their absolute paths.
 type AliasResolver struct {
-	Provider     *workspace.Provider
-	providerOnce sync.Once
-	DiscoverErr  error
-	configPath   string // Optional: custom config path for testing
-	workDir      string // Current working directory for context-aware resolution
+	Provider        *workspace.Provider
+	providerOnce    sync.Once
+	DiscoverErr     error
+	configPath      string // Optional: custom config path for testing
+	workDir         string // Current working directory for context-aware resolution
+	notebookLocator *workspace.NotebookLocator
 }
 
 // NewAliasResolver creates a new, uninitialized alias resolver.
@@ -72,10 +72,43 @@ func (r *AliasResolver) InitProvider() {
 		}
 
 		r.Provider = workspace.NewProvider(discoveryResult)
+
+		// Initialize NotebookLocator with config
+		cfg, _ := config.LoadDefault()
+		r.notebookLocator = workspace.NewNotebookLocator(cfg)
 	})
 }
 
-// Resolve translates a pure alias string (e.g., "ecosystem:repo") into an absolute path.
+// Resolve translates an alias string into an absolute filesystem path. It supports
+// two primary types of aliases:
+//
+// 1. Project/Workspace Aliases: Used to resolve the root path of a project,
+//    ecosystem, or worktree. These do not contain slashes in their path components.
+//    Examples:
+//      - "project-name"              // Standalone project
+//      - "ecosystem:repo"            // Ecosystem sub-project
+//      - "repo:worktree"             // Worktree
+//      - "ecosystem:repo:worktree"   // Ecosystem repo worktree
+//
+// 2. Notebook Resource Aliases: Used to resolve paths to specific files or
+//    directories within a workspace's notebook structure (e.g., notes, plans, chats).
+//    This format is typically used in configuration files like concept manifests.
+//    Examples:
+//      - "workspace-name:plans/my-plan"      // Plan directory
+//      - "workspace-name:inbox/my-note.md"   // Note file
+//      - "workspace-name:chats/conversation" // Chat file
+//
+// Alias Syntax in Different Contexts:
+//
+// The `@a:` or `@alias:` prefix is a directive used within `.rules` files to
+// distinguish an alias from a file glob pattern. The resolver handles this
+// prefix by stripping it and processing the underlying alias. For example,
+// a rule file might contain `@a:nb:my-project:inbox/note.md`, which is internally
+// resolved using the "my-project:inbox/note.md" resource alias.
+//
+// In YAML configuration files (like concept manifests), the `@a:` prefix is not
+// needed since the context already expects an alias. Use the clean format:
+// `workspace:path/to/resource` directly.
 func (r *AliasResolver) Resolve(alias string) (string, error) {
 	defer profiling.Start("alias.Resolve").Stop()
 	r.InitProvider()
@@ -84,6 +117,16 @@ func (r *AliasResolver) Resolve(alias string) (string, error) {
 	}
 	if r.Provider == nil {
 		return "", fmt.Errorf("workspace provider not initialized")
+	}
+
+	// Check for notebook resource alias format first (workspace:path/to/resource)
+	// Heuristic: if it contains both a colon and a slash, it's likely a resource alias
+	if strings.Contains(alias, ":") && strings.Contains(alias, "/") {
+		// Try to resolve it as a resource alias first
+		if path, err := r.ResolveResourceAlias(alias); err == nil {
+			return path, nil
+		}
+		// If it fails, fall through to the project/worktree alias logic below
 	}
 
 	allNodes := r.Provider.All()
@@ -213,11 +256,66 @@ func (r *AliasResolver) Resolve(alias string) (string, error) {
 	return "", fmt.Errorf("alias not found: '%s'", alias)
 }
 
+// ResolveResourceAlias resolves a notebook resource alias (e.g., "my-project:plans/my-plan")
+// to its full absolute path.
+func (r *AliasResolver) ResolveResourceAlias(alias string) (string, error) {
+	r.InitProvider()
+	if r.DiscoverErr != nil {
+		return "", r.DiscoverErr
+	}
+	if r.Provider == nil {
+		return "", fmt.Errorf("workspace provider not initialized")
+	}
+
+	// 1. Parse the alias into workspace and resource path.
+	workspaceName, resourcePath, err := ParseResourceAlias(alias)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. Resolve the workspace name to a WorkspaceNode.
+	wsNode := r.Provider.FindByName(workspaceName)
+	if wsNode == nil {
+		// Attempt fuzzy matching for better error message.
+		var suggestions []string
+		for _, node := range r.Provider.All() {
+			if strings.Contains(node.Name, workspaceName) {
+				suggestions = append(suggestions, node.Name)
+			}
+		}
+		if len(suggestions) > 0 {
+			return "", fmt.Errorf("workspace not found: '%s'. Did you mean: %s?", workspaceName, strings.Join(suggestions, ", "))
+		}
+		return "", fmt.Errorf("workspace not found: '%s'", workspaceName)
+	}
+
+	// 3. Use NotebookLocator to get the directory based on the resource path
+	// The resource path format is like "plans/my-plan" or "inbox/note.md"
+	// We need to extract the first component to determine the resource type
+	parts := strings.SplitN(resourcePath, "/", 2)
+	groupName := parts[0] // e.g., "plans", "inbox", "chats"
+	remainingPath := ""
+	if len(parts) > 1 {
+		remainingPath = parts[1] // e.g., "my-plan", "note.md"
+	}
+
+	// Use GetGroupDir to resolve the base directory for the resource type
+	groupDir, err := r.notebookLocator.GetGroupDir(wsNode, groupName)
+	if err != nil {
+		return "", fmt.Errorf("could not resolve group directory for '%s' in workspace '%s': %w", groupName, workspaceName, err)
+	}
+
+	// 4. Join with the remaining path to get the final absolute path
+	if remainingPath != "" {
+		return filepath.Join(groupDir, remainingPath), nil
+	}
+	return groupDir, nil
+}
+
 // ResolveLine parses a full rule line, resolves the alias, and reconstructs the line with an absolute path.
 func (r *AliasResolver) ResolveLine(line string) (string, error) {
 	defer profiling.Start("alias.ResolveLine").Stop()
-	// --- Start Notebook Alias Resolution ---
-	// Check for special notebook alias first, as it has higher priority.
+	// Handle @a:nb: and @alias:nb: prefixes for notebook paths
 	trimmedLine := strings.TrimSpace(line)
 	prefix := ""
 	if strings.HasPrefix(trimmedLine, "!") {
@@ -225,59 +323,22 @@ func (r *AliasResolver) ResolveLine(line string) (string, error) {
 		trimmedLine = strings.TrimSpace(strings.TrimPrefix(trimmedLine, "!"))
 	}
 
-	notebookAliasPrefix1 := "@a:nb:"
-	notebookAliasPrefix2 := "@alias:nb:"
-	var notebookAlias string
-
-	if strings.HasPrefix(trimmedLine, notebookAliasPrefix1) {
-		notebookAlias = strings.TrimPrefix(trimmedLine, notebookAliasPrefix1)
-	} else if strings.HasPrefix(trimmedLine, notebookAliasPrefix2) {
-		notebookAlias = strings.TrimPrefix(trimmedLine, notebookAliasPrefix2)
-	}
-
-	if notebookAlias != "" {
-		// Load config to find notebook root. The config loader now handles backward compatibility.
-		cfg, err := config.LoadFrom(r.workDir)
-		if err != nil {
-			return "", fmt.Errorf("could not load grove config to resolve notebook alias: %w", err)
-		}
-		if cfg == nil || cfg.Notebooks == nil || cfg.Notebooks.Definitions == nil || len(cfg.Notebooks.Definitions) == 0 {
-			return "", fmt.Errorf("no 'notebooks' are configured in grove.yml; cannot resolve alias '%s'", line)
-		}
-
-		var notebookName, relativePath string
-		parts := strings.SplitN(notebookAlias, ":", 2)
-
-		// Determine if the alias includes a notebook name or implies "default".
-		if len(parts) > 1 && cfg.Notebooks.Definitions[parts[0]] != nil {
-			notebookName = parts[0]
-			relativePath = parts[1]
+	if strings.HasPrefix(trimmedLine, "@a:nb:") || strings.HasPrefix(trimmedLine, "@alias:nb:") {
+		var resourceAlias string
+		if strings.HasPrefix(trimmedLine, "@a:nb:") {
+			resourceAlias = strings.TrimPrefix(trimmedLine, "@a:nb:")
 		} else {
-			// Use default notebook from rules, or fall back to "default"
-			notebookName = "default"
-			if cfg.Notebooks.Rules != nil && cfg.Notebooks.Rules.Default != "" {
-				notebookName = cfg.Notebooks.Rules.Default
-			}
-			relativePath = notebookAlias
+			resourceAlias = strings.TrimPrefix(trimmedLine, "@alias:nb:")
 		}
+		resourceAlias = strings.TrimSpace(resourceAlias)
 
-		notebook, exists := cfg.Notebooks.Definitions[notebookName]
-		if !exists {
-			return "", fmt.Errorf("notebook '%s' not found in configuration; cannot resolve alias '%s'", notebookName, line)
-		}
-		if notebook.RootDir == "" {
-			return "", fmt.Errorf("notebook '%s' has no 'root_dir' configured; cannot resolve alias '%s'", notebookName, line)
-		}
-
-		notebookRoot, err := pathutil.Expand(notebook.RootDir)
+		// Use the new unified resolver.
+		resolvedPath, err := r.ResolveResourceAlias(resourceAlias)
 		if err != nil {
-			return "", fmt.Errorf("could not expand notebook root_dir '%s': %w", notebook.RootDir, err)
+			return "", err
 		}
-
-		resolvedPath := filepath.Join(notebookRoot, relativePath)
 		return prefix + resolvedPath, nil
 	}
-	// --- End Notebook Alias Resolution ---
 
 	parts, err := r.parseAliasLine(line)
 	if err != nil {

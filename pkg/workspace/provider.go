@@ -59,6 +59,17 @@ func (p *Provider) All() []*WorkspaceNode {
 	return p.nodes
 }
 
+// FindByName returns the first workspace node that matches the given name.
+// It returns nil if no matching workspace is found.
+func (p *Provider) FindByName(name string) *WorkspaceNode {
+	for _, node := range p.nodes {
+		if node.Name == name {
+			return node
+		}
+	}
+	return nil
+}
+
 // FindByPath returns the WorkspaceNode for a given absolute path.
 // It performs a fast lookup using an internal map.
 func (p *Provider) FindByPath(path string) *WorkspaceNode {
