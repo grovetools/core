@@ -82,33 +82,40 @@ func (r *AliasResolver) InitProvider() {
 // Resolve translates an alias string into an absolute filesystem path. It supports
 // two primary types of aliases:
 //
-// 1. Project/Workspace Aliases: Used to resolve the root path of a project,
-//    ecosystem, or worktree. These do not contain slashes in their path components.
+// 1. Project/Workspace Aliases (default): Used to resolve the root path of a project,
+//    ecosystem, or worktree. Can optionally use "project:" prefix for clarity.
 //    Examples:
-//      - "project-name"              // Standalone project
-//      - "ecosystem:repo"            // Ecosystem sub-project
-//      - "repo:worktree"             // Worktree
-//      - "ecosystem:repo:worktree"   // Ecosystem repo worktree
+//      - "project-name"                           // Standalone project
+//      - "ecosystem:repo"                         // Ecosystem sub-project
+//      - "repo:worktree"                          // Worktree
+//      - "ecosystem:repo:worktree"                // Ecosystem repo worktree
+//      - "worktree:repo/pkg/alias/**"             // Path within worktree
+//      - "project:ecosystem:repo/cmd/**"          // Explicit (optional)
 //
-// 2. Notebook Resource Aliases: Used to resolve paths to specific files or
-//    directories within a workspace's notebook structure (e.g., notes, plans, chats).
-//    This format is typically used in configuration files like concept manifests.
+// 2. Notebook Resource Aliases (requires "nb:" prefix): Used to resolve paths to
+//    specific files or directories within a workspace's notebook structure.
+//    The "nb:" prefix is REQUIRED to distinguish from project paths.
 //    Examples:
-//      - "workspace-name:plans/my-plan"      // Plan directory
-//      - "workspace-name:inbox/my-note.md"   // Note file
-//      - "workspace-name:chats/conversation" // Chat file
+//      - "nb:workspace-name:plans/my-plan"        // Plan directory
+//      - "nb:workspace-name:inbox/my-note.md"     // Note file
+//      - "nb:workspace-name:chats/conversation"   // Chat file
 //
 // Alias Syntax in Different Contexts:
 //
-// The `@a:` or `@alias:` prefix is a directive used within `.rules` files to
-// distinguish an alias from a file glob pattern. The resolver handles this
-// prefix by stripping it and processing the underlying alias. For example,
-// a rule file might contain `@a:nb:my-project:inbox/note.md`, which is internally
-// resolved using the "my-project:inbox/note.md" resource alias.
+// In .rules files, use the @a: or @alias: directive:
+//   @a:grove-core/pkg/**                         // Project paths (default)
+//   @a:concepts-eco:grove-core/cmd/**            // Worktree paths
+//   @a:nb:grove-core:inbox/note.md               // Notebook resources (nb: required)
 //
-// In YAML configuration files (like concept manifests), the `@a:` prefix is not
-// needed since the context already expects an alias. Use the clean format:
-// `workspace:path/to/resource` directly.
+// In YAML configuration files (like concept manifests):
+//   related_plans:
+//     - nb:grove-core:plans/architecture         // nb: prefix required
+//   related_notes:
+//     - nb:grove-ecosystem:inbox/brainstorm.md   // nb: prefix required
+//
+// The "nb:" prefix is essential because both project and notebook aliases can contain
+// colons and slashes (e.g., "worktree:repo/path" vs "nb:workspace:path"), making them
+// ambiguous without an explicit marker.
 func (r *AliasResolver) Resolve(alias string) (string, error) {
 	defer profiling.Start("alias.Resolve").Stop()
 	r.InitProvider()
@@ -119,14 +126,14 @@ func (r *AliasResolver) Resolve(alias string) (string, error) {
 		return "", fmt.Errorf("workspace provider not initialized")
 	}
 
-	// Check for notebook resource alias format first (workspace:path/to/resource)
-	// Heuristic: if it contains both a colon and a slash, it's likely a resource alias
-	if strings.Contains(alias, ":") && strings.Contains(alias, "/") {
-		// Try to resolve it as a resource alias first
-		if path, err := r.ResolveResourceAlias(alias); err == nil {
-			return path, nil
-		}
-		// If it fails, fall through to the project/worktree alias logic below
+	// Check for explicit nb: prefix for notebook resources
+	if strings.HasPrefix(alias, "nb:") {
+		return r.ResolveResourceAlias(strings.TrimPrefix(alias, "nb:"))
+	}
+
+	// Optional: support explicit project: prefix (can be omitted)
+	if strings.HasPrefix(alias, "project:") {
+		alias = strings.TrimPrefix(alias, "project:")
 	}
 
 	allNodes := r.Provider.All()
