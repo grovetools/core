@@ -56,7 +56,7 @@ extensions:
 					}
 
 					// 5. Execute 'config-layers' command and verify output
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -133,7 +133,7 @@ groves:
 						return err
 					}
 
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -182,7 +182,7 @@ func CoreConfigMissingScenario() *harness.Scenario {
 						return fmt.Errorf("failed to create project dir: %w", err)
 					}
 
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -232,7 +232,7 @@ groves:
 						return err
 					}
 
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -303,7 +303,7 @@ extensions:
 						return err
 					}
 
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -400,7 +400,7 @@ logging:
 						return err
 					}
 
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -471,7 +471,7 @@ extensions:
 						return err
 					}
 
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}

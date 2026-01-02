@@ -598,14 +598,14 @@ func JSONTreeComponentScenario() *harness.Scenario {
 			{
 				Name: "Find core binary",
 				Func: func(ctx *harness.Context) error {
-					_, err := findCoreBinary()
+					_, err := FindProjectBinary()
 					return err
 				},
 			},
 			{
 				Name: "Run core version to verify binary works",
 				Func: func(ctx *harness.Context) error {
-					coreBinary, _ := findCoreBinary()
+					coreBinary, _ := FindProjectBinary()
 					cmd := ctx.Command(coreBinary, "version")
 					result := cmd.Run()
 

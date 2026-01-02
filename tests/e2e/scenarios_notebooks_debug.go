@@ -92,7 +92,7 @@ notebooks:
 					}
 
 					// Run config-layers to see what config is loaded
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -168,7 +168,7 @@ notebooks:
 					}
 
 					// Get core binary
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}
@@ -240,7 +240,7 @@ version: "1.0"
 					}
 
 					// Run config-layers
-					coreBinary, err := findCoreBinary()
+					coreBinary, err := FindProjectBinary()
 					if err != nil {
 						return err
 					}

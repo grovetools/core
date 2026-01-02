@@ -73,7 +73,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Launch logs TUI", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
+				coreBinary, err := FindProjectBinary()
 				if err != nil {
 					return fmt.Errorf("failed to find core binary: %w", err)
 				}
@@ -247,7 +247,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Launch logs TUI", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
+				coreBinary, err := FindProjectBinary()
 				if err != nil {
 					return err
 				}
@@ -403,7 +403,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Launch logs TUI with follow mode", func(ctx *harness.Context) error {
-				coreBinary, err := findCoreBinary()
+				coreBinary, err := FindProjectBinary()
 				if err != nil {
 					return err
 				}

@@ -12,3 +12,5 @@ grove.yml
 
 # Exclude docs
 !docs
+
+@a:grove-ecosystem:grove-tend::dev-with-tests
