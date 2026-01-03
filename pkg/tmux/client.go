@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -20,8 +21,17 @@ func NewClient() (*Client, error) {
 	}
 
 	builder := command.NewSafeBuilder()
+
+	// Check if we're in a test environment with an isolated tmux socket
+	// Tests set GROVE_TMUX_SOCKET to ensure spawned processes use the same isolated server
+	socket := ""
+	if testSocket := os.Getenv("GROVE_TMUX_SOCKET"); testSocket != "" {
+		socket = testSocket
+	}
+
 	return &Client{
 		builder: builder,
+		socket:  socket,
 	}, nil
 }
 
@@ -42,6 +52,18 @@ func NewClientWithSocket(socket string) (*Client, error) {
 // Socket returns the socket name this client uses, or empty string for default.
 func (c *Client) Socket() string {
 	return c.socket
+}
+
+// KillServer kills the tmux server for this client's socket.
+// This is useful for cleaning up isolated test servers.
+// If the client uses the default socket, this will kill the default tmux server (use with caution!).
+func (c *Client) KillServer(ctx context.Context) error {
+	_, err := c.run(ctx, "kill-server")
+	// Ignore "no server running" errors - server is already gone
+	if err != nil && strings.Contains(err.Error(), "no server running") {
+		return nil
+	}
+	return err
 }
 
 func (c *Client) run(ctx context.Context, args ...string) (string, error) {
