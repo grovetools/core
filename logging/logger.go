@@ -308,6 +308,16 @@ func NewLogger(component string) *logrus.Entry {
 			// Use workspace-aware path resolution to find the correct project root
 			cwd, err := os.Getwd()
 			if err == nil {
+				// Check if cwd actually exists. If not, skip file logging entirely.
+				// This prevents recreating zombie worktree directories that were deleted.
+				if _, err := os.Stat(cwd); err != nil {
+					// cwd doesn't exist - skip file logging (logs still go to stderr)
+					logger.Debugf("Current working directory does not exist: %s. Skipping file logging.", cwd)
+					cwd = ""
+				}
+			}
+
+			if cwd != "" {
 				// Determine the log base path using workspace discovery
 				logBasePath := cwd // fallback to cwd if not in a workspace
 
