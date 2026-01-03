@@ -21,13 +21,20 @@ const (
 type SafeBuilder struct {
 	defaultTimeout time.Duration
 	validators     map[string]func(string) error
+	executor       Executor
 }
 
-// NewSafeBuilder creates a new SafeBuilder instance
+// NewSafeBuilder creates a new SafeBuilder instance with a RealExecutor
 func NewSafeBuilder() *SafeBuilder {
+	return NewSafeBuilderWithExecutor(&RealExecutor{})
+}
+
+// NewSafeBuilderWithExecutor creates a new SafeBuilder with a custom Executor
+func NewSafeBuilderWithExecutor(exec Executor) *SafeBuilder {
 	return &SafeBuilder{
 		defaultTimeout: DefaultTimeout,
 		validators:     makeDefaultValidators(),
+		executor:       exec,
 	}
 }
 
@@ -117,10 +124,11 @@ func validateGitRef(ref string) error {
 
 // Command represents a safe command configuration
 type Command struct {
-	ctx     context.Context
-	name    string
-	args    []string
-	timeout time.Duration
+	ctx      context.Context
+	name     string
+	args     []string
+	timeout  time.Duration
+	executor Executor
 }
 
 // Build creates a new command with validation
@@ -138,10 +146,11 @@ func (sb *SafeBuilder) Build(ctx context.Context, name string, args ...string) (
 	_ = cancel
 
 	return &Command{
-		ctx:     timeoutCtx,
-		name:    name,
-		args:    args,
-		timeout: sb.defaultTimeout,
+		ctx:      timeoutCtx,
+		name:     name,
+		args:     args,
+		timeout:  sb.defaultTimeout,
+		executor: sb.executor,
 	}, nil
 }
 
@@ -171,5 +180,5 @@ func (sb *SafeBuilder) Validate(argType string, value string) error {
 
 // Exec creates and returns an exec.Cmd
 func (c *Command) Exec() *exec.Cmd {
-	return exec.CommandContext(c.ctx, c.name, c.args...) //nolint:gosec // SafeBuilder provides validation
+	return c.executor.CommandContext(c.ctx, c.name, c.args...) //nolint:gosec // SafeBuilder provides validation
 }
