@@ -335,29 +335,22 @@ func NewLogger(component string) *logrus.Entry {
 		}
 
 		if logFilePath != "" {
-			dir := filepath.Dir(logFilePath)
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				logger.Warnf("Failed to create log directory %s: %v", dir, err)
+			// Use the zombie-aware writer instead of opening the file directly.
+			// This prevents recreating deleted worktree directories.
+			writer := newZombieAwareWriter(logFilePath)
+
+			var fileFormatter logrus.Formatter
+			if logCfg.File.Format == "json" {
+				fileFormatter = &logrus.JSONFormatter{}
 			} else {
-				// Use a file writer that is safe for concurrent writes
-				file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-				if err == nil {
-					var fileFormatter logrus.Formatter
-					if logCfg.File.Format == "json" {
-						fileFormatter = &logrus.JSONFormatter{}
-					} else {
-						// Default to a simple text formatter for files if not JSON
-						fileFormatter = &TextFormatter{Config: FormatConfig{DisableTimestamp: false}}
-					}
-					logger.AddHook(&FileHook{
-						Writer:    file,
-						LogLevels: logrus.AllLevels,
-						Formatter: fileFormatter,
-					})
-				} else {
-					logger.Warnf("Failed to open log file %s: %v", logFilePath, err)
-				}
+				// Default to a simple text formatter for files if not JSON
+				fileFormatter = &TextFormatter{Config: FormatConfig{DisableTimestamp: false}}
 			}
+			logger.AddHook(&FileHook{
+				Writer:    writer,
+				LogLevels: logrus.AllLevels,
+				Formatter: fileFormatter,
+			})
 		}
 	}
 
