@@ -655,6 +655,40 @@ func (l *NotebookLocator) GetCompletedDir(node *WorkspaceNode) (string, error) {
 	return filepath.Join(rootDir, renderedPath), nil
 }
 
+// GetSkillsDir returns the absolute path to the skills directory for a given workspace node.
+// Skills are stored alongside plans and chats in the notebook structure.
+func (l *NotebookLocator) GetSkillsDir(node *WorkspaceNode) (string, error) {
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
+		// Local Mode: Skills are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "skills"), nil
+	}
+
+	// Centralized Mode
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+
+	// Use a default template similar to plans
+	tplStr := "workspaces/{{ .Workspace.Name }}/skills"
+
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
 // GetGroupDir resolves the absolute path for any group directory (e.g., "inbox", "plans", "plans/my-feature").
 // This is the centralized method for resolving all note-related directory paths.
 func (l *NotebookLocator) GetGroupDir(node *WorkspaceNode, groupName string) (string, error) {
@@ -681,6 +715,8 @@ func (l *NotebookLocator) GetGroupDir(node *WorkspaceNode, groupName string) (st
 		basePath, err = l.GetInProgressDir(node)
 	case "completed":
 		basePath, err = l.GetCompletedDir(node)
+	case "skills":
+		basePath, err = l.GetSkillsDir(node)
 	default:
 		// For all other types, it's a subdirectory under the main notes directory.
 		basePath, err = l.GetNotesDir(node, groupName)
