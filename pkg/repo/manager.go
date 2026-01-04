@@ -19,10 +19,18 @@ type Manager struct {
 	mu           sync.Mutex
 }
 
+type WorktreeInfo struct {
+	Path      string    `json:"path"`
+	Commit    string    `json:"commit"`
+	SourceRef string    `json:"source_ref,omitempty"` // The original version string (e.g., "v0.13.0", "main")
+	LastUsed  time.Time `json:"last_used"`
+}
+
 type RepoInfo struct {
-	URL       string `json:"url"`
-	Shorthand string `json:"shorthand,omitempty"`
-	BarePath  string `json:"bare_path"`
+	URL       string                  `json:"url"`
+	Shorthand string                  `json:"shorthand,omitempty"`
+	BarePath  string                  `json:"bare_path"`
+	Worktrees map[string]WorktreeInfo `json:"worktrees,omitempty"` // map[commitHash]WorktreeInfo
 }
 
 type AuditInfo struct {
@@ -194,6 +202,25 @@ func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, r
 		if err := m.createWorktree(barePath, worktreePath, resolvedCommit); err != nil {
 			return "", "", fmt.Errorf("creating worktree: %w", err)
 		}
+	}
+
+	// Update manifest with worktree information
+	if info.Worktrees == nil {
+		info.Worktrees = make(map[string]WorktreeInfo)
+	}
+
+	// Store the worktree info with the original version as SourceRef
+	info.Worktrees[resolvedCommit] = WorktreeInfo{
+		Path:      worktreePath,
+		Commit:    resolvedCommit,
+		SourceRef: version, // Store the original version string
+		LastUsed:  time.Now(),
+	}
+
+	manifest.Repositories[repoURL] = info
+
+	if err := m.saveManifest(manifest); err != nil {
+		return "", "", fmt.Errorf("saving manifest with worktree info: %w", err)
 	}
 
 	return worktreePath, resolvedCommit, nil
