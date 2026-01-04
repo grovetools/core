@@ -55,6 +55,8 @@ func main() {
 		LoggingTUIChronologicalSortingScenario(),
 		LoggingTUILiveUpdateSortingScenario(),
 		LoggingTUIFollowModeSortingScenario(),
+		// Zombie worktree scenarios
+		ZombieWorktreeLogRecreationScenario(),
 		// Nvim component scenarios
 		// NvimDemoScenario(),
 		// NvimDemoFileBrowserScenario(),
