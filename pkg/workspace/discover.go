@@ -372,6 +372,24 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					return nil
 
 				case typeNonGroveRepo:
+					// This is a git repo without grove.yml. Before classifying it as a non-Grove repo,
+					// check if it's part of a known notebook structure. If so, we should continue
+					// descending into it as if it were a regular directory.
+					if layeredCfg != nil && layeredCfg.Final != nil && layeredCfg.Final.Notebooks != nil && layeredCfg.Final.Notebooks.Definitions != nil {
+						for _, notebookDef := range layeredCfg.Final.Notebooks.Definitions {
+							if notebookDef != nil && notebookDef.RootDir != "" {
+								notebookRoot, absErr := filepath.Abs(expandPath(notebookDef.RootDir))
+								if absErr != nil {
+									continue // Skip if path can't be resolved
+								}
+								if strings.HasPrefix(path, notebookRoot+string(filepath.Separator)) {
+									s.logger.Debugf("Path %s is inside notebook %s, continuing descent despite .git", path, notebookRoot)
+									return nil // Continue walking into the directory
+								}
+							}
+						}
+					}
+
 					// This is a git repo without grove.yml
 					nonGrovePath := processNonGroveRepo(path)
 					groveRes.nonGrove = append(groveRes.nonGrove, nonGrovePath)

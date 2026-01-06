@@ -13,6 +13,11 @@ import (
 
 // Prepare creates or gets a fully configured worktree.
 func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(worktreePath, gitRoot string) error) (string, error) {
+	// Centralized safeguard: check if the git root is a notebook repo.
+	if IsNotebookRepo(opts.GitRoot) {
+		return "", fmt.Errorf("cannot create project worktree inside a notebook repository located at %s. Run this command from your project directory", opts.GitRoot)
+	}
+
 	wm := git.NewWorktreeManager()
 	worktreePath, created, err := wm.GetOrPrepareWorktree(ctx, opts.GitRoot, opts.WorktreeName, opts.BranchName)
 	if err != nil {
