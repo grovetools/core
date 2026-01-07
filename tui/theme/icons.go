@@ -68,6 +68,7 @@ const (
 	nerdIconGitPartiallyStaged    = "󰦒" // md-plus_minus (U+F0992)
 	nerdIconInbox                 = "󰚇" // md-inbox (U+F0687)
 	nerdIconLightbulb             = "󰌵" // md-lightbulb (U+F0335)
+	nerdIconChevron               = "󰬪" // md-chevron_right_circle (U+F0B2A)
 	nerdIconMerge                 = "󰽜" // md-merge (U+F0F5C)
 	nerdIconHome                  = "󰋜" // md-home (U+F02DC)
 	nerdIconRobot                 = "󰚩" // md-robot (U+F06A9)
@@ -221,6 +222,7 @@ const (
 	asciiIconGitPartiallyStaged    = "±"     // Partially staged
 	asciiIconInbox                 = "[I]"   //  Inbox
 	asciiIconLightbulb             = "[*]"   //  Lightbulb
+	asciiIconChevron               = ">"     //  Chevron/prompt
 	asciiIconMerge                 = "><"    // Merge
 	asciiIconHome                  = "[H]"   // Home
 	asciiIconRobot                 = "[R]"   // Robot
@@ -374,6 +376,7 @@ var (
 	IconGitPartiallyStaged    string
 	IconInbox                 string
 	IconLightbulb             string
+	IconChevron               string
 	IconMerge                 string
 	IconHome                  string
 	IconRobot                 string
@@ -540,6 +543,7 @@ func init() {
 		IconGitPartiallyStaged = asciiIconGitPartiallyStaged
 		IconInbox = asciiIconInbox
 		IconLightbulb = asciiIconLightbulb
+		IconChevron = asciiIconChevron
 		IconMerge = asciiIconMerge
 		IconHome = asciiIconHome
 		IconRobot = asciiIconRobot
@@ -684,6 +688,7 @@ func init() {
 		IconGitPartiallyStaged = nerdIconGitPartiallyStaged
 		IconInbox = nerdIconInbox
 		IconLightbulb = nerdIconLightbulb
+		IconChevron = nerdIconChevron
 		IconMerge = nerdIconMerge
 		IconHome = nerdIconHome
 		IconRobot = nerdIconRobot
