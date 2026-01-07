@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,11 +16,37 @@ type State map[string]interface{}
 // stateFilePath returns the path to the state file.
 // The state file is located in .grove/state.yml in the current working directory.
 // This allows each worktree to have its own independent state.
+//
+// Returns an error if the current directory is inside a notebook, directing
+// the user to run the command from the project directory instead.
 func stateFilePath() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("get current directory: %w", err)
 	}
+
+	// Check if we're inside a notebook - if so, block state writes with helpful error
+	notebookRoot := workspace.FindNotebookRoot(cwd)
+	if notebookRoot != "" {
+		// Extract workspace name for the error message
+		workspaceName := workspace.ExtractWorkspaceNameFromNotebookPath(cwd, notebookRoot)
+		if workspaceName == "" || workspaceName == "global" {
+			return "", fmt.Errorf("cannot write state from notebook directory")
+		}
+
+		// Use reverse lookup to find the associated project (discovery is fine here since this is an error path)
+		project, _, _ := workspace.GetProjectFromNotebookPath(cwd)
+
+		if project != nil {
+			return "", fmt.Errorf("you are in the notebook directory for '%s'.\n"+
+				"Run this command from the project directory instead:\n\n"+
+				"  cd %s", workspaceName, project.Path)
+		}
+
+		return "", fmt.Errorf("you are in a notebook directory for '%s'.\n"+
+			"Run this command from the associated project directory instead.", workspaceName)
+	}
+
 	return filepath.Join(cwd, ".grove", "state.yml"), nil
 }
 
