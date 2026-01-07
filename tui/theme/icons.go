@@ -60,6 +60,12 @@ const (
 	nerdIconGitCompare            = "" // dev-git_compare (U+E728)
 	nerdIconDiff                  = "" // cod-diff (U+EAE1)
 	nerdIconGit                   = "󰊢" // md-git (U+F02A2)
+	nerdIconGitStaged             = "" // cod-pass (U+EBA4)
+	nerdIconGitModified           = "" // cod-diff_modified (U+EADE)
+	nerdIconGitUntracked          = "" // cod-diff_added (U+EADC)
+	nerdIconGitDeleted            = "" // cod-diff_removed (U+EADF)
+	nerdIconGitRenamed            = "" // cod-diff_renamed (U+EAE0)
+	nerdIconGitPartiallyStaged    = "󰦒" // md-plus_minus (U+F0992)
 	nerdIconInbox                 = "󰚇" // md-inbox (U+F0687)
 	nerdIconLightbulb             = "󰌵" // md-lightbulb (U+F0335)
 	nerdIconMerge                 = "󰽜" // md-merge (U+F0F5C)
@@ -207,6 +213,12 @@ const (
 	asciiIconGitCompare            = "<>"    // Git compare
 	asciiIconDiff                  = "[±]"   // Diff
 	asciiIconGit                   = "git"   // Git
+	asciiIconGitStaged             = "✓"     // Staged/ready to commit
+	asciiIconGitModified           = "M"     // Modified but unstaged
+	asciiIconGitUntracked          = "?"     // New untracked file
+	asciiIconGitDeleted            = "D"     // Deleted file
+	asciiIconGitRenamed            = "R"     // Renamed file
+	asciiIconGitPartiallyStaged    = "±"     // Partially staged
 	asciiIconInbox                 = "[I]"   //  Inbox
 	asciiIconLightbulb             = "[*]"   //  Lightbulb
 	asciiIconMerge                 = "><"    // Merge
@@ -354,6 +366,12 @@ var (
 	IconGitCompare            string
 	IconDiff                  string
 	IconGit                   string
+	IconGitStaged             string
+	IconGitModified           string
+	IconGitUntracked          string
+	IconGitDeleted            string
+	IconGitRenamed            string
+	IconGitPartiallyStaged    string
 	IconInbox                 string
 	IconLightbulb             string
 	IconMerge                 string
@@ -514,6 +532,12 @@ func init() {
 		IconDiff = asciiIconDiff
 		IconGitCompare = asciiIconGitCompare
 		IconGit = asciiIconGit
+		IconGitStaged = asciiIconGitStaged
+		IconGitModified = asciiIconGitModified
+		IconGitUntracked = asciiIconGitUntracked
+		IconGitDeleted = asciiIconGitDeleted
+		IconGitRenamed = asciiIconGitRenamed
+		IconGitPartiallyStaged = asciiIconGitPartiallyStaged
 		IconInbox = asciiIconInbox
 		IconLightbulb = asciiIconLightbulb
 		IconMerge = asciiIconMerge
@@ -652,6 +676,12 @@ func init() {
 		IconGithubAction = nerdIconGithubAction
 		IconGitCompare = nerdIconGitCompare
 		IconGit = nerdIconGit
+		IconGitStaged = nerdIconGitStaged
+		IconGitModified = nerdIconGitModified
+		IconGitUntracked = nerdIconGitUntracked
+		IconGitDeleted = nerdIconGitDeleted
+		IconGitRenamed = nerdIconGitRenamed
+		IconGitPartiallyStaged = nerdIconGitPartiallyStaged
 		IconInbox = nerdIconInbox
 		IconLightbulb = nerdIconLightbulb
 		IconMerge = nerdIconMerge
