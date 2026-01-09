@@ -164,6 +164,7 @@ type Theme struct {
 	Italic      lipgloss.Style // Italic text
 	Normal      lipgloss.Style // Regular terminal default text
 	Muted       lipgloss.Style // De-emphasized text
+	Path        lipgloss.Style // File paths - muted italic
 	Selected    lipgloss.Style
 	SelectedRow lipgloss.Style
 
@@ -315,6 +316,10 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 
 		Muted: lipgloss.NewStyle().
 			Faint(true),
+
+		Path: lipgloss.NewStyle().
+			Faint(true).
+			Italic(true),
 
 		Selected: lipgloss.NewStyle().
 			Background(colors.SelectedBackground).

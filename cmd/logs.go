@@ -63,7 +63,8 @@ Examples:
 	}
 
 	cmd.Flags().Bool("json", false, "Output logs in JSON Lines format (shorthand for --format=json)")
-	cmd.Flags().String("format", "text", "Output format: text, json, full, pretty, pretty-text")
+	cmd.Flags().String("format", "text", "Output format: text, json, full, rich, pretty, pretty-text")
+	cmd.Flags().Bool("compact", false, "Disable spacing between log entries (for pretty/full/rich formats)")
 	cmd.Flags().BoolP("tui", "i", false, "Launch the interactive TUI")
 	cmd.Flags().Bool("ecosystem", false, "Show logs from all workspaces in the ecosystem")
 	cmd.Flags().StringSliceP("workspaces", "w", []string{}, "Filter by specific workspace names (comma-separated)")
@@ -181,6 +182,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	tail, _ := cmd.Flags().GetInt("tail")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	format, _ := cmd.Flags().GetString("format")
+	compact, _ := cmd.Flags().GetBool("compact")
 
 	// --json is shorthand for --format=json
 	if jsonOutput {
@@ -254,11 +256,13 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		case "json":
 			printLogJSON(tailedLine)
 		case "pretty":
-			printLogPretty(tailedLine, true) // with ANSI
+			printLogPretty(tailedLine, true, compact) // with ANSI
 		case "pretty-text":
-			printLogPretty(tailedLine, false) // without ANSI
+			printLogPretty(tailedLine, false, compact) // without ANSI
 		case "full":
-			printLogFull(tailedLine)
+			printLogFull(tailedLine, compact)
+		case "rich":
+			printLogRich(tailedLine, compact)
 		default: // "text"
 			printLogText(tailedLine)
 		}
@@ -465,12 +469,15 @@ func printLogJSON(tailedLine TailedLine) {
 
 // printLogPretty prints only the pretty output from the unified logger.
 // If withANSI is true, uses pretty_ansi (styled); otherwise uses pretty_text (plain).
-func printLogPretty(tailedLine TailedLine, withANSI bool) {
+// If compact is true, no spacing is added between entries.
+func printLogPretty(tailedLine TailedLine, withANSI bool, compact bool) {
 	var logMap map[string]interface{}
 	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
 		// Not JSON, print raw line
 		fmt.Println(tailedLine.Line)
-		fmt.Println() // blank line for spacing
+		if !compact {
+			fmt.Println()
+		}
 		return
 	}
 
@@ -496,11 +503,88 @@ func printLogPretty(tailedLine TailedLine, withANSI bool) {
 	}
 
 	fmt.Println(prettyOutput)
-	fmt.Println() // blank line for spacing between entries
+	if !compact {
+		fmt.Println() // blank line for spacing between entries
+	}
+}
+
+// printLogRich prints time, component, level, and pretty output on one line.
+// Format: 12:40:43 [grove-flow] INFO 󰄬 Job completed
+// If compact is true, no spacing is added between entries.
+func printLogRich(tailedLine TailedLine, compact bool) {
+	var logMap map[string]interface{}
+	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
+		// Print as a raw line if not JSON
+		fmt.Println(tailedLine.Line)
+		if !compact {
+			fmt.Println()
+		}
+		return
+	}
+
+	// Extract fields
+	ts, _ := logMap["time"].(string)
+	level, _ := logMap["level"].(string)
+	component, _ := logMap["component"].(string)
+
+	// Parse time for formatting
+	parsedTime, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		parsedTime, _ = time.Parse(time.RFC3339, ts)
+	}
+	timeStr := parsedTime.Format("15:04:05")
+
+	// Style level
+	var levelStyle lipgloss.Style
+	switch strings.ToLower(level) {
+	case "error", "fatal", "panic":
+		levelStyle = theme.DefaultTheme.Error
+	case "warning":
+		levelStyle = theme.DefaultTheme.Warning
+	case "info":
+		levelStyle = theme.DefaultTheme.Info
+	default:
+		levelStyle = theme.DefaultTheme.Muted
+	}
+	levelStr := levelStyle.Render(strings.ToUpper(level))
+
+	// Get pretty output, fall back to msg
+	prettyOutput := ""
+	if v, ok := logMap["pretty_ansi"].(string); ok && v != "" {
+		prettyOutput = v
+	} else if msg, ok := logMap["msg"].(string); ok {
+		prettyOutput = msg
+	}
+
+	// Check if multi-line
+	isMultiLine := strings.Contains(prettyOutput, "\n")
+
+	if isMultiLine {
+		// Multi-line: metadata on first line, pretty output below
+		fmt.Printf("%s [%s] %s\n",
+			theme.DefaultTheme.Muted.Render(timeStr),
+			theme.DefaultTheme.Muted.Render(component),
+			levelStr,
+		)
+		fmt.Println(prettyOutput)
+	} else {
+		// Single line: all on one line
+		fmt.Printf("%s [%s] %s %s\n",
+			theme.DefaultTheme.Muted.Render(timeStr),
+			theme.DefaultTheme.Muted.Render(component),
+			levelStr,
+			prettyOutput,
+		)
+	}
+
+	if !compact {
+		fmt.Println()
+	}
 }
 
 // printLogFull prints the standard text format plus the pretty output indented below.
-func printLogFull(tailedLine TailedLine) {
+// If compact is true, no spacing is added between entries.
+func printLogFull(tailedLine TailedLine, compact bool) {
 	var logMap map[string]interface{}
 	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
 		// Print as a raw line if not JSON
@@ -570,7 +654,11 @@ func printLogFull(tailedLine TailedLine) {
 
 	// Print pretty output indented below if available
 	if prettyAnsi, ok := logMap["pretty_ansi"].(string); ok && prettyAnsi != "" {
-		fmt.Printf("         %s %s\n\n", theme.DefaultTheme.Muted.Render("└─"), prettyAnsi)
+		if compact {
+			fmt.Printf("         %s %s\n", theme.DefaultTheme.Muted.Render("└─"), prettyAnsi)
+		} else {
+			fmt.Printf("         %s %s\n\n", theme.DefaultTheme.Muted.Render("└─"), prettyAnsi)
+		}
 	}
 }
 
