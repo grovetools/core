@@ -199,6 +199,16 @@ func (e *LogEntry) StructuredOnly() *LogEntry {
 	return e
 }
 
+// Emit logs the message without job context.
+// Output routes to structured logging (workspace.log) and pretty output
+// via GetGlobalOutput(). Use this for CLI commands and utility code
+// that runs outside job execution.
+//
+// For job execution code where you want output in job.log, use Log(ctx).
+func (e *LogEntry) Emit() {
+	e.Log(context.Background())
+}
+
 // Log executes the log entry, writing to both outputs based on configuration.
 // This is the terminal method that must be called for the log to be written.
 func (e *LogEntry) Log(ctx context.Context) {

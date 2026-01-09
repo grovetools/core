@@ -3,6 +3,7 @@ package logging
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -346,6 +347,61 @@ func TestWithPretty(t *testing.T) {
 	if pretty == nil {
 		t.Error("expected WithPretty to return a non-nil logger")
 	}
+}
+
+func TestLogEntry_Emit(t *testing.T) {
+	// Capture output via global output
+	var buf bytes.Buffer
+	SetGlobalOutput(&buf)
+	defer SetGlobalOutput(os.Stderr)
+
+	ulog := NewUnifiedLogger("test")
+
+	// Should not panic and should produce output
+	ulog.Info("test message").Field("key", "value").Emit()
+
+	output := buf.String()
+	if !strings.Contains(output, "test message") {
+		t.Errorf("expected output to contain 'test message', got '%s'", output)
+	}
+}
+
+func TestLogEntry_EmitProducesSameOutputAsLogWithBackgroundContext(t *testing.T) {
+	// Test that Emit() produces the same output as Log(context.Background())
+	var bufEmit bytes.Buffer
+	var bufLog bytes.Buffer
+	defer SetGlobalOutput(os.Stderr)
+
+	SetGlobalOutput(&bufEmit)
+	ulog := NewUnifiedLogger("test")
+	ulog.Info("emit test").Field("count", 42).Emit()
+	emitOutput := bufEmit.String()
+
+	SetGlobalOutput(&bufLog)
+	ulog2 := NewUnifiedLogger("test")
+	ulog2.Info("emit test").Field("count", 42).Log(context.Background())
+	logOutput := bufLog.String()
+
+	// Both should contain the same message (output may differ slightly in metadata)
+	if !strings.Contains(emitOutput, "emit test") {
+		t.Errorf("Emit() output missing message, got '%s'", emitOutput)
+	}
+	if !strings.Contains(logOutput, "emit test") {
+		t.Errorf("Log() output missing message, got '%s'", logOutput)
+	}
+}
+
+func TestLogEntry_EmitWithDifferentLevels(t *testing.T) {
+	ulog := NewUnifiedLogger("test")
+
+	// Should not panic for any level
+	ulog.Debug("debug").Emit()
+	ulog.Info("info").Emit()
+	ulog.Warn("warn").Emit()
+	ulog.Error("error").Emit()
+	ulog.Success("success").Emit()
+	ulog.Progress("progress").Emit()
+	ulog.Status("status").Emit()
 }
 
 // testError is a simple error implementation for testing
