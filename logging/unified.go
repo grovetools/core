@@ -206,9 +206,10 @@ func (e *LogEntry) Log(ctx context.Context) {
 	prettyOutput := e.computePrettyOutput()
 
 	// Pretty output (to context writer -> CLI + job.log)
+	// Add extra newline for visual spacing between log entries in TUI
 	if !e.structOnly {
 		writer := GetWriter(ctx)
-		fmt.Fprintln(writer, prettyOutput)
+		fmt.Fprintf(writer, "%s\n\n", prettyOutput)
 	}
 
 	// Structured output (to workspace log + core logs)
