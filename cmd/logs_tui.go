@@ -110,11 +110,19 @@ func (i logItem) FormatDetails() string {
 	lines = append(lines, fmt.Sprintf("Component:  %s", componentStyle.Render(i.component)))
 	lines = append(lines, fmt.Sprintf("Time:       %s", timeStyle.Render(i.timestamp.Format("2006-01-02 15:04:05"))))
 	lines = append(lines, fmt.Sprintf("Message:    %s", i.message))
+
+	// Show pretty_ansi output if present (styled CLI output from unified logger)
+	if prettyAnsi, ok := i.rawData["pretty_ansi"].(string); ok && prettyAnsi != "" {
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf("Output:     %s", prettyAnsi))
+	}
+
 	lines = append(lines, "")
 
-	// Standard fields we've already shown
+	// Standard fields we've already shown (including pretty_* which are shown above)
 	standardFields := map[string]bool{
 		"level": true, "msg": true, "component": true, "time": true, "_verbosity": true,
+		"pretty_ansi": true, "pretty_text": true,
 	}
 
 	// Special fields to show separately

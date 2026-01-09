@@ -49,11 +49,21 @@ Examples:
 
   # Follow logs from specific workspaces
   core logs -f -w my-project,another-project
+
+  # Show only the pretty CLI output (styled)
+  core logs --format=pretty
+
+  # Show only the pretty CLI output (plain text, no ANSI)
+  core logs --format=pretty-text
+
+  # Show full details with pretty output indented below each line
+  core logs --format=full
 `,
 		RunE: runLogsE,
 	}
 
-	cmd.Flags().Bool("json", false, "Output logs in JSON Lines format")
+	cmd.Flags().Bool("json", false, "Output logs in JSON Lines format (shorthand for --format=json)")
+	cmd.Flags().String("format", "text", "Output format: text, json, full, pretty, pretty-text")
 	cmd.Flags().BoolP("tui", "i", false, "Launch the interactive TUI")
 	cmd.Flags().Bool("ecosystem", false, "Show logs from all workspaces in the ecosystem")
 	cmd.Flags().StringSliceP("workspaces", "w", []string{}, "Filter by specific workspace names (comma-separated)")
@@ -170,6 +180,12 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 
 	tail, _ := cmd.Flags().GetInt("tail")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
+	format, _ := cmd.Flags().GetString("format")
+
+	// --json is shorthand for --format=json
+	if jsonOutput {
+		format = "json"
+	}
 
 	for _, ws := range workspaces {
 		logFile, logsDir, err := logutil.FindLogFileForWorkspace(ws)
@@ -228,9 +244,22 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}
 		stats.shown++
 
-		if jsonOutput || opts.JSONOutput {
+		// Handle global JSON output option
+		outputFormat := format
+		if opts.JSONOutput {
+			outputFormat = "json"
+		}
+
+		switch outputFormat {
+		case "json":
 			printLogJSON(tailedLine)
-		} else {
+		case "pretty":
+			printLogPretty(tailedLine, true) // with ANSI
+		case "pretty-text":
+			printLogPretty(tailedLine, false) // without ANSI
+		case "full":
+			printLogFull(tailedLine)
+		default: // "text"
 			printLogText(tailedLine)
 		}
 	}
@@ -410,6 +439,7 @@ func tailDirectory(wsName, logsDir string, lineChan chan<- TailedLine, wg *sync.
 }
 
 // printLogJSON prints a log line in JSON format, enriched with the workspace name.
+// Filters out pretty_ansi (keeps pretty_text for clean searchable output).
 func printLogJSON(tailedLine TailedLine) {
 	var logMap map[string]interface{}
 	err := json.Unmarshal([]byte(tailedLine.Line), &logMap)
@@ -425,9 +455,121 @@ func printLogJSON(tailedLine TailedLine) {
 		return
 	}
 
+	// Filter out pretty_ansi (ANSI codes don't belong in JSON output)
+	delete(logMap, "pretty_ansi")
+
 	logMap["workspace"] = tailedLine.Workspace
 	jsonData, _ := json.Marshal(logMap)
 	fmt.Println(string(jsonData))
+}
+
+// printLogPretty prints only the pretty output from the unified logger.
+// If withANSI is true, uses pretty_ansi (styled); otherwise uses pretty_text (plain).
+func printLogPretty(tailedLine TailedLine, withANSI bool) {
+	var logMap map[string]interface{}
+	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
+		// Not JSON, print raw line
+		fmt.Println(tailedLine.Line)
+		return
+	}
+
+	// Choose which pretty field to use
+	var prettyOutput string
+	if withANSI {
+		if v, ok := logMap["pretty_ansi"].(string); ok && v != "" {
+			prettyOutput = v
+		}
+	} else {
+		if v, ok := logMap["pretty_text"].(string); ok && v != "" {
+			prettyOutput = v
+		}
+	}
+
+	// If no pretty output available, fall back to msg
+	if prettyOutput == "" {
+		if msg, ok := logMap["msg"].(string); ok {
+			prettyOutput = msg
+		} else {
+			return // Nothing to print
+		}
+	}
+
+	fmt.Println(prettyOutput)
+}
+
+// printLogFull prints the standard text format plus the pretty output indented below.
+func printLogFull(tailedLine TailedLine) {
+	var logMap map[string]interface{}
+	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
+		// Print as a raw line if not JSON
+		fmt.Printf("[%s] %s\n",
+			theme.DefaultTheme.Accent.Render(tailedLine.Workspace),
+			tailedLine.Line,
+		)
+		return
+	}
+
+	// Extract common fields
+	ts, _ := logMap["time"].(string)
+	level, _ := logMap["level"].(string)
+	msg, _ := logMap["msg"].(string)
+	component, _ := logMap["component"].(string)
+
+	// Parse time for formatting
+	parsedTime, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		parsedTime, _ = time.Parse(time.RFC3339, ts)
+	}
+	timeStr := parsedTime.Format("15:04:05")
+
+	// Style level
+	var levelStyle lipgloss.Style
+	switch strings.ToLower(level) {
+	case "error", "fatal", "panic":
+		levelStyle = theme.DefaultTheme.Error
+	case "warning":
+		levelStyle = theme.DefaultTheme.Warning
+	case "info":
+		levelStyle = theme.DefaultTheme.Info
+	default:
+		levelStyle = theme.DefaultTheme.Muted
+	}
+	levelStr := levelStyle.Render(strings.ToUpper(level))
+
+	// Get other fields (excluding pretty_* and standard fields)
+	otherFields := []string{}
+	sortedKeys := []string{}
+	excludeFields := map[string]bool{
+		"time": true, "level": true, "msg": true, "component": true,
+		"workspace": true, "pretty_ansi": true, "pretty_text": true,
+	}
+	for k := range logMap {
+		if !excludeFields[k] {
+			sortedKeys = append(sortedKeys, k)
+		}
+	}
+	sort.Strings(sortedKeys)
+
+	for _, k := range sortedKeys {
+		otherFields = append(otherFields, fmt.Sprintf("%s=%v", theme.DefaultTheme.Muted.Render(k), logMap[k]))
+	}
+
+	fieldsStr := strings.Join(otherFields, " ")
+
+	// Print the main log line
+	fmt.Printf("%s [%s] %s %s [%s] %s\n",
+		timeStr,
+		theme.DefaultTheme.Accent.Render(tailedLine.Workspace),
+		levelStr,
+		msg,
+		theme.DefaultTheme.Muted.Render(component),
+		fieldsStr,
+	)
+
+	// Print pretty output indented below if available
+	if prettyAnsi, ok := logMap["pretty_ansi"].(string); ok && prettyAnsi != "" {
+		fmt.Printf("         %s %s\n\n", theme.DefaultTheme.Muted.Render("└─"), prettyAnsi)
+	}
 }
 
 // printLogText pretty-prints a log line for human consumption.
@@ -469,11 +611,15 @@ func printLogText(tailedLine TailedLine) {
 	}
 	levelStr := levelStyle.Render(strings.ToUpper(level))
 
-	// Get other fields
+	// Get other fields (excluding pretty_* which are handled separately)
 	otherFields := []string{}
 	sortedKeys := []string{}
+	excludeFields := map[string]bool{
+		"time": true, "level": true, "msg": true, "component": true,
+		"workspace": true, "pretty_ansi": true, "pretty_text": true,
+	}
 	for k := range logMap {
-		if k != "time" && k != "level" && k != "msg" && k != "component" && k != "workspace" {
+		if !excludeFields[k] {
 			sortedKeys = append(sortedKeys, k)
 		}
 	}
