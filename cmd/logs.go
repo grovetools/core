@@ -470,6 +470,7 @@ func printLogPretty(tailedLine TailedLine, withANSI bool) {
 	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
 		// Not JSON, print raw line
 		fmt.Println(tailedLine.Line)
+		fmt.Println() // blank line for spacing
 		return
 	}
 
@@ -495,6 +496,7 @@ func printLogPretty(tailedLine TailedLine, withANSI bool) {
 	}
 
 	fmt.Println(prettyOutput)
+	fmt.Println() // blank line for spacing between entries
 }
 
 // printLogFull prints the standard text format plus the pretty output indented below.

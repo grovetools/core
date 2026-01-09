@@ -226,8 +226,13 @@ func (e *LogEntry) computePrettyOutput() string {
 	} else {
 		// Auto-style based on level/icon
 		output = e.msg
-		if e.icon != "" && !e.noIcon {
-			output = e.icon + " " + e.msg
+		if !e.noIcon {
+			icon := e.icon
+			if icon == "" {
+				// Default icon for entries without a specific icon
+				icon = theme.IconBullet
+			}
+			output = icon + " " + e.msg
 		}
 	}
 
