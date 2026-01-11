@@ -35,6 +35,7 @@ type Model struct {
 	height     int
 	logChannel chan LogLineMsg
 	lines      []string
+	tailing    bool // true when using Start() to tail files, false when receiving messages via program.Send()
 }
 
 // New creates a new log viewer model.
@@ -55,6 +56,8 @@ func (m *Model) Start(files map[string]string) tea.Cmd {
 	m.Stop() // Stop any existing tails
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	m.tailing = true // Enable channel-based log line waiting
 
 	for workspace, path := range files {
 		config := tail.Config{
@@ -88,6 +91,7 @@ func (m *Model) Stop() {
 		t.Stop()
 	}
 	m.tails = nil
+	m.tailing = false // Disable channel-based log line waiting
 }
 
 // setWrappedContent wraps the content to the viewport's current width.
@@ -196,7 +200,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.follow {
 			m.viewport.GotoBottom()
 		}
-		cmds = append(cmds, m.waitForLogLine())
+		// Only wait for the next log line from the channel if we're in tailing mode.
+		// When messages come via program.Send() (e.g., from StreamWriter), we don't
+		// need to wait on the channel - the next message will arrive via Update.
+		if m.tailing {
+			cmds = append(cmds, m.waitForLogLine())
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "f":
