@@ -44,3 +44,22 @@ func ComparePaths(path1, path2 string) (bool, error) {
 	}
 	return norm1 == norm2, nil
 }
+
+// CanonicalPath returns the absolute, symlink-resolved path with correct filesystem case.
+// Unlike NormalizeForLookup, this preserves the actual case from the filesystem,
+// which is important for matching paths used by external tools (e.g., Claude's project paths).
+// On macOS, this ensures /users/foo becomes /Users/foo to match the real directory name.
+func CanonicalPath(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	// EvalSymlinks resolves symlinks AND returns the canonical path with correct case
+	canonicalPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		// If symlink evaluation fails (e.g., path doesn't exist yet),
+		// fall back to the absolute path.
+		return absPath, nil
+	}
+	return canonicalPath, nil
+}
