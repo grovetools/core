@@ -110,6 +110,7 @@ type Config struct {
 	Version    string   `yaml:"version"`
 	Workspaces []string `yaml:"workspaces,omitempty"`
 	BuildCmd   string   `yaml:"build_cmd,omitempty"`
+	BuildAfter []string `yaml:"build_after,omitempty"`
 
 	// Notebooks contains all notebook-related configuration.
 	Notebooks *NotebooksConfig `yaml:"notebooks,omitempty"`
@@ -144,6 +145,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Version          string                       `yaml:"version"`
 		Workspaces       []string                     `yaml:"workspaces,omitempty"`
 		BuildCmd         string                       `yaml:"build_cmd,omitempty"`
+		BuildAfter       []string                     `yaml:"build_after,omitempty"`
 		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty"`
 		TUI              *TUIConfig                   `yaml:"tui,omitempty"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty"`
@@ -168,6 +170,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Version = raw.Version
 	c.Workspaces = raw.Workspaces
 	c.BuildCmd = raw.BuildCmd
+	c.BuildAfter = raw.BuildAfter
 	c.TUI = raw.TUI
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions

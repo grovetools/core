@@ -67,6 +67,9 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Workspaces != nil {
 		result.Workspaces = override.Workspaces
 	}
+	if override.BuildAfter != nil {
+		result.BuildAfter = override.BuildAfter
+	}
 	if override.ExplicitProjects != nil {
 		result.ExplicitProjects = override.ExplicitProjects
 	}

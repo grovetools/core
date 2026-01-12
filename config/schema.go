@@ -26,6 +26,7 @@ func GenerateSchema() ([]byte, error) {
 		Version          string                       `yaml:"version" jsonschema:"required,description=Configuration version (e.g. '1.0')"`
 		Workspaces       []string                     `yaml:"workspaces,omitempty" jsonschema:"description=List of workspace directories in this ecosystem"`
 		BuildCmd         string                       `yaml:"build_cmd,omitempty" jsonschema:"description=Custom command for 'grove build' (e.g., 'make build-optimized'). Defaults to 'make build'."`
+		BuildAfter       []string                     `yaml:"build_after,omitempty" jsonschema:"description=List of project names that must be built before this project. Used by 'grove build' to determine build order."`
 		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Configuration for notebooks"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
