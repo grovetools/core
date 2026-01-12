@@ -54,6 +54,9 @@
     "completed_path_template": {
       "type": "string"
     },
+    "prompts_path_template": {
+      "type": "string"
+    },
     "types": {
       "additionalProperties": {
         "$ref": "#/$defs/NoteTypeConfig"

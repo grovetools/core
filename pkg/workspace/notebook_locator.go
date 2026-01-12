@@ -20,6 +20,7 @@ const (
 	defaultRecipesPathTemplate     = "workspaces/{{ .Workspace.Name }}/recipes"
 	defaultInProgressPathTemplate  = "workspaces/{{ .Workspace.Name }}/in_progress"
 	defaultCompletedPathTemplate   = "workspaces/{{ .Workspace.Name }}/completed"
+	defaultPromptsPathTemplate     = "workspaces/{{ .Workspace.Name }}/docgen"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -652,6 +653,43 @@ func (l *NotebookLocator) GetCompletedDir(node *WorkspaceNode) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
+// GetDocgenPromptsDir returns the absolute path to the docgen prompts directory for a given workspace node.
+// In Local Mode, it returns the docgen directory within the project's .notebook directory.
+// In Centralized Mode, it uses the configured root_dir and prompts_path_template.
+func (l *NotebookLocator) GetDocgenPromptsDir(node *WorkspaceNode) (string, error) {
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
+		// Local Mode: Prompts are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "docgen"), nil
+	}
+
+	// Centralized Mode
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+
+	tplStr := notebook.PromptsPathTemplate
+	if tplStr == "" {
+		tplStr = defaultPromptsPathTemplate
+	}
+
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+
 	return filepath.Join(rootDir, renderedPath), nil
 }
 

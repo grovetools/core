@@ -94,6 +94,7 @@ type Notebook struct {
 	RecipesPathTemplate    string `yaml:"recipes_path_template,omitempty"`
 	InProgressPathTemplate string `yaml:"in_progress_path_template,omitempty"`
 	CompletedPathTemplate  string `yaml:"completed_path_template,omitempty"`
+	PromptsPathTemplate    string `yaml:"prompts_path_template,omitempty"`
 
 	// Types defines a map of user-configurable note types.
 	// This will override the hardcoded defaults in grove-notebook if provided.
