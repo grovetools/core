@@ -172,6 +172,13 @@
       "type": "string",
       "description": "Custom command for 'grove build' (e.g."
     },
+    "build_after": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "description": "List of project names that must be built before this project. Used by 'grove build' to determine build order."
+    },
     "notebooks": {
       "$ref": "#/$defs/NotebooksConfig",
       "description": "Configuration for notebooks"
