@@ -355,24 +355,23 @@ func FindEcosystemConfig(startDir string) string {
 		".grove.yaml",
 	}
 
-	dir := filepath.Dir(startDir) // Start from parent of workspace
+	dir := startDir // Start from the given directory itself
 	for {
-		// Skip any directory that is inside .grove-worktrees, as these are worktrees
-		// and not the actual ecosystem root
-		if !strings.Contains(dir, ".grove-worktrees") {
-			for _, name := range configNames {
-				path := filepath.Join(dir, name)
-				if info, err := os.Stat(path); err == nil && !info.IsDir() {
-					// Check if this config has workspaces field
-					data, err := os.ReadFile(path)
-					if err == nil {
-						expanded := expandEnvVars(string(data))
-						var cfg Config
-						if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
-							// An ecosystem config is identified by having a non-empty 'workspaces' field.
-							if len(cfg.Workspaces) > 0 {
-								return path
-							}
+		// Check for grove.yml with workspaces in this directory
+		// Note: We check even inside .grove-worktrees because ecosystem worktrees
+		// contain a full copy of the ecosystem including grove.yml with workspaces
+		for _, name := range configNames {
+			path := filepath.Join(dir, name)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				// Check if this config has workspaces field
+				data, err := os.ReadFile(path)
+				if err == nil {
+					expanded := expandEnvVars(string(data))
+					var cfg Config
+					if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
+						// An ecosystem config is identified by having a non-empty 'workspaces' field.
+						if len(cfg.Workspaces) > 0 {
+							return path
 						}
 					}
 				}
