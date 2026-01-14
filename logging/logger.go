@@ -255,11 +255,12 @@ func NewLogger(component string) *logrus.Entry {
 
 	logger := logrus.New()
 
-	// Load configuration from grove.yml
+	// Load configuration from grove.yml, starting with defaults
 	cfg, err := config.LoadDefault()
-	var logCfg Config
+	logCfg := GetDefaultLoggingConfig() // Start with defaults
 	if err == nil {
 		// Use UnmarshalExtension to safely decode the logging part
+		// This overlays user config on top of the defaults
 		if err := cfg.UnmarshalExtension("logging", &logCfg); err != nil {
 			// Log a warning if parsing fails, but continue with defaults
 			logrus.Warnf("Failed to parse 'logging' config: %v", err)

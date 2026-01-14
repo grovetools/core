@@ -92,8 +92,8 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	logger := cli.GetLogger(cmd)
 	opts := cli.GetOptions(cmd)
 
-	// Load logging config for component filtering
-	var logCfg logging.Config
+	// Load logging config for component filtering, starting with defaults
+	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
 	}

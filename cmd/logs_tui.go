@@ -1206,8 +1206,8 @@ func getWorkspaceStyle(workspace string) lipgloss.Style {
 func runLogsTUI(workspaces []string, follow bool, overrideOpts *logging.OverrideOptions) error {
 	logger := logging.NewLogger("logs-tui")
 
-	// Load logging config for component filtering
-	var logCfg logging.Config
+	// Load logging config for component filtering, starting with defaults
+	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
 	}

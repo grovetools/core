@@ -28,13 +28,15 @@
     "FileSinkConfig": {
       "properties": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "path": {
           "type": "string"
         },
         "format": {
-          "type": "string"
+          "type": "string",
+          "default": "json"
         }
       },
       "type": "object",
@@ -69,10 +71,12 @@
   },
   "properties": {
     "level": {
-      "type": "string"
+      "type": "string",
+      "default": "info"
     },
     "report_caller": {
-      "type": "boolean"
+      "type": "boolean",
+      "default": true
     },
     "log_startup": {
       "type": "boolean"

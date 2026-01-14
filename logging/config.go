@@ -54,11 +54,11 @@ type ComponentFilteringConfig struct {
 type Config struct {
 	// Level is the minimum log level to output (e.g., "debug", "info", "warn", "error").
 	// Can be overridden by the GROVE_LOG_LEVEL environment variable.
-	Level string `yaml:"level"`
+	Level string `yaml:"level" jsonschema:"default=info"`
 
 	// ReportCaller, if true, includes the file, line, and function name in the log output.
 	// Can be enabled with the GROVE_LOG_CALLER=true environment variable.
-	ReportCaller bool `yaml:"report_caller"`
+	ReportCaller bool `yaml:"report_caller" jsonschema:"default=true"`
 
 	// LogStartup, if true, logs "Grove binary started" on first logger initialization.
 	// Defaults to false.
@@ -87,10 +87,10 @@ type Config struct {
 
 // FileSinkConfig configures the file logging sink.
 type FileSinkConfig struct {
-	Enabled bool   `yaml:"enabled"`
+	Enabled bool `yaml:"enabled" jsonschema:"default=true"`
 	// Path is the full path to the log file.
 	Path   string `yaml:"path"`
-	Format string `yaml:"format,omitempty"` // "text" (default) or "json"
+	Format string `yaml:"format,omitempty" jsonschema:"default=json"` // "text" or "json" (default)
 }
 
 // FormatConfig controls the log output format.
@@ -104,4 +104,18 @@ type FormatConfig struct {
 	// StructuredToStderr controls when structured logs are sent to stderr.
 	// Can be "auto" (default), "always", or "never".
 	StructuredToStderr string `yaml:"structured_to_stderr"`
+}
+
+// GetDefaultLoggingConfig returns a Config with sensible defaults that enable
+// file logging and caller reporting out of the box. This allows `core logs`
+// to work immediately without any user configuration.
+func GetDefaultLoggingConfig() Config {
+	return Config{
+		Level:        "info",
+		ReportCaller: true,
+		File: FileSinkConfig{
+			Enabled: true,
+			Format:  "json",
+		},
+	}
 }
