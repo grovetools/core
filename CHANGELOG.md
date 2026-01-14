@@ -1,3 +1,600 @@
+## v0.5.0 (2026-01-14)
+
+This release introduces a complete overhaul of the logging system, a new interactive logs TUI, a reusable embedded Neovim component, and major improvements to the workspace discovery and path resolution systems. The new unified logging API provides a chainable builder pattern for creating both structured and pretty-printed log output from a single call, with extensive configuration options for component-based filtering (dbc1670, c455796). The new `core logs` command leverages this system to provide a powerful tool for viewing logs across an entire ecosystem, complete with a full-featured TUI for interactive browsing, searching, and filtering (ce02c65, 769ec18).
+
+Workspace management has been significantly enhanced with the introduction of a centralized `NotebookLocator` for consistent, configuration-driven path resolution for notes, plans, and chats across both local and centralized notebook structures (f6ded98, d9a4582). Path handling is now more robust with new utilities that correctly normalize for case-sensitivity on different operating systems (6ea4031, dfed5b8), and a new utility prevents bugs related to deleted worktrees (210604e, ed647c8). The alias resolution system has also been centralized into `grove-core` and expanded to natively support notebook resources (9c81658, 8574644).
+
+For developers, this release adds a `build_after` field to `grove.yml` for defining build dependencies (b77e7bb), a reusable embedded Neovim TUI component (3a07cca), and a comprehensive set of over 100 theme icons with Nerd Font and ASCII fallbacks to create richer and more informative TUIs across the ecosystem (bccd627, 081b068, 667bf5a).
+
+### Features
+
+- Add unified logging API with a chainable builder pattern for structured and pretty output (dbc1670)
+- Implement `core logs` command with text, JSON, and interactive TUI modes (ce02c65)
+- Add extensive component-based log filtering with CLI overrides and filter statistics (c455796)
+- Add reusable embedded Neovim TUI component with a demo command (3a07cca)
+- Add centralized `NotebookLocator` for consistent notebook, plan, and chat path resolution (f6ded98)
+- Add `IsZombieWorktree` utility to prevent bugs from deleted worktrees (210604e)
+- Add `CanonicalPath` function for case-correct path normalization on macOS (6ea4031)
+- Move and enhance alias resolver from `grove-context` to `grove-core` for shared use (9c81658)
+- Add native support for notebook resource aliases (e.g., `@a:nb:notebook:path`) (8574644)
+- Add `build_after` field to `grove.yml` for defining build dependency order (b77e7bb)
+- Add comprehensive set of over 100 theme icons with Nerd Font and ASCII fallbacks (bccd627)
+- Add support for user-configurable note types with TUI metadata (d9a4582)
+- Add global writer for dynamic TUI output redirection, fixing output mangling (0dce554)
+- Add workspace-aware path resolution for log files (63767f9)
+- Add reusable scrollbar utility package for TUI components (d506f4a)
+- Add `StreamWriter` utility for streaming command output to TUIs without splitting lines (abeacbe)
+- Add support for global override configuration file (`~/.config/grove/grove.override.yml`) (8b2bb9d)
+- Add `core config-layers` command to diagnose configuration merging (0c3e40f)
+- Add session registry for tracking live agent sessions from `grove-hooks` (13d2214)
+
+### Bug Fixes
+
+- Fix path normalization to correctly handle filesystem case on macOS (dfed5b8)
+- Prevent recreation of "zombie" worktree directories by long-running loggers (ed647c8, de8429f)
+- Fix `FindEcosystemConfig` to correctly recognize ecosystem worktrees (7489d3d)
+- Prevent logviewer deadlock when using `StreamWriter` for TUI output (b89a451)
+- Require `nb:` prefix for notebook aliases to resolve ambiguity with project paths (bf00107)
+- Fix TUI log filtering to respect CLI override flags (3cf7532)
+- Fix logviewer scrollbar calculation to account for text wrapping (e52a77b)
+- Make default log filtering show all logs unless explicitly configured (466153c)
+- Fix `tmux` commands to use exact session name matching to prevent ambiguity (8651e9b)
+- Fix `core ws list` to correctly handle ecosystem worktree contents in focus mode (4b7b0db)
+
+### Miscellaneous
+
+- Standardize CI release workflows and disable CI runs on branches to reduce cost (bba4be4)
+- Migrate `docgen` prompts to the notebook workspace (a61df2d)
+
+### File Changes
+
+```
+ .cx/core.rules                              |    3 +
+ .cx/dev-no-tests.rules                      |   19 +
+ .cx/dev-with-tests.rules                    |   16 +
+ .cx/docs-only.rules                         |    8 +
+ .cx/pkg-only.rules                          |    1 +
+ .cx/workspace-only.rules                    |    1 +
+ .github/workflows/ci.yml                    |   52 ++
+ .github/workflows/release.yml               |   38 +-
+ .gitignore                                  |   56 +-
+ CLAUDE.md                                   |   30 +
+ Makefile                                    |  102 +-
+ README.md                                   |    4 +-
+ cmd/config.go                               |   60 ++
+ cmd/core/main.go                            |   29 +
+ cmd/editor.go                               |   78 ++
+ cmd/logs.go                                 |  732 +++++++++++++++
+ cmd/logs_tui.go                             | 1334 +++++++++++++++++++++++++++
+ cmd/nvim_demo.go                            |  342 +++++++
+ cmd/open_in_window.go                       |   51 +
+ cmd/tmux.go                                 |   18 +
+ cmd/tmux_editor.go                          |  147 +++
+ cmd/version.go                              |   36 +
+ cmd/ws.go                                   |  122 +++
+ command/builder.go                          |   29 +-
+ command/executor.go                         |   31 +
+ config/config.go                            |  340 ++++---
+ config/config_test.go                       |   77 ++
+ config/merge.go                             |  108 ++-
+ config/schema.go                            |   72 +-
+ config/schema/definitions/base.schema.json  |  211 +++++
+ config/types.go                             |  271 +++++-
+ config/validator.go                         |  207 ----
+ docs/01-overview.md                         |  170 +++-
+ docs/docgen.config.yml                      |   35 +-
+ docs/prompts/01-overview.md                 |   30 -
+ fs/utils.go                                 |   63 +-
+ git/extended_status.go                      |   91 ++
+ git/status.go                               |   54 +-
+ git/utils.go                                |   24 +-
+ git/worktree.go                             |   27 +-
+ go.mod                                      |   25 +-
+ go.sum                                      |   53 +-
+ grove.yml                                   |   12 +-
+ logging.schema.json                         |  109 +++
+ logging/config.go                           |   90 +-
+ logging/context_writer.go                   |   24 +
+ logging/formatter.go                        |    8 +-
+ logging/global_writer.go                    |   43 +
+ logging/logger.go                           |  268 +++++-
+ logging/logger_test.go                      |  635 ++++++++++++-
+ logging/pretty.go                           |  188 ++--
+ logging/unified.go                          |  318 +++++++
+ logging/unified_test.go                     |  414 +++++++++
+ logging/zombie_writer.go                    |  110 +++
+ notebook.schema.json                        |   71 ++
+ pkg/alias/notebook.go                       |   17 +
+ pkg/alias/resolver.go                       |  425 +++++++++
+ pkg/alias/resolver_test.go                  |  143 +++
+ pkg/docs/docs.json                          |   14 +-
+ pkg/logging/logutil/finder.go               |   87 ++
+ pkg/models/session.go                       |    5 +
+ pkg/process/process.go                      |   31 +
+ pkg/profiling/cobra.go                      |   79 ++
+ pkg/profiling/timer.go                      |  142 +++
+ pkg/repo/manager.go                         |  440 +++++++--
+ pkg/sessions/metadata.go                    |   22 +
+ pkg/sessions/registry.go                    |  132 +++
+ pkg/tmux/client.go                          |   47 +
+ pkg/tmux/launch.go                          |   42 +
+ pkg/tmux/session.go                         |  284 +++++-
+ pkg/tmux/tui.go                             |  258 ++++++
+ pkg/tmux/types.go                           |   21 +
+ pkg/workspace/discover.go                   |  582 ++++++++----
+ pkg/workspace/discover_test.go              |    8 +-
+ pkg/workspace/enrich.go                     |  222 -----
+ pkg/workspace/filter/filter.go              |  115 ++-
+ pkg/workspace/history.go                    |  127 +++
+ pkg/workspace/identifier.go                 |   73 +-
+ pkg/workspace/identifier_test.go            |   72 +-
+ pkg/workspace/lookup.go                     |  448 +++++++--
+ pkg/workspace/lookup_test.go                |  323 ++++++-
+ pkg/workspace/notebook_locator.go           |  777 ++++++++++++++++
+ pkg/workspace/notebook_locator_test.go      |  116 +++
+ pkg/workspace/notebook_resolver.go          |  316 +++++++
+ pkg/workspace/prepare.go                    |   83 +-
+ pkg/workspace/prepare_test.go               |   51 +-
+ pkg/workspace/provider.go                   |  245 +++++
+ pkg/workspace/provider_test.go              |  183 ++++
+ pkg/workspace/submodules.go                 |  142 +--
+ pkg/workspace/submodules_test.go            |   95 +-
+ pkg/workspace/transform.go                  |  484 ++++++++--
+ pkg/workspace/transform_test.go             |  291 ++++++
+ pkg/workspace/types.go                      |  322 ++++++-
+ pkg/workspace/utils.go                      |   19 +
+ pkg/workspace/zombie.go                     |   68 ++
+ schema/definitions/base.schema.json         |  113 +++
+ schema/grove.embedded.schema.json           |  113 +++
+ schema/manifest.go                          |   18 +
+ schema/validator.go                         |   71 ++
+ starship/command.go                         |  158 ++++
+ starship/provider.go                        |   30 +
+ state/state.go                              |  158 ++++
+ state/state_test.go                         |  167 ++++
+ tests/e2e/main.go                           |   82 ++
+ tests/e2e/scenarios_basic.go                |   42 +
+ tests/e2e/scenarios_config.go               |  503 ++++++++++
+ tests/e2e/scenarios_log_creation.go         |  526 +++++++++++
+ tests/e2e/scenarios_logging.go              | 1031 +++++++++++++++++++++
+ tests/e2e/scenarios_logs_filtering.go       |  240 +++++
+ tests/e2e/scenarios_logs_tui.go             | 1000 ++++++++++++++++++++
+ tests/e2e/scenarios_logs_tui_filtering.go   |  186 ++++
+ tests/e2e/scenarios_logs_tui_sorting.go     |  508 ++++++++++
+ tests/e2e/scenarios_notebooks_debug.go      |  272 ++++++
+ tests/e2e/scenarios_workspace.go            |  226 +++++
+ tests/e2e/scenarios_workspace_advanced.go   |  481 ++++++++++
+ tests/e2e/scenarios_workspace_edge_cases.go |  513 ++++++++++
+ tests/e2e/scenarios_zombie_worktrees.go     |  202 ++++
+ tests/e2e/test_utils.go                     |   25 +
+ tools/logging-schema-generator/main.go      |   37 +
+ tools/notebook-schema-generator/main.go     |   37 +
+ tools/schema-composer/main.go               |  163 ++++
+ tools/schema-generator/main.go              |   30 +
+ tui/components/components.go                |    2 +-
+ tui/components/help/help.go                 |  264 ++++--
+ tui/components/jsontree/keymap.go           |  113 +++
+ tui/components/jsontree/model.go            |  969 +++++++++++++++++++
+ tui/components/logviewer/logviewer.go       |  311 +++++++
+ tui/components/logviewer/writer.go          |   62 ++
+ tui/components/navigator/io.go              |    9 +-
+ tui/components/navigator/keymap.go          |    6 +-
+ tui/components/navigator/model.go           |  105 ++-
+ tui/components/nvim/model.go                |  303 ++++++
+ tui/components/nvim/nvim.go                 |  538 +++++++++++
+ tui/components/table/table.go               |   87 +-
+ tui/keymap/keymap.go                        |    1 -
+ tui/theme/icons.go                          |  777 ++++++++++++++++
+ tui/theme/theme.go                          |  553 ++++++++---
+ tui/utils/scrollbar/scrollbar.go            |  100 ++
+ tui/wsnav/io.go                             |   14 +
+ tui/wsnav/model.go                          |   68 ++
+ tui/wsnav/update.go                         |   42 +
+ tui/wsnav/util.go                           |   39 +
+ tui/wsnav/view.go                           |  241 +++++
+ tui/wsnav/wsnav.go                          |   60 ++
+ util/pathutil/normalize.go                  |  119 +++
+ 145 files changed, 24669 insertions(+), 1884 deletions(-)
+```
+
+## v0.4.2 (2026-01-14)
+
+This release introduces a complete overhaul of the logging system, a new interactive logs TUI, a reusable embedded Neovim component, and major improvements to the workspace discovery and path resolution systems. The new unified logging API provides a chainable builder pattern for creating both structured and pretty-printed log output from a single call, with extensive configuration options for component-based filtering (dbc1670, c455796). The new `core logs` command leverages this system to provide a powerful tool for viewing logs across an entire ecosystem, complete with a full-featured TUI for interactive browsing, searching, and filtering (ce02c65, 769ec18).
+
+Workspace management has been significantly enhanced with the introduction of a centralized `NotebookLocator` for consistent, configuration-driven path resolution for notes, plans, and chats across both local and centralized notebook structures (f6ded98, d9a4582). Path handling is now more robust with new utilities that correctly normalize for case-sensitivity on different operating systems (6ea4031, dfed5b8), and a new `IsZombieWorktree` utility prevents bugs related to deleted worktrees (210604e, ed647c8). The alias resolution system has also been centralized into `grove-core` and expanded to natively support notebook resources (9c81658, 8574644).
+
+For developers, this release adds a `build_after` field to `grove.yml` for defining build dependencies (b77e7bb), a reusable embedded Neovim TUI component (3a07cca), and a comprehensive set of over 100 theme icons with Nerd Font and ASCII fallbacks to create richer and more informative TUIs across the ecosystem (bccd627, 081b068, 667bf5a).
+
+### Features
+
+- Add unified logging API with a chainable builder pattern for structured and pretty output (dbc1670)
+- Implement `core logs` command with text, JSON, and interactive TUI modes (ce02c65)
+- Add extensive component-based log filtering with CLI overrides and filter statistics (c455796)
+- Add reusable embedded Neovim TUI component with a demo command (3a07cca)
+- Add centralized `NotebookLocator` for consistent notebook, plan, and chat path resolution (f6ded98)
+- Add `IsZombieWorktree` utility to prevent bugs from deleted worktrees (210604e)
+- Add `CanonicalPath` function for case-correct path normalization on macOS (6ea4031)
+- Move and enhance alias resolver from `grove-context` to `grove-core` for shared use (9c81658)
+- Add native support for notebook resource aliases (e.g., `@a:nb:notebook:path`) (8574644)
+- Add `build_after` field to `grove.yml` for defining build dependency order (b77e7bb)
+- Add comprehensive set of over 100 theme icons with Nerd Font and ASCII fallbacks (bccd627)
+- Add support for user-configurable note types with TUI metadata (d9a4582)
+- Add global writer for dynamic TUI output redirection, fixing output mangling (0dce554)
+- Add workspace-aware path resolution for log files (63767f9)
+- Add reusable scrollbar utility package for TUI components (d506f4a)
+- Add `StreamWriter` utility for streaming command output to TUIs without splitting lines (abeacbe)
+- Add support for global override configuration file (`~/.config/grove/grove.override.yml`) (8b2bb9d)
+- Add `core config-layers` command to diagnose configuration merging (0c3e40f)
+- Add session registry for tracking live agent sessions from `grove-hooks` (13d2214)
+
+### Bug Fixes
+
+- Fix path normalization to correctly handle filesystem case on macOS (dfed5b8)
+- Prevent recreation of "zombie" worktree directories by long-running loggers (ed647c8, de8429f)
+- Fix `FindEcosystemConfig` to correctly recognize ecosystem worktrees (7489d3d)
+- Prevent logviewer deadlock when using `StreamWriter` for TUI output (b89a451)
+- Require `nb:` prefix for notebook aliases to resolve ambiguity with project paths (bf00107)
+- Fix TUI log filtering to respect CLI override flags (3cf7532)
+- Fix logviewer scrollbar calculation to account for text wrapping (e52a77b)
+- Make default log filtering show all logs unless explicitly configured (466153c)
+- Fix `tmux` commands to use exact session name matching to prevent ambiguity (8651e9b)
+- Fix `core ws list` to correctly handle ecosystem worktree contents in focus mode (4b7b0db)
+
+### Miscellaneous
+
+- Standardize CI release workflows and disable CI runs on branches to reduce cost (bba4be4)
+- Migrate `docgen` prompts to the notebook workspace (a61df2d)
+
+### File Changes
+
+```
+ .cx/core.rules                              |    3 +
+ .cx/dev-no-tests.rules                      |   19 +
+ .cx/dev-with-tests.rules                    |   16 +
+ .cx/docs-only.rules                         |    8 +
+ .cx/pkg-only.rules                          |    1 +
+ .cx/workspace-only.rules                    |    1 +
+ .github/workflows/ci.yml                    |   52 ++
+ .github/workflows/release.yml               |   38 +-
+ .gitignore                                  |   56 +-
+ CLAUDE.md                                   |   30 +
+ Makefile                                    |  102 +-
+ README.md                                   |    4 +-
+ cmd/config.go                               |   60 ++
+ cmd/core/main.go                            |   29 +
+ cmd/editor.go                               |   78 ++
+ cmd/logs.go                                 |  732 +++++++++++++++
+ cmd/logs_tui.go                             | 1334 +++++++++++++++++++++++++++
+ cmd/nvim_demo.go                            |  342 +++++++
+ cmd/open_in_window.go                       |   51 +
+ cmd/tmux.go                                 |   18 +
+ cmd/tmux_editor.go                          |  147 +++
+ cmd/version.go                              |   36 +
+ cmd/ws.go                                   |  122 +++
+ command/builder.go                          |   29 +-
+ command/executor.go                         |   31 +
+ config/config.go                            |  340 ++++---
+ config/config_test.go                       |   77 ++
+ config/merge.go                             |  108 ++-
+ config/schema.go                            |   72 +-
+ config/schema/definitions/base.schema.json  |  211 +++++
+ config/types.go                             |  271 +++++-
+ config/validator.go                         |  207 ----
+ docs/01-overview.md                         |  170 +++-
+ docs/docgen.config.yml                      |   35 +-
+ docs/prompts/01-overview.md                 |   30 -
+ fs/utils.go                                 |   63 +-
+ git/extended_status.go                      |   91 ++
+ git/status.go                               |   54 +-
+ git/utils.go                                |   24 +-
+ git/worktree.go                             |   27 +-
+ go.mod                                      |   25 +-
+ go.sum                                      |   53 +-
+ grove.yml                                   |   12 +-
+ logging.schema.json                         |  109 +++
+ logging/config.go                           |   90 +-
+ logging/context_writer.go                   |   24 +
+ logging/formatter.go                        |    8 +-
+ logging/global_writer.go                    |   43 +
+ logging/logger.go                           |  268 +++++-
+ logging/logger_test.go                      |  635 ++++++++++++-
+ logging/pretty.go                           |  188 ++--
+ logging/unified.go                          |  318 +++++++
+ logging/unified_test.go                     |  414 +++++++++
+ logging/zombie_writer.go                    |  110 +++
+ notebook.schema.json                        |   71 ++
+ pkg/alias/notebook.go                       |   17 +
+ pkg/alias/resolver.go                       |  425 +++++++++
+ pkg/alias/resolver_test.go                  |  143 +++
+ pkg/docs/docs.json                          |   14 +-
+ pkg/logging/logutil/finder.go               |   87 ++
+ pkg/models/session.go                       |    5 +
+ pkg/process/process.go                      |   31 +
+ pkg/profiling/cobra.go                      |   79 ++
+ pkg/profiling/timer.go                      |  142 +++
+ pkg/repo/manager.go                         |  440 +++++++--
+ pkg/sessions/metadata.go                    |   22 +
+ pkg/sessions/registry.go                    |  132 +++
+ pkg/tmux/client.go                          |   47 +
+ pkg/tmux/launch.go                          |   42 +
+ pkg/tmux/session.go                         |  284 +++++-
+ pkg/tmux/tui.go                             |  258 ++++++
+ pkg/tmux/types.go                           |   21 +
+ pkg/workspace/discover.go                   |  582 ++++++++----
+ pkg/workspace/discover_test.go              |    8 +-
+ pkg/workspace/enrich.go                     |  222 -----
+ pkg/workspace/filter/filter.go              |  115 ++-
+ pkg/workspace/history.go                    |  127 +++
+ pkg/workspace/identifier.go                 |   73 +-
+ pkg/workspace/identifier_test.go            |   72 +-
+ pkg/workspace/lookup.go                     |  448 +++++++--
+ pkg/workspace/lookup_test.go                |  323 ++++++-
+ pkg/workspace/notebook_locator.go           |  777 ++++++++++++++++
+ pkg/workspace/notebook_locator_test.go      |  116 +++
+ pkg/workspace/notebook_resolver.go          |  316 +++++++
+ pkg/workspace/prepare.go                    |   83 +-
+ pkg/workspace/prepare_test.go               |   51 +-
+ pkg/workspace/provider.go                   |  245 +++++
+ pkg/workspace/provider_test.go              |  183 ++++
+ pkg/workspace/submodules.go                 |  142 +--
+ pkg/workspace/submodules_test.go            |   95 +-
+ pkg/workspace/transform.go                  |  484 ++++++++--
+ pkg/workspace/transform_test.go             |  291 ++++++
+ pkg/workspace/types.go                      |  322 ++++++-
+ pkg/workspace/utils.go                      |   19 +
+ pkg/workspace/zombie.go                     |   68 ++
+ schema/definitions/base.schema.json         |  113 +++
+ schema/grove.embedded.schema.json           |  113 +++
+ schema/manifest.go                          |   18 +
+ schema/validator.go                         |   71 ++
+ starship/command.go                         |  158 ++++
+ starship/provider.go                        |   30 +
+ state/state.go                              |  158 ++++
+ state/state_test.go                         |  167 ++++
+ tests/e2e/main.go                           |   82 ++
+ tests/e2e/scenarios_basic.go                |   42 +
+ tests/e2e/scenarios_config.go               |  503 ++++++++++
+ tests/e2e/scenarios_log_creation.go         |  526 +++++++++++
+ tests/e2e/scenarios_logging.go              | 1031 +++++++++++++++++++++
+ tests/e2e/scenarios_logs_filtering.go       |  240 +++++
+ tests/e2e/scenarios_logs_tui.go             | 1000 ++++++++++++++++++++
+ tests/e2e/scenarios_logs_tui_filtering.go   |  186 ++++
+ tests/e2e/scenarios_logs_tui_sorting.go     |  508 ++++++++++
+ tests/e2e/scenarios_notebooks_debug.go      |  272 ++++++
+ tests/e2e/scenarios_workspace.go            |  226 +++++
+ tests/e2e/scenarios_workspace_advanced.go   |  481 ++++++++++
+ tests/e2e/scenarios_workspace_edge_cases.go |  513 ++++++++++
+ tests/e2e/scenarios_zombie_worktrees.go     |  202 ++++
+ tests/e2e/test_utils.go                     |   25 +
+ tools/logging-schema-generator/main.go      |   37 +
+ tools/notebook-schema-generator/main.go     |   37 +
+ tools/schema-composer/main.go               |  163 ++++
+ tools/schema-generator/main.go              |   30 +
+ tui/components/components.go                |    2 +-
+ tui/components/help/help.go                 |  264 ++++--
+ tui/components/jsontree/keymap.go           |  113 +++
+ tui/components/jsontree/model.go            |  969 +++++++++++++++++++
+ tui/components/logviewer/logviewer.go       |  311 +++++++
+ tui/components/logviewer/writer.go          |   62 ++
+ tui/components/navigator/io.go              |    9 +-
+ tui/components/navigator/keymap.go          |    6 +-
+ tui/components/navigator/model.go           |  105 ++-
+ tui/components/nvim/model.go                |  303 ++++++
+ tui/components/nvim/nvim.go                 |  538 +++++++++++
+ tui/components/table/table.go               |   87 +-
+ tui/keymap/keymap.go                        |    1 -
+ tui/theme/icons.go                          |  777 ++++++++++++++++
+ tui/theme/theme.go                          |  553 ++++++++---
+ tui/utils/scrollbar/scrollbar.go            |  100 ++
+ tui/wsnav/io.go                             |   14 +
+ tui/wsnav/model.go                          |   68 ++
+ tui/wsnav/update.go                         |   42 +
+ tui/wsnav/util.go                           |   39 +
+ tui/wsnav/view.go                           |  241 +++++
+ tui/wsnav/wsnav.go                          |   60 ++
+ util/pathutil/normalize.go                  |  119 +++
+ 145 files changed, 24669 insertions(+), 1884 deletions(-)
+```
+
+## v0.4.2 (2026-01-14)
+
+This release introduces a complete overhaul of the logging system, a new interactive logs TUI, a reusable embedded Neovim component, and major improvements to the workspace discovery and path resolution systems. The new unified logging API provides a chainable builder pattern for creating both structured and pretty-printed log output from a single call, with extensive configuration options for component-based filtering (dbc1670, c455796). The new `core logs` command leverages this system to provide a powerful tool for viewing logs across an entire ecosystem, complete with a full-featured TUI for interactive browsing, searching, and filtering (ce02c65, 769ec18).
+
+Workspace management has been significantly enhanced with the introduction of a centralized `NotebookLocator` for consistent, configuration-driven path resolution for notes, plans, and chats across both local and centralized notebook structures (f6ded98, d9a4582). Path handling is now more robust with new utilities that correctly normalize for case-sensitivity on different operating systems (6ea4031, dfed5b8), and a new a new utility prevents bugs related to deleted worktrees (210604e, ed647c8). The alias resolution system has also been centralized into `grove-core` and expanded to natively support notebook resources (9c81658, 8574644).
+
+For developers, this release adds a `build_after` field to `grove.yml` for defining build dependencies (b77e7bb), a reusable/experimental embedded Neovim TUI component (3a07cca), and a comprehensive set of over 100 theme icons with Nerd Font and ASCII fallbacks to create richer and more informative TUIs across the ecosystem (bccd627, 081b068, 667bf5a).
+
+### Features
+
+- Add unified logging API with a chainable builder pattern for structured and pretty output (dbc1670)
+- Implement `core logs` command with text, JSON, and interactive TUI modes (ce02c65)
+- Add extensive component-based log filtering with CLI overrides and filter statistics (c455796)
+- Add reusable embedded Neovim TUI component with a demo command (3a07cca)
+- Add centralized `NotebookLocator` for consistent notebook, plan, and chat path resolution (f6ded98)
+- Add `IsZombieWorktree` utility to prevent bugs from deleted worktrees (210604e)
+- Add `CanonicalPath` function for case-correct path normalization on macOS (6ea4031)
+- Move and enhance alias resolver from `grove-context` to `grove-core` for shared use (9c81658)
+- Add native support for notebook resource aliases (e.g., `@a:nb:notebook:path`) (8574644)
+- Add `build_after` field to `grove.yml` for defining build dependency order (b77e7bb)
+- Add comprehensive set of over 100 theme icons with Nerd Font and ASCII fallbacks (bccd627)
+- Add support for user-configurable note types with TUI metadata (d9a4582)
+- Add global writer for dynamic TUI output redirection, fixing output mangling (0dce554)
+- Add workspace-aware path resolution for log files (63767f9)
+- Add reusable scrollbar utility package for TUI components (d506f4a)
+- Add `StreamWriter` utility for streaming command output to TUIs without splitting lines (abeacbe)
+- Add support for global override configuration file (`~/.config/grove/grove.override.yml`) (8b2bb9d)
+- Add `core config-layers` command to diagnose configuration merging (0c3e40f)
+- Add session registry for tracking live agent sessions from `grove-hooks` (13d2214)
+
+### Bug Fixes
+
+- Fix path normalization to correctly handle filesystem case on macOS (dfed5b8)
+- Prevent recreation of "zombie" worktree directories by long-running loggers (ed647c8, de8429f)
+- Fix `FindEcosystemConfig` to correctly recognize ecosystem worktrees (7489d3d)
+- Prevent logviewer deadlock when using `StreamWriter` for TUI output (b89a451)
+- Require `nb:` prefix for notebook aliases to resolve ambiguity with project paths (bf00107)
+- Fix TUI log filtering to respect CLI override flags (3cf7532)
+- Fix logviewer scrollbar calculation to account for text wrapping (e52a77b)
+- Make default log filtering show all logs unless explicitly configured (466153c)
+- Fix `tmux` commands to use exact session name matching to prevent ambiguity (8651e9b)
+- Fix `core ws list` to correctly handle ecosystem worktree contents in focus mode (4b7b0db)
+
+### Miscellaneous
+
+- Standardize CI release workflows and disable CI runs on branches to reduce cost (bba4be4)
+- Migrate `docgen` prompts to the notebook workspace (a61df2d)
+
+### File Changes
+
+```
+ .cx/core.rules                              |    3 +
+ .cx/dev-no-tests.rules                      |   19 +
+ .cx/dev-with-tests.rules                    |   16 +
+ .cx/docs-only.rules                         |    8 +
+ .cx/pkg-only.rules                          |    1 +
+ .cx/workspace-only.rules                    |    1 +
+ .github/workflows/ci.yml                    |   52 ++
+ .github/workflows/release.yml               |   38 +-
+ .gitignore                                  |   56 +-
+ CLAUDE.md                                   |   30 +
+ Makefile                                    |  102 +-
+ README.md                                   |    4 +-
+ cmd/config.go                               |   60 ++
+ cmd/core/main.go                            |   29 +
+ cmd/editor.go                               |   78 ++
+ cmd/logs.go                                 |  732 +++++++++++++++
+ cmd/logs_tui.go                             | 1334 +++++++++++++++++++++++++++
+ cmd/nvim_demo.go                            |  342 +++++++
+ cmd/open_in_window.go                       |   51 +
+ cmd/tmux.go                                 |   18 +
+ cmd/tmux_editor.go                          |  147 +++
+ cmd/version.go                              |   36 +
+ cmd/ws.go                                   |  122 +++
+ command/builder.go                          |   29 +-
+ command/executor.go                         |   31 +
+ config/config.go                            |  340 ++++---
+ config/config_test.go                       |   77 ++
+ config/merge.go                             |  108 ++-
+ config/schema.go                            |   72 +-
+ config/schema/definitions/base.schema.json  |  211 +++++
+ config/types.go                             |  271 +++++-
+ config/validator.go                         |  207 ----
+ docs/01-overview.md                         |  170 +++-
+ docs/docgen.config.yml                      |   35 +-
+ docs/prompts/01-overview.md                 |   30 -
+ fs/utils.go                                 |   63 +-
+ git/extended_status.go                      |   91 ++
+ git/status.go                               |   54 +-
+ git/utils.go                                |   24 +-
+ git/worktree.go                             |   27 +-
+ go.mod                                      |   25 +-
+ go.sum                                      |   53 +-
+ grove.yml                                   |   12 +-
+ logging.schema.json                         |  109 +++
+ logging/config.go                           |   90 +-
+ logging/context_writer.go                   |   24 +
+ logging/formatter.go                        |    8 +-
+ logging/global_writer.go                    |   43 +
+ logging/logger.go                           |  268 +++++-
+ logging/logger_test.go                      |  635 ++++++++++++-
+ logging/pretty.go                           |  188 ++--
+ logging/unified.go                          |  318 +++++++
+ logging/unified_test.go                     |  414 +++++++++
+ logging/zombie_writer.go                    |  110 +++
+ notebook.schema.json                        |   71 ++
+ pkg/alias/notebook.go                       |   17 +
+ pkg/alias/resolver.go                       |  425 +++++++++
+ pkg/alias/resolver_test.go                  |  143 +++
+ pkg/docs/docs.json                          |   14 +-
+ pkg/logging/logutil/finder.go               |   87 ++
+ pkg/models/session.go                       |    5 +
+ pkg/process/process.go                      |   31 +
+ pkg/profiling/cobra.go                      |   79 ++
+ pkg/profiling/timer.go                      |  142 +++
+ pkg/repo/manager.go                         |  440 +++++++--
+ pkg/sessions/metadata.go                    |   22 +
+ pkg/sessions/registry.go                    |  132 +++
+ pkg/tmux/client.go                          |   47 +
+ pkg/tmux/launch.go                          |   42 +
+ pkg/tmux/session.go                         |  284 +++++-
+ pkg/tmux/tui.go                             |  258 ++++++
+ pkg/tmux/types.go                           |   21 +
+ pkg/workspace/discover.go                   |  582 ++++++++----
+ pkg/workspace/discover_test.go              |    8 +-
+ pkg/workspace/enrich.go                     |  222 -----
+ pkg/workspace/filter/filter.go              |  115 ++-
+ pkg/workspace/history.go                    |  127 +++
+ pkg/workspace/identifier.go                 |   73 +-
+ pkg/workspace/identifier_test.go            |   72 +-
+ pkg/workspace/lookup.go                     |  448 +++++++--
+ pkg/workspace/lookup_test.go                |  323 ++++++-
+ pkg/workspace/notebook_locator.go           |  777 ++++++++++++++++
+ pkg/workspace/notebook_locator_test.go      |  116 +++
+ pkg/workspace/notebook_resolver.go          |  316 +++++++
+ pkg/workspace/prepare.go                    |   83 +-
+ pkg/workspace/prepare_test.go               |   51 +-
+ pkg/workspace/provider.go                   |  245 +++++
+ pkg/workspace/provider_test.go              |  183 ++++
+ pkg/workspace/submodules.go                 |  142 +--
+ pkg/workspace/submodules_test.go            |   95 +-
+ pkg/workspace/transform.go                  |  484 ++++++++--
+ pkg/workspace/transform_test.go             |  291 ++++++
+ pkg/workspace/types.go                      |  322 ++++++-
+ pkg/workspace/utils.go                      |   19 +
+ pkg/workspace/zombie.go                     |   68 ++
+ schema/definitions/base.schema.json         |  113 +++
+ schema/grove.embedded.schema.json           |  113 +++
+ schema/manifest.go                          |   18 +
+ schema/validator.go                         |   71 ++
+ starship/command.go                         |  158 ++++
+ starship/provider.go                        |   30 +
+ state/state.go                              |  158 ++++
+ state/state_test.go                         |  167 ++++
+ tests/e2e/main.go                           |   82 ++
+ tests/e2e/scenarios_basic.go                |   42 +
+ tests/e2e/scenarios_config.go               |  503 ++++++++++
+ tests/e2e/scenarios_log_creation.go         |  526 +++++++++++
+ tests/e2e/scenarios_logging.go              | 1031 +++++++++++++++++++++
+ tests/e2e/scenarios_logs_filtering.go       |  240 +++++
+ tests/e2e/scenarios_logs_tui.go             | 1000 ++++++++++++++++++++
+ tests/e2e/scenarios_logs_tui_filtering.go   |  186 ++++
+ tests/e2e/scenarios_logs_tui_sorting.go     |  508 ++++++++++
+ tests/e2e/scenarios_notebooks_debug.go      |  272 ++++++
+ tests/e2e/scenarios_workspace.go            |  226 +++++
+ tests/e2e/scenarios_workspace_advanced.go   |  481 ++++++++++
+ tests/e2e/scenarios_workspace_edge_cases.go |  513 ++++++++++
+ tests/e2e/scenarios_zombie_worktrees.go     |  202 ++++
+ tests/e2e/test_utils.go                     |   25 +
+ tools/logging-schema-generator/main.go      |   37 +
+ tools/notebook-schema-generator/main.go     |   37 +
+ tools/schema-composer/main.go               |  163 ++++
+ tools/schema-generator/main.go              |   30 +
+ tui/components/components.go                |    2 +-
+ tui/components/help/help.go                 |  264 ++++--
+ tui/components/jsontree/keymap.go           |  113 +++
+ tui/components/jsontree/model.go            |  969 +++++++++++++++++++
+ tui/components/logviewer/logviewer.go       |  311 +++++++
+ tui/components/logviewer/writer.go          |   62 ++
+ tui/components/navigator/io.go              |    9 +-
+ tui/components/navigator/keymap.go          |    6 +-
+ tui/components/navigator/model.go           |  105 ++-
+ tui/components/nvim/model.go                |  303 ++++++
+ tui/components/nvim/nvim.go                 |  538 +++++++++++
+ tui/components/table/table.go               |   87 +-
+ tui/keymap/keymap.go                        |    1 -
+ tui/theme/icons.go                          |  777 ++++++++++++++++
+ tui/theme/theme.go                          |  553 ++++++++---
+ tui/utils/scrollbar/scrollbar.go            |  100 ++
+ tui/wsnav/io.go                             |   14 +
+ tui/wsnav/model.go                          |   68 ++
+ tui/wsnav/update.go                         |   42 +
+ tui/wsnav/util.go                           |   39 +
+ tui/wsnav/view.go                           |  241 +++++
+ tui/wsnav/wsnav.go                          |   60 ++
+ util/pathutil/normalize.go                  |  119 +++
+ 145 files changed, 24669 insertions(+), 1884 deletions(-)
+```
+
 ## v0.4.1-nightly.516efdf (2025-10-03)
 
 ## v0.4.0 (2025-10-01)
