@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/mattsolo1/grove-core/tui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 )
 
 // HelpExtrasFunc is a callback that renders additional help sections.
@@ -20,6 +22,53 @@ var (
 	helpExtras   = make(map[*cobra.Command]HelpExtrasFunc)
 	helpExtrasMu sync.RWMutex
 )
+
+const maxWidth = 60
+const minWidth = 40
+
+// getTerminalWidth returns the terminal width capped at maxWidth.
+func getTerminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width < minWidth {
+		return maxWidth
+	}
+	if width > maxWidth {
+		return maxWidth
+	}
+	return width
+}
+
+// wrapText wraps text to the specified width, preserving existing line breaks.
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		width = maxWidth
+	}
+
+	var result []string
+	for _, paragraph := range strings.Split(text, "\n") {
+		if len(paragraph) <= width {
+			result = append(result, paragraph)
+			continue
+		}
+
+		// Wrap long lines
+		var line string
+		for _, word := range strings.Fields(paragraph) {
+			if line == "" {
+				line = word
+			} else if len(line)+1+len(word) <= width {
+				line += " " + word
+			} else {
+				result = append(result, line)
+				line = word
+			}
+		}
+		if line != "" {
+			result = append(result, line)
+		}
+	}
+	return strings.Join(result, "\n")
+}
 
 // SetStyledHelp applies consistent Grove styling to a command's help output.
 // Call this on the root command before Execute().
@@ -130,6 +179,9 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 	blue := lipgloss.NewStyle().Bold(true).Foreground(t.Colors.Blue)
 	section := lipgloss.NewStyle().Italic(true).Foreground(t.Colors.Orange)
 
+	// Get terminal width for wrapping (subtract 2 for indent)
+	width := getTerminalWidth() - 2
+
 	// Title - uppercase command path in orange
 	title := lipgloss.NewStyle().Bold(true).Foreground(t.Colors.Orange)
 	fmt.Println(" " + title.Render(strings.ToUpper(cmd.CommandPath())))
@@ -144,12 +196,15 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 
 	// Short description in italic, then expanded description below
 	if cmd.Short != "" {
-		fmt.Println(" " + t.Italic.Render(cmd.Short))
+		for _, line := range strings.Split(wrapText(cmd.Short, width), "\n") {
+			fmt.Println(" " + t.Italic.Render(line))
+		}
 	}
 	if description != "" && description != cmd.Short {
 		fmt.Println()
-		// Indent each line of the description
-		for _, line := range strings.Split(description, "\n") {
+		// Wrap and indent each line of the description
+		wrapped := wrapText(description, width)
+		for _, line := range strings.Split(wrapped, "\n") {
 			fmt.Println(" " + line)
 		}
 	}
