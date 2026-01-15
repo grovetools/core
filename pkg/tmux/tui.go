@@ -207,6 +207,7 @@ func (c *Client) FocusOrRunCommandInWindow(ctx context.Context, command, windowN
 // If the command fails, it displays the error and opens a shell for debugging.
 func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, windowName string, windowIndex int) error {
 	log := logging.NewLogger("tmux")
+	logging.SetGlobalOutput(os.Stderr)
 
 	session, err := c.GetCurrentSession(ctx)
 	if err != nil {
@@ -253,6 +254,6 @@ func (c *Client) FocusOrRunTUIWithErrorHandling(ctx context.Context, command, wi
 		return fmt.Errorf("failed to switch to window '%s': %w", windowName, err)
 	}
 
-	log.WithField("window", windowName).Info("Successfully opened TUI in tmux window")
+	log.WithField("window", windowName).Debug("Successfully opened TUI in tmux window")
 	return nil
 }
