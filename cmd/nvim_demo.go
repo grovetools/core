@@ -40,9 +40,9 @@ type fileItem struct {
 func (f fileItem) FilterValue() string { return f.name }
 func (f fileItem) Title() string {
 	if f.isDir {
-		return "📁 " + f.name
+		return "[D] " + f.name
 	}
-	return "📄 " + f.name
+	return "[F] " + f.name
 }
 func (f fileItem) Description() string { return f.path }
 

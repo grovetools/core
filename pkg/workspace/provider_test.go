@@ -136,11 +136,11 @@ func TestValidateAndWarnCollisions(t *testing.T) {
 			output := buf.String()
 
 			if tt.expectWarning {
-				assert.Contains(t, output, "⚠️  Warning: workspace name collisions detected:")
+				assert.Contains(t, output, "WARNING: workspace name collisions detected:")
 				assert.Contains(t, output, tt.expectedCollision)
 			} else {
 				// Should not contain any collision warnings
-				if strings.Contains(output, "⚠️  Warning") {
+				if strings.Contains(output, "WARNING: workspace name collisions") {
 					t.Errorf("Expected no collision warning, but got: %s", output)
 				}
 			}

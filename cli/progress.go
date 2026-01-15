@@ -39,14 +39,14 @@ func (p *ProgressReporter) render() {
 	fmt.Printf("Grove operation in progress... [%s]\n\n", elapsed)
 
 	for service, status := range p.statuses {
-		symbol := "⏳"
+		symbol := "[.]"
 		switch status {
 		case "completed":
-			symbol = "✅"
+			symbol = "[*]"
 		case "failed":
-			symbol = "❌"
+			symbol = "[x]"
 		case "starting":
-			symbol = "🔄"
+			symbol = "[~]"
 		}
 
 		fmt.Printf("%s %s: %s\n", symbol, service, status)

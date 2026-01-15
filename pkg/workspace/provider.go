@@ -237,7 +237,7 @@ func (p *Provider) validateAndWarnCollisions() {
 	}
 
 	if len(collisions) > 0 {
-		fmt.Printf("⚠️  Warning: workspace name collisions detected:\n")
+		fmt.Printf("WARNING: workspace name collisions detected:\n")
 		for _, collision := range collisions {
 			fmt.Printf("   %v\n", collision)
 		}

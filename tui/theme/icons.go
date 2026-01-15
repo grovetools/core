@@ -168,9 +168,9 @@ const (
 	asciiIconWorktree          = "⑂"
 	asciiIconEcosystem         = "◆"
 	asciiIconGitBranch         = "⎇"
-	asciiIconSuccess           = "✓"
-	asciiIconError             = "✗"
-	asciiIconWarning           = "⚠"
+	asciiIconSuccess           = "*"
+	asciiIconError             = "x"
+	asciiIconWarning           = "!"
 	asciiIconInfo              = "ℹ"
 	asciiIconRunning           = "◐"
 	asciiIconPending           = "…"
@@ -187,7 +187,7 @@ const (
 	asciiIconShell             = "▶"
 	asciiIconStatusCompleted   = "●"
 	asciiIconStatusRunning     = "◐"
-	asciiIconStatusFailed      = "✗"
+	asciiIconStatusFailed      = "x"
 	asciiIconStatusBlocked     = "[X]" // Blocked
 	asciiIconStatusNeedsReview = "[?]"
 	asciiIconStatusPendingUser = "○"
@@ -203,7 +203,7 @@ const (
 	asciiIconFilter         = "⊲"   // Filter
 	asciiIconSave           = "[S]" // Save
 	asciiIconSelectAll      = "[*]" //  Select all
-	asciiIconAudited        = "✓"   // Audited
+	asciiIconAudited        = "*"   // Audited
 
 	asciiIconPullRequest           = "PR"    // Pull request
 	asciiIconPullRequestClosed     = "[x]PR" // PR closed
@@ -214,7 +214,7 @@ const (
 	asciiIconGitCompare            = "<>"    // Git compare
 	asciiIconDiff                  = "[±]"   // Diff
 	asciiIconGit                   = "git"   // Git
-	asciiIconGitStaged             = "✓"     // Staged/ready to commit
+	asciiIconGitStaged             = "*"     // Staged/ready to commit
 	asciiIconGitModified           = "M"     // Modified but unstaged
 	asciiIconGitUntracked          = "?"     // New untracked file
 	asciiIconGitDeleted            = "D"     // Deleted file
@@ -256,7 +256,7 @@ const (
 	asciiIconNoteCurrent    = "[>]" // Current note
 	asciiIconNoteIssues     = "[!]" // Issues notes
 	asciiIconNoteInbox      = "[I]" // Inbox notes
-	asciiIconNoteCompleted  = "[✓]" // Completed notes
+	asciiIconNoteCompleted  = "[*]" // Completed notes
 	asciiIconNoteReview     = "[R]" // Review notes
 	asciiIconNoteInProgress = "[~]" // In-progress notes
 
@@ -282,7 +282,7 @@ const (
 	asciiIconFilePlus               = "[+]"  // File plus
 	asciiIconFire                   = "[*]"  // Fire
 	asciiIconFolder                 = "[ ]"  // Folder
-	asciiIconFolderCheck            = "[✓]"  // Folder check
+	asciiIconFolderCheck            = "[*]"  // Folder check
 	asciiIconFolderEye              = "[E]"  // Folder eye
 	asciiIconFolderLock             = "[#]"  // Folder lock
 	asciiIconFolderMultiple         = "[=]"  // Folder multiple

@@ -109,7 +109,7 @@ Only shows workspaces that have additional worktrees beyond the main one.`
 
 		// Display results
 		for _, result := range results {
-			header := worktreeHeaderStyle.Render(fmt.Sprintf("📁 %s", result.name))
+			header := worktreeHeaderStyle.Render(result.name)
 			fmt.Println(header)
 
 			var lines []string
@@ -158,10 +158,10 @@ func formatWorktreeLine(wt git.WorktreeWithStatus) string {
 			}
 			statusStr = worktreeDirtyStyle.Render(fmt.Sprintf("● %s", strings.Join(counts, " ")))
 		} else {
-			statusStr = worktreeCleanStyle.Render("✓ Clean")
+			statusStr = worktreeCleanStyle.Render("Clean")
 		}
 	} else {
-		statusStr = worktreeErrorStyle.Render("⚠ Unknown")
+		statusStr = worktreeErrorStyle.Render("Unknown")
 	}
 
 	return fmt.Sprintf("%-50s %-20s %s", pathStr, branchStr, statusStr)
