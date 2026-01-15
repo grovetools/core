@@ -22,12 +22,15 @@ func NewStandardCommand(use, short string) *cobra.Command {
         Use:   use,
         Short: short,
     }
-    
+
     // Standard flags for all Grove tools
     cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
     cmd.PersistentFlags().Bool("json", false, "Output in JSON format")
     cmd.PersistentFlags().StringP("config", "c", "", "Path to grove.yml config file")
-    
+
+    // Apply styled help
+    SetStyledHelp(cmd)
+
     return cmd
 }
 
