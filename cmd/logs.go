@@ -146,13 +146,19 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to get current directory: %w", err)
 		}
 
+		// Try to get workspace name from grove.yml, fall back to directory basename
+		wsName := filepath.Base(cwd)
+		if cfg, err := config.LoadFrom(cwd); err == nil && cfg.Name != "" {
+			wsName = cfg.Name
+		}
+
 		// Create a WorkspaceNode for the current workspace
 		// Note: We don't require grove.yml to exist here - findLogFileForWorkspace
 		// handles missing configs gracefully by falling back to .grove/logs/
 		workspaces = []*workspace.WorkspaceNode{
 			{
 				Path: cwd,
-				Name: filepath.Base(cwd),
+				Name: wsName,
 			},
 		}
 	}
@@ -167,12 +173,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	follow, _ := cmd.Flags().GetBool("follow")
 
 	if tuiMode {
-		// Convert WorkspaceNode slice to string slice of paths
-		workspacePaths := make([]string, len(workspaces))
-		for i, ws := range workspaces {
-			workspacePaths[i] = ws.Path
-		}
-		return runLogsTUI(workspacePaths, follow, overrideOpts)
+		return runLogsTUI(workspaces, follow, overrideOpts)
 	}
 
 	// 3. Find log files and start tailing

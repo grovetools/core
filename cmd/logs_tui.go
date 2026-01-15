@@ -23,6 +23,7 @@ import (
 	"github.com/hpcloud/tail"
 	"github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/logging"
+	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"github.com/mattsolo1/grove-core/tui/components/help"
 	"github.com/mattsolo1/grove-core/tui/components/jsontree"
 	"github.com/mattsolo1/grove-core/tui/keymap"
@@ -1203,7 +1204,7 @@ func getWorkspaceStyle(workspace string) lipgloss.Style {
 }
 
 // Run the logs TUI
-func runLogsTUI(workspaces []string, follow bool, overrideOpts *logging.OverrideOptions) error {
+func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions) error {
 	logger := logging.NewLogger("logs-tui")
 
 	// Load logging config for component filtering, starting with defaults
@@ -1257,14 +1258,14 @@ func runLogsTUI(workspaces []string, follow bool, overrideOpts *logging.Override
 	// Helper to discover and tail log files for all workspaces
 	discoverAndTailFiles := func() {
 		for _, ws := range workspaces {
-			logDir := filepath.Join(ws, ".grove", "logs")
+			logDir := filepath.Join(ws.Path, ".grove", "logs")
 			files, err := filepath.Glob(filepath.Join(logDir, "*.log"))
 			if err != nil {
 				continue
 			}
 
 			for _, file := range files {
-				startTailing(file, filepath.Base(ws))
+				startTailing(file, ws.Name)
 			}
 		}
 	}

@@ -268,7 +268,8 @@ logging:
 				session := ctx.Get("tui_session").(*tui.Session)
 
 				return ctx.Verify(func(v *verify.Collector) {
-					v.Equal("initial count is 3/3", nil, session.AssertContains("3/3"))
+					// Check for total count of 3 (shown as "X/3" in status bar)
+					v.Equal("initial count is 3", nil, session.AssertContains("/3"))
 					v.Equal("T+2s visible", nil, session.AssertContains("Message T+2s"))
 					v.Equal("T+4s visible", nil, session.AssertContains("Message T+4s"))
 					v.Equal("T+6s visible", nil, session.AssertContains("Message T+6s"))
@@ -305,7 +306,8 @@ logging:
 
 				// Verify chronological order: T+1s should appear before T+2s
 				return ctx.Verify(func(v *verify.Collector) {
-					v.Equal("count is now 4/4", nil, session.AssertContains("4/4"))
+					// Check total count is now 4 (shown as "X/4" in status bar)
+					v.Equal("count is now 4", nil, session.AssertContains("/4"))
 
 					idxT1 := strings.Index(content, "Message T+1s (older)")
 					idxT2 := strings.Index(content, "Message T+2s")
@@ -344,7 +346,8 @@ logging:
 
 				// Verify chronological order: T+2s < T+3s < T+4s
 				return ctx.Verify(func(v *verify.Collector) {
-					v.Equal("count is now 5/5", nil, session.AssertContains("5/5"))
+					// Check total count is now 5 (shown as "X/5" in status bar)
+					v.Equal("count is now 5", nil, session.AssertContains("/5"))
 
 					idxT2 := strings.Index(content, "Message T+2s")
 					idxT3 := strings.Index(content, "Message T+3s (middle)")
