@@ -1,12 +1,13 @@
 package cli
 
 import (
+    "context"
     "os"
-    
-    "github.com/spf13/cobra"
-    "github.com/sirupsen/logrus"
+
     "github.com/mattsolo1/grove-core/config"
     "github.com/mattsolo1/grove-core/logging"
+    "github.com/sirupsen/logrus"
+    "github.com/spf13/cobra"
 )
 
 // CommandOptions holds common options for Grove commands
@@ -41,6 +42,27 @@ func Execute(cmd *cobra.Command) error {
     cmd.SilenceErrors = true
 
     err := cmd.Execute()
+    if err != nil {
+        // Find the actual command that was targeted
+        targetCmd, _, _ := cmd.Find(os.Args[1:])
+        if targetCmd != nil {
+            PrintError(targetCmd, err)
+        } else {
+            PrintError(cmd, err)
+        }
+    }
+    return err
+}
+
+// ExecuteContext applies styled help and executes the command with context.
+// Use this instead of cmd.ExecuteContext() to get consistent Grove styling.
+func ExecuteContext(ctx context.Context, cmd *cobra.Command) error {
+    ApplyStyledHelpRecursive(cmd)
+
+    // Silence cobra's default error printing so we can style it
+    cmd.SilenceErrors = true
+
+    err := cmd.ExecuteContext(ctx)
     if err != nil {
         // Find the actual command that was targeted
         targetCmd, _, _ := cmd.Find(os.Args[1:])
