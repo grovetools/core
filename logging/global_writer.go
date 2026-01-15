@@ -28,7 +28,7 @@ func (gw *globalWriter) Set(w io.Writer) {
 }
 
 // Ensure the global writer is a singleton.
-var defaultGlobalWriter = &globalWriter{w: os.Stderr}
+var defaultGlobalWriter = &globalWriter{w: os.Stdout}
 
 // SetGlobalOutput sets the output destination for all loggers that use it.
 // This is the central function for redirecting logs in the TUI.
