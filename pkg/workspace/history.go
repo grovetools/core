@@ -40,6 +40,13 @@ func LoadAccessHistory(configDir string) (*AccessHistory, error) {
 		return nil, err
 	}
 
+	// Return empty history if file is empty
+	if len(data) == 0 {
+		return &AccessHistory{
+			Projects: make(map[string]*ProjectAccess),
+		}, nil
+	}
+
 	var history AccessHistory
 	if err := json.Unmarshal(data, &history); err != nil {
 		return nil, err
