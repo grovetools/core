@@ -23,7 +23,7 @@ func main() {
 	rootCmd.AddCommand(cmd.NewLogsCmd())
 	rootCmd.AddCommand(cmd.NewNvimDemoCmd())
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.Execute(rootCmd); err != nil {
 		os.Exit(1)
 	}
 }

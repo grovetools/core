@@ -21,9 +21,34 @@ var (
 	helpExtrasMu sync.RWMutex
 )
 
-// SetStyledHelp applies consistent Grove styling to a command's help output
+// SetStyledHelp applies consistent Grove styling to a command's help output.
+// Call this on the root command before Execute().
 func SetStyledHelp(cmd *cobra.Command) {
 	cmd.SetHelpFunc(styledHelpFunc)
+}
+
+// ApplyStyledHelpRecursive applies styled help and usage to a command and all its subcommands.
+// Call this after all subcommands have been added, before Execute().
+func ApplyStyledHelpRecursive(cmd *cobra.Command) {
+	cmd.SetHelpFunc(styledHelpFunc)
+	cmd.SetUsageFunc(styledUsageFunc)
+	for _, sub := range cmd.Commands() {
+		ApplyStyledHelpRecursive(sub)
+	}
+}
+
+// styledUsageFunc provides minimal usage output (shown on errors).
+// Returns nothing since error handling is done in cli.Execute.
+func styledUsageFunc(cmd *cobra.Command) error {
+	return nil
+}
+
+// PrintError prints a styled error message to stderr with help hint.
+func PrintError(cmd *cobra.Command, err error) {
+	t := theme.DefaultTheme
+	red := lipgloss.NewStyle().Bold(true).Foreground(t.Colors.Red)
+	fmt.Fprintf(cmd.ErrOrStderr(), "%s %s\n", red.Render("Error:"), err.Error())
+	fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", t.Muted.Render(fmt.Sprintf("Run '%s --help' for usage.", cmd.CommandPath())))
 }
 
 // SetStyledHelpWithExtras applies Grove styling with additional custom sections.
@@ -103,6 +128,11 @@ func styleCommandLine(line, rootCmd string, mainStyle, subStyle, flagStyle lipgl
 func styledHelpFunc(cmd *cobra.Command, args []string) {
 	t := theme.DefaultTheme
 	blue := lipgloss.NewStyle().Bold(true).Foreground(t.Colors.Blue)
+	section := lipgloss.NewStyle().Italic(true).Foreground(t.Colors.Orange)
+
+	// Title - uppercase command path in orange
+	title := lipgloss.NewStyle().Bold(true).Foreground(t.Colors.Orange)
+	fmt.Println(" " + title.Render(strings.ToUpper(cmd.CommandPath())))
 
 	// Parse description and examples from Long
 	var description, examples string
@@ -112,14 +142,21 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 		description = cmd.Short
 	}
 
-	// Description
-	if description != "" {
-		fmt.Println(description)
+	// Short description in italic, then expanded description below
+	if cmd.Short != "" {
+		fmt.Println(" " + t.Italic.Render(cmd.Short))
+	}
+	if description != "" && description != cmd.Short {
+		fmt.Println()
+		// Indent each line of the description
+		for _, line := range strings.Split(description, "\n") {
+			fmt.Println(" " + line)
+		}
 	}
 
 	// Usage section
 	if cmd.Runnable() || cmd.HasSubCommands() {
-		fmt.Println("\n " + t.Bold.Render("USAGE"))
+		fmt.Println("\n " + section.Render("USAGE"))
 		if cmd.Runnable() {
 			fmt.Printf(" %s\n", cmd.UseLine())
 		}
@@ -137,7 +174,7 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 			}
 		}
 
-		fmt.Println("\n " + t.Bold.Render("COMMANDS"))
+		fmt.Println("\n " + section.Render("COMMANDS"))
 		for _, sub := range cmd.Commands() {
 			if sub.IsAvailableCommand() {
 				padding := strings.Repeat(" ", maxLen-len(sub.Name()))
@@ -169,7 +206,7 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 		} else {
 			// Leaf commands: show detailed flags
 			magenta := lipgloss.NewStyle().Foreground(t.Colors.Violet)
-			fmt.Println("\n " + t.Bold.Render("FLAGS"))
+			fmt.Println("\n " + section.Render("FLAGS"))
 			maxFlagLen := 0
 			for _, f := range visibleFlags {
 				flagStr := formatFlagName(f)
@@ -180,18 +217,25 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 			for _, f := range visibleFlags {
 				flagStr := formatFlagName(f)
 				padding := strings.Repeat(" ", maxFlagLen-len(flagStr))
-				usage := f.Usage
+				indent := strings.Repeat(" ", maxFlagLen+3) // for continuation lines
+
+				usage, choices := parseChoices(f.Usage)
 				if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "[]" {
 					usage += t.Muted.Render(fmt.Sprintf(" (default: %s)", f.DefValue))
 				}
 				fmt.Printf(" %s%s  %s\n", magenta.Render(flagStr), padding, usage)
+
+				// Print choices on separate lines if present
+				for _, choice := range choices {
+					fmt.Printf(" %s  %s\n", indent, t.Muted.Render("• "+choice))
+				}
 			}
 		}
 	}
 
 	// Examples section (if present in Long description)
 	if examples != "" {
-		fmt.Println("\n " + t.Bold.Render("EXAMPLES"))
+		fmt.Println("\n " + section.Render("EXAMPLES"))
 		renderExamples(t, examples, cmd.CommandPath())
 	}
 
@@ -215,4 +259,55 @@ func formatFlagName(f *pflag.Flag) string {
 		return fmt.Sprintf("-%s, --%s", f.Shorthand, f.Name)
 	}
 	return fmt.Sprintf("    --%s", f.Name)
+}
+
+// parseChoices extracts choices from a flag usage string.
+// Looks for patterns like "type: x, y, z" or "one of: x, y, z" and returns
+// the base description and the list of choices.
+func parseChoices(usage string) (description string, choices []string) {
+	// Look for patterns like ": x, y, z" or ": x, y, or z"
+	colonIdx := strings.Index(usage, ": ")
+	if colonIdx == -1 {
+		return usage, nil
+	}
+
+	// Check if what follows looks like a list of choices (contains commas)
+	afterColon := usage[colonIdx+2:]
+
+	// Find where the choices end (at a parenthesis or end of string)
+	endIdx := strings.Index(afterColon, " (")
+	var choicesStr string
+	var suffix string
+	if endIdx != -1 {
+		choicesStr = afterColon[:endIdx]
+		suffix = afterColon[endIdx:]
+	} else {
+		choicesStr = afterColon
+	}
+
+	// Must have at least one comma to be considered a choice list
+	if !strings.Contains(choicesStr, ", ") {
+		return usage, nil
+	}
+
+	// Split by comma, handling "or" in the last item
+	parts := strings.Split(choicesStr, ", ")
+	if len(parts) < 3 {
+		// Not enough choices to warrant splitting
+		return usage, nil
+	}
+
+	// Clean up choices (handle "or x" in last item)
+	for i, p := range parts {
+		p = strings.TrimPrefix(p, "or ")
+		parts[i] = strings.TrimSpace(p)
+	}
+
+	// Return base description (up to and including colon) + suffix
+	baseDesc := usage[:colonIdx+1]
+	if suffix != "" {
+		baseDesc += suffix
+	}
+
+	return baseDesc, parts
 }

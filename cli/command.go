@@ -16,7 +16,8 @@ type CommandOptions struct {
     JSONOutput bool
 }
 
-// NewStandardCommand creates a new command with standard Grove flags
+// NewStandardCommand creates a new command with standard Grove flags.
+// After adding all subcommands, call Execute(cmd) to run with styled help.
 func NewStandardCommand(use, short string) *cobra.Command {
     cmd := &cobra.Command{
         Use:   use,
@@ -28,10 +29,28 @@ func NewStandardCommand(use, short string) *cobra.Command {
     cmd.PersistentFlags().Bool("json", false, "Output in JSON format")
     cmd.PersistentFlags().StringP("config", "c", "", "Path to grove.yml config file")
 
-    // Apply styled help
-    SetStyledHelp(cmd)
-
     return cmd
+}
+
+// Execute applies styled help to all subcommands and executes the command.
+// Use this instead of cmd.Execute() to get consistent Grove styling.
+func Execute(cmd *cobra.Command) error {
+    ApplyStyledHelpRecursive(cmd)
+
+    // Silence cobra's default error printing so we can style it
+    cmd.SilenceErrors = true
+
+    err := cmd.Execute()
+    if err != nil {
+        // Find the actual command that was targeted
+        targetCmd, _, _ := cmd.Find(os.Args[1:])
+        if targetCmd != nil {
+            PrintError(targetCmd, err)
+        } else {
+            PrintError(cmd, err)
+        }
+    }
+    return err
 }
 
 // GetLogger creates a logger based on command flags
