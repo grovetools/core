@@ -16,6 +16,7 @@ func main() {
 	// Add subcommands
 	rootCmd.AddCommand(cmd.NewVersionCmd())
 	rootCmd.AddCommand(cmd.NewWsCmd())
+	rootCmd.AddCommand(cmd.NewWorktreesCmd())
 	rootCmd.AddCommand(cmd.NewConfigCmd())
 	rootCmd.AddCommand(cmd.NewEditorCmd())
 	rootCmd.AddCommand(cmd.NewOpenInWindowCmd())
