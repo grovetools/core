@@ -194,3 +194,51 @@ func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead int, be
 
 	return ahead, behind
 }
+
+// GetCommitsDivergenceFromRemoteMain returns the number of commits the local main/master branch
+// is ahead of and behind origin/main or origin/master.
+func GetCommitsDivergenceFromRemoteMain(repoPath, currentBranch string) (ahead int, behind int) {
+	cmdBuilder := command.NewSafeBuilder()
+
+	// Check if origin/main or origin/master exists
+	remoteRef := ""
+	for _, branchName := range []string{"main", "master"} {
+		refPath := "refs/remotes/origin/" + branchName
+		cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", refPath)
+		if err != nil {
+			continue
+		}
+		execCmd := cmd.Exec()
+		execCmd.Dir = repoPath
+		if execCmd.Run() == nil {
+			remoteRef = "origin/" + branchName
+			break
+		}
+	}
+
+	if remoteRef == "" {
+		return 0, 0
+	}
+
+	// git rev-list --left-right --count HEAD...origin/main
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-list", "--left-right", "--count", "HEAD..."+remoteRef)
+	if err != nil {
+		return 0, 0
+	}
+
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+
+	parts := strings.Fields(string(output))
+	if len(parts) == 2 {
+		// output is: <ahead> <behind> (HEAD on left side)
+		ahead, _ = strconv.Atoi(parts[0])
+		behind, _ = strconv.Atoi(parts[1])
+	}
+
+	return ahead, behind
+}

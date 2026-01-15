@@ -35,6 +35,11 @@ func GetExtendedStatus(path string) (*ExtendedGitStatus, error) {
 		ahead, behind := GetCommitsDivergenceFromMain(cleanPath, status.Branch)
 		status.AheadMainCount = ahead
 		status.BehindMainCount = behind
+	} else if !status.HasUpstream {
+		// When on main/master without an upstream set, compare against origin/main or origin/master
+		ahead, behind := GetCommitsDivergenceFromRemoteMain(cleanPath, status.Branch)
+		status.AheadMainCount = ahead
+		status.BehindMainCount = behind
 	}
 
 	cmdBuilder := command.NewSafeBuilder()
