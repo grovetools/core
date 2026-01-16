@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/git"
+	"github.com/grovetools/core/git"
 )
 
 // Expand expands home directory (~), environment variables, and git variables in a path.

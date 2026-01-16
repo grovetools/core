@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/pkg/tmux"
+	"github.com/grovetools/core/pkg/tmux"
 	"github.com/spf13/cobra"
 )
 

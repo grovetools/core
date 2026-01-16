@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/grovetools/core/tui/theme"
 )
 
 // PrettyLogger provides pretty formatted console output

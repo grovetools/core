@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/config"
+	"github.com/grovetools/core/config"
 )
 
 // determineKind classifies a project or workspace based on its path and context.

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/logging"
+	"github.com/grovetools/core/logging"
 )
 
 // OpenInEditorWindow finds or creates a window with a given name and opens a file.

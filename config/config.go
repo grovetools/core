@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/errors"
+	"github.com/grovetools/core/errors"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )

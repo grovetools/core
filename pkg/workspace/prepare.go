@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mattsolo1/grove-core/git"
+	"github.com/grovetools/core/git"
 	"github.com/sirupsen/logrus"
 )
 

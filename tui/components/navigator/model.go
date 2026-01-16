@@ -6,9 +6,9 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-core/tui/components/help"
-	core_theme "github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/tui/components/help"
+	core_theme "github.com/grovetools/core/tui/theme"
 )
 
 // Model is the generic navigator component model

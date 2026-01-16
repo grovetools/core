@@ -6,9 +6,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mattsolo1/grove-core/cli"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-core/tui/wsnav"
+	"github.com/grovetools/core/cli"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/tui/wsnav"
 	"github.com/spf13/cobra"
 )
 

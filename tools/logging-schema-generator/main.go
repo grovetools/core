@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/invopop/jsonschema"
-	"github.com/mattsolo1/grove-core/logging"
+	"github.com/grovetools/core/logging"
 )
 
 func main() {

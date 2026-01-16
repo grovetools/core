@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/util/pathutil"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // Provider acts as a read-only, in-memory store for a snapshot of discovered workspaces.

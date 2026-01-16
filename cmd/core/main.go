@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/mattsolo1/grove-core/cli"
-	"github.com/mattsolo1/grove-core/cmd"
+	"github.com/grovetools/core/cli"
+	"github.com/grovetools/core/cmd"
 )
 
 func main() {

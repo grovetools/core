@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mattsolo1/grove-core/config"
+	"github.com/grovetools/core/config"
 )
 
 func main() {

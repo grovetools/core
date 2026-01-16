@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // kindAbbreviation returns a single-character string for a workspace kind.

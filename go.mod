@@ -1,4 +1,4 @@
-module github.com/mattsolo1/grove-core
+module github.com/grovetools/core
 
 go 1.24.4
 
@@ -9,7 +9,7 @@ require (
 	github.com/hpcloud/tail v1.0.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/mattn/go-isatty v0.0.20
-	github.com/mattsolo1/grove-tend v0.4.0
+	github.com/grovetools/tend v0.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/termenv v0.16.0
 	github.com/neovim/go-client v1.2.1

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/command"
+	"github.com/grovetools/core/command"
 )
 
 type Client struct {

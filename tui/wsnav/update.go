@@ -2,7 +2,7 @@ package wsnav
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mattsolo1/grove-core/tui/components/navigator"
+	"github.com/grovetools/core/tui/components/navigator"
 )
 
 // Update handles messages and updates the model accordingly.

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattsolo1/grove-core/config"
+	"github.com/grovetools/core/config"
 )
 
 const defaultThemeName = "kanagawa"

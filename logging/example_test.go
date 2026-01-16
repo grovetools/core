@@ -1,7 +1,7 @@
 package logging_test
 
 import (
-	"github.com/mattsolo1/grove-core/logging"
+	"github.com/grovetools/core/logging"
 	"github.com/sirupsen/logrus"
 )
 

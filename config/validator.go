@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/mattsolo1/grove-core/schema"
+	"github.com/grovetools/core/schema"
 )
 
 // SchemaValidator validates configuration against the embedded JSON Schema.

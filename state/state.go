@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/grovetools/core/pkg/workspace"
 	"gopkg.in/yaml.v3"
 )
 

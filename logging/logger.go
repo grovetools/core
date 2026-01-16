@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
-	"github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-core/version"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/version"
 	"github.com/sirupsen/logrus"
 )
 

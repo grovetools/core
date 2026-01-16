@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattsolo1/grove-core/logging"
+	"github.com/grovetools/core/logging"
 	"github.com/neovim/go-client/nvim"
 	"github.com/sirupsen/logrus"
 )

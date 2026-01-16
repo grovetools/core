@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 
-	"github.com/mattsolo1/grove-core/command"
+	"github.com/grovetools/core/command"
 )
 
 // CLIRepository implements RepositoryProvider using git CLI

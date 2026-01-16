@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
-	"github.com/mattsolo1/grove-core/tui/keymap"
-	"github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/grovetools/core/tui/keymap"
+	"github.com/grovetools/core/tui/theme"
 )
 
 // Model represents an embeddable help component

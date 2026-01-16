@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-core/pkg/workspace/filter"
-	"github.com/mattsolo1/grove-core/tui/components/table"
-	"github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/pkg/workspace/filter"
+	"github.com/grovetools/core/tui/components/table"
+	"github.com/grovetools/core/tui/theme"
 )
 
 // View renders the TUI with custom table-based display.

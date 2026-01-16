@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-tend/pkg/fs"
-	"github.com/mattsolo1/grove-tend/pkg/git"
-	"github.com/mattsolo1/grove-tend/pkg/harness"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/tend/pkg/fs"
+	"github.com/grovetools/tend/pkg/git"
+	"github.com/grovetools/tend/pkg/harness"
 	"gopkg.in/yaml.v3"
 )
 

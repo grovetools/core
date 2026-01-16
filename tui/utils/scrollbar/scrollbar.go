@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/grovetools/core/tui/theme"
 )
 
 // Generate creates scrollbar characters based on viewport position.

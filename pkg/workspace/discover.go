@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/pkg/repo"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/repo"
 	"github.com/sirupsen/logrus"
 )
 

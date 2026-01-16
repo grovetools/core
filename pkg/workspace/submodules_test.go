@@ -372,10 +372,10 @@ func TestParseGitmodules(t *testing.T) {
 	t.Run("parse standard gitmodules", func(t *testing.T) {
 		gitmodulesContent := `[submodule "grove-core"]
 	path = grove-core
-	url = https://github.com/mattsolo1/grove-core.git
+	url = https://github.com/grovetools/core.git
 [submodule "grove-flow"]
 	path = grove-flow
-	url = https://github.com/mattsolo1/grove-flow.git
+	url = https://github.com/grovetools/flow.git
 `
 		tmpDir := t.TempDir()
 		gitmodulesPath := filepath.Join(tmpDir, ".gitmodules")

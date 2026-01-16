@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // FilterByFocus returns only the focused project and its children/worktrees

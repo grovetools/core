@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"runtime"
 
-	"github.com/mattsolo1/grove-core/tui/theme"
+	"github.com/grovetools/core/tui/theme"
 	"github.com/sirupsen/logrus"
 )
 

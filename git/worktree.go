@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/command"
+	"github.com/grovetools/core/command"
 )
 
 // WorktreeInfo contains information about a git worktree

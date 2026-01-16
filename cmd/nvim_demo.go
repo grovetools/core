@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/logging"
-	"github.com/mattsolo1/grove-core/tui/components/nvim"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/tui/components/nvim"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

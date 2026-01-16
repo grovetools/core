@@ -1,6 +1,6 @@
 package wsnav
 
-import "github.com/mattsolo1/grove-core/git"
+import "github.com/grovetools/core/git"
 
 // gitStatusLoadedMsg is sent when a workspace's Git status has been loaded.
 //

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/grovetools/core/pkg/workspace"
 	"github.com/stretchr/testify/assert"
 )
 

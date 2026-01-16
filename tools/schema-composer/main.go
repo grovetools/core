@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	groveSchema "github.com/mattsolo1/grove-core/schema"
+	groveSchema "github.com/grovetools/core/schema"
 )
 
 func main() {

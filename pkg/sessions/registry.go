@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mattsolo1/grove-core/util/pathutil"
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // Registry defines the interface for managing live session tracking.

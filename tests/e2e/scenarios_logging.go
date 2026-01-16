@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/logging"
-	"github.com/mattsolo1/grove-tend/pkg/assert"
-	"github.com/mattsolo1/grove-tend/pkg/fs"
-	"github.com/mattsolo1/grove-tend/pkg/harness"
+	"github.com/grovetools/core/logging"
+	"github.com/grovetools/tend/pkg/assert"
+	"github.com/grovetools/tend/pkg/fs"
+	"github.com/grovetools/tend/pkg/harness"
 )
 
 // LoggingJSONFormatScenario tests that the logger outputs valid JSON when configured.

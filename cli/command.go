@@ -4,8 +4,8 @@ import (
     "context"
     "os"
 
-    "github.com/mattsolo1/grove-core/config"
-    "github.com/mattsolo1/grove-core/logging"
+    "github.com/grovetools/core/config"
+    "github.com/grovetools/core/logging"
     "github.com/sirupsen/logrus"
     "github.com/spf13/cobra"
 )

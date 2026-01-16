@@ -1,7 +1,7 @@
 package starship
 
 import (
-	"github.com/mattsolo1/grove-core/state"
+	"github.com/grovetools/core/state"
 )
 
 // StatusProvider generates a status string for a tool based on the current state.

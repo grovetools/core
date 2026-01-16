@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mattsolo1/grove-core/config"
+	"github.com/grovetools/core/config"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

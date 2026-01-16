@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mattsolo1/grove-core/errors"
+	"github.com/grovetools/core/errors"
 )
 
 // ErrorHandler provides user-friendly error messages

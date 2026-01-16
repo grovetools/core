@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/mattsolo1/grove-core/util/sanitize"
+	"github.com/grovetools/core/util/sanitize"
 )
 
 // Identifier generates a unique, sanitized identifier for a project,

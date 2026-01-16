@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/command"
+	"github.com/grovetools/core/command"
 )
 
 // StatusInfo contains detailed git status information for a repository

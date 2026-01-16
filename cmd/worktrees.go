@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattsolo1/grove-core/cli"
-	"github.com/mattsolo1/grove-core/git"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/grovetools/core/cli"
+	"github.com/grovetools/core/git"
+	"github.com/grovetools/core/pkg/workspace"
 	"github.com/spf13/cobra"
 )
 

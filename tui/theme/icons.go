@@ -3,7 +3,7 @@ package theme
 import (
 	"os"
 
-	"github.com/mattsolo1/grove-core/config"
+	"github.com/grovetools/core/config"
 )
 
 // Nerd Font Icons (Private Constants)
