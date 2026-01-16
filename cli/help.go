@@ -317,9 +317,42 @@ func formatFlagName(f *pflag.Flag) string {
 }
 
 // parseChoices extracts choices from a flag usage string.
-// Looks for patterns like "type: x, y, z" or "one of: x, y, z" and returns
-// the base description and the list of choices.
+// Supports two formats:
+// 1. Inline: "type: x, y, z" - comma-separated choices on one line
+// 2. Multi-line with descriptions:
+//
+//	"Description:
+//	   • choice1 - Description of choice1
+//	   • choice2 - Description of choice2"
+//
+// Returns the base description and the list of choices (with descriptions if present).
 func parseChoices(usage string) (description string, choices []string) {
+	// First check for multi-line bullet point format
+	lines := strings.Split(usage, "\n")
+	if len(lines) > 1 {
+		var baseDesc string
+		var bulletChoices []string
+
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			// Check for bullet point lines (• or -)
+			if strings.HasPrefix(trimmed, "• ") || strings.HasPrefix(trimmed, "- ") {
+				// Extract the choice (including description after dash if present)
+				choice := strings.TrimPrefix(trimmed, "• ")
+				choice = strings.TrimPrefix(choice, "- ")
+				bulletChoices = append(bulletChoices, choice)
+			} else if i == 0 && trimmed != "" {
+				// First non-bullet line is the description
+				baseDesc = trimmed
+			}
+		}
+
+		if len(bulletChoices) > 0 {
+			return baseDesc, bulletChoices
+		}
+	}
+
+	// Fall back to inline comma-separated format
 	// Look for patterns like ": x, y, z" or ": x, y, or z"
 	colonIdx := strings.Index(usage, ": ")
 	if colonIdx == -1 {
