@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/mattsolo1/grove-core/logging/config",
+  "$id": "https://github.com/grovetools/core/logging/config",
   "$defs": {
     "ComponentFilteringConfig": {
       "properties": {

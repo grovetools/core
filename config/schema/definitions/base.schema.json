@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/mattsolo1/grove-core/config/base-config",
+  "$id": "https://github.com/grovetools/core/config/base-config",
   "$defs": {
     "ExplicitProject": {
       "properties": {
