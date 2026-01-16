@@ -1,5 +1,6 @@
-name: grove-core
+name: core
 description: Core libraries and debugging tools for the Grove ecosystem
+managed: true
 binary:
   name: core
   path: ./bin/core
