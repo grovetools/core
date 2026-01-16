@@ -1,5 +1,5 @@
 enabled: true
-title: Grove Core
+title: core
 description: The shared Go library for the Grove ecosystem, providing standardized CLI patterns, configuration management, logging, and utilities for all Grove tools.
 category: Core Libraries
 settings:
