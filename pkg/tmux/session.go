@@ -361,6 +361,19 @@ func (c *Client) GetWindowPaneID(ctx context.Context, windowTarget string) (stri
 	return strings.TrimSpace(output), nil
 }
 
+// SetGlobalEnvironment sets environment variables at the tmux server level.
+// These variables will be inherited by all new sessions and windows.
+// Use this to configure the environment for an isolated tmux server (e.g., demo environments).
+func (c *Client) SetGlobalEnvironment(ctx context.Context, env map[string]string) error {
+	for key, value := range env {
+		// tmux setenv -g NAME VALUE (setenv is alias for set-environment)
+		if _, err := c.run(ctx, "setenv", "-g", key, value); err != nil {
+			return fmt.Errorf("failed to set global environment %s: %w", key, err)
+		}
+	}
+	return nil
+}
+
 // SetPaneEnvironment sets environment variables for a specific pane by sending export commands.
 // This affects the shell running in the pane for its entire lifetime.
 // Commands are prefixed with a space to prevent shell history pollution.
