@@ -33,8 +33,14 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 	if opts.WindowIndex >= 0 {
 		windowToMove := opts.WindowName
 		if windowToMove == "" {
-			// If no name, the first window has the same name as the session
-			windowToMove = opts.SessionName
+			// Get the actual window name from tmux - it may be the shell name, not the session name
+			windows, err := c.ListWindowsDetailed(ctx, opts.SessionName)
+			if err == nil && len(windows) > 0 {
+				windowToMove = windows[0].Name
+			} else {
+				// Fallback to session name if we can't get the window list
+				windowToMove = opts.SessionName
+			}
 		}
 		// InsertWindowAt handles moving or swapping to the target index
 		if err := c.InsertWindowAt(ctx, opts.SessionName, windowToMove, opts.WindowIndex); err != nil {
