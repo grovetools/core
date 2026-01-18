@@ -66,6 +66,17 @@ func (c *Client) KillServer(ctx context.Context) error {
 	return err
 }
 
+// Command creates an exec.Cmd for tmux that respects GROVE_TMUX_SOCKET.
+// Use this instead of exec.Command("tmux", ...) for socket-aware operations
+// when you need a raw *exec.Cmd (e.g., for AttachStdin/Stdout).
+// For most operations, prefer using the Client methods instead.
+func Command(args ...string) *exec.Cmd {
+	if socket := os.Getenv("GROVE_TMUX_SOCKET"); socket != "" {
+		args = append([]string{"-L", socket}, args...)
+	}
+	return exec.Command("tmux", args...)
+}
+
 func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	// Prepend socket flag if using a dedicated server
 	if c.socket != "" {
