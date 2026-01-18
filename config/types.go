@@ -328,6 +328,7 @@ const (
 	SourceDefault        ConfigSource = "default"
 	SourceGlobal         ConfigSource = "global"
 	SourceGlobalOverride ConfigSource = "global-override"
+	SourceEnvOverlay     ConfigSource = "env-overlay" // GROVE_CONFIG_OVERLAY
 	SourceEcosystem      ConfigSource = "ecosystem"
 	SourceProject        ConfigSource = "project"
 	SourceOverride       ConfigSource = "override"
@@ -343,12 +344,13 @@ type OverrideSource struct {
 // LayeredConfig holds the raw configuration from each source file,
 // as well as the final merged configuration, for analysis purposes.
 type LayeredConfig struct {
-	Default        *Config          // Config with only default values applied.
-	Global         *Config          // Raw config from the global file.
-	GlobalOverride *OverrideSource  // Raw config from the global override file.
-	Ecosystem      *Config          // Raw config from the ecosystem file (if workspace is in an ecosystem).
-	Project        *Config          // Raw config from the project file.
-	Overrides      []OverrideSource // Raw configs from override files, in order of application.
-	Final          *Config          // The fully merged and validated config.
+	Default        *Config                 // Config with only default values applied.
+	Global         *Config                 // Raw config from the global file.
+	GlobalOverride *OverrideSource         // Raw config from the global override file.
+	EnvOverlay     *OverrideSource         // Raw config from GROVE_CONFIG_OVERLAY env var.
+	Ecosystem      *Config                 // Raw config from the ecosystem file (if workspace is in an ecosystem).
+	Project        *Config                 // Raw config from the project file.
+	Overrides      []OverrideSource        // Raw configs from override files, in order of application.
+	Final          *Config                 // The fully merged and validated config.
 	FilePaths      map[ConfigSource]string // Maps sources to their file paths.
 }

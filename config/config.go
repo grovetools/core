@@ -114,6 +114,39 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 	}
 
+	// Load GROVE_CONFIG_OVERLAY if set (for demo/testing environments)
+	// Any field present in the overlay replaces the corresponding field in base config.
+	if overlayPath := os.Getenv("GROVE_CONFIG_OVERLAY"); overlayPath != "" {
+		overlayPath = expandPath(overlayPath)
+		if _, err := os.Stat(overlayPath); err == nil {
+			logger.WithField("path", overlayPath).Debug("Loading config overlay from GROVE_CONFIG_OVERLAY")
+			overlayData, err := os.ReadFile(overlayPath)
+			if err != nil {
+				return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read config overlay").
+					WithDetail("path", overlayPath)
+			}
+			expanded := expandEnvVars(string(overlayData))
+			var overlayConfig Config
+			if err := yaml.Unmarshal([]byte(expanded), &overlayConfig); err != nil {
+				return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse config overlay").
+					WithDetail("path", overlayPath)
+			}
+			if finalConfig == nil {
+				finalConfig = &overlayConfig
+			} else {
+				// Replace any non-zero field from overlay
+				applyOverlay(finalConfig, &overlayConfig)
+			}
+		} else if os.IsNotExist(err) {
+			// If GROVE_CONFIG_OVERLAY is set but file doesn't exist, that's an error
+			return nil, errors.ConfigNotFound(overlayPath).
+				WithDetail("reason", "GROVE_CONFIG_OVERLAY path does not exist")
+		} else {
+			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to access config overlay").
+				WithDetail("path", overlayPath)
+		}
+	}
+
 	if projectPath != "" {
 		logger.WithField("path", projectPath).Debug("Loading project configuration")
 		// 2. Load and merge project config - also without defaults/validation
@@ -298,6 +331,37 @@ func FindConfigFile(startDir string) (string, error) {
 	return "", errors.ConfigNotFound(startDir).WithDetail("searchPath", startDir)
 }
 
+// expandPath expands ~ to home directory and environment variables in a path
+func expandPath(path string) string {
+	// First expand environment variables
+	path = os.ExpandEnv(path)
+
+	// Then handle ~ expansion
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+
+	return path
+}
+
+// applyOverlay replaces fields in base with non-zero fields from overlay.
+func applyOverlay(base, overlay *Config) {
+	if len(overlay.Groves) > 0 {
+		base.Groves = overlay.Groves
+	}
+	if overlay.Notebooks != nil && overlay.Notebooks.Definitions != nil {
+		if base.Notebooks == nil {
+			base.Notebooks = &NotebooksConfig{}
+		}
+		base.Notebooks.Definitions = overlay.Notebooks.Definitions
+	}
+	if len(overlay.Extensions) > 0 {
+		base.Extensions = overlay.Extensions
+	}
+}
+
 // expandEnvVars replaces ${VAR} with environment variable values
 func expandEnvVars(content string) string {
 	return envVarRegex.ReplaceAllStringFunc(content, func(match string) string {
@@ -449,6 +513,25 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 	}
 
+	// 2.75. Load GROVE_CONFIG_OVERLAY layer (optional)
+	if overlayPath := os.Getenv("GROVE_CONFIG_OVERLAY"); overlayPath != "" {
+		overlayPath = expandPath(overlayPath)
+		if _, err := os.Stat(overlayPath); err == nil {
+			overlayData, err := os.ReadFile(overlayPath)
+			if err == nil {
+				expanded := expandEnvVars(string(overlayData))
+				var overlayConfig Config
+				if err := yaml.Unmarshal([]byte(expanded), &overlayConfig); err == nil {
+					layeredConfig.EnvOverlay = &OverrideSource{
+						Path:   overlayPath,
+						Config: &overlayConfig,
+					}
+					layeredConfig.FilePaths[SourceEnvOverlay] = overlayPath
+				}
+			}
+		}
+	}
+
 	// 3. Load Project layer (optional)
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
@@ -533,6 +616,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		finalConfig = mergeConfigs(finalConfig, layeredConfig.GlobalOverride.Config)
 	}
 
+	// Apply env overlay (GROVE_CONFIG_OVERLAY) - REPLACES groves/workspaces for isolation
+	if layeredConfig.EnvOverlay != nil {
+		applyOverlay(finalConfig, layeredConfig.EnvOverlay.Config)
+	}
+
 	// Merge ecosystem config (after global, before project)
 	if layeredConfig.Ecosystem != nil {
 		finalConfig = mergeConfigs(finalConfig, layeredConfig.Ecosystem)
@@ -543,9 +631,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		finalConfig = mergeConfigs(finalConfig, layeredConfig.Project)
 	}
 
-	// Merge overrides
-	for _, override := range layeredConfig.Overrides {
-		finalConfig = mergeConfigs(finalConfig, override.Config)
+	// Merge overrides (skip when overlay is active for full isolation)
+	if layeredConfig.EnvOverlay == nil {
+		for _, override := range layeredConfig.Overrides {
+			finalConfig = mergeConfigs(finalConfig, override.Config)
+		}
 	}
 
 	// Set defaults for the final merged config
