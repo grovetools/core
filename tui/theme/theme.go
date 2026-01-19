@@ -152,12 +152,18 @@ type Theme struct {
 	Header lipgloss.Style
 	Title  lipgloss.Style
 
-	// Status indicators
+	// Status indicators (bold)
 	Success lipgloss.Style
 	Error   lipgloss.Style
 	Warning lipgloss.Style
 	Info    lipgloss.Style
 	Magenta lipgloss.Style // Magenta/violet for special statuses like interrupted
+
+	// Status indicators (non-bold) - for subtle/inline coloring
+	SuccessLight lipgloss.Style
+	ErrorLight   lipgloss.Style
+	WarningLight lipgloss.Style
+	InfoLight    lipgloss.Style
 
 	// Text styles - visual hierarchy
 	Bold        lipgloss.Style // Emphasized text
@@ -304,6 +310,19 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 		Magenta: lipgloss.NewStyle().
 			Foreground(colors.Violet).
 			Bold(true),
+
+		// Non-bold variants for subtle/inline coloring
+		SuccessLight: lipgloss.NewStyle().
+			Foreground(colors.Green),
+
+		ErrorLight: lipgloss.NewStyle().
+			Foreground(colors.Red),
+
+		WarningLight: lipgloss.NewStyle().
+			Foreground(colors.Yellow),
+
+		InfoLight: lipgloss.NewStyle().
+			Foreground(colors.Cyan),
 
 		// Text hierarchy: Bold → Normal → Muted
 		Bold: lipgloss.NewStyle().
