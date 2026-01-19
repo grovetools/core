@@ -20,7 +20,7 @@ const (
 	defaultRecipesPathTemplate     = "workspaces/{{ .Workspace.Name }}/recipes"
 	defaultInProgressPathTemplate  = "workspaces/{{ .Workspace.Name }}/in_progress"
 	defaultCompletedPathTemplate   = "workspaces/{{ .Workspace.Name }}/completed"
-	defaultPromptsPathTemplate     = "workspaces/{{ .Workspace.Name }}/docgen"
+	defaultPromptsPathTemplate     = "workspaces/{{ .Workspace.Name }}/docgen/prompts"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
