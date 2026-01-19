@@ -21,6 +21,7 @@ const (
 	defaultInProgressPathTemplate  = "workspaces/{{ .Workspace.Name }}/in_progress"
 	defaultCompletedPathTemplate   = "workspaces/{{ .Workspace.Name }}/completed"
 	defaultPromptsPathTemplate     = "workspaces/{{ .Workspace.Name }}/docgen/prompts"
+	defaultDocgenDirPathTemplate   = "workspaces/{{ .Workspace.Name }}/docgen"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -657,12 +658,33 @@ func (l *NotebookLocator) GetCompletedDir(node *WorkspaceNode) (string, error) {
 }
 
 // GetDocgenPromptsDir returns the absolute path to the docgen prompts directory for a given workspace node.
-// In Local Mode, it returns the docgen directory within the project's .notebook directory.
-// In Centralized Mode, it uses the configured root_dir and prompts_path_template.
+// This is a convenience method equivalent to filepath.Join(GetDocgenDir(node), "prompts").
 func (l *NotebookLocator) GetDocgenPromptsDir(node *WorkspaceNode) (string, error) {
+	docgenDir, err := l.GetDocgenDir(node)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(docgenDir, "prompts"), nil
+}
+
+// GetDocgenDir returns the absolute path to the root docgen directory for a given workspace node.
+// This is the parent directory containing prompts/, docs/, images/, asciicasts/, videos/, and
+// the docgen.config.yml file.
+//
+// In Local Mode, it returns the docgen directory within the project's .notebook directory.
+// In Centralized Mode, it uses the configured root_dir and path templates.
+//
+// Callers can use this to construct paths to subdirectories:
+//   - filepath.Join(docgenDir, "prompts")        - prompt files
+//   - filepath.Join(docgenDir, "docs")           - generated documentation output
+//   - filepath.Join(docgenDir, "docgen.config.yml") - configuration file
+//   - filepath.Join(docgenDir, "images")         - image assets
+//   - filepath.Join(docgenDir, "asciicasts")     - asciicast recordings
+//   - filepath.Join(docgenDir, "videos")         - video files
+func (l *NotebookLocator) GetDocgenDir(node *WorkspaceNode) (string, error) {
 	// For non-global nodes, check mode based on resolved notebook
 	if !l.isCentralized(node) {
-		// Local Mode: Prompts are inside the project's root .notebook directory.
+		// Local Mode: Docgen is inside the project's root .notebook directory.
 		return filepath.Join(node.GetGroupingKey(), ".notebook", "docgen"), nil
 	}
 
@@ -673,10 +695,8 @@ func (l *NotebookLocator) GetDocgenPromptsDir(node *WorkspaceNode) (string, erro
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
 
-	tplStr := notebook.PromptsPathTemplate
-	if tplStr == "" {
-		tplStr = defaultPromptsPathTemplate
-	}
+	// Use the dedicated docgen directory template
+	tplStr := defaultDocgenDirPathTemplate
 
 	contextNode := getContextNodeForPath(node)
 	data := struct {
