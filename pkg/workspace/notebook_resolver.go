@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -124,17 +123,9 @@ func FindNotebookMarker(path string) string {
 }
 
 // findProjectByWorkspaceName searches for a project matching the workspace name.
-// It first tries common paths, then falls back to full discovery.
+// It only searches within configured groves, then falls back to full discovery.
 func findProjectByWorkspaceName(workspaceName string, cfg *config.Config) *WorkspaceNode {
-	// Fast path: Check common project locations
-	homeDir, _ := os.UserHomeDir()
-	commonPaths := []string{
-		filepath.Join(homeDir, "code", workspaceName),
-		filepath.Join(homeDir, "Code", workspaceName),
-		filepath.Join(homeDir, "projects", workspaceName),
-	}
-
-	// Also check paths from groves config
+	// Fast path: Check paths from configured groves only
 	if cfg != nil && cfg.Groves != nil {
 		for _, grove := range cfg.Groves {
 			if grove.Enabled != nil && !*grove.Enabled {
@@ -144,13 +135,10 @@ func findProjectByWorkspaceName(workspaceName string, cfg *config.Config) *Works
 			if err != nil {
 				continue
 			}
-			commonPaths = append(commonPaths, filepath.Join(grovePath, workspaceName))
-		}
-	}
-
-	for _, projectPath := range commonPaths {
-		if node, err := GetProjectByPath(projectPath); err == nil && node != nil {
-			return node
+			projectPath := filepath.Join(grovePath, workspaceName)
+			if node, err := GetProjectByPath(projectPath); err == nil && node != nil {
+				return node
+			}
 		}
 	}
 
