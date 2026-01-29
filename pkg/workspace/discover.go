@@ -660,18 +660,12 @@ func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
 }
 
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
-// These are now treated as EcosystemSubProjects under the ~/.grove/cx/ ecosystem.
+// These are now treated as EcosystemSubProjects under the cx ecosystem.
 // Each bare repo is discovered along with its worktrees in the .grove-worktrees directory.
-// Returns empty slice if repo management is disabled by config.
 func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 	manager, err := repo.NewManager()
 	if err != nil {
 		return nil, err
-	}
-
-	// If repo management is disabled, return empty slice
-	if manager.IsDisabled() {
-		return []Project{}, nil
 	}
 
 	cloned, err := manager.List()
@@ -679,15 +673,10 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 		return nil, err
 	}
 
-	// Get the cx ecosystem path from config
+	// Get the cx ecosystem path (uses XDG_DATA_HOME or ~/.local/share/grove/cx)
 	cxEcosystemPath, err := repo.GetCxEcosystemPath()
 	if err != nil {
 		return nil, err
-	}
-
-	// If cxEcosystemPath is empty, repo management is disabled
-	if cxEcosystemPath == "" {
-		return []Project{}, nil
 	}
 
 	var projects []Project
