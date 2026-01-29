@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/grovetools/core/util/pathutil"
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // Registry defines the interface for managing live session tracking.
@@ -22,10 +22,7 @@ type FileSystemRegistry struct {
 }
 
 func NewFileSystemRegistry() (*FileSystemRegistry, error) {
-	baseDir, err := pathutil.Expand("~/.grove/hooks/sessions")
-	if err != nil {
-		return nil, fmt.Errorf("could not expand session directory path: %w", err)
-	}
+	baseDir := filepath.Join(paths.StateDir(), "hooks", "sessions")
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create sessions directory: %w", err)
 	}

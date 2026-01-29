@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/grovetools/core/errors"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -396,17 +397,11 @@ func getGitRoot(dir string) (string, error) {
 
 // getXDGConfigPath returns the XDG config path for Grove
 func getXDGConfigPath() string {
-	// Check XDG_CONFIG_HOME first
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		return filepath.Join(xdgConfig, "grove", "grove.yml")
+	configDir := paths.ConfigDir()
+	if configDir == "" {
+		return ""
 	}
-
-	// Fall back to ~/.config
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(homeDir, ".config", "grove", "grove.yml")
-	}
-
-	return ""
+	return filepath.Join(configDir, "grove.yml")
 }
 
 // FindEcosystemConfig searches upward from the given directory for a grove.yml
