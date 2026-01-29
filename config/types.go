@@ -78,6 +78,14 @@ type TUIConfig struct {
 	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty"` // Embedded Neovim configuration
 }
 
+// ContextConfig holds configuration for the grove-context (cx) tool.
+type ContextConfig struct {
+	// ReposDir specifies where 'cx repo' stores bare repositories.
+	// If nil, defaults to ~/.grove/cx.
+	// If set to empty string "", repository discovery/management is disabled.
+	ReposDir *string `yaml:"repos_dir,omitempty"`
+}
+
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
@@ -119,6 +127,9 @@ type Config struct {
 	// TUI contains TUI-specific configuration.
 	TUI *TUIConfig `yaml:"tui,omitempty"`
 
+	// Context contains configuration for the grove-context (cx) tool.
+	Context *ContextConfig `yaml:"context,omitempty"`
+
 	// Groves defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
 	Groves map[string]GroveSourceConfig `yaml:"groves,omitempty"`
@@ -149,6 +160,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		BuildAfter       []string                     `yaml:"build_after,omitempty"`
 		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty"`
 		TUI              *TUIConfig                   `yaml:"tui,omitempty"`
+		Context          *ContextConfig               `yaml:"context,omitempty"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
 		Extensions       map[string]interface{}       `yaml:",inline"`
@@ -173,6 +185,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.BuildCmd = raw.BuildCmd
 	c.BuildAfter = raw.BuildAfter
 	c.TUI = raw.TUI
+	c.Context = raw.Context
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions
 

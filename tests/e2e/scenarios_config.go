@@ -436,6 +436,85 @@ logging:
 	}
 }
 
+// CoreContextReposDirScenario tests the context.repos_dir configuration.
+func CoreContextReposDirScenario() *harness.Scenario {
+	return &harness.Scenario{
+		Name:        "core-context-repos-dir",
+		Description: "Verifies that context.repos_dir config is properly parsed and can disable cx repo discovery.",
+		Tags:        []string{"core", "config", "context"},
+		Steps: []harness.Step{
+			{
+				Name: "Setup config with context.repos_dir empty to disable repo discovery",
+				Func: func(ctx *harness.Context) error {
+					projectDir := ctx.NewDir("context-repos-test")
+					globalConfigDir := filepath.Join(ctx.HomeDir(), ".config", "grove")
+					if err := fs.CreateDir(globalConfigDir); err != nil {
+						return fmt.Errorf("failed to create global config dir: %w", err)
+					}
+
+					// Create Global Config with context.repos_dir set to empty string
+					// This should disable cx repo discovery
+					globalYAML := `name: context-test
+version: "1.0"
+context:
+  repos_dir: ""
+groves:
+  test_grove:
+    path: /test/path
+    enabled: true
+`
+					if err := fs.WriteString(filepath.Join(globalConfigDir, "grove.yml"), globalYAML); err != nil {
+						return err
+					}
+
+					// Create a minimal project config
+					projectYAML := `name: test-project
+version: "1.0"
+`
+					if err := fs.WriteString(filepath.Join(projectDir, "grove.yml"), projectYAML); err != nil {
+						return err
+					}
+
+					coreBinary, err := FindProjectBinary()
+					if err != nil {
+						return err
+					}
+
+					// Test 1: Verify config-layers shows context section
+					cmd := ctx.Command(coreBinary, "config-layers").Dir(projectDir)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core config-layers` failed: %w", result.Error)
+					}
+
+					output := result.Stdout
+					// Verify context section appears in config output
+					if err := assert.Contains(output, "context:", "context section should be in config output"); err != nil {
+						return err
+					}
+					if err := assert.Contains(output, "repos_dir:", "repos_dir should be in context section"); err != nil {
+						return err
+					}
+
+					// Test 2: Verify ws list works without errors when repos_dir is disabled
+					wsCmd := ctx.Command(coreBinary, "ws", "list", "--json").Dir(projectDir)
+					wsResult := wsCmd.Run()
+					ctx.ShowCommandOutput(wsCmd.String(), wsResult.Stdout, wsResult.Stderr)
+					if wsResult.Error != nil {
+						return fmt.Errorf("`core ws list` failed when context.repos_dir is empty: %w", wsResult.Error)
+					}
+
+					// The test passes if ws list completes without error
+					// In a sandboxed environment, there are no cloned repos anyway,
+					// but this confirms the disabled state doesn't cause crashes
+					return nil
+				},
+			},
+		},
+	}
+}
+
 // CoreConfigGlobalOverrideYamlExtensionScenario tests that .yaml extension is also supported.
 func CoreConfigGlobalOverrideYamlExtensionScenario() *harness.Scenario {
 	return &harness.Scenario{

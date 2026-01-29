@@ -21,6 +21,7 @@ func main() {
 		CoreConfigGlobalOverrideScenario(),
 		CoreConfigGlobalOverridePrecedenceScenario(),
 		CoreConfigGlobalOverrideYamlExtensionScenario(),
+		CoreContextReposDirScenario(),
 		WorkspaceModelScenario(),
 		WorkspaceEdgeCasesScenario(),
 		WorkspaceAdvancedScenario(),

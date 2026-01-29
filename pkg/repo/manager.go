@@ -11,11 +11,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/util/pathutil"
 )
 
 type Manager struct {
 	basePath     string
 	manifestPath string
+	disabled     bool // If true, repo management is disabled by config
 	mu           sync.Mutex
 }
 
@@ -44,24 +48,67 @@ type Manifest struct {
 	Audits       map[string]AuditInfo `json:"audits"`       // map[commitHash]AuditInfo
 }
 
-// GetCxEcosystemPath returns the path to the cx ecosystem root (~/.grove/cx).
-// This is the parent ecosystem path for all cx-managed bare repos.
+// GetCxEcosystemPath returns the path to the cx ecosystem root.
+// By default this uses XDG data directory (~/.local/share/grove/cx),
+// but it can be configured via context.repos_dir.
+// Returns empty string if repo management is disabled (repos_dir set to "").
 func GetCxEcosystemPath() (string, error) {
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// If config can't be loaded, fall back to XDG default
+		return getDefaultCxPath()
+	}
+
+	// Check if context.repos_dir is configured
+	if cfg.Context != nil && cfg.Context.ReposDir != nil {
+		if *cfg.Context.ReposDir == "" {
+			// Empty string means disabled
+			return "", nil
+		}
+		// Expand the configured path
+		expanded, err := pathutil.Expand(*cfg.Context.ReposDir)
+		if err != nil {
+			return "", fmt.Errorf("expanding repos_dir path: %w", err)
+		}
+		return expanded, nil
+	}
+
+	// Default to XDG data directory
+	return getDefaultCxPath()
+}
+
+// getDefaultCxPath returns the default cx ecosystem path using XDG conventions.
+// Uses XDG_DATA_HOME if set, otherwise ~/.local/share/grove/cx
+func getDefaultCxPath() (string, error) {
+	// Check XDG_DATA_HOME first
+	if xdgData := os.Getenv("XDG_DATA_HOME"); xdgData != "" {
+		return filepath.Join(xdgData, "grove", "cx"), nil
+	}
+
+	// Fall back to ~/.local/share/grove/cx
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("getting home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".grove", "cx"), nil
+	return filepath.Join(homeDir, ".local", "share", "grove", "cx"), nil
 }
 
 func NewManager() (*Manager, error) {
-	homeDir, err := os.UserHomeDir()
+	// Get the cx ecosystem path from config
+	cxPath, err := GetCxEcosystemPath()
 	if err != nil {
-		return nil, fmt.Errorf("getting home directory: %w", err)
+		return nil, err
 	}
 
-	basePath := filepath.Join(homeDir, ".grove", "cx", "repos")
-	manifestPath := filepath.Join(homeDir, ".grove", "cx", "manifest.json")
+	// If cxPath is empty, repo management is disabled
+	if cxPath == "" {
+		return &Manager{
+			disabled: true,
+		}, nil
+	}
+
+	basePath := filepath.Join(cxPath, "repos")
+	manifestPath := filepath.Join(cxPath, "manifest.json")
 
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		return nil, fmt.Errorf("creating repos directory: %w", err)
@@ -107,7 +154,12 @@ func extractShorthand(repoURL string) string {
 
 // Ensure makes sure the bare clone for the given repository exists and is up-to-date.
 // It does not perform any checkouts. Use EnsureVersion for version-specific worktrees.
+// Returns an error if repo management is disabled by config.
 func (m *Manager) Ensure(repoURL string) error {
+	if m.disabled {
+		return fmt.Errorf("repository management is disabled by config (context.repos_dir is empty)")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -301,7 +353,17 @@ func (m *Manager) createWorktree(barePath, worktreePath, commitHash string) erro
 	return nil
 }
 
+// IsDisabled returns true if repository management is disabled by config.
+func (m *Manager) IsDisabled() bool {
+	return m.disabled
+}
+
 func (m *Manager) List() ([]RepoInfo, error) {
+	// If disabled, return empty list (not an error)
+	if m.disabled {
+		return []RepoInfo{}, nil
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -333,6 +395,10 @@ func (m *Manager) List() ([]RepoInfo, error) {
 }
 
 func (m *Manager) Sync() error {
+	if m.disabled {
+		return fmt.Errorf("repository management is disabled by config (context.repos_dir is empty)")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -353,6 +419,10 @@ func (m *Manager) Sync() error {
 
 // UpdateAuditResult updates the audit status for a specific commit hash
 func (m *Manager) UpdateAuditResult(commitHash, status, reportPath string) error {
+	if m.disabled {
+		return fmt.Errorf("repository management is disabled by config (context.repos_dir is empty)")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -376,6 +446,10 @@ func (m *Manager) UpdateAuditResult(commitHash, status, reportPath string) error
 
 // GetAuditInfo returns the audit information for a specific commit hash
 func (m *Manager) GetAuditInfo(commitHash string) (AuditInfo, bool) {
+	if m.disabled {
+		return AuditInfo{}, false
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -422,6 +496,10 @@ func (m *Manager) fetchRepository(localPath string) error {
 
 
 func (m *Manager) LoadManifest() (*Manifest, error) {
+	if m.disabled {
+		return &Manifest{Repositories: make(map[string]RepoInfo)}, nil
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.loadManifest()

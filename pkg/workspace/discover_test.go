@@ -19,9 +19,14 @@ func setupMockFS(t *testing.T) (string, string) {
 	// 1. Global config with 'search_paths'
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
+	emptyStr := ""
 	globalCfg := config.Config{
 		SearchPaths: map[string]config.SearchPathConfig{
 			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		},
+		// Disable cx repo discovery so tests don't pick up real user repos
+		Context: &config.ContextConfig{
+			ReposDir: &emptyStr,
 		},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
@@ -71,6 +76,11 @@ func TestDiscoveryService(t *testing.T) {
 	originalXDG := os.Getenv("XDG_CONFIG_HOME")
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
 	defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
+
+	// Set GROVE_CONFIG_OVERLAY to use the test config (which disables cx repo discovery)
+	originalOverlay := os.Getenv("GROVE_CONFIG_OVERLAY")
+	os.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(homeDir, ".config", "grove", "grove.yml"))
+	defer os.Setenv("GROVE_CONFIG_OVERLAY", originalOverlay)
 
 	logger := logrus.New()
 	logger.SetOutput(os.Stdout)
