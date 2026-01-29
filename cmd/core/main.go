@@ -23,6 +23,7 @@ func main() {
 	rootCmd.AddCommand(cmd.NewTmuxCmd())
 	rootCmd.AddCommand(cmd.NewLogsCmd())
 	rootCmd.AddCommand(cmd.NewNvimDemoCmd())
+	rootCmd.AddCommand(cmd.NewPathsCmd())
 
 	if err := cli.Execute(rootCmd); err != nil {
 		os.Exit(1)
