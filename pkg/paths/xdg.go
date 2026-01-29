@@ -108,8 +108,15 @@ func CacheDir() string {
 }
 
 // BinDir returns the Grove binary directory.
-// This is a subdirectory of DataDir.
+// Resolution order:
+// 1. GROVE_BIN env var (explicit override for demos/testing)
+// 2. DataDir()/bin (standard location)
 func BinDir() string {
+	// Allow explicit override for demos/testing where GROVE_HOME
+	// is set but binaries should still come from the real location
+	if binDir := os.Getenv("GROVE_BIN"); binDir != "" {
+		return binDir
+	}
 	data := DataDir()
 	if data == "" {
 		return ""
