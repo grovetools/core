@@ -1,81 +1,52 @@
-# Grove Core - MAIN BRANCH VERSION
+<!-- DOCGEN:OVERVIEW:START -->
 
-`grove-core` is the foundational Go library for the Grove ecosystem. It provides a shared set of packages and utilities that ensure consistency and reduce boilerplate code across all Grove command-line tools.
+`grove-core` is the foundational Go library for the Grove ecosystem. It provides shared infrastructure for configuration management, workspace discovery, logging, and terminal user interface (TUI) components, ensuring consistency across all Grove CLI tools.
 
-## Packages and Features
+## Core Mechanisms
 
-### cli
-A package for building command-line interfaces using the Cobra library.
-*   **Command Creation**: Provides `NewStandardCommand` to create a command with flags like `--verbose`, `--json`, and `--config`.
-*   **Configuration & Logging**: Initializes configuration from files and sets up a logger based on command-line flags.
-*   **Error Handling**: Includes a structured error handler to present messages for common issues.
-*   **Version Commands**: A `NewVersionCommand` constructor for creating commands that display build information.
-*   **Documentation Endpoint**: A `NewDocsCommand` helper to expose tool documentation as a JSON object.
+**Layered Configuration**: Configuration is loaded and merged from multiple sources in a specific precedence order:
+1.  **Global**: `~/.config/grove/grove.yml` (System-wide defaults and search paths).
+2.  **Ecosystem**: `grove.yml` in a parent directory defining a workspace boundary.
+3.  **Project**: `grove.yml` in the current working directory.
+4.  **Overrides**: `grove.override.yml` for local, git-ignored developer settings.
 
-### config
-A system for managing `grove.yml` configuration files.
-*   **Hierarchical Loading**: Merges configuration from global (`~/.config/grove`), project (`grove.yml`), and local override (`grove.override.yml`) files.
-*   **Schema and Validation**: Defines the `grove.yml` structure and validates configurations against a JSON schema and semantic rules, such as checking for port conflicts.
-*   **Extensibility**: Allows other Grove tools to define and access their own top-level sections within `grove.yml` via an `Extensions` map.
-*   **Environment Variable Expansion**: Supports `${VAR}` syntax in configuration files.
+**Workspace Discovery**: The `DiscoveryService` scans directories defined in the `groves` configuration. It classifies filesystem locations into three types based on file markers:
+*   **Ecosystems**: Directories containing a `grove.yml` with a `workspaces` key.
+*   **Projects**: Directories containing a `grove.yml` or `.git`.
+*   **Worktrees**: Git worktrees located in `.grove-worktrees/` directories.
 
-### logging
-A centralized logging infrastructure built on Logrus.
-*   **Component-Based Logging**: `NewLogger("component-name")` creates a logger that automatically tags messages with the component's name.
-*   **Configuration-Driven**: Log level, format (text or JSON), and file output are configured in `grove.yml`.
-*   **Custom Formatting**: Includes a custom text formatter.
-*   **Structured Logging**: Supports structured logging with fields for machine-readable output.
+**Unified Logging**: The logging system writes two streams simultaneously:
+*   **Structured**: JSON-formatted logs written to `.grove/logs/` in the workspace root for machine analysis.
+*   **Human-Readable**: Styled, colored text written to `stderr` for interactive use.
+*   **Filtering**: Supports component-based filtering rules defined in `grove.yml`.
 
-### command
-A package for executing external commands.
-*   **Command Building**: A `SafeBuilder` validates command arguments against pre-defined patterns (e.g., filenames, Git references) to mitigate command injection risks.
-*   **Context and Timeouts**: Integrates with Go's `context` package to manage command timeouts and cancellation.
+## Packages & Features
 
-### git
-A package for interacting with Git repositories.
-*   **Worktree Management**: A `WorktreeManager` to create, list, and remove Git worktrees for isolated development environments.
-*   **Repository Information**: Functions to get the current branch, repository root, remote URL, and detailed status (`ahead`/`behind` counts, dirty state).
-*   **Hook Management**: An interface for installing and uninstalling Git hooks (`post-checkout`, `pre-commit`).
-*   **Environment Variables**: Gathers Git context (repo name, branch, commit) and makes it available as environment variables.
+### Application Infrastructure
+*   **`cli`**: Wraps `spf13/cobra` to provide standard flags (`--json`, `--verbose`, `--config`) and styled help output across all tools.
+*   **`config`**: Handles YAML parsing, environment variable expansion (`${VAR}`), and JSON schema validation.
+*   **`logging`**: A wrapper around `logrus` providing the unified logging streams and component registry.
 
-### pkg/tmux
-A Go client for managing tmux sessions.
-*   **Session Management**: Functions to create, check for existence, kill, and list tmux sessions.
-*   **Pane and Window Control**: APIs to launch layouts with multiple panes, send commands, and capture pane content.
-*   **Monitoring**: A function to block execution until a specified tmux session is closed.
+### System Integration
+*   **`pkg/tmux`**: A client for controlling `tmux` servers. Manages sessions, windows, and panes via the CLI or socket. Supports socket isolation for testing.
+*   **`git`**: Wrappers for git operations, specifically focusing on worktree management and status retrieval.
+*   **`command`**: A safe command executor that validates arguments to prevent injection and handles timeouts.
 
-### pkg/models
-A collection of shared data structures used across multiple Grove tools, particularly for orchestration services. This ensures data consistency for concepts like sessions, events, tool executions, transcripts, and notifications.
+### TUI Components
+The `tui` package provides reusable [Bubble Tea](https://github.com/charmbracelet/bubbletea) components:
+*   **`navigator`**: A list-based browser for selecting projects or files.
+*   **`logviewer`**: A component for tailing files and streaming logs with filtering capabilities.
+*   **`jsontree`**: An interactive viewer for exploring structured JSON data.
+*   **`theme`**: Centralized color palette and style definitions (Kanagawa, Gruvbox).
 
-### Other Utilities
-*   **`conventional`**: Tools for parsing Conventional Commit messages and generating changelogs.
-*   **`util/sanitize`**: Functions for sanitizing strings for use as Docker labels, domain names, filenames, and environment variable keys.
-*   **`testutil`**: Helper functions for writing integration tests, including utilities for initializing Git repositories and managing Docker resources.
-*   **`version`**: A mechanism for embedding build information (version, commit, build date) into binaries at compile time via linker flags.
+## The `core` Debugging Tool
 
-## Role in the Grove Ecosystem
+While primarily a library, this repository compiles to a `core` binary used for debugging the ecosystem state.
 
-`grove-core` is a dependency for all executable tools in the Grove ecosystem, including `grove-meta`, `grove-context`, `grove-flow`, and `grove-docgen`. This dependency ensures that all tools share a consistent approach to:
-*   Command-line interaction and flag parsing.
-*   Configuration file loading and validation.
-*   Logging output and structure.
-*   Error reporting and handling.
-
-By providing this common foundation, `grove-core` accelerates the development of new tools and maintains a cohesive user experience.
-
-## Installation
-
-Grove-core is a Go library. Add it to your project:
-```bash
-go get github.com/mattsolo1/grove-core
-```
-
-Import in your Go code:
-```go
-import "github.com/mattsolo1/grove-core/cli"
-```
-
-See the [Grove Development Guide](https://github.com/mattsolo1/grove-meta/blob/main/docs/02-installation.md#building-from-source) for development setup.
+*   **`core ws list`**: JSON output of the full discovery tree. Used by `nav` to populate the project list.
+*   **`core config-layers`**: Prints the merged configuration and the source file for each value.
+*   **`core logs`**: Aggregates and streams logs from `.grove/logs/`.
+*   **`core nvim-demo`**: Demonstrates the embedded Neovim component integration.
 
 <!-- DOCGEN:OVERVIEW:END -->
 
@@ -86,5 +57,3 @@ See the [documentation](docs/) for detailed usage instructions:
 - [Overview](docs/01-overview.md)
 
 <!-- DOCGEN:TOC:END -->
-
-# Testing conflict scenario - main branch change
