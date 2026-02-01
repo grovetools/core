@@ -191,5 +191,10 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge Hooks (replace if present in override)
+	if override.Hooks != nil {
+		result.Hooks = override.Hooks
+	}
+
 	return &result
 }
