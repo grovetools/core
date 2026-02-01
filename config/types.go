@@ -142,9 +142,6 @@ type Config struct {
 	// Context contains configuration for the grove-context (cx) tool.
 	Context *ContextConfig `yaml:"context,omitempty"`
 
-	// Hooks contains configuration for repository lifecycle hooks.
-	Hooks *HooksConfig `yaml:"hooks,omitempty"`
-
 	// Groves defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
 	Groves map[string]GroveSourceConfig `yaml:"groves,omitempty"`
