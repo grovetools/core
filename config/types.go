@@ -86,6 +86,18 @@ type ContextConfig struct {
 	ReposDir *string `yaml:"repos_dir,omitempty"`
 }
 
+// HookCommand defines a command to be executed for a hook.
+type HookCommand struct {
+	Name    string `yaml:"name" jsonschema:"description=Name of the hook command"`
+	Command string `yaml:"command" jsonschema:"description=Shell command to execute"`
+	RunIf   string `yaml:"run_if,omitempty" jsonschema:"enum=always,enum=changes,description=Condition to run the command (always or changes)"`
+}
+
+// HooksConfig groups all hook-related settings.
+type HooksConfig struct {
+	OnStop []HookCommand `yaml:"on_stop,omitempty" jsonschema:"description=Commands to run when a session stops"`
+}
+
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
 	// RootDir is the absolute path to the root of the notebook.
@@ -129,6 +141,9 @@ type Config struct {
 
 	// Context contains configuration for the grove-context (cx) tool.
 	Context *ContextConfig `yaml:"context,omitempty"`
+
+	// Hooks contains configuration for repository lifecycle hooks.
+	Hooks *HooksConfig `yaml:"hooks,omitempty"`
 
 	// Groves defines the root directories to search for projects and ecosystems.
 	// This is typically set in the global ~/.config/grove/grove.yml file.
