@@ -288,10 +288,14 @@ func styledHelpFunc(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Examples section (if present in Long description)
-	if examples != "" {
+	// Examples section (from cmd.Example field or parsed from Long description)
+	exampleText := cmd.Example
+	if exampleText == "" {
+		exampleText = examples
+	}
+	if exampleText != "" {
 		fmt.Println("\n " + section.Render("EXAMPLES"))
-		renderExamples(t, examples, cmd.CommandPath())
+		renderExamples(t, exampleText, cmd.CommandPath())
 	}
 
 	// Custom extras section (if registered)
