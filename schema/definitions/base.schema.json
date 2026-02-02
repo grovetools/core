@@ -293,9 +293,6 @@
   },
   "additionalProperties": false,
   "type": "object",
-  "required": [
-    "version"
-  ],
   "title": "Grove Core Configuration",
   "description": "Base schema for core grove.yml properties."
 }
