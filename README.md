@@ -55,5 +55,7 @@ While primarily a library, this repository compiles to a `core` binary used for 
 
 See the [documentation](docs/) for detailed usage instructions:
 - [Overview](docs/01-overview.md)
+- [CLI Reference](docs/02-cli-reference.md)
+- [Configuration](docs/03-configuration.md)
 
 <!-- DOCGEN:TOC:END -->

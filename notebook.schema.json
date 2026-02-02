@@ -5,25 +5,32 @@
     "NoteTypeConfig": {
       "properties": {
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Human-readable description of this note type"
         },
         "template_path": {
-          "type": "string"
+          "type": "string",
+          "description": "Path to the template file for this note type"
         },
         "filename_format": {
-          "type": "string"
+          "type": "string",
+          "description": "Filename format: date-title"
         },
         "icon": {
-          "type": "string"
+          "type": "string",
+          "description": "Icon for TUI display (nerd font icon)"
         },
         "icon_color": {
-          "type": "string"
+          "type": "string",
+          "description": "Lipgloss color for the icon in the TUI"
         },
         "default_expand": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Whether this group is expanded by default in the TUI"
         },
         "sort_order": {
-          "type": "integer"
+          "type": "integer",
+          "description": "Sort order in the TUI (lower numbers appear first)"
         }
       },
       "type": "object"
@@ -31,39 +38,51 @@
   },
   "properties": {
     "root_dir": {
-      "type": "string"
+      "type": "string",
+      "description": "Absolute path to the notebook root (enables Centralized Mode)"
     },
     "notes_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for notes directory"
     },
     "plans_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for plans directory"
     },
     "chats_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for chats directory"
     },
     "templates_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for templates directory"
     },
     "recipes_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for recipes directory"
     },
     "in_progress_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for in-progress items"
     },
     "completed_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for completed items"
     },
     "prompts_path_template": {
-      "type": "string"
+      "type": "string",
+      "description": "Path template for prompts directory"
     },
     "types": {
       "additionalProperties": {
         "$ref": "#/$defs/NoteTypeConfig"
       },
-      "type": "object"
+      "type": "object",
+      "description": "Map of note type name to configuration"
     },
-    "sync": true
+    "sync": {
+      "description": "Synchronization configuration for this notebook"
+    }
   },
   "type": "object",
   "title": "Grove Notebook Configuration",

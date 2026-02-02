@@ -20,70 +20,63 @@ type SearchPathConfig struct {
 
 // GroveSourceConfig defines the configuration for a single grove source.
 type GroveSourceConfig struct {
-	Path        string `yaml:"path" toml:"path"`
-	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty"`
-	Description string `yaml:"description,omitempty" toml:"description,omitempty"`
-	Notebook    string `yaml:"notebook,omitempty" toml:"notebook,omitempty"`
+	Path        string `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the grove root directory"`
+	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Whether this grove is enabled (default: true)"`
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this grove"`
+	Notebook    string `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Name of the notebook to use for projects in this grove"`
 }
 
 // ExplicitProject defines a specific project to include regardless of discovery.
 type ExplicitProject struct {
-	Path        string `yaml:"path" toml:"path"`
-	Name        string `yaml:"name,omitempty" toml:"name,omitempty"`
-	Description string `yaml:"description,omitempty" toml:"description,omitempty"`
-	Enabled     bool   `yaml:"enabled" toml:"enabled"`
+	Path        string `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the project directory"`
+	Name        string `yaml:"name,omitempty" toml:"name,omitempty" jsonschema:"description=Display name for the project"`
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this project"`
+	Enabled     bool   `yaml:"enabled" toml:"enabled" jsonschema:"description=Whether this project is enabled"`
 }
 
 // NoteTypeConfig defines the configuration for a single, user-defined note type.
 type NoteTypeConfig struct {
-	Description    string `yaml:"description,omitempty" toml:"description,omitempty"`
-	TemplatePath   string `yaml:"template_path,omitempty" toml:"template_path,omitempty"`
-	FilenameFormat string `yaml:"filename_format,omitempty" toml:"filename_format,omitempty"` // e.g., "date-title", "timestamp-title", "title"
-	// Icon specifies the icon for TUI display (e.g., from theme.Icon... constants)
-	Icon string `yaml:"icon,omitempty" toml:"icon,omitempty"`
-	// IconColor specifies the lipgloss color for the icon in the TUI
-	IconColor string `yaml:"icon_color,omitempty" toml:"icon_color,omitempty"`
-	// DefaultExpand determines if this group is expanded by default in the TUI
-	DefaultExpand bool `yaml:"default_expand,omitempty" toml:"default_expand,omitempty"`
-	// SortOrder is used for sorting groups in the TUI (lower numbers appear first)
-	SortOrder int `yaml:"sort_order,omitempty" toml:"sort_order,omitempty"`
+	Description    string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this note type"`
+	TemplatePath   string `yaml:"template_path,omitempty" toml:"template_path,omitempty" jsonschema:"description=Path to the template file for this note type"`
+	FilenameFormat string `yaml:"filename_format,omitempty" toml:"filename_format,omitempty" jsonschema:"description=Filename format: date-title, timestamp-title, or title"`
+	Icon           string `yaml:"icon,omitempty" toml:"icon,omitempty" jsonschema:"description=Icon for TUI display (nerd font icon)"`
+	IconColor      string `yaml:"icon_color,omitempty" toml:"icon_color,omitempty" jsonschema:"description=Lipgloss color for the icon in the TUI"`
+	DefaultExpand  bool   `yaml:"default_expand,omitempty" toml:"default_expand,omitempty" jsonschema:"description=Whether this group is expanded by default in the TUI"`
+	SortOrder      int    `yaml:"sort_order,omitempty" toml:"sort_order,omitempty" jsonschema:"description=Sort order in the TUI (lower numbers appear first)"`
 }
 
 // GlobalNotebookConfig defines the configuration for the system-wide global notebook.
 type GlobalNotebookConfig struct {
-	RootDir string `yaml:"root_dir" toml:"root_dir"`
+	RootDir string `yaml:"root_dir" toml:"root_dir" jsonschema:"description=Absolute path to the global notebook root directory"`
 }
 
 // NotebookRules defines the usage rules for notebooks.
 type NotebookRules struct {
-	Default string                `yaml:"default,omitempty" toml:"default,omitempty"`
-	Global  *GlobalNotebookConfig `yaml:"global,omitempty" toml:"global,omitempty"`
+	Default string                `yaml:"default,omitempty" toml:"default,omitempty" jsonschema:"description=Name of the default notebook to use"`
+	Global  *GlobalNotebookConfig `yaml:"global,omitempty" toml:"global,omitempty" jsonschema:"description=Configuration for the system-wide global notebook"`
 }
 
 // NotebooksConfig groups all notebook-related settings.
 type NotebooksConfig struct {
-	Definitions map[string]*Notebook `yaml:"definitions,omitempty" toml:"definitions,omitempty"`
-	Rules       *NotebookRules       `yaml:"rules,omitempty" toml:"rules,omitempty"`
+	Definitions map[string]*Notebook `yaml:"definitions,omitempty" toml:"definitions,omitempty" jsonschema:"description=Map of notebook name to notebook configuration"`
+	Rules       *NotebookRules       `yaml:"rules,omitempty" toml:"rules,omitempty" jsonschema:"description=Rules for notebook usage (default notebook, global notebook)"`
 }
 
 // NvimEmbedConfig holds settings for the embedded Neovim component.
 type NvimEmbedConfig struct {
-	UserConfig bool `yaml:"user_config" toml:"user_config"` // If true, loads the user's default Neovim config (~/.config/nvim)
+	UserConfig bool `yaml:"user_config" toml:"user_config" jsonschema:"description=If true, loads the user's default Neovim config (~/.config/nvim)"`
 }
 
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
-	Icons     string           `yaml:"icons,omitempty" toml:"icons,omitempty"`           // Can be "nerd" or "ascii"
-	Theme     string           `yaml:"theme,omitempty" toml:"theme,omitempty"`           // Color theme: "kanagawa", "gruvbox", or "terminal"
-	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty"` // Embedded Neovim configuration
+	Icons     string           `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii"`
+	Theme     string           `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme: kanagawa, gruvbox, or terminal,enum=kanagawa,enum=gruvbox,enum=terminal"`
+	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
 }
 
 // ContextConfig holds configuration for the grove-context (cx) tool.
 type ContextConfig struct {
-	// ReposDir specifies where 'cx repo' stores bare repositories.
-	// If nil, defaults to ~/.grove/cx.
-	// If set to empty string "", repository discovery/management is disabled.
-	ReposDir *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty"`
+	ReposDir *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty" jsonschema:"description=Directory where cx repo stores bare repositories (default: ~/.grove/cx, empty string disables)"`
 }
 
 // HookCommand defines a command to be executed for a hook.
@@ -100,65 +93,37 @@ type HooksConfig struct {
 
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
-	// RootDir is the absolute path to the root of the notebook.
-	// If this is set, the system operates in "Centralized Mode".
-	// If empty, it operates in "Local Mode".
-	RootDir string `yaml:"root_dir" toml:"root_dir"`
-
-	// Path templates for customizing directory structure in Centralized Mode.
-	// These are optional and have sensible defaults.
-	NotesPathTemplate      string `yaml:"notes_path_template,omitempty" toml:"notes_path_template,omitempty"`
-	PlansPathTemplate      string `yaml:"plans_path_template,omitempty" toml:"plans_path_template,omitempty"`
-	ChatsPathTemplate      string `yaml:"chats_path_template,omitempty" toml:"chats_path_template,omitempty"`
-	TemplatesPathTemplate  string `yaml:"templates_path_template,omitempty" toml:"templates_path_template,omitempty"`
-	RecipesPathTemplate    string `yaml:"recipes_path_template,omitempty" toml:"recipes_path_template,omitempty"`
-	InProgressPathTemplate string `yaml:"in_progress_path_template,omitempty" toml:"in_progress_path_template,omitempty"`
-	CompletedPathTemplate  string `yaml:"completed_path_template,omitempty" toml:"completed_path_template,omitempty"`
-	PromptsPathTemplate    string `yaml:"prompts_path_template,omitempty" toml:"prompts_path_template,omitempty"`
-
-	// Types defines a map of user-configurable note types.
-	// This will override the hardcoded defaults in grove-notebook if provided.
-	Types map[string]*NoteTypeConfig `yaml:"types,omitempty" toml:"types,omitempty"`
-
-	// Sync defines the synchronization configuration for this notebook.
-	// This is a list of sync provider configurations.
-	Sync interface{} `yaml:"sync,omitempty" toml:"sync,omitempty"`
+	RootDir                string                     `yaml:"root_dir" toml:"root_dir" jsonschema:"description=Absolute path to the notebook root (enables Centralized Mode)"`
+	NotesPathTemplate      string                     `yaml:"notes_path_template,omitempty" toml:"notes_path_template,omitempty" jsonschema:"description=Path template for notes directory"`
+	PlansPathTemplate      string                     `yaml:"plans_path_template,omitempty" toml:"plans_path_template,omitempty" jsonschema:"description=Path template for plans directory"`
+	ChatsPathTemplate      string                     `yaml:"chats_path_template,omitempty" toml:"chats_path_template,omitempty" jsonschema:"description=Path template for chats directory"`
+	TemplatesPathTemplate  string                     `yaml:"templates_path_template,omitempty" toml:"templates_path_template,omitempty" jsonschema:"description=Path template for templates directory"`
+	RecipesPathTemplate    string                     `yaml:"recipes_path_template,omitempty" toml:"recipes_path_template,omitempty" jsonschema:"description=Path template for recipes directory"`
+	InProgressPathTemplate string                     `yaml:"in_progress_path_template,omitempty" toml:"in_progress_path_template,omitempty" jsonschema:"description=Path template for in-progress items"`
+	CompletedPathTemplate  string                     `yaml:"completed_path_template,omitempty" toml:"completed_path_template,omitempty" jsonschema:"description=Path template for completed items"`
+	PromptsPathTemplate    string                     `yaml:"prompts_path_template,omitempty" toml:"prompts_path_template,omitempty" jsonschema:"description=Path template for prompts directory"`
+	Types                  map[string]*NoteTypeConfig `yaml:"types,omitempty" toml:"types,omitempty" jsonschema:"description=Map of note type name to configuration"`
+	Sync                   interface{}                `yaml:"sync,omitempty" toml:"sync,omitempty" jsonschema:"description=Synchronization configuration for this notebook"`
 }
 
 // Config represents the grove.yml configuration
 type Config struct {
-	Name       string   `yaml:"name,omitempty" toml:"name,omitempty"`
-	Version    string   `yaml:"version" toml:"version"`
-	Workspaces []string `yaml:"workspaces,omitempty" toml:"workspaces,omitempty"`
-	BuildCmd   string   `yaml:"build_cmd,omitempty" toml:"build_cmd,omitempty"`
-	BuildAfter []string `yaml:"build_after,omitempty" toml:"build_after,omitempty"`
+	Name       string   `yaml:"name,omitempty" toml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem"`
+	Version    string   `yaml:"version" toml:"version" jsonschema:"description=Configuration version (e.g. 1.0)"`
+	Workspaces []string `yaml:"workspaces,omitempty" toml:"workspaces,omitempty" jsonschema:"description=Glob patterns for workspace directories in this ecosystem"`
+	BuildCmd   string   `yaml:"build_cmd,omitempty" toml:"build_cmd,omitempty" jsonschema:"description=Custom build command (default: make build)"`
+	BuildAfter []string `yaml:"build_after,omitempty" toml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one"`
 
-	// Notebooks contains all notebook-related configuration.
-	Notebooks *NotebooksConfig `yaml:"notebooks,omitempty" toml:"notebooks,omitempty"`
+	Notebooks *NotebooksConfig `yaml:"notebooks,omitempty" toml:"notebooks,omitempty" jsonschema:"description=Notebook configuration"`
+	TUI       *TUIConfig       `yaml:"tui,omitempty" toml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings"`
+	Context   *ContextConfig   `yaml:"context,omitempty" toml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool"`
 
-	// TUI contains TUI-specific configuration.
-	TUI *TUIConfig `yaml:"tui,omitempty" toml:"tui,omitempty"`
-
-	// Context contains configuration for the grove-context (cx) tool.
-	Context *ContextConfig `yaml:"context,omitempty" toml:"context,omitempty"`
-
-	// Groves defines the root directories to search for projects and ecosystems.
-	// This is typically set in the global ~/.config/grove/grove.yml file.
-	Groves map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty"`
-
-	// SearchPaths is a legacy field for backward compatibility.
-	// DEPRECATED: Use Groves instead.
-	SearchPaths map[string]SearchPathConfig `yaml:"search_paths,omitempty" toml:"search_paths,omitempty"`
-
-	// ExplicitProjects defines specific projects to include without discovery.
-	// Useful for including individual directories that don't fit the grove model.
-	ExplicitProjects []ExplicitProject `yaml:"explicit_projects,omitempty" toml:"explicit_projects,omitempty"`
+	Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
+	SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" toml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead"`
+	ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" toml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
 
 	// Extensions captures all other top-level keys for extensibility.
-	// This allows other tools in the Grove ecosystem to define their
-	// own configuration sections in grove.yml.
-	// Note: TOML does not support inline, so we handle this in LoadFromTOMLBytes.
-	Extensions map[string]interface{} `yaml:",inline" toml:"-"`
+	Extensions map[string]interface{} `yaml:",inline" toml:"-" jsonschema:"-"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling to handle backward compatibility

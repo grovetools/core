@@ -22,12 +22,14 @@ func GenerateSchema() ([]byte, error) {
 	// Create a temporary struct that omits the Extensions field
 	// so it's not included in the base schema.
 	type BaseConfig struct {
-		Name             string                       `yaml:"name,omitempty" jsonschema:"description=Name of the configuration"`
-		Version          string                       `yaml:"version" jsonschema:"required,description=Configuration version (e.g. '1.0')"`
-		Workspaces       []string                     `yaml:"workspaces,omitempty" jsonschema:"description=List of workspace directories in this ecosystem"`
-		BuildCmd         string                       `yaml:"build_cmd,omitempty" jsonschema:"description=Custom command for 'grove build' (e.g., 'make build-optimized'). Defaults to 'make build'."`
-		BuildAfter       []string                     `yaml:"build_after,omitempty" jsonschema:"description=List of project names that must be built before this project. Used by 'grove build' to determine build order."`
-		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Configuration for notebooks"`
+		Name             string                       `yaml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem"`
+		Version          string                       `yaml:"version" jsonschema:"description=Configuration version (e.g. 1.0)"`
+		Workspaces       []string                     `yaml:"workspaces,omitempty" jsonschema:"description=Glob patterns for workspace directories in this ecosystem"`
+		BuildCmd         string                       `yaml:"build_cmd,omitempty" jsonschema:"description=Custom build command (default: make build)"`
+		BuildAfter       []string                     `yaml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one"`
+		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Notebook configuration"`
+		TUI              *TUIConfig                   `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings"`
+		Context          *ContextConfig               `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
 	}
