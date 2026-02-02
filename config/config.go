@@ -9,11 +9,59 @@ import (
 
 	"github.com/grovetools/core/errors"
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
 var envVarRegex = regexp.MustCompile(`\$\{([^}]+)\}`)
+
+// coreConfigKeys lists the known top-level keys that are part of the core Config struct.
+// These are excluded from Extensions when loading TOML files.
+var coreConfigKeys = map[string]bool{
+	"name":              true,
+	"version":           true,
+	"workspaces":        true,
+	"build_cmd":         true,
+	"build_after":       true,
+	"notebooks":         true,
+	"tui":               true,
+	"context":           true,
+	"groves":            true,
+	"search_paths":      true,
+	"explicit_projects": true,
+}
+
+// unmarshalConfig parses config data based on file extension (TOML or YAML).
+// For TOML files, it also captures extension fields into Extensions to emulate YAML inline behavior.
+func unmarshalConfig(path string, data []byte) (*Config, error) {
+	var cfg Config
+
+	if strings.HasSuffix(path, ".toml") {
+		if err := toml.Unmarshal(data, &cfg); err != nil {
+			return nil, err
+		}
+		// Capture extension fields (non-core keys) into Extensions
+		var raw map[string]interface{}
+		if err := toml.Unmarshal(data, &raw); err == nil {
+			extensions := make(map[string]interface{})
+			for k, v := range raw {
+				if !coreConfigKeys[k] {
+					extensions[k] = v
+				}
+			}
+			if len(extensions) > 0 {
+				cfg.Extensions = extensions
+			}
+		}
+	} else {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	return &cfg, nil
+}
 
 // Load reads and parses a Grove configuration file
 func Load(path string) (*Config, error) {
@@ -24,6 +72,10 @@ func Load(path string) (*Config, error) {
 		}
 		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read config file").
 			WithDetail("path", path)
+	}
+
+	if strings.HasSuffix(path, ".toml") {
+		return LoadFromTOMLBytes(data)
 	}
 
 	return LoadFromBytes(data)
@@ -71,11 +123,11 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 			globalData, err := os.ReadFile(globalPath)
 			if err == nil {
 				expanded := expandEnvVars(string(globalData))
-				var globalConfig Config
-				if err := yaml.Unmarshal([]byte(expanded), &globalConfig); err == nil {
-					finalConfig = &globalConfig
+				globalConfig, parseErr := unmarshalConfig(globalPath, []byte(expanded))
+				if parseErr == nil {
+					finalConfig = globalConfig
 				} else {
-					logger.WithError(err).Warn("Failed to parse global configuration, continuing without it")
+					logger.WithError(parseErr).Warn("Failed to parse global configuration, continuing without it")
 				}
 			} else {
 				logger.WithError(err).Warn("Failed to read global configuration, continuing without it")
@@ -89,6 +141,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		overrideFiles := []string{
 			filepath.Join(globalDir, "grove.override.yml"),
 			filepath.Join(globalDir, "grove.override.yaml"),
+			filepath.Join(globalDir, "grove.override.toml"),
 		}
 
 		for _, overridePath := range overrideFiles {
@@ -100,15 +153,15 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 					continue
 				}
 				expanded := expandEnvVars(string(overrideData))
-				var overrideConfig Config
-				if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err != nil {
-					logger.WithError(err).Warn("Failed to parse global override file, skipping")
+				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
+				if parseErr != nil {
+					logger.WithError(parseErr).Warn("Failed to parse global override file, skipping")
 					continue
 				}
 				if finalConfig == nil {
-					finalConfig = &overrideConfig
+					finalConfig = overrideConfig
 				} else {
-					finalConfig = mergeConfigs(finalConfig, &overrideConfig)
+					finalConfig = mergeConfigs(finalConfig, overrideConfig)
 				}
 				break // Only load one
 			}
@@ -127,16 +180,16 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 					WithDetail("path", overlayPath)
 			}
 			expanded := expandEnvVars(string(overlayData))
-			var overlayConfig Config
-			if err := yaml.Unmarshal([]byte(expanded), &overlayConfig); err != nil {
-				return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse config overlay").
+			overlayConfig, parseErr := unmarshalConfig(overlayPath, []byte(expanded))
+			if parseErr != nil {
+				return nil, errors.Wrap(parseErr, errors.ErrCodeConfigInvalid, "failed to parse config overlay").
 					WithDetail("path", overlayPath)
 			}
 			if finalConfig == nil {
-				finalConfig = &overlayConfig
+				finalConfig = overlayConfig
 			} else {
 				// Replace any non-zero field from overlay
-				applyOverlay(finalConfig, &overlayConfig)
+				applyOverlay(finalConfig, overlayConfig)
 			}
 		} else if os.IsNotExist(err) {
 			// If GROVE_CONFIG_OVERLAY is set but file doesn't exist, that's an error
@@ -158,9 +211,9 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 
 		expanded := expandEnvVars(string(projectData))
-		var projectConfig Config
-		if err := yaml.Unmarshal([]byte(expanded), &projectConfig); err != nil {
-			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").
+		projectConfig, parseErr := unmarshalConfig(projectPath, []byte(expanded))
+		if parseErr != nil {
+			return nil, errors.Wrap(parseErr, errors.ErrCodeConfigInvalid, "failed to parse project config").
 				WithDetail("path", projectPath)
 		}
 
@@ -174,17 +227,17 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 				ecosystemData, err := os.ReadFile(ecosystemPath)
 				if err == nil {
 					expandedEco := expandEnvVars(string(ecosystemData))
-					var ecosystemConfig Config
-					if err := yaml.Unmarshal([]byte(expandedEco), &ecosystemConfig); err == nil {
+					ecosystemConfig, ecoParseErr := unmarshalConfig(ecosystemPath, []byte(expandedEco))
+					if ecoParseErr == nil {
 						// Merge ecosystem config after global but before project
 						if finalConfig == nil {
-							finalConfig = &ecosystemConfig
+							finalConfig = ecosystemConfig
 						} else {
 							logger.Debug("Merging ecosystem configuration over global configuration")
-							finalConfig = mergeConfigs(finalConfig, &ecosystemConfig)
+							finalConfig = mergeConfigs(finalConfig, ecosystemConfig)
 						}
 					} else {
-						logger.WithError(err).Warn("Failed to parse ecosystem configuration, continuing without it")
+						logger.WithError(ecoParseErr).Warn("Failed to parse ecosystem configuration, continuing without it")
 					}
 				} else {
 					logger.WithError(err).Warn("Failed to read ecosystem configuration, continuing without it")
@@ -193,10 +246,10 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 
 		if finalConfig == nil {
-			finalConfig = &projectConfig
+			finalConfig = projectConfig
 		} else {
 			logger.Debug("Merging project configuration over global/ecosystem configuration")
-			finalConfig = mergeConfigs(finalConfig, &projectConfig)
+			finalConfig = mergeConfigs(finalConfig, projectConfig)
 		}
 
 		// 3. Load and merge override files if they exist (optional)
@@ -204,8 +257,10 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		overrideFiles := []string{
 			filepath.Join(projectDir, "grove.override.yml"),
 			filepath.Join(projectDir, "grove.override.yaml"),
+			filepath.Join(projectDir, "grove.override.toml"),
 			filepath.Join(projectDir, ".grove.override.yml"),
 			filepath.Join(projectDir, ".grove.override.yaml"),
+			filepath.Join(projectDir, ".grove.override.toml"),
 		}
 
 		for _, overridePath := range overrideFiles {
@@ -220,14 +275,13 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 
 				// Expand environment variables
 				expanded := expandEnvVars(string(overrideData))
-
-				var overrideConfig Config
-				if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err != nil {
-					logger.WithError(err).Warn("Failed to parse override file, skipping")
+				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
+				if parseErr != nil {
+					logger.WithError(parseErr).Warn("Failed to parse override file, skipping")
 					continue
 				}
 
-				finalConfig = mergeConfigs(finalConfig, &overrideConfig)
+				finalConfig = mergeConfigs(finalConfig, overrideConfig)
 			}
 		}
 	}
@@ -279,18 +333,62 @@ func LoadFromBytes(data []byte) (*Config, error) {
 	return &config, nil
 }
 
+// LoadFromTOMLBytes parses configuration from TOML byte array
+func LoadFromTOMLBytes(data []byte) (*Config, error) {
+	// Expand environment variables
+	expanded := expandEnvVars(string(data))
+
+	var config Config
+	if err := toml.Unmarshal([]byte(expanded), &config); err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse TOML configuration")
+	}
+
+	// Capture extension fields (non-core keys) into Extensions
+	// TOML doesn't support inline like YAML, so we unmarshal again to a raw map
+	var raw map[string]interface{}
+	if err := toml.Unmarshal([]byte(expanded), &raw); err == nil {
+		extensions := make(map[string]interface{})
+		for k, v := range raw {
+			if !coreConfigKeys[k] {
+				extensions[k] = v
+			}
+		}
+		if len(extensions) > 0 {
+			config.Extensions = extensions
+		}
+	}
+
+	// Validate against schema
+	validator, err := NewSchemaValidator()
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to create validator")
+	}
+
+	if err := validator.Validate(&config); err != nil {
+		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "schema validation failed")
+	}
+
+	// Set defaults
+	config.SetDefaults()
+
+	return &config, nil
+}
+
 // FindConfigFile searches for grove configuration files with the following precedence:
 // 1. Current directory up to filesystem root
-// 2. Git repository root (if in a git repo)  
+// 2. Git repository root (if in a git repo)
 // 3. XDG config directory (~/.config/grove/grove.yml)
 func FindConfigFile(startDir string) (string, error) {
 	configNames := []string{
 		"grove.yml",
 		"grove.yaml",
+		"grove.toml",
 		".grove.yml",
 		".grove.yaml",
+		".grove.toml",
 		"docker-compose.grove.yml",
 		"docker-compose.grove.yaml",
+		"docker-compose.grove.toml",
 	}
 
 	// 1. Search from current directory up to filesystem root
@@ -401,7 +499,21 @@ func getXDGConfigPath() string {
 	if configDir == "" {
 		return ""
 	}
-	return filepath.Join(configDir, "grove.yml")
+
+	// Check YAML first
+	yamlPath := filepath.Join(configDir, "grove.yml")
+	if _, err := os.Stat(yamlPath); err == nil {
+		return yamlPath
+	}
+
+	// Check TOML second
+	tomlPath := filepath.Join(configDir, "grove.toml")
+	if _, err := os.Stat(tomlPath); err == nil {
+		return tomlPath
+	}
+
+	// Default to YAML if neither exists (for callers that might create it)
+	return yamlPath
 }
 
 // FindEcosystemConfig searches upward from the given directory for a grove.yml
@@ -410,8 +522,10 @@ func FindEcosystemConfig(startDir string) string {
 	configNames := []string{
 		"grove.yml",
 		"grove.yaml",
+		"grove.toml",
 		".grove.yml",
 		".grove.yaml",
+		".grove.toml",
 	}
 
 	dir := startDir // Start from the given directory itself
@@ -427,11 +541,18 @@ func FindEcosystemConfig(startDir string) string {
 				if err == nil {
 					expanded := expandEnvVars(string(data))
 					var cfg Config
-					if err := yaml.Unmarshal([]byte(expanded), &cfg); err == nil {
-						// An ecosystem config is identified by having a non-empty 'workspaces' field.
-						if len(cfg.Workspaces) > 0 {
-							return path
+					if strings.HasSuffix(name, ".toml") {
+						if err := toml.Unmarshal([]byte(expanded), &cfg); err != nil {
+							continue
 						}
+					} else {
+						if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+							continue
+						}
+					}
+					// An ecosystem config is identified by having a non-empty 'workspaces' field.
+					if len(cfg.Workspaces) > 0 {
+						return path
 					}
 				}
 			}
@@ -473,9 +594,9 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			globalData, err := os.ReadFile(globalPath)
 			if err == nil {
 				expanded := expandEnvVars(string(globalData))
-				var globalConfig Config
-				if err := yaml.Unmarshal([]byte(expanded), &globalConfig); err == nil {
-					layeredConfig.Global = &globalConfig
+				globalConfig, parseErr := unmarshalConfig(globalPath, []byte(expanded))
+				if parseErr == nil {
+					layeredConfig.Global = globalConfig
 					layeredConfig.FilePaths[SourceGlobal] = globalPath
 				}
 			}
@@ -488,17 +609,18 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		overrideFiles := []string{
 			filepath.Join(globalDir, "grove.override.yml"),
 			filepath.Join(globalDir, "grove.override.yaml"),
+			filepath.Join(globalDir, "grove.override.toml"),
 		}
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
 				overrideData, err := os.ReadFile(overridePath)
 				if err == nil {
 					expanded := expandEnvVars(string(overrideData))
-					var overrideConfig Config
-					if err := yaml.Unmarshal([]byte(expanded), &overrideConfig); err == nil {
+					overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
+					if parseErr == nil {
 						layeredConfig.GlobalOverride = &OverrideSource{
 							Path:   overridePath,
-							Config: &overrideConfig,
+							Config: overrideConfig,
 						}
 						layeredConfig.FilePaths[SourceGlobalOverride] = overridePath
 						break // Only load the first one found
@@ -515,11 +637,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			overlayData, err := os.ReadFile(overlayPath)
 			if err == nil {
 				expanded := expandEnvVars(string(overlayData))
-				var overlayConfig Config
-				if err := yaml.Unmarshal([]byte(expanded), &overlayConfig); err == nil {
+				overlayConfig, parseErr := unmarshalConfig(overlayPath, []byte(expanded))
+				if parseErr == nil {
 					layeredConfig.EnvOverlay = &OverrideSource{
 						Path:   overlayPath,
-						Config: &overlayConfig,
+						Config: overlayConfig,
 					}
 					layeredConfig.FilePaths[SourceEnvOverlay] = overlayPath
 				}
@@ -543,11 +665,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").WithDetail("path", projectPath)
 		}
 		expandedProject := expandEnvVars(string(projectData))
-		var projectConfig Config
-		if err := yaml.Unmarshal([]byte(expandedProject), &projectConfig); err != nil {
-			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
+		projectConfig, parseErr := unmarshalConfig(projectPath, []byte(expandedProject))
+		if parseErr != nil {
+			return nil, errors.Wrap(parseErr, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
 		}
-		layeredConfig.Project = &projectConfig
+		layeredConfig.Project = projectConfig
 		layeredConfig.FilePaths[SourceProject] = projectPath
 
 		// 3.5. Load Ecosystem layer (optional, only if this is a workspace config)
@@ -557,9 +679,9 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 				ecosystemData, err := os.ReadFile(ecosystemPath)
 				if err == nil {
 					expandedEco := expandEnvVars(string(ecosystemData))
-					var ecosystemConfig Config
-					if err := yaml.Unmarshal([]byte(expandedEco), &ecosystemConfig); err == nil {
-						layeredConfig.Ecosystem = &ecosystemConfig
+					ecosystemConfig, ecoParseErr := unmarshalConfig(ecosystemPath, []byte(expandedEco))
+					if ecoParseErr == nil {
+						layeredConfig.Ecosystem = ecosystemConfig
 						layeredConfig.FilePaths[SourceEcosystem] = ecosystemPath
 					}
 				}
@@ -573,11 +695,14 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		overrideFiles := []string{
 			filepath.Join(projectDir, "grove.override.yml"),
 			filepath.Join(projectDir, "grove.override.yaml"),
+			filepath.Join(projectDir, "grove.override.toml"),
 			filepath.Join(projectDir, ".grove.override.yml"),
 			filepath.Join(projectDir, ".grove.override.yaml"),
-			// This also includes the previously named .grove-work.yml/.yaml
+			filepath.Join(projectDir, ".grove.override.toml"),
+			// This also includes the previously named .grove-work.yml/.yaml/.toml
 			filepath.Join(projectDir, ".grove-work.yml"),
 			filepath.Join(projectDir, ".grove-work.yaml"),
+			filepath.Join(projectDir, ".grove-work.toml"),
 		}
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
@@ -586,11 +711,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 					continue // Skip unreadable override files
 				}
 				expandedOverride := expandEnvVars(string(overrideData))
-				var overrideConfig Config
-				if err := yaml.Unmarshal([]byte(expandedOverride), &overrideConfig); err == nil {
+				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expandedOverride))
+				if parseErr == nil {
 					layeredConfig.Overrides = append(layeredConfig.Overrides, OverrideSource{
 						Path:   overridePath,
-						Config: &overrideConfig,
+						Config: overrideConfig,
 					})
 				}
 			}

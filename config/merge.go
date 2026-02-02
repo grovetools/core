@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"gopkg.in/yaml.v3"
 )
 
 // LoadWithOverrides loads configuration with override files
@@ -21,8 +19,10 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 	overrides := []string{
 		filepath.Join(dir, "grove.override.yml"),
 		filepath.Join(dir, "grove.override.yaml"),
+		filepath.Join(dir, "grove.override.toml"),
 		filepath.Join(dir, ".grove.override.yml"),
 		filepath.Join(dir, ".grove.override.yaml"),
+		filepath.Join(dir, ".grove.override.toml"),
 	}
 
 	for _, overrideFile := range overrides {
@@ -35,13 +35,12 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 
 			// Expand environment variables
 			expanded := expandEnvVars(string(data))
-
-			var override Config
-			if err := yaml.Unmarshal([]byte(expanded), &override); err != nil {
-				return nil, fmt.Errorf("parse override %s: %w", overrideFile, err)
+			override, parseErr := unmarshalConfig(overrideFile, []byte(expanded))
+			if parseErr != nil {
+				return nil, fmt.Errorf("parse override %s: %w", overrideFile, parseErr)
 			}
 
-			config = mergeConfigs(config, &override)
+			config = mergeConfigs(config, override)
 		}
 	}
 

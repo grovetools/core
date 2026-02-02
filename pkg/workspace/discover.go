@@ -20,8 +20,10 @@ func findGroveConfig(dir string) (string, *config.Config, error) {
 	configNames := []string{
 		"grove.yml",
 		"grove.yaml",
+		"grove.toml",
 		".grove.yml",
 		".grove.yaml",
+		".grove.toml",
 	}
 
 	for _, name := range configNames {
