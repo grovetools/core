@@ -47,3 +47,5 @@ jobs:
             --draft=false \
             --prerelease=$IS_PRERELEASE \
             dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
