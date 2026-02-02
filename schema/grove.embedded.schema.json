@@ -293,9 +293,6 @@
       "type": "array"
     }
   },
-  "required": [
-    "version"
-  ],
   "title": "Grove Ecosystem Configuration Schema",
   "type": "object"
 }
