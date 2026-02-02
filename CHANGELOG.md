@@ -1,3 +1,95 @@
+## v0.6.0 (2026-02-02)
+
+Configuration capabilities have been expanded with support for TOML files (31f9a44), a new `GROVE_CONFIG_OVERLAY` mechanism for isolated environments (876b799), and integrated hooks configuration within the main `grove.yml` schema (fca2cdb). Path resolution has been overhauled to adhere to XDG standards (f6483cb), accompanied by a new `paths` command for discovery (7e5ea37) and support for binary path overrides via `GROVE_BIN` (c8e50d0).
+
+Workspace management improvements include configurable `cx` repository locations (c79f801) and better organization of `docgen` assets (a7359d8). The CLI help system now supports styled examples (0b337f4), while `tmux` integration received updates for socket-aware command execution (6d7fd1a) and server-level environment variable management (ac2f07e).
+
+### Features
+* Add TOML configuration file support (31f9a44)
+* Support cmd.Example in styled help (0b337f4)
+* Add hooks configuration to grove.yml schema (fca2cdb)
+* Add GROVE_BIN env var for binary path override (c8e50d0)
+* Add paths command for XDG directory discovery (7e5ea37)
+* Add XDG-compliant path resolution package (f6483cb)
+* Add context.repos_dir to configure cx repo location (c79f801)
+* Add GetDocgenDir method to NotebookLocator (534c1b7)
+* Add GROVE_CONFIG_OVERLAY for isolated environments (876b799)
+* Add SetGlobalEnvironment for server-level env vars (ac2f07e)
+* Add Command() helper for socket-aware exec.Cmd (6d7fd1a)
+* Organize docgen prompts in prompts/ subdirectory (a7359d8)
+* Add descriptions to choices (b1427e7)
+
+### Bug Fixes
+* Make version field optional in config schema (ee30a6e)
+* Add Hooks to config merge logic (a28d7d8)
+* Use XDG paths for repo manager and workspace discovery (28e07ad)
+* Remove common paths from nb resolver (3afc381)
+* Get actual window name instead of assuming session name (ff9ccc8)
+* Dont bold status text e.g. success, error, warning etc (65fbb00)
+* Update VERSION_PKG to grovetools/core path (c727ade)
+
+### Code Refactoring
+* Use extensions for hooks config instead of struct field (4d897d4)
+* Update docgen title to match package name (32ef41c)
+
+### Chores
+* Add MIT License (fee40be)
+* Update schemas, readme, makefile, cli ref, docs (3fd1819)
+* Add concept lookup instructions to CLAUDE.md (30f3410)
+* Update readme/overview (594ffd7)
+* Move README template to notebook (7e25ad3)
+* Remove docgen files from repo (75fddb7)
+* Move docs.rules to .cx/ directory (8ad28fd)
+* Update go.mod for grovetools migration (0627935)
+
+### File Changes
+```
+ .cx/docs.rules                             |  10 +
+ CLAUDE.md                                  |  13 ++
+ LICENSE                                    |  21 ++
+ Makefile                                   |   2 +-
+ README.md                                  | 131 +++++-------
+ cli/help.go                                |  47 ++++-
+ cmd/core/main.go                           |   1 +
+ cmd/paths.go                               |  54 +++++
+ config/config.go                           | 322 ++++++++++++++++++++++++-----
+ config/merge.go                            |  13 +-
+ config/schema.go                           |  14 +-
+ config/schema/definitions/base.schema.json | 166 +++++++++++----
+ config/types.go                            | 163 +++++++--------
+ docs/01-overview.md                        | 172 ++++-----------
+ docs/02-cli-reference.md                   | 282 +++++++++++++++++++++++++
+ docs/03-configuration.md                   | 193 +++++++++++++++++
+ docs/README.md.tpl                         |   7 -
+ docs/docgen.config.yml                     |  22 --
+ docs/docs.rules                            |   1 -
+ go.mod                                     |  10 +-
+ go.sum                                     |  38 +++-
+ grove.toml                                 |  13 ++
+ grove.yml                                  |  13 --
+ logging.schema.json                        |   2 +-
+ logging/config.go                          |  36 ++--
+ notebook.schema.json                       |  57 +++--
+ pkg/docs/docs.json                         |  55 ++++-
+ pkg/models/hooks.go                        |  15 --
+ pkg/paths/xdg.go                           | 146 +++++++++++++
+ pkg/repo/manager.go                        |  22 +-
+ pkg/sessions/registry.go                   |   7 +-
+ pkg/tmux/client.go                         |  11 +
+ pkg/tmux/launch.go                         |  10 +-
+ pkg/tmux/session.go                        |  13 ++
+ pkg/workspace/discover.go                  |   9 +-
+ pkg/workspace/discover_test.go             |  10 +
+ pkg/workspace/notebook_locator.go          |  36 +++-
+ pkg/workspace/notebook_resolver.go         |  24 +--
+ schema/definitions/base.schema.json        | 253 ++++++++++++++++++++---
+ schema/grove.embedded.schema.json          | 237 ++++++++++++++++++---
+ tests/e2e/main.go                          |   1 +
+ tests/e2e/scenarios_config.go              |  79 +++++++
+ tui/theme/theme.go                         |  21 +-
+ 43 files changed, 2120 insertions(+), 632 deletions(-)
+```
+
 ## v0.5.0 (2026-01-14)
 
 This release introduces a complete overhaul of the logging system, a new interactive logs TUI, a reusable embedded Neovim component, and major improvements to the workspace discovery and path resolution systems. The new unified logging API provides a chainable builder pattern for creating both structured and pretty-printed log output from a single call, with extensive configuration options for component-based filtering (dbc1670, c455796). The new `core logs` command leverages this system to provide a powerful tool for viewing logs across an entire ecosystem, complete with a full-featured TUI for interactive browsing, searching, and filtering (ce02c65, 769ec18).
