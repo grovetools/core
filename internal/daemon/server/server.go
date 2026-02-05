@@ -3,12 +3,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/grovetools/core/internal/daemon/engine"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -18,6 +20,7 @@ import (
 type Server struct {
 	logger *logrus.Entry
 	server *http.Server
+	engine *engine.Engine
 }
 
 // New creates a new Server instance.
@@ -25,6 +28,11 @@ func New(logger *logrus.Entry) *Server {
 	return &Server{
 		logger: logger,
 	}
+}
+
+// SetEngine sets the collector engine for the server.
+func (s *Server) SetEngine(eng *engine.Engine) {
+	s.engine = eng
 }
 
 // ListenAndServe starts the daemon on the given unix socket path.
@@ -54,11 +62,17 @@ func (s *Server) ListenAndServe(socketPath string) error {
 	}
 
 	mux := http.NewServeMux()
-	// TODO: Register Connect handlers here in later phases
+
+	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
+
+	// State API endpoints (will be replaced with Connect-RPC in Phase 5)
+	mux.HandleFunc("/api/state", s.handleGetState)
+	mux.HandleFunc("/api/workspaces", s.handleGetWorkspaces)
+	mux.HandleFunc("/api/sessions", s.handleGetSessions)
 
 	s.server = &http.Server{
 		Handler: h2c.NewHandler(mux, &http2.Server{}),
@@ -75,4 +89,40 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return s.server.Shutdown(ctx)
 	}
 	return nil
+}
+
+// handleGetState returns the complete daemon state as JSON.
+func (s *Server) handleGetState(w http.ResponseWriter, r *http.Request) {
+	if s.engine == nil {
+		http.Error(w, "engine not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	state := s.engine.Store().Get()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(state)
+}
+
+// handleGetWorkspaces returns all enriched workspaces as JSON.
+func (s *Server) handleGetWorkspaces(w http.ResponseWriter, r *http.Request) {
+	if s.engine == nil {
+		http.Error(w, "engine not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	workspaces := s.engine.Store().GetWorkspaces()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(workspaces)
+}
+
+// handleGetSessions returns all active sessions as JSON.
+func (s *Server) handleGetSessions(w http.ResponseWriter, r *http.Request) {
+	if s.engine == nil {
+		http.Error(w, "engine not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	sessions := s.engine.Store().GetSessions()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(sessions)
 }

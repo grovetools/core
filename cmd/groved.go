@@ -8,8 +8,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/grovetools/core/internal/daemon/collector"
+	"github.com/grovetools/core/internal/daemon/engine"
 	"github.com/grovetools/core/internal/daemon/pidfile"
 	"github.com/grovetools/core/internal/daemon/server"
+	"github.com/grovetools/core/internal/daemon/store"
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/spf13/cobra"
@@ -50,22 +53,36 @@ func newGrovedStartCmd() *cobra.Command {
 				}
 			}()
 
-			// 2. Setup Server
-			srv := server.New(logger)
+			// 2. Setup Store and Engine
+			st := store.New()
+			eng := engine.New(st, logger)
 
-			// 3. Handle Signals
+			// Register collectors
+			eng.Register(collector.NewWorkspaceCollector())
+			eng.Register(collector.NewGitStatusCollector())
+			eng.Register(collector.NewSessionCollector())
+			eng.Register(collector.NewPlanCollector())
+			eng.Register(collector.NewNoteCollector())
+
+			// 3. Setup Server with engine
+			srv := server.New(logger)
+			srv.SetEngine(eng)
+
+			// 4. Handle Signals
+			ctx, cancel := context.WithCancel(context.Background())
 			stop := make(chan os.Signal, 1)
 			signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 			go func() {
 				<-stop
 				logger.Info("Received stop signal")
+				cancel() // Stop the engine
 
 				// Create shutdown context with timeout
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer shutdownCancel()
 
-				if err := srv.Shutdown(ctx); err != nil {
+				if err := srv.Shutdown(shutdownCtx); err != nil {
 					logger.Errorf("Server shutdown error: %v", err)
 				}
 
@@ -74,7 +91,10 @@ func newGrovedStartCmd() *cobra.Command {
 				os.Exit(0)
 			}()
 
-			// 4. Start Server (Blocking)
+			// 5. Start Engine in background
+			go eng.Start(ctx)
+
+			// 6. Start Server (Blocking)
 			logger.WithField("pid", os.Getpid()).Info("Starting daemon")
 			if err := srv.ListenAndServe(sockPath); err != nil {
 				return fmt.Errorf("server error: %w", err)
