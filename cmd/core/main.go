@@ -24,6 +24,7 @@ func main() {
 	rootCmd.AddCommand(cmd.NewLogsCmd())
 	rootCmd.AddCommand(cmd.NewNvimDemoCmd())
 	rootCmd.AddCommand(cmd.NewPathsCmd())
+	rootCmd.AddCommand(cmd.NewGrovedCmd())
 
 	if err := cli.Execute(rootCmd); err != nil {
 		os.Exit(1)
