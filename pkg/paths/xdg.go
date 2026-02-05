@@ -124,6 +124,29 @@ func BinDir() string {
 	return filepath.Join(data, "bin")
 }
 
+// RuntimeDir returns the Grove runtime directory for sockets and pipes.
+// Uses XDG_RUNTIME_DIR when available (Linux), falls back to StateDir (macOS).
+func RuntimeDir() string {
+	if groveHome := os.Getenv("GROVE_HOME"); groveHome != "" {
+		return filepath.Join(groveHome, "run")
+	}
+	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
+		return filepath.Join(dir, "grove")
+	}
+	// Fallback: use state dir for socket on macOS/systems without XDG_RUNTIME_DIR
+	return StateDir()
+}
+
+// SocketPath returns the path to the grove daemon unix socket.
+func SocketPath() string {
+	return filepath.Join(RuntimeDir(), "groved.sock")
+}
+
+// PidFilePath returns the path to the grove daemon PID file.
+func PidFilePath() string {
+	return filepath.Join(StateDir(), "groved.pid")
+}
+
 // EnsureDirs creates all Grove directories if they don't exist.
 func EnsureDirs() error {
 	dirs := []string{
@@ -132,6 +155,7 @@ func EnsureDirs() error {
 		StateDir(),
 		CacheDir(),
 		BinDir(),
+		RuntimeDir(),
 	}
 
 	for _, dir := range dirs {
