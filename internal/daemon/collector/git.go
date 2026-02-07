@@ -19,6 +19,21 @@ var gitWorkers = max(min(runtime.NumCPU()/2, 8), 2)
 // backgroundScanInterval is how often to scan non-focused workspaces.
 const backgroundScanInterval = 60 * time.Second
 
+// dynamicInterval returns a scan interval based on workspace count.
+// Fewer workspaces = faster scanning since it's cheaper.
+func dynamicInterval(count int, baseInterval time.Duration) time.Duration {
+	switch {
+	case count <= 5:
+		return max(baseInterval/4, 250*time.Millisecond) // 4x faster, min 250ms
+	case count <= 15:
+		return max(baseInterval/2, 500*time.Millisecond) // 2x faster, min 500ms
+	case count <= 30:
+		return baseInterval // Normal speed
+	default:
+		return baseInterval * 2 // Slower for large sets
+	}
+}
+
 // GitStatusCollector updates git status for all workspaces.
 type GitStatusCollector struct {
 	interval time.Duration
@@ -40,10 +55,11 @@ func (c *GitStatusCollector) Name() string { return "git" }
 
 // Run starts the git status collection loop.
 func (c *GitStatusCollector) Run(ctx context.Context, st *store.Store, updates chan<- store.Update) error {
-	ticker := time.NewTicker(c.interval)
-	defer ticker.Stop()
-
 	var lastFullScan time.Time
+	var lastFocusCount int
+	currentInterval := c.interval
+	ticker := time.NewTicker(currentInterval)
+	defer ticker.Stop()
 
 	scan := func() {
 		state := st.Get()
@@ -115,6 +131,18 @@ func (c *GitStatusCollector) Run(ctx context.Context, st *store.Store, updates c
 				Scanned: len(toScan),
 				Payload: newWorkspaces,
 			}
+		}
+
+		// Adjust interval dynamically based on focus count
+		focusCount := len(focus)
+		if focusCount == 0 {
+			focusCount = len(state.Workspaces)
+		}
+		newInterval := dynamicInterval(focusCount, c.interval)
+		if newInterval != currentInterval && focusCount != lastFocusCount {
+			currentInterval = newInterval
+			ticker.Reset(currentInterval)
+			lastFocusCount = focusCount
 		}
 	}
 
