@@ -13,10 +13,14 @@ type PlanCollector struct {
 	interval time.Duration
 }
 
-// NewPlanCollector creates a new PlanCollector.
-func NewPlanCollector() *PlanCollector {
+// NewPlanCollector creates a new PlanCollector with the specified interval.
+// If interval is 0, defaults to 30 seconds.
+func NewPlanCollector(interval time.Duration) *PlanCollector {
+	if interval == 0 {
+		interval = 30 * time.Second
+	}
 	return &PlanCollector{
-		interval: 30 * time.Second,
+		interval: interval,
 	}
 }
 

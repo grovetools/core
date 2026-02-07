@@ -13,10 +13,14 @@ type NoteCollector struct {
 	interval time.Duration
 }
 
-// NewNoteCollector creates a new NoteCollector.
-func NewNoteCollector() *NoteCollector {
+// NewNoteCollector creates a new NoteCollector with the specified interval.
+// If interval is 0, defaults to 60 seconds.
+func NewNoteCollector(interval time.Duration) *NoteCollector {
+	if interval == 0 {
+		interval = 60 * time.Second
+	}
 	return &NoteCollector{
-		interval: 60 * time.Second,
+		interval: interval,
 	}
 }
 

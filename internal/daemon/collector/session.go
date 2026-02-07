@@ -13,10 +13,14 @@ type SessionCollector struct {
 	interval time.Duration
 }
 
-// NewSessionCollector creates a new SessionCollector.
-func NewSessionCollector() *SessionCollector {
+// NewSessionCollector creates a new SessionCollector with the specified interval.
+// If interval is 0, defaults to 2 seconds.
+func NewSessionCollector(interval time.Duration) *SessionCollector {
+	if interval == 0 {
+		interval = 2 * time.Second
+	}
 	return &SessionCollector{
-		interval: 2 * time.Second,
+		interval: interval,
 	}
 }
 

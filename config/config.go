@@ -27,6 +27,7 @@ var coreConfigKeys = map[string]bool{
 	"notebooks":         true,
 	"tui":               true,
 	"context":           true,
+	"daemon":            true,
 	"groves":            true,
 	"search_paths":      true,
 	"explicit_projects": true,

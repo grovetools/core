@@ -22,8 +22,10 @@ func New() Client {
 		conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
 		if err == nil {
 			conn.Close()
-			// TODO: Return DaemonClient when implemented
-			// return NewDaemonClient(socketPath)
+			// Return RemoteClient when daemon is available
+			if client, err := NewRemoteClient(socketPath); err == nil {
+				return client
+			}
 		}
 	}
 

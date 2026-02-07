@@ -16,12 +16,16 @@ type WorkspaceCollector struct {
 	logger   *logrus.Logger
 }
 
-// NewWorkspaceCollector creates a new WorkspaceCollector.
-func NewWorkspaceCollector() *WorkspaceCollector {
+// NewWorkspaceCollector creates a new WorkspaceCollector with the specified interval.
+// If interval is 0, defaults to 30 seconds.
+func NewWorkspaceCollector(interval time.Duration) *WorkspaceCollector {
+	if interval == 0 {
+		interval = 30 * time.Second
+	}
 	logger := logrus.New()
 	logger.SetLevel(logrus.WarnLevel)
 	return &WorkspaceCollector{
-		interval: 30 * time.Second,
+		interval: interval,
 		logger:   logger,
 	}
 }

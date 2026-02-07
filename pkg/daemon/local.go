@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 
 	"github.com/grovetools/core/pkg/enrichment"
 	"github.com/grovetools/core/pkg/models"
@@ -54,6 +55,12 @@ func (c *LocalClient) GetNoteCounts(ctx context.Context) (map[string]*enrichment
 // the hooks package provides more comprehensive discovery.
 func (c *LocalClient) GetSessions(ctx context.Context) ([]*models.Session, error) {
 	return sessions.DiscoverLiveSessions()
+}
+
+// StreamState returns an error for LocalClient since streaming is only available via daemon.
+// Use the daemon for real-time updates.
+func (c *LocalClient) StreamState(ctx context.Context) (<-chan StateUpdate, error) {
+	return nil, errors.New("streaming not available in local mode; start the daemon for real-time updates")
 }
 
 // IsRunning returns false since this is the local fallback client.

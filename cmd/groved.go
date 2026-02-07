@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/internal/daemon/collector"
 	"github.com/grovetools/core/internal/daemon/engine"
 	"github.com/grovetools/core/internal/daemon/pidfile"
@@ -53,22 +54,59 @@ func newGrovedStartCmd() *cobra.Command {
 				}
 			}()
 
-			// 2. Setup Store and Engine
+			// 2. Load config for daemon settings
+			cfg, err := config.LoadDefault()
+			if err != nil {
+				logger.WithError(err).Warn("Failed to load config, using defaults")
+				cfg = &config.Config{}
+			}
+
+			// Parse intervals from config (0 means use default)
+			var gitInterval, sessionInterval, workspaceInterval, planInterval, noteInterval time.Duration
+			if cfg.Daemon != nil {
+				if cfg.Daemon.GitInterval != "" {
+					if d, err := time.ParseDuration(cfg.Daemon.GitInterval); err == nil {
+						gitInterval = d
+					}
+				}
+				if cfg.Daemon.SessionInterval != "" {
+					if d, err := time.ParseDuration(cfg.Daemon.SessionInterval); err == nil {
+						sessionInterval = d
+					}
+				}
+				if cfg.Daemon.WorkspaceInterval != "" {
+					if d, err := time.ParseDuration(cfg.Daemon.WorkspaceInterval); err == nil {
+						workspaceInterval = d
+					}
+				}
+				if cfg.Daemon.PlanInterval != "" {
+					if d, err := time.ParseDuration(cfg.Daemon.PlanInterval); err == nil {
+						planInterval = d
+					}
+				}
+				if cfg.Daemon.NoteInterval != "" {
+					if d, err := time.ParseDuration(cfg.Daemon.NoteInterval); err == nil {
+						noteInterval = d
+					}
+				}
+			}
+
+			// 3. Setup Store and Engine
 			st := store.New()
 			eng := engine.New(st, logger)
 
-			// Register collectors
-			eng.Register(collector.NewWorkspaceCollector())
-			eng.Register(collector.NewGitStatusCollector())
-			eng.Register(collector.NewSessionCollector())
-			eng.Register(collector.NewPlanCollector())
-			eng.Register(collector.NewNoteCollector())
+			// Register collectors with configured intervals
+			eng.Register(collector.NewWorkspaceCollector(workspaceInterval))
+			eng.Register(collector.NewGitStatusCollector(gitInterval))
+			eng.Register(collector.NewSessionCollector(sessionInterval))
+			eng.Register(collector.NewPlanCollector(planInterval))
+			eng.Register(collector.NewNoteCollector(noteInterval))
 
-			// 3. Setup Server with engine
+			// 4. Setup Server with engine
 			srv := server.New(logger)
 			srv.SetEngine(eng)
 
-			// 4. Handle Signals
+			// 5. Handle Signals
 			ctx, cancel := context.WithCancel(context.Background())
 			stop := make(chan os.Signal, 1)
 			signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -91,10 +129,10 @@ func newGrovedStartCmd() *cobra.Command {
 				os.Exit(0)
 			}()
 
-			// 5. Start Engine in background
+			// 6. Start Engine in background
 			go eng.Start(ctx)
 
-			// 6. Start Server (Blocking)
+			// 7. Start Server (Blocking)
 			logger.WithField("pid", os.Getpid()).Info("Starting daemon")
 			if err := srv.ListenAndServe(sockPath); err != nil {
 				return fmt.Errorf("server error: %w", err)

@@ -14,10 +14,14 @@ type GitStatusCollector struct {
 	interval time.Duration
 }
 
-// NewGitStatusCollector creates a new GitStatusCollector.
-func NewGitStatusCollector() *GitStatusCollector {
+// NewGitStatusCollector creates a new GitStatusCollector with the specified interval.
+// If interval is 0, defaults to 10 seconds.
+func NewGitStatusCollector(interval time.Duration) *GitStatusCollector {
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
 	return &GitStatusCollector{
-		interval: 10 * time.Second,
+		interval: interval,
 	}
 }
 
