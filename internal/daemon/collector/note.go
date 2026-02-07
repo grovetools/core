@@ -2,11 +2,15 @@ package collector
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/grovetools/core/internal/daemon/store"
 	"github.com/grovetools/core/pkg/enrichment"
 )
+
+// noteBackgroundInterval is how often to update non-focused workspaces.
+const noteBackgroundInterval = 2 * time.Minute
 
 // NoteCollector updates note counts for all workspaces.
 type NoteCollector struct {
@@ -32,6 +36,8 @@ func (c *NoteCollector) Run(ctx context.Context, st *store.Store, updates chan<-
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
+	var lastFullScan time.Time
+
 	scan := func() {
 		// FetchNoteCountsMap returns counts by workspace name, not path
 		noteCounts, err := enrichment.FetchNoteCountsMap()
@@ -40,23 +46,46 @@ func (c *NoteCollector) Run(ctx context.Context, st *store.Store, updates chan<-
 		}
 
 		state := st.Get()
+		focus := st.GetFocus()
+
+		// Determine if this is a full scan or focused scan
+		doFullScan := len(focus) == 0 || time.Since(lastFullScan) >= noteBackgroundInterval
+		if doFullScan {
+			lastFullScan = time.Now()
+		}
+
+		// Build case-insensitive focus map
+		focusLower := make(map[string]struct{}, len(focus))
+		for p := range focus {
+			focusLower[strings.ToLower(p)] = struct{}{}
+		}
 
 		// Clone existing workspaces and update note counts
 		newWorkspaces := make(map[string]*enrichment.EnrichedWorkspace)
+		scanned := 0
 
 		for k, v := range state.Workspaces {
 			cpy := *v
-			// Note counts are indexed by workspace name, not path
-			if cpy.WorkspaceNode != nil {
-				if counts, ok := noteCounts[cpy.Name]; ok {
-					cpy.NoteCounts = counts
+
+			// Check if this workspace should be updated
+			_, isFocused := focusLower[strings.ToLower(k)]
+			if doFullScan || isFocused {
+				// Note counts are indexed by workspace name, not path
+				if cpy.WorkspaceNode != nil {
+					if counts, ok := noteCounts[cpy.Name]; ok {
+						cpy.NoteCounts = counts
+					}
 				}
+				scanned++
 			}
+
 			newWorkspaces[k] = &cpy
 		}
 
 		updates <- store.Update{
 			Type:    store.UpdateWorkspaces,
+			Source:  "note",
+			Scanned: scanned,
 			Payload: newWorkspaces,
 		}
 	}

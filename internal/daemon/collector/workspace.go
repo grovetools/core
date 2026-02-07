@@ -68,6 +68,7 @@ func (c *WorkspaceCollector) Run(ctx context.Context, st *store.Store, updates c
 
 		updates <- store.Update{
 			Type:    store.UpdateWorkspaces,
+			Source:  "workspace",
 			Payload: enrichedMap,
 		}
 	}

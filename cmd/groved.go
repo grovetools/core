@@ -15,6 +15,7 @@ import (
 	"github.com/grovetools/core/internal/daemon/server"
 	"github.com/grovetools/core/internal/daemon/store"
 	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/pkg/daemon"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/spf13/cobra"
 )
@@ -30,6 +31,8 @@ func NewGrovedCmd() *cobra.Command {
 	cmd.AddCommand(newGrovedStartCmd())
 	cmd.AddCommand(newGrovedStopCmd())
 	cmd.AddCommand(newGrovedStatusCmd())
+	cmd.AddCommand(newGrovedConfigCmd())
+	cmd.AddCommand(newGrovedMonitorCmd())
 
 	return cmd
 }
@@ -61,8 +64,14 @@ func newGrovedStartCmd() *cobra.Command {
 				cfg = &config.Config{}
 			}
 
-			// Parse intervals from config (0 means use default)
-			var gitInterval, sessionInterval, workspaceInterval, planInterval, noteInterval time.Duration
+			// Parse intervals from config with defaults
+			// Defaults match the collector defaults: git=10s, session=2s, workspace=30s, plan=30s, note=60s
+			gitInterval := 10 * time.Second
+			sessionInterval := 2 * time.Second
+			workspaceInterval := 30 * time.Second
+			planInterval := 30 * time.Second
+			noteInterval := 60 * time.Second
+
 			if cfg.Daemon != nil {
 				if cfg.Daemon.GitInterval != "" {
 					if d, err := time.ParseDuration(cfg.Daemon.GitInterval); err == nil {
@@ -105,6 +114,16 @@ func newGrovedStartCmd() *cobra.Command {
 			// 4. Setup Server with engine
 			srv := server.New(logger)
 			srv.SetEngine(eng)
+
+			// Set running config for introspection
+			srv.SetRunningConfig(&server.RunningConfig{
+				GitInterval:       gitInterval,
+				SessionInterval:   sessionInterval,
+				WorkspaceInterval: workspaceInterval,
+				PlanInterval:      planInterval,
+				NoteInterval:      noteInterval,
+				StartedAt:         time.Now(),
+			})
 
 			// 5. Handle Signals
 			ctx, cancel := context.WithCancel(context.Background())
@@ -195,5 +214,124 @@ func newGrovedStatusCmd() *cobra.Command {
 			}
 			return nil
 		},
+	}
+}
+
+func newGrovedConfigCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "config",
+		Short: "Show running daemon configuration",
+		Long:  "Query the running daemon to show its active configuration intervals.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := daemon.New()
+			defer client.Close()
+
+			if !client.IsRunning() {
+				fmt.Println("Daemon is not running")
+				os.Exit(1)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			cfg, err := client.GetConfig(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get config: %w", err)
+			}
+
+			fmt.Println("Running Daemon Configuration")
+			fmt.Println("============================")
+			fmt.Printf("Started At:         %s\n", cfg.StartedAt.Format(time.RFC3339))
+			fmt.Printf("Uptime:             %s\n", time.Since(cfg.StartedAt).Round(time.Second))
+			fmt.Println()
+			fmt.Println("Collector Intervals:")
+			fmt.Printf("  Git Status:       %s\n", cfg.GitInterval)
+			fmt.Printf("  Session:          %s\n", cfg.SessionInterval)
+			fmt.Printf("  Workspace:        %s\n", cfg.WorkspaceInterval)
+			fmt.Printf("  Plan Stats:       %s\n", cfg.PlanInterval)
+			fmt.Printf("  Note Counts:      %s\n", cfg.NoteInterval)
+
+			return nil
+		},
+	}
+}
+
+func newGrovedMonitorCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "monitor",
+		Short: "Monitor daemon activity in real-time",
+		Long:  "Subscribe to the daemon event stream and print activity logs.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := daemon.New()
+			defer client.Close()
+
+			if !client.IsRunning() {
+				fmt.Println("Daemon is not running")
+				os.Exit(1)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			// Handle Ctrl+C gracefully
+			stop := make(chan os.Signal, 1)
+			signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				<-stop
+				fmt.Println("\nDisconnecting...")
+				cancel()
+			}()
+
+			stream, err := client.StreamState(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to connect to stream: %w", err)
+			}
+
+			fmt.Println("Monitoring daemon activity (Ctrl+C to stop)...")
+			fmt.Println("==============================================")
+
+			for update := range stream {
+				timestamp := time.Now().Format("15:04:05")
+				switch update.UpdateType {
+				case "initial":
+					fmt.Printf("[%s] Connected: %d workspaces loaded\n", timestamp, len(update.Workspaces))
+				case "workspaces":
+					source := update.Source
+					if source == "" {
+						source = "unknown"
+					}
+					if update.Scanned > 0 && update.Scanned != len(update.Workspaces) {
+						fmt.Printf("[%s] %s: scanned %d/%d\n", timestamp, formatSource(source), update.Scanned, len(update.Workspaces))
+					} else {
+						fmt.Printf("[%s] %s: %d workspaces\n", timestamp, formatSource(source), len(update.Workspaces))
+					}
+				case "sessions":
+					fmt.Printf("[%s] Session: %d active\n", timestamp, len(update.Sessions))
+				case "focus":
+					fmt.Printf("[%s] Focus: %d workspaces\n", timestamp, update.Scanned)
+				default:
+					fmt.Printf("[%s] Update: %s\n", timestamp, update.UpdateType)
+				}
+			}
+
+			return nil
+		},
+	}
+}
+
+// formatSource returns a human-readable label for the collector source.
+func formatSource(source string) string {
+	switch source {
+	case "git":
+		return "Git Status"
+	case "workspace":
+		return "Workspace Discovery"
+	case "session":
+		return "Session"
+	case "plan":
+		return "Plan Stats"
+	case "note":
+		return "Note Counts"
+	default:
+		return source
 	}
 }

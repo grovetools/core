@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/grovetools/core/internal/daemon/engine"
 	"github.com/grovetools/core/internal/daemon/store"
@@ -18,11 +19,23 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
+// RunningConfig holds the active configuration intervals being used by the daemon.
+// This is exposed via the /api/config endpoint so clients can verify what config is active.
+type RunningConfig struct {
+	GitInterval       time.Duration `json:"git_interval"`
+	SessionInterval   time.Duration `json:"session_interval"`
+	WorkspaceInterval time.Duration `json:"workspace_interval"`
+	PlanInterval      time.Duration `json:"plan_interval"`
+	NoteInterval      time.Duration `json:"note_interval"`
+	StartedAt         time.Time     `json:"started_at"`
+}
+
 // Server manages the daemon's HTTP server over a Unix socket.
 type Server struct {
-	logger *logrus.Entry
-	server *http.Server
-	engine *engine.Engine
+	logger        *logrus.Entry
+	server        *http.Server
+	engine        *engine.Engine
+	runningConfig *RunningConfig
 }
 
 // New creates a new Server instance.
@@ -35,6 +48,11 @@ func New(logger *logrus.Entry) *Server {
 // SetEngine sets the collector engine for the server.
 func (s *Server) SetEngine(eng *engine.Engine) {
 	s.engine = eng
+}
+
+// SetRunningConfig sets the running configuration for the server.
+func (s *Server) SetRunningConfig(cfg *RunningConfig) {
+	s.runningConfig = cfg
 }
 
 // ListenAndServe starts the daemon on the given unix socket path.
@@ -76,6 +94,8 @@ func (s *Server) ListenAndServe(socketPath string) error {
 	mux.HandleFunc("/api/workspaces", s.handleGetWorkspaces)
 	mux.HandleFunc("/api/sessions", s.handleGetSessions)
 	mux.HandleFunc("/api/stream", s.handleStreamState)
+	mux.HandleFunc("/api/config", s.handleGetConfig)
+	mux.HandleFunc("/api/focus", s.handleFocus)
 
 	s.server = &http.Server{
 		Handler: h2c.NewHandler(mux, &http2.Server{}),
@@ -205,6 +225,8 @@ func (s *Server) handleStreamState(w http.ResponseWriter, r *http.Request) {
 type apiStateUpdate struct {
 	Workspaces []*enrichment.EnrichedWorkspace `json:"workspaces,omitempty"`
 	UpdateType string                          `json:"update_type"`
+	Source     string                          `json:"source,omitempty"`
+	Scanned    int                             `json:"scanned,omitempty"`
 }
 
 // convertToAPIUpdate converts internal store.Update to the public API format.
@@ -219,13 +241,69 @@ func convertToAPIUpdate(u store.Update) *apiStateUpdate {
 			return &apiStateUpdate{
 				Workspaces: workspaces,
 				UpdateType: "workspaces",
+				Source:     u.Source,
+				Scanned:    u.Scanned,
 			}
 		}
 	case store.UpdateSessions:
 		// Sessions updates are handled separately if needed
 		return &apiStateUpdate{
 			UpdateType: "sessions",
+			Source:     u.Source,
+		}
+	case store.UpdateFocus:
+		return &apiStateUpdate{
+			UpdateType: "focus",
+			Source:     u.Source,
+			Scanned:    u.Scanned,
 		}
 	}
 	return nil
+}
+
+// handleGetConfig returns the running configuration as JSON.
+func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	if s.runningConfig == nil {
+		http.Error(w, "config not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.runningConfig)
+}
+
+// handleFocus handles GET/POST for focused workspaces.
+// POST sets the focus list, GET returns current focus.
+func (s *Server) handleFocus(w http.ResponseWriter, r *http.Request) {
+	if s.engine == nil {
+		http.Error(w, "engine not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		var req struct {
+			Paths []string `json:"paths"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		s.engine.Store().SetFocus(req.Paths)
+		s.logger.WithField("count", len(req.Paths)).Debug("Focus updated")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]int{"focused": len(req.Paths)})
+
+	case http.MethodGet:
+		focus := s.engine.Store().GetFocus()
+		paths := make([]string, 0, len(focus))
+		for p := range focus {
+			paths = append(paths, p)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string][]string{"paths": paths})
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

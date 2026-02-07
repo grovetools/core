@@ -63,6 +63,16 @@ func (c *LocalClient) StreamState(ctx context.Context) (<-chan StateUpdate, erro
 	return nil, errors.New("streaming not available in local mode; start the daemon for real-time updates")
 }
 
+// GetConfig returns an error for LocalClient since config is only available via daemon.
+func (c *LocalClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
+	return nil, errors.New("config not available in local mode; start the daemon to view running config")
+}
+
+// SetFocus is a no-op for LocalClient since there's no daemon to notify.
+func (c *LocalClient) SetFocus(ctx context.Context, paths []string) error {
+	return nil // No-op in local mode
+}
+
 // IsRunning returns false since this is the local fallback client.
 func (c *LocalClient) IsRunning() bool {
 	return false

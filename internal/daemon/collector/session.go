@@ -42,6 +42,7 @@ func (c *SessionCollector) Run(ctx context.Context, st *store.Store, updates cha
 
 		updates <- store.Update{
 			Type:    store.UpdateSessions,
+			Source:  "session",
 			Payload: liveSessions,
 		}
 	}

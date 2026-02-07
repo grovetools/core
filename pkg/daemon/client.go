@@ -5,11 +5,22 @@ package daemon
 
 import (
 	"context"
+	"time"
 
 	"github.com/grovetools/core/pkg/enrichment"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/workspace"
 )
+
+// RunningConfig holds the active configuration intervals being used by the daemon.
+type RunningConfig struct {
+	GitInterval       time.Duration `json:"git_interval"`
+	SessionInterval   time.Duration `json:"session_interval"`
+	WorkspaceInterval time.Duration `json:"workspace_interval"`
+	PlanInterval      time.Duration `json:"plan_interval"`
+	NoteInterval      time.Duration `json:"note_interval"`
+	StartedAt         time.Time     `json:"started_at"`
+}
 
 // Client defines the interface for interacting with the Grove Daemon.
 // Both DaemonClient (RPC) and LocalClient (direct calls) implement this interface.
@@ -34,6 +45,14 @@ type Client interface {
 	// For LocalClient, this returns an error since streaming is only available via daemon.
 	StreamState(ctx context.Context) (<-chan StateUpdate, error)
 
+	// GetConfig returns the running configuration of the daemon.
+	// For LocalClient, this returns an error since config is only available via daemon.
+	GetConfig(ctx context.Context) (*RunningConfig, error)
+
+	// SetFocus tells the daemon which workspaces to prioritize for scanning.
+	// For LocalClient, this is a no-op since there's no daemon to notify.
+	SetFocus(ctx context.Context, paths []string) error
+
 	// IsRunning returns true if the daemon is available and responding.
 	IsRunning() bool
 
@@ -45,5 +64,7 @@ type Client interface {
 type StateUpdate struct {
 	Workspaces []*enrichment.EnrichedWorkspace `json:"workspaces,omitempty"`
 	Sessions   []*models.Session               `json:"sessions,omitempty"`
-	UpdateType string                          `json:"update_type"` // "full", "workspace", "session", "enrichment"
+	UpdateType string                          `json:"update_type"`         // "full", "workspace", "session", "enrichment"
+	Source     string                          `json:"source,omitempty"`    // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note")
+	Scanned    int                             `json:"scanned,omitempty"`   // Number of items actually scanned (for focused updates)
 }

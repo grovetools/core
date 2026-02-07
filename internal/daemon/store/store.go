@@ -13,6 +13,7 @@ type Store struct {
 	mu          sync.RWMutex
 	state       *State
 	subscribers map[chan Update]struct{}
+	focus       map[string]struct{} // Focused workspace paths for priority scanning
 }
 
 // New creates a new Store instance.
@@ -23,6 +24,7 @@ func New() *Store {
 			Sessions:   make(map[string]*models.Session),
 		},
 		subscribers: make(map[chan Update]struct{}),
+		focus:       make(map[string]struct{}),
 	}
 }
 
@@ -102,4 +104,49 @@ func (s *Store) Unsubscribe(ch chan Update) {
 	defer s.mu.Unlock()
 	delete(s.subscribers, ch)
 	close(ch)
+}
+
+// SetFocus updates the set of focused workspace paths.
+// Focused workspaces get priority scanning by collectors.
+func (s *Store) SetFocus(paths []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.focus = make(map[string]struct{}, len(paths))
+	for _, p := range paths {
+		s.focus[p] = struct{}{}
+	}
+
+	// Broadcast focus change to subscribers
+	update := Update{
+		Type:    UpdateFocus,
+		Source:  "client",
+		Scanned: len(paths),
+		Payload: paths,
+	}
+	for ch := range s.subscribers {
+		select {
+		case ch <- update:
+		default:
+		}
+	}
+}
+
+// GetFocus returns the set of focused workspace paths.
+func (s *Store) GetFocus() map[string]struct{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	// Return a copy
+	result := make(map[string]struct{}, len(s.focus))
+	for k := range s.focus {
+		result[k] = struct{}{}
+	}
+	return result
+}
+
+// IsFocused returns true if the given path is in the focus set.
+func (s *Store) IsFocused(path string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.focus[path]
+	return ok
 }

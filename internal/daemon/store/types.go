@@ -18,10 +18,13 @@ type UpdateType string
 const (
 	UpdateWorkspaces UpdateType = "workspaces"
 	UpdateSessions   UpdateType = "sessions"
+	UpdateFocus      UpdateType = "focus"
 )
 
 // Update represents a change to the state.
 type Update struct {
 	Type    UpdateType
+	Source  string      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note")
+	Scanned int         // Number of items actually scanned (for focused updates)
 	Payload interface{}
 }

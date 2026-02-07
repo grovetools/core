@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -144,6 +145,55 @@ func (c *RemoteClient) GetSessions(ctx context.Context) ([]*models.Session, erro
 		return nil, fmt.Errorf("failed to decode sessions: %w", err)
 	}
 	return sessions, nil
+}
+
+// GetConfig returns the running configuration of the daemon.
+func (c *RemoteClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/config", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var cfg RunningConfig
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to decode config: %w", err)
+	}
+	return &cfg, nil
+}
+
+// SetFocus tells the daemon which workspaces to prioritize for scanning.
+func (c *RemoteClient) SetFocus(ctx context.Context, paths []string) error {
+	body, err := json.Marshal(map[string][]string{"paths": paths})
+	if err != nil {
+		return fmt.Errorf("failed to marshal focus request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/focus", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to set focus: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // IsRunning returns true if the daemon is available and responding.
