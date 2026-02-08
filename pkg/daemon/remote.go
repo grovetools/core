@@ -214,6 +214,25 @@ func (c *RemoteClient) IsRunning() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// Refresh triggers a re-scan of workspaces and enrichment data.
+func (c *RemoteClient) Refresh(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/refresh", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to trigger refresh: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // StreamState subscribes to real-time state updates via Server-Sent Events (SSE).
 // Returns a channel that receives updates. The channel is closed when the context is cancelled
 // or the connection is lost.

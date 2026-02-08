@@ -76,6 +76,11 @@ func (c *LocalClient) SetFocus(ctx context.Context, paths []string) error {
 	return nil // No-op in local mode
 }
 
+// Refresh is a no-op for LocalClient since there's no daemon cache to refresh.
+func (c *LocalClient) Refresh(ctx context.Context) error {
+	return nil // No-op in local mode
+}
+
 // IsRunning returns false since this is the local fallback client.
 func (c *LocalClient) IsRunning() bool {
 	return false

@@ -53,6 +53,11 @@ type Client interface {
 	// For LocalClient, this is a no-op since there's no daemon to notify.
 	SetFocus(ctx context.Context, paths []string) error
 
+	// Refresh triggers a re-scan of workspaces and enrichment data.
+	// For LocalClient, this is a no-op since there's no daemon cache to refresh.
+	// For RemoteClient, this signals the daemon to immediately re-discover workspaces.
+	Refresh(ctx context.Context) error
+
 	// IsRunning returns true if the daemon is available and responding.
 	IsRunning() bool
 
