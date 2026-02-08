@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grovetools/core/internal/daemon/store"
+	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/enrichment"
 )
 
@@ -33,12 +34,20 @@ func (c *NoteCollector) Name() string { return "note" }
 
 // Run starts the note counts collection loop.
 func (c *NoteCollector) Run(ctx context.Context, st *store.Store, updates chan<- store.Update) error {
+	logger := logging.NewLogger("collector.note")
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
 	var lastFullScan time.Time
 
 	scan := func() {
+		start := time.Now()
+		defer func() {
+			if d := time.Since(start); d > 200*time.Millisecond {
+				logger.WithField("duration", d).Warn("Slow note scan detected")
+			}
+		}()
+
 		// FetchNoteCountsMap returns counts by workspace name, not path
 		noteCounts, err := enrichment.FetchNoteCountsMap()
 		if err != nil {

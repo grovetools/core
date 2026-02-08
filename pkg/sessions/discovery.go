@@ -390,6 +390,9 @@ func DiscoverAll() ([]*models.Session, error) {
 // DiscoverFlowJobs scans all workspace directories for job files (plans, chats, notes).
 // This is the core-level implementation that mirrors the hooks discovery logic
 // but without caching (caching is handled at the daemon level).
+//
+// NOTE: This function performs a full workspace discovery which is expensive.
+// For daemon use, prefer DiscoverFlowJobsWithNodes which reuses cached workspace data.
 func DiscoverFlowJobs() ([]*models.Session, error) {
 	// Load configuration
 	coreCfg, err := coreconfig.LoadDefault()
@@ -406,6 +409,27 @@ func DiscoverFlowJobs() ([]*models.Session, error) {
 		return nil, fmt.Errorf("workspace discovery failed: %w", err)
 	}
 	provider := workspace.NewProvider(discoveryResult)
+
+	return DiscoverFlowJobsWithProvider(provider, coreCfg)
+}
+
+// DiscoverFlowJobsWithNodes scans workspace directories for job files using pre-built nodes.
+// This is much more efficient than DiscoverFlowJobs as it avoids the expensive workspace
+// discovery step. Use this when you already have workspace data (e.g., from daemon cache).
+func DiscoverFlowJobsWithNodes(nodes []*workspace.WorkspaceNode) ([]*models.Session, error) {
+	// Load configuration
+	coreCfg, err := coreconfig.LoadDefault()
+	if err != nil {
+		coreCfg = &coreconfig.Config{} // Proceed with defaults on error
+	}
+
+	provider := workspace.NewProviderFromNodes(nodes)
+	return DiscoverFlowJobsWithProvider(provider, coreCfg)
+}
+
+// DiscoverFlowJobsWithProvider scans workspace directories for job files using an existing provider.
+// This is the core implementation shared by DiscoverFlowJobs and DiscoverFlowJobsWithNodes.
+func DiscoverFlowJobsWithProvider(provider *workspace.Provider, coreCfg *coreconfig.Config) ([]*models.Session, error) {
 	locator := workspace.NewNotebookLocator(coreCfg)
 
 	// Scan for all plan, chat, and note directories

@@ -39,6 +39,13 @@ func (c *WorkspaceCollector) Run(ctx context.Context, st *store.Store, updates c
 	defer ticker.Stop()
 
 	scan := func() {
+		start := time.Now()
+		defer func() {
+			if d := time.Since(start); d > 500*time.Millisecond {
+				c.logger.WithField("duration", d).Warn("Slow workspace discovery detected")
+			}
+		}()
+
 		// 1. Discover base nodes
 		nodes, err := workspace.GetProjects(c.logger)
 		if err != nil {

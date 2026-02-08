@@ -17,6 +17,7 @@ import (
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/process"
 	"github.com/grovetools/core/pkg/sessions"
+	"github.com/grovetools/core/pkg/workspace"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,6 +34,9 @@ type SessionCollector struct {
 	interval    time.Duration
 	sessionsDir string
 	logger      *logrus.Entry
+
+	// Reference to the store for accessing cached workspace data
+	store *store.Store
 
 	// In-memory session registry for interactive sessions (fsnotify-tracked)
 	mu       sync.RWMutex
@@ -67,6 +71,9 @@ func (c *SessionCollector) Name() string { return "session" }
 
 // Run starts the session monitoring loop with fsnotify watching.
 func (c *SessionCollector) Run(ctx context.Context, st *store.Store, updates chan<- store.Update) error {
+	// Store reference for use in scanFlowJobs
+	c.store = st
+
 	// Ensure sessions directory exists
 	if err := os.MkdirAll(c.sessionsDir, 0755); err != nil {
 		c.logger.WithError(err).Warn("Failed to ensure sessions directory exists")
@@ -126,16 +133,24 @@ func (c *SessionCollector) Run(ctx context.Context, st *store.Store, updates cha
 
 		case <-pidTicker.C:
 			// Periodic PID verification for active sessions
+			start := time.Now()
 			if c.verifyPIDs() {
 				c.emitUpdate(updates)
+			}
+			if d := time.Since(start); d > 100*time.Millisecond {
+				c.logger.WithField("duration", d).Warn("Slow PID verification detected")
 			}
 
 		case <-scanTicker.C:
 			// Periodic scan for Flow Jobs and OpenCode sessions
+			start := time.Now()
 			flowChanged := c.scanFlowJobs()
 			openCodeChanged := c.scanOpenCode()
 			if flowChanged || openCodeChanged {
 				c.emitUpdate(updates)
+			}
+			if d := time.Since(start); d > 200*time.Millisecond {
+				c.logger.WithField("duration", d).Warn("Slow job/opencode scan detected")
 			}
 		}
 	}
@@ -147,6 +162,13 @@ func (c *SessionCollector) runPollingOnly(ctx context.Context, st *store.Store, 
 	defer ticker.Stop()
 
 	scan := func() {
+		start := time.Now()
+		defer func() {
+			if d := time.Since(start); d > 200*time.Millisecond {
+				c.logger.WithField("duration", d).Warn("Slow session polling scan detected")
+			}
+		}()
+
 		// Use DiscoverAll to get all session types
 		allSessions, err := sessions.DiscoverAll()
 		if err != nil {
@@ -263,7 +285,29 @@ func (c *SessionCollector) fullScan() {
 // scanFlowJobs discovers Flow Jobs from workspace directories.
 // Returns true if the registry changed.
 func (c *SessionCollector) scanFlowJobs() bool {
-	flowSessions, err := sessions.DiscoverFlowJobs()
+	// Use cached workspace data from the store to avoid expensive re-discovery
+	var flowSessions []*models.Session
+	var err error
+
+	if c.store != nil {
+		workspaces := c.store.GetWorkspaces()
+		if len(workspaces) > 0 {
+			// Extract workspace nodes from enriched workspaces
+			nodes := make([]*workspace.WorkspaceNode, 0, len(workspaces))
+			for _, ws := range workspaces {
+				if ws.WorkspaceNode != nil {
+					nodes = append(nodes, ws.WorkspaceNode)
+				}
+			}
+			flowSessions, err = sessions.DiscoverFlowJobsWithNodes(nodes)
+		}
+	}
+
+	// Fallback to full discovery if store is not available or empty
+	if flowSessions == nil && err == nil {
+		flowSessions, err = sessions.DiscoverFlowJobs()
+	}
+
 	if err != nil {
 		c.logger.WithError(err).Debug("Failed to discover flow jobs")
 		return false

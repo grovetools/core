@@ -3,8 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,7 +41,7 @@ func NewGrovedCmd() *cobra.Command {
 }
 
 func newGrovedStartCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the daemon",
 		Long:  "Start the grove daemon in foreground mode.",
@@ -46,6 +49,28 @@ func newGrovedStartCmd() *cobra.Command {
 			logger := logging.NewLogger("groved")
 			pidPath := paths.PidFilePath()
 			sockPath := paths.SocketPath()
+
+			// Start pprof if requested
+			if port, _ := cmd.Flags().GetInt("pprof-port"); port > 0 {
+				go func() {
+					addr := fmt.Sprintf("localhost:%d", port)
+					logger.Infof("Starting pprof server on %s", addr)
+					if err := http.ListenAndServe(addr, nil); err != nil {
+						logger.WithError(err).Error("Failed to start pprof server")
+					}
+				}()
+			}
+
+			// Helper to check enabled collectors
+			enabledCollectors, _ := cmd.Flags().GetStringSlice("collectors")
+			isEnabled := func(name string) bool {
+				for _, c := range enabledCollectors {
+					if c == "all" || strings.TrimSpace(c) == name {
+						return true
+					}
+				}
+				return false
+			}
 
 			// 1. Acquire Lock
 			if err := pidfile.Acquire(pidPath); err != nil {
@@ -104,12 +129,22 @@ func newGrovedStartCmd() *cobra.Command {
 			st := store.New()
 			eng := engine.New(st, logger)
 
-			// Register collectors with configured intervals
-			eng.Register(collector.NewWorkspaceCollector(workspaceInterval))
-			eng.Register(collector.NewGitStatusCollector(gitInterval))
-			eng.Register(collector.NewSessionCollector(sessionInterval))
-			eng.Register(collector.NewPlanCollector(planInterval))
-			eng.Register(collector.NewNoteCollector(noteInterval))
+			// Register collectors with configured intervals based on flags
+			if isEnabled("workspace") {
+				eng.Register(collector.NewWorkspaceCollector(workspaceInterval))
+			}
+			if isEnabled("git") {
+				eng.Register(collector.NewGitStatusCollector(gitInterval))
+			}
+			if isEnabled("session") {
+				eng.Register(collector.NewSessionCollector(sessionInterval))
+			}
+			if isEnabled("plan") {
+				eng.Register(collector.NewPlanCollector(planInterval))
+			}
+			if isEnabled("note") {
+				eng.Register(collector.NewNoteCollector(noteInterval))
+			}
 
 			// 4. Setup Server with engine
 			srv := server.New(logger)
@@ -159,6 +194,11 @@ func newGrovedStartCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringSlice("collectors", []string{"all"}, "Comma-separated list of collectors to enable (git, session, workspace, plan, note)")
+	cmd.Flags().Int("pprof-port", 0, "Port to start pprof server on (0 to disable)")
+
+	return cmd
 }
 
 func newGrovedStopCmd() *cobra.Command {

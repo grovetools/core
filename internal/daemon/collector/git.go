@@ -9,6 +9,7 @@ import (
 
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/internal/daemon/store"
+	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/enrichment"
 )
 
@@ -55,6 +56,7 @@ func (c *GitStatusCollector) Name() string { return "git" }
 
 // Run starts the git status collection loop.
 func (c *GitStatusCollector) Run(ctx context.Context, st *store.Store, updates chan<- store.Update) error {
+	logger := logging.NewLogger("collector.git")
 	var lastFullScan time.Time
 	var lastFocusCount int
 	currentInterval := c.interval
@@ -62,6 +64,13 @@ func (c *GitStatusCollector) Run(ctx context.Context, st *store.Store, updates c
 	defer ticker.Stop()
 
 	scan := func() {
+		start := time.Now()
+		defer func() {
+			if d := time.Since(start); d > 200*time.Millisecond {
+				logger.WithField("duration", d).Warn("Slow git status scan detected")
+			}
+		}()
+
 		state := st.Get()
 		focus := st.GetFocus()
 

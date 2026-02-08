@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grovetools/core/internal/daemon/store"
+	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/enrichment"
 )
 
@@ -33,12 +34,20 @@ func (c *PlanCollector) Name() string { return "plan" }
 
 // Run starts the plan stats collection loop.
 func (c *PlanCollector) Run(ctx context.Context, st *store.Store, updates chan<- store.Update) error {
+	logger := logging.NewLogger("collector.plan")
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
 	var lastFullScan time.Time
 
 	scan := func() {
+		start := time.Now()
+		defer func() {
+			if d := time.Since(start); d > 200*time.Millisecond {
+				logger.WithField("duration", d).Warn("Slow plan scan detected")
+			}
+		}()
+
 		planStats, err := enrichment.FetchPlanStatsMap()
 		if err != nil {
 			return

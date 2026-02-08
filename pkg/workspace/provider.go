@@ -35,6 +35,13 @@ func NewProvider(result *DiscoveryResult) *Provider {
 	nodes := TransformToWorkspaceNodes(result, cfg)
 	nodes = BuildWorkspaceTree(nodes)
 
+	return NewProviderFromNodes(nodes)
+}
+
+// NewProviderFromNodes creates a workspace provider from pre-built WorkspaceNodes.
+// This is useful when reusing already-discovered workspace data (e.g., from daemon cache)
+// to avoid expensive re-discovery and path normalization.
+func NewProviderFromNodes(nodes []*WorkspaceNode) *Provider {
 	pathMap := make(map[string]*WorkspaceNode, len(nodes))
 	for _, node := range nodes {
 		// Normalize the path for the lookup map.
@@ -84,14 +91,16 @@ func (p *Provider) FindByPath(path string) *WorkspaceNode {
 		return node
 	}
 
-	// If no exact match, find the containing workspace using normalized paths.
+	// If no exact match, find the containing workspace using pre-normalized paths from pathMap.
+	// The pathMap keys are already normalized, so we avoid expensive re-normalization.
 	var bestMatch *WorkspaceNode
-	for _, node := range p.nodes {
-		normalizedNodePath, _ := pathutil.NormalizeForLookup(node.Path)
+	var bestMatchLen int
+	for normalizedNodePath, node := range p.pathMap {
 		// Check if the normalized node's path is a prefix of the normalized search path.
 		if strings.HasPrefix(normalizedPath, normalizedNodePath+string(filepath.Separator)) {
-			if bestMatch == nil || len(normalizedNodePath) > len(bestMatch.Path) {
+			if bestMatch == nil || len(normalizedNodePath) > bestMatchLen {
 				bestMatch = node
+				bestMatchLen = len(normalizedNodePath)
 			}
 		}
 	}
