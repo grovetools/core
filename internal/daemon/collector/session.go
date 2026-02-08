@@ -26,14 +26,24 @@ import (
 // Phase 2 implementation: The daemon becomes the single source of truth for
 // "what sessions are running?" This eliminates redundant scanning of
 // ~/.grove/hooks/sessions by multiple tools.
+//
+// Phase 3 enhancement: Now includes Flow Jobs and OpenCode sessions via
+// periodic discovery scans, merged with real-time interactive session tracking.
 type SessionCollector struct {
 	interval    time.Duration
 	sessionsDir string
 	logger      *logrus.Entry
 
-	// In-memory session registry
+	// In-memory session registry for interactive sessions (fsnotify-tracked)
 	mu       sync.RWMutex
 	registry map[string]*models.Session
+
+	// Additional sessions from Flow Jobs and OpenCode (periodically scanned)
+	flowJobsMu       sync.RWMutex
+	flowJobsRegistry map[string]*models.Session
+
+	openCodeMu       sync.RWMutex
+	openCodeRegistry map[string]*models.Session
 }
 
 // NewSessionCollector creates a new SessionCollector with the specified interval.
@@ -43,10 +53,12 @@ func NewSessionCollector(interval time.Duration) *SessionCollector {
 		interval = 2 * time.Second
 	}
 	return &SessionCollector{
-		interval:    interval,
-		sessionsDir: filepath.Join(paths.StateDir(), "hooks", "sessions"),
-		logger:      logging.NewLogger("daemon.collector.session"),
-		registry:    make(map[string]*models.Session),
+		interval:         interval,
+		sessionsDir:      filepath.Join(paths.StateDir(), "hooks", "sessions"),
+		logger:           logging.NewLogger("daemon.collector.session"),
+		registry:         make(map[string]*models.Session),
+		flowJobsRegistry: make(map[string]*models.Session),
+		openCodeRegistry: make(map[string]*models.Session),
 	}
 }
 
@@ -78,13 +90,20 @@ func (c *SessionCollector) Run(ctx context.Context, st *store.Store, updates cha
 	// Also watch each existing session subdirectory for metadata changes
 	c.watchExistingSessionDirs(watcher)
 
-	// Initial scan to populate the registry
+	// Initial scan to populate the registry (including Flow Jobs and OpenCode)
 	c.fullScan()
+	c.scanFlowJobs()
+	c.scanOpenCode()
 	c.emitUpdate(updates)
 
-	// PID verification ticker
-	ticker := time.NewTicker(c.interval)
-	defer ticker.Stop()
+	// PID verification ticker (fast - every interval)
+	pidTicker := time.NewTicker(c.interval)
+	defer pidTicker.Stop()
+
+	// Flow Jobs and OpenCode scan ticker (slower - every 10 seconds)
+	// These are more expensive scans, so we do them less frequently
+	scanTicker := time.NewTicker(10 * time.Second)
+	defer scanTicker.Stop()
 
 	c.logger.WithField("sessions_dir", c.sessionsDir).Info("Session collector started with fsnotify watching")
 
@@ -105,9 +124,17 @@ func (c *SessionCollector) Run(ctx context.Context, st *store.Store, updates cha
 			}
 			c.logger.WithError(err).Error("Watcher error")
 
-		case <-ticker.C:
+		case <-pidTicker.C:
 			// Periodic PID verification for active sessions
 			if c.verifyPIDs() {
+				c.emitUpdate(updates)
+			}
+
+		case <-scanTicker.C:
+			// Periodic scan for Flow Jobs and OpenCode sessions
+			flowChanged := c.scanFlowJobs()
+			openCodeChanged := c.scanOpenCode()
+			if flowChanged || openCodeChanged {
 				c.emitUpdate(updates)
 			}
 		}
@@ -120,15 +147,18 @@ func (c *SessionCollector) runPollingOnly(ctx context.Context, st *store.Store, 
 	defer ticker.Stop()
 
 	scan := func() {
-		liveSessions, err := sessions.DiscoverLiveSessions()
+		// Use DiscoverAll to get all session types
+		allSessions, err := sessions.DiscoverAll()
 		if err != nil {
+			c.logger.WithError(err).Debug("Failed to discover sessions in polling mode")
 			return
 		}
 
 		updates <- store.Update{
 			Type:    store.UpdateSessions,
 			Source:  "session",
-			Payload: liveSessions,
+			Scanned: len(allSessions),
+			Payload: allSessions,
 		}
 	}
 
@@ -215,7 +245,7 @@ func (c *SessionCollector) handleFsEvent(event fsnotify.Event, watcher *fsnotify
 	}
 }
 
-// fullScan reads all sessions from the filesystem
+// fullScan reads all interactive sessions from the filesystem
 func (c *SessionCollector) fullScan() {
 	entries, err := os.ReadDir(c.sessionsDir)
 	if err != nil {
@@ -228,6 +258,72 @@ func (c *SessionCollector) fullScan() {
 			c.loadSession(entry.Name())
 		}
 	}
+}
+
+// scanFlowJobs discovers Flow Jobs from workspace directories.
+// Returns true if the registry changed.
+func (c *SessionCollector) scanFlowJobs() bool {
+	flowSessions, err := sessions.DiscoverFlowJobs()
+	if err != nil {
+		c.logger.WithError(err).Debug("Failed to discover flow jobs")
+		return false
+	}
+
+	c.flowJobsMu.Lock()
+	defer c.flowJobsMu.Unlock()
+
+	// Check if anything changed
+	changed := len(flowSessions) != len(c.flowJobsRegistry)
+	if !changed {
+		for _, s := range flowSessions {
+			existing, ok := c.flowJobsRegistry[s.ID]
+			if !ok || existing.Status != s.Status || existing.LastActivity != s.LastActivity {
+				changed = true
+				break
+			}
+		}
+	}
+
+	// Update registry
+	c.flowJobsRegistry = make(map[string]*models.Session)
+	for _, s := range flowSessions {
+		c.flowJobsRegistry[s.ID] = s
+	}
+
+	return changed
+}
+
+// scanOpenCode discovers OpenCode sessions.
+// Returns true if the registry changed.
+func (c *SessionCollector) scanOpenCode() bool {
+	openCodeSessions, err := sessions.DiscoverOpenCodeSessions()
+	if err != nil {
+		c.logger.WithError(err).Debug("Failed to discover OpenCode sessions")
+		return false
+	}
+
+	c.openCodeMu.Lock()
+	defer c.openCodeMu.Unlock()
+
+	// Check if anything changed
+	changed := len(openCodeSessions) != len(c.openCodeRegistry)
+	if !changed {
+		for _, s := range openCodeSessions {
+			existing, ok := c.openCodeRegistry[s.ID]
+			if !ok || existing.Status != s.Status || existing.LastActivity != s.LastActivity {
+				changed = true
+				break
+			}
+		}
+	}
+
+	// Update registry
+	c.openCodeRegistry = make(map[string]*models.Session)
+	for _, s := range openCodeSessions {
+		c.openCodeRegistry[s.ID] = s
+	}
+
+	return changed
 }
 
 // loadSession reads a session from disk and updates the registry
@@ -353,49 +449,111 @@ func (c *SessionCollector) cleanupDeadSession(dirName string, session *models.Se
 	// Just log for now - Phase 5 will add auto-completion
 }
 
-// emitUpdate sends the current registry state to the update channel
+// emitUpdate sends the merged registry state to the update channel
 func (c *SessionCollector) emitUpdate(updates chan<- store.Update) {
-	c.mu.RLock()
-	sessions := make([]*models.Session, 0, len(c.registry))
-	for _, s := range c.registry {
-		// Return a copy to prevent external mutation
-		sCopy := *s
-		sessions = append(sessions, &sCopy)
-	}
-	c.mu.RUnlock()
+	allSessions := c.getAllSessionsMerged()
 
 	updates <- store.Update{
 		Type:    store.UpdateSessions,
 		Source:  "session",
-		Scanned: len(sessions),
-		Payload: sessions,
+		Scanned: len(allSessions),
+		Payload: allSessions,
 	}
 }
 
-// GetSessions returns a copy of the current session list (for direct access)
-func (c *SessionCollector) GetSessions() []*models.Session {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+// getAllSessionsMerged returns all sessions from all sources, with deduplication.
+// Interactive sessions take priority over Flow Jobs (they have live PID info).
+func (c *SessionCollector) getAllSessionsMerged() []*models.Session {
+	merged := make(map[string]*models.Session)
 
-	result := make([]*models.Session, 0, len(c.registry))
+	// 1. Add OpenCode sessions first (lowest priority)
+	c.openCodeMu.RLock()
+	for id, s := range c.openCodeRegistry {
+		sCopy := *s
+		merged[id] = &sCopy
+	}
+	c.openCodeMu.RUnlock()
+
+	// 2. Add Flow Jobs (medium priority - more metadata)
+	c.flowJobsMu.RLock()
+	for id, s := range c.flowJobsRegistry {
+		if existing, ok := merged[id]; ok {
+			// Merge: keep Flow Job metadata but update with existing info
+			sCopy := *s
+			if existing.Provider != "" && sCopy.Provider == "" {
+				sCopy.Provider = existing.Provider
+			}
+			merged[id] = &sCopy
+		} else {
+			sCopy := *s
+			merged[id] = &sCopy
+		}
+	}
+	c.flowJobsMu.RUnlock()
+
+	// 3. Add interactive sessions (highest priority - live PID tracking)
+	c.mu.RLock()
 	for _, s := range c.registry {
 		sCopy := *s
-		result = append(result, &sCopy)
+		if existing, ok := merged[sCopy.ID]; ok {
+			// Interactive session updates existing entry
+			existing.PID = sCopy.PID
+			existing.Status = sCopy.Status
+			existing.LastActivity = sCopy.LastActivity
+			existing.ClaudeSessionID = sCopy.ClaudeSessionID
+			if sCopy.Provider != "" {
+				existing.Provider = sCopy.Provider
+			}
+		} else {
+			merged[sCopy.ID] = &sCopy
+		}
+	}
+	c.mu.RUnlock()
+
+	// Convert to slice
+	result := make([]*models.Session, 0, len(merged))
+	for _, s := range merged {
+		result = append(result, s)
 	}
 	return result
 }
 
-// GetSession returns a specific session by ID
-func (c *SessionCollector) GetSession(id string) *models.Session {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+// GetSessions returns a copy of the current session list from all sources (for direct access)
+func (c *SessionCollector) GetSessions() []*models.Session {
+	return c.getAllSessionsMerged()
+}
 
+// GetSession returns a specific session by ID from any source
+func (c *SessionCollector) GetSession(id string) *models.Session {
+	// Check interactive sessions first (most authoritative for live state)
+	c.mu.RLock()
 	for _, s := range c.registry {
 		if s.ID == id {
 			sCopy := *s
+			c.mu.RUnlock()
 			return &sCopy
 		}
 	}
+	c.mu.RUnlock()
+
+	// Check flow jobs
+	c.flowJobsMu.RLock()
+	if s, ok := c.flowJobsRegistry[id]; ok {
+		sCopy := *s
+		c.flowJobsMu.RUnlock()
+		return &sCopy
+	}
+	c.flowJobsMu.RUnlock()
+
+	// Check OpenCode sessions
+	c.openCodeMu.RLock()
+	if s, ok := c.openCodeRegistry[id]; ok {
+		sCopy := *s
+		c.openCodeMu.RUnlock()
+		return &sCopy
+	}
+	c.openCodeMu.RUnlock()
+
 	return nil
 }
 

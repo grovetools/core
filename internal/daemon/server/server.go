@@ -14,6 +14,7 @@ import (
 	"github.com/grovetools/core/internal/daemon/engine"
 	"github.com/grovetools/core/internal/daemon/store"
 	"github.com/grovetools/core/pkg/enrichment"
+	"github.com/grovetools/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -224,6 +225,7 @@ func (s *Server) handleStreamState(w http.ResponseWriter, r *http.Request) {
 // apiStateUpdate matches the daemon.StateUpdate type for SSE streaming.
 type apiStateUpdate struct {
 	Workspaces []*enrichment.EnrichedWorkspace `json:"workspaces,omitempty"`
+	Sessions   []*models.Session               `json:"sessions,omitempty"`
 	UpdateType string                          `json:"update_type"`
 	Source     string                          `json:"source,omitempty"`
 	Scanned    int                             `json:"scanned,omitempty"`
@@ -246,10 +248,18 @@ func convertToAPIUpdate(u store.Update) *apiStateUpdate {
 			}
 		}
 	case store.UpdateSessions:
-		// Sessions updates are handled separately if needed
+		if sessions, ok := u.Payload.([]*models.Session); ok {
+			return &apiStateUpdate{
+				Sessions:   sessions,
+				UpdateType: "sessions",
+				Source:     u.Source,
+				Scanned:    len(sessions),
+			}
+		}
 		return &apiStateUpdate{
 			UpdateType: "sessions",
 			Source:     u.Source,
+			Scanned:    u.Scanned,
 		}
 	case store.UpdateFocus:
 		return &apiStateUpdate{

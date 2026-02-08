@@ -49,12 +49,15 @@ func (c *LocalClient) GetNoteCounts(ctx context.Context) (map[string]*enrichment
 	return enrichment.FetchNoteCountsMap()
 }
 
-// GetSessions returns active sessions from filesystem discovery.
-// Note: This is a simplified version that only returns live sessions from the registry.
-// For full session discovery including flow jobs and database sessions,
-// the hooks package provides more comprehensive discovery.
+// GetSessions returns active sessions from all sources.
+// This uses the comprehensive DiscoverAll function which aggregates:
+// - Interactive sessions (from ~/.grove/hooks/sessions)
+// - Flow jobs (from workspace plan/chat/note directories)
+// - OpenCode sessions (from ~/.local/share/opencode/storage)
+//
+// This provides full parity with the daemon's session registry when running in local mode.
 func (c *LocalClient) GetSessions(ctx context.Context) ([]*models.Session, error) {
-	return sessions.DiscoverLiveSessions()
+	return sessions.DiscoverAll()
 }
 
 // StreamState returns an error for LocalClient since streaming is only available via daemon.

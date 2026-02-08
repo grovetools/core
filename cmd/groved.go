@@ -305,7 +305,25 @@ func newGrovedMonitorCmd() *cobra.Command {
 						fmt.Printf("[%s] %s: %d workspaces\n", timestamp, formatSource(source), len(update.Workspaces))
 					}
 				case "sessions":
-					fmt.Printf("[%s] Session: %d active\n", timestamp, len(update.Sessions))
+					// Count sessions by type/status
+					var interactive, flowJobs, openCode, running, pending int
+					for _, s := range update.Sessions {
+						switch s.Type {
+						case "opencode_session":
+							openCode++
+						case "interactive_agent", "agent", "oneshot", "chat", "headless_agent", "shell":
+							flowJobs++
+						default:
+							interactive++
+						}
+						if s.Status == "running" {
+							running++
+						} else if s.Status == "pending_user" || s.Status == "idle" {
+							pending++
+						}
+					}
+					fmt.Printf("[%s] Session: %d total (%d running, %d pending) [interactive:%d flow:%d opencode:%d]\n",
+						timestamp, len(update.Sessions), running, pending, interactive, flowJobs, openCode)
 				case "focus":
 					fmt.Printf("[%s] Focus: %d workspaces\n", timestamp, update.Scanned)
 				default:
