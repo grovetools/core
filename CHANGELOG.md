@@ -1,3 +1,61 @@
+## v0.6.2 (2026-02-10)
+
+This release introduces the `grove-daemon` (`groved`), shifting state management to a centralized background process. This includes the new `core groved` subcommand for lifecycle management (d75b602), a robust client infrastructure enabling local/remote fallback (891966f), and a collector engine (42df574) that gathers git, session, and workspace data in the background.
+
+The daemon now supports SSE streaming for real-time state updates (1f766b0) and uses `fsnotify` for instant session detection (d5a9b52). Performance has been significantly optimized by reusing cached workspace data and reducing CPU-intensive IO operations (3d82b8d), alongside dynamic scan intervals that adapt based on the number of focused workspaces (2484832).
+
+Workspace discovery has been centralized and enhanced to support generic note groups and full worktree resolution (4f5419f). The enrichment system now includes release information, binary status, and context statistics (30347a9), providing comprehensive data for consumer tools like `nav`.
+
+### Features
+
+* Add `core groved` subcommand for daemon management (d75b602)
+* Add daemon client infrastructure with local/remote fallback (891966f)
+* Implement Phase 4 collector engine for background state aggregation (42df574)
+* Add RemoteClient and SSE streaming support (1f766b0)
+* Add monitoring, config inspection, and focus-based scanning (b9b3c71)
+* Implement dynamic scan intervals based on focus count (2484832)
+* Implement Phase 2 session collector with fsnotify support (d5a9b52)
+* Implement Phase 3 session registry with full discovery (4f5419f)
+* Add Release, Binary, and CX stats enrichment support (30347a9)
+
+### Bug Fixes
+
+* Reduce CPU usage by reusing cached workspace data (3d82b8d)
+
+### File Changes
+
+```
+ cmd/core/main.go                       |   1 +
+ cmd/groved.go                          | 395 +++++++++++++++++
+ config/config.go                       |   1 +
+ config/types.go                        |  12 +
+ internal/daemon/collector/git.go       | 170 ++++++++
+ internal/daemon/collector/interface.go |  19 +
+ internal/daemon/collector/note.go      | 114 +++++
+ internal/daemon/collector/plan.go      | 110 +++++
+ internal/daemon/collector/session.go   | 614 +++++++++++++++++++++++++++
+ internal/daemon/collector/workspace.go |  94 +++++
+ internal/daemon/engine/engine.go       |  70 ++++
+ internal/daemon/pidfile/pidfile.go     |  67 +++
+ internal/daemon/server/server.go       | 319 ++++++++++++++
+ internal/daemon/store/store.go         | 152 +++++++
+ internal/daemon/store/types.go         |  30 ++
+ pkg/daemon/client.go                   |  75 ++++
+ pkg/daemon/factory.go                  |  60 +++
+ pkg/daemon/local.go                    |  95 +++++
+ pkg/daemon/remote.go                   | 313 ++++++++++++++
+ pkg/enrichment/enrich.go               | 151 +++++++
+ pkg/enrichment/notes.go                |  67 +++
+ pkg/enrichment/plans.go                | 197 +++++++++
+ pkg/enrichment/tools.go                | 191 +++++++++
+ pkg/enrichment/types.go                |  67 +++
+ pkg/paths/xdg.go                       |  24 ++
+ pkg/sessions/discovery.go              | 744 +++++++++++++++++++++++++++++++++
+ pkg/workspace/provider.go              |  17 +-
+ util/frontmatter/parser.go             |  98 +++++
+ 28 files changed, 4263 insertions(+), 4 deletions(-)
+```
+
 ## v0.6.0 (2026-02-02)
 
 Configuration capabilities have been expanded with support for TOML files (31f9a44), a new `GROVE_CONFIG_OVERLAY` mechanism for isolated environments (876b799), and integrated hooks configuration within the main `grove.yml` schema (fca2cdb). Path resolution has been overhauled to adhere to XDG standards (f6483cb), accompanied by a new `paths` command for discovery (7e5ea37) and support for binary path overrides via `GROVE_BIN` (c8e50d0).
