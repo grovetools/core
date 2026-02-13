@@ -20,10 +20,10 @@ type SearchPathConfig struct {
 
 // GroveSourceConfig defines the configuration for a single grove source.
 type GroveSourceConfig struct {
-	Path        string `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the grove root directory"`
-	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Whether this grove is enabled (default: true)"`
-	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this grove"`
-	Notebook    string `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Name of the notebook to use for projects in this grove"`
+	Path        string `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the grove root directory" jsonschema_extras:"x-priority=1"`
+	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Whether this grove is enabled (default: true)" jsonschema_extras:"x-priority=2"`
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this grove" jsonschema_extras:"x-priority=4"`
+	Notebook    string `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Name of the notebook to use for projects in this grove" jsonschema_extras:"x-priority=3"`
 }
 
 // ExplicitProject defines a specific project to include regardless of discovery.
@@ -69,14 +69,15 @@ type NvimEmbedConfig struct {
 
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
-	Icons     string           `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii"`
-	Theme     string           `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme: kanagawa, gruvbox, or terminal,enum=kanagawa,enum=gruvbox,enum=terminal"`
-	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
+	Icons     string           `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-layer=global,x-priority=52"`
+	Theme     string           `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-layer=global,x-priority=51"`
+	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-layer=global,x-priority=53"`
 }
 
 // ContextConfig holds configuration for the grove-context (cx) tool.
 type ContextConfig struct {
-	ReposDir *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty" jsonschema:"description=Directory where cx repo stores bare repositories (default: ~/.grove/cx, empty string disables)"`
+	ReposDir         *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty" jsonschema:"description=Directory where cx repo stores bare repositories (default: ~/.grove/cx)" jsonschema_extras:"x-layer=global,x-priority=80"`
+	DefaultRulesPath string  `yaml:"default_rules_path,omitempty" toml:"default_rules_path,omitempty" jsonschema:"description=Default rules file path for context filtering" jsonschema_extras:"x-layer=project,x-priority=81"`
 }
 
 // DaemonConfig holds configuration for the grove daemon (groved).

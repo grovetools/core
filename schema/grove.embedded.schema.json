@@ -3,9 +3,17 @@
     "ContextConfig": {
       "additionalProperties": false,
       "properties": {
+        "default_rules_path": {
+          "description": "Default rules file path for context filtering",
+          "type": "string",
+          "x-layer": "project",
+          "x-priority": "81"
+        },
         "repos_dir": {
-          "description": "Directory where cx repo stores bare repositories (default: ~/.grove/cx",
-          "type": "string"
+          "description": "Directory where cx repo stores bare repositories (default: ~/.grove/cx)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "80"
         }
       },
       "type": "object"
@@ -54,19 +62,23 @@
       "properties": {
         "description": {
           "description": "Human-readable description of this grove",
-          "type": "string"
+          "type": "string",
+          "x-priority": "4"
         },
         "enabled": {
           "description": "Whether this grove is enabled (default: true)",
-          "type": "boolean"
+          "type": "boolean",
+          "x-priority": "2"
         },
         "notebook": {
           "description": "Name of the notebook to use for projects in this grove",
-          "type": "string"
+          "type": "string",
+          "x-priority": "3"
         },
         "path": {
           "description": "Absolute path to the grove root directory",
-          "type": "string"
+          "type": "string",
+          "x-priority": "1"
         }
       },
       "required": [
@@ -216,20 +228,26 @@
             "nerd",
             "ascii"
           ],
-          "type": "string"
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "52"
         },
         "nvim_embed": {
           "$ref": "#/$defs/NvimEmbedConfig",
-          "description": "Embedded Neovim configuration"
+          "description": "Embedded Neovim configuration",
+          "x-layer": "global",
+          "x-priority": "53"
         },
         "theme": {
-          "description": "Color theme: kanagawa",
+          "description": "Color theme for terminal interfaces",
           "enum": [
             "kanagawa",
             "gruvbox",
             "terminal"
           ],
-          "type": "string"
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "51"
         }
       },
       "type": "object"
@@ -245,52 +263,74 @@
       "items": {
         "type": "string"
       },
-      "type": "array"
+      "type": "array",
+      "x-layer": "project",
+      "x-priority": "21"
     },
     "build_cmd": {
       "description": "Custom build command (default: make build)",
-      "type": "string"
+      "type": "string",
+      "x-layer": "project",
+      "x-priority": "20"
     },
     "context": {
       "$ref": "#/$defs/ContextConfig",
-      "description": "Configuration for the cx (context) tool"
+      "description": "Configuration for the cx (context) tool",
+      "x-layer": "global",
+      "x-priority": "80"
     },
     "explicit_projects": {
       "description": "Specific projects to include without discovery",
       "items": {
         "$ref": "#/$defs/ExplicitProject"
       },
-      "type": "array"
+      "type": "array",
+      "x-layer": "global",
+      "x-priority": "5"
     },
     "groves": {
       "additionalProperties": {
         "$ref": "#/$defs/GroveSourceConfig"
       },
       "description": "Root directories to search for projects and ecosystems",
-      "type": "object"
+      "type": "object",
+      "x-layer": "global",
+      "x-priority": "1",
+      "x-wizard": true
     },
     "name": {
       "description": "Name of the project or ecosystem",
-      "type": "string"
+      "type": "string",
+      "x-layer": "ecosystem",
+      "x-priority": "10"
     },
     "notebooks": {
       "$ref": "#/$defs/NotebooksConfig",
-      "description": "Notebook configuration"
+      "description": "Notebook configuration",
+      "x-layer": "global",
+      "x-priority": "2",
+      "x-wizard": true
     },
     "tui": {
       "$ref": "#/$defs/TUIConfig",
-      "description": "TUI appearance and behavior settings"
+      "description": "TUI appearance and behavior settings",
+      "x-layer": "global",
+      "x-priority": "50"
     },
     "version": {
       "description": "Configuration version (e.g. 1.0)",
-      "type": "string"
+      "type": "string",
+      "x-layer": "global",
+      "x-priority": "100"
     },
     "workspaces": {
       "description": "Glob patterns for workspace directories in this ecosystem",
       "items": {
         "type": "string"
       },
-      "type": "array"
+      "type": "array",
+      "x-layer": "ecosystem",
+      "x-priority": "11"
     }
   },
   "title": "Grove Ecosystem Configuration Schema",
