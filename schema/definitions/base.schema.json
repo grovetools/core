@@ -340,18 +340,16 @@
       "additionalProperties": {
         "$ref": "#/$defs/SearchPathConfig"
       },
-      "description": "DEPRECATED: Use groves instead",
+      "description": "Root directories to scan for projects",
       "type": "object",
-      "x-deprecated": true,
-      "x-deprecated-message": "Use 'groves' for project discovery",
-      "x-deprecated-removal": "v1.0.0",
-      "x-deprecated-replacement": "groves",
-      "x-deprecated-version": "v0.5.0",
+      "deprecated": true,
       "x-layer": "global",
       "x-priority": "1000",
       "x-status": "deprecated",
       "x-status-message": "Use 'groves' for project discovery",
       "x-status-replaced-by": "groves",
+      "x-status-since": "v0.5.0",
+      "x-status-target": "v1.0.0",
       "x-status-since": "v0.5.0",
       "x-status-target": "v1.0.0"
     },

@@ -217,7 +217,9 @@
       "required": [
         "user_config"
       ],
-      "type": "object"
+      "type": "object",
+      "x-status": "alpha",
+      "x-status-message": "Experimental Neovim embedding"
     },
     "SearchPathConfig": {
       "additionalProperties": false,
@@ -255,7 +257,11 @@
           "$ref": "#/$defs/NvimEmbedConfig",
           "description": "Embedded Neovim configuration",
           "x-layer": "global",
-          "x-priority": "53"
+          "x-priority": "53",
+          "x-status": "alpha",
+          "x-status-message": "Experimental Neovim embedding",
+          "x-status-since": "v0.6.0",
+          "x-status-target": "v1.0"
         },
         "theme": {
           "description": "Color theme for terminal interfaces",
@@ -334,15 +340,16 @@
       "additionalProperties": {
         "$ref": "#/$defs/SearchPathConfig"
       },
-      "description": "DEPRECATED: Use groves instead",
+      "deprecated": true,
+      "description": "Root directories to scan for projects",
       "type": "object",
-      "x-deprecated": true,
-      "x-deprecated-message": "Use 'groves' for project discovery",
-      "x-deprecated-removal": "v1.0.0",
-      "x-deprecated-replacement": "groves",
-      "x-deprecated-version": "v0.5.0",
       "x-layer": "global",
-      "x-priority": "1000"
+      "x-priority": "1000",
+      "x-status": "deprecated",
+      "x-status-message": "Use 'groves' for project discovery",
+      "x-status-replaced-by": "groves",
+      "x-status-since": "v0.5.0",
+      "x-status-target": "v1.0.0"
     },
     "tui": {
       "$ref": "#/$defs/TUIConfig",
