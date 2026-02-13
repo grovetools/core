@@ -159,6 +159,9 @@ const (
 	nerdIconNumeric8CircleOutline  = "󰲯" // md-numeric_8_circle_outline (U+F0CAF)
 	nerdIconNumeric9CircleOutline  = "󰲱" // md-numeric_9_circle_outline (U+F0CB1)
 	nerdIconNumeric10CircleOutline = "󰿭" // md-numeric_10_circle_outline (U+F0FED)
+
+	nerdIconStatusAlpha = "α" // Greek lowercase alpha (U+03B1)
+	nerdIconStatusBeta  = "β" // Greek lowercase beta (U+03B2)
 )
 
 // ASCII Fallback Icons (Private Constants)
@@ -314,6 +317,9 @@ const (
 	asciiIconNumeric8CircleOutline  = "(8)"  // Numeric8CircleOutline
 	asciiIconNumeric9CircleOutline  = "(9)"  // Numeric9CircleOutline
 	asciiIconNumeric10CircleOutline = "(10)" // Numeric10CircleOutline
+
+	asciiIconStatusAlpha = "[A]" // Alpha status
+	asciiIconStatusBeta  = "[B]" // Beta status
 )
 
 // Public Icon Variables
@@ -469,6 +475,9 @@ var (
 	IconNumeric8CircleOutline  string
 	IconNumeric9CircleOutline  string
 	IconNumeric10CircleOutline string
+
+	IconStatusAlpha string
+	IconStatusBeta  string
 )
 
 // init function determines which icon set to use
@@ -632,6 +641,8 @@ func init() {
 		IconNumeric8CircleOutline = asciiIconNumeric8CircleOutline
 		IconNumeric9CircleOutline = asciiIconNumeric9CircleOutline
 		IconNumeric10CircleOutline = asciiIconNumeric10CircleOutline
+		IconStatusAlpha = asciiIconStatusAlpha
+		IconStatusBeta = asciiIconStatusBeta
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -778,5 +789,7 @@ func init() {
 		IconNumeric8CircleOutline = nerdIconNumeric8CircleOutline
 		IconNumeric9CircleOutline = nerdIconNumeric9CircleOutline
 		IconNumeric10CircleOutline = nerdIconNumeric10CircleOutline
+		IconStatusAlpha = nerdIconStatusAlpha
+		IconStatusBeta = nerdIconStatusBeta
 	}
 }

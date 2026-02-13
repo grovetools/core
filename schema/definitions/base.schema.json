@@ -1,296 +1,333 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/grovetools/core/config/base-config",
   "$defs": {
     "ContextConfig": {
+      "additionalProperties": false,
       "properties": {
-        "repos_dir": {
-          "type": "string",
-          "description": "Directory where cx repo stores bare repositories (default: ~/.grove/cx)",
-          "x-layer": "global",
-          "x-priority": "80"
-        },
         "default_rules_path": {
-          "type": "string",
           "description": "Default rules file path for context filtering",
+          "type": "string",
           "x-layer": "project",
           "x-priority": "81"
+        },
+        "repos_dir": {
+          "description": "Directory where cx repo stores bare repositories (default: ~/.grove/cx)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "80"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     },
     "ExplicitProject": {
+      "additionalProperties": false,
       "properties": {
-        "path": {
-          "type": "string",
-          "description": "Absolute path to the project directory"
-        },
-        "name": {
-          "type": "string",
-          "description": "Display name for the project"
-        },
         "description": {
-          "type": "string",
-          "description": "Human-readable description of this project"
+          "description": "Human-readable description of this project",
+          "type": "string"
         },
         "enabled": {
-          "type": "boolean",
-          "description": "Whether this project is enabled"
+          "description": "Whether this project is enabled",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Display name for the project",
+          "type": "string"
+        },
+        "path": {
+          "description": "Absolute path to the project directory",
+          "type": "string"
         }
       },
-      "additionalProperties": false,
-      "type": "object",
       "required": [
         "path",
         "enabled"
-      ]
+      ],
+      "type": "object"
     },
     "GlobalNotebookConfig": {
+      "additionalProperties": false,
       "properties": {
         "root_dir": {
-          "type": "string",
-          "description": "Absolute path to the global notebook root directory"
+          "description": "Absolute path to the global notebook root directory",
+          "type": "string"
         }
       },
-      "additionalProperties": false,
-      "type": "object",
       "required": [
         "root_dir"
-      ]
+      ],
+      "type": "object"
     },
     "GroveSourceConfig": {
+      "additionalProperties": false,
       "properties": {
-        "path": {
-          "type": "string",
-          "description": "Absolute path to the grove root directory",
-          "x-priority": "1"
-        },
-        "enabled": {
-          "type": "boolean",
-          "description": "Whether this grove is enabled (default: true)",
-          "x-priority": "2"
-        },
         "description": {
-          "type": "string",
           "description": "Human-readable description of this grove",
+          "type": "string",
           "x-priority": "4"
         },
+        "enabled": {
+          "description": "Whether this grove is enabled (default: true)",
+          "type": "boolean",
+          "x-priority": "2"
+        },
         "notebook": {
-          "type": "string",
           "description": "Name of the notebook to use for projects in this grove",
+          "type": "string",
           "x-priority": "3"
+        },
+        "path": {
+          "description": "Absolute path to the grove root directory",
+          "type": "string",
+          "x-priority": "1"
         }
       },
-      "additionalProperties": false,
-      "type": "object",
       "required": [
         "path"
-      ]
+      ],
+      "type": "object"
     },
     "NoteTypeConfig": {
+      "additionalProperties": false,
       "properties": {
-        "description": {
-          "type": "string",
-          "description": "Human-readable description of this note type"
+        "default_expand": {
+          "description": "Whether this group is expanded by default in the TUI",
+          "type": "boolean"
         },
-        "template_path": {
-          "type": "string",
-          "description": "Path to the template file for this note type"
+        "description": {
+          "description": "Human-readable description of this note type",
+          "type": "string"
         },
         "filename_format": {
-          "type": "string",
-          "description": "Filename format: date-title"
+          "description": "Filename format: date-title",
+          "type": "string"
         },
         "icon": {
-          "type": "string",
-          "description": "Icon for TUI display (nerd font icon)"
+          "description": "Icon for TUI display (nerd font icon)",
+          "type": "string"
         },
         "icon_color": {
-          "type": "string",
-          "description": "Lipgloss color for the icon in the TUI"
-        },
-        "default_expand": {
-          "type": "boolean",
-          "description": "Whether this group is expanded by default in the TUI"
+          "description": "Lipgloss color for the icon in the TUI",
+          "type": "string"
         },
         "sort_order": {
-          "type": "integer",
-          "description": "Sort order in the TUI (lower numbers appear first)"
+          "description": "Sort order in the TUI (lower numbers appear first)",
+          "type": "integer"
+        },
+        "template_path": {
+          "description": "Path to the template file for this note type",
+          "type": "string"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     },
     "Notebook": {
+      "additionalProperties": false,
       "properties": {
-        "root_dir": {
-          "type": "string",
-          "description": "Absolute path to the notebook root (enables Centralized Mode)"
-        },
-        "notes_path_template": {
-          "type": "string",
-          "description": "Path template for notes directory"
-        },
-        "plans_path_template": {
-          "type": "string",
-          "description": "Path template for plans directory"
-        },
         "chats_path_template": {
-          "type": "string",
-          "description": "Path template for chats directory"
-        },
-        "templates_path_template": {
-          "type": "string",
-          "description": "Path template for templates directory"
-        },
-        "recipes_path_template": {
-          "type": "string",
-          "description": "Path template for recipes directory"
-        },
-        "in_progress_path_template": {
-          "type": "string",
-          "description": "Path template for in-progress items"
+          "description": "Path template for chats directory",
+          "type": "string"
         },
         "completed_path_template": {
-          "type": "string",
-          "description": "Path template for completed items"
+          "description": "Path template for completed items",
+          "type": "string"
+        },
+        "in_progress_path_template": {
+          "description": "Path template for in-progress items",
+          "type": "string"
+        },
+        "notes_path_template": {
+          "description": "Path template for notes directory",
+          "type": "string"
+        },
+        "plans_path_template": {
+          "description": "Path template for plans directory",
+          "type": "string"
         },
         "prompts_path_template": {
-          "type": "string",
-          "description": "Path template for prompts directory"
+          "description": "Path template for prompts directory",
+          "type": "string"
+        },
+        "recipes_path_template": {
+          "description": "Path template for recipes directory",
+          "type": "string"
+        },
+        "root_dir": {
+          "description": "Absolute path to the notebook root (enables Centralized Mode)",
+          "type": "string"
+        },
+        "sync": {
+          "description": "Synchronization configuration for this notebook"
+        },
+        "templates_path_template": {
+          "description": "Path template for templates directory",
+          "type": "string"
         },
         "types": {
           "additionalProperties": {
             "$ref": "#/$defs/NoteTypeConfig"
           },
-          "type": "object",
-          "description": "Map of note type name to configuration"
-        },
-        "sync": {
-          "description": "Synchronization configuration for this notebook"
+          "description": "Map of note type name to configuration",
+          "type": "object"
         }
       },
-      "additionalProperties": false,
-      "type": "object",
       "required": [
         "root_dir"
-      ]
+      ],
+      "type": "object"
     },
     "NotebookRules": {
+      "additionalProperties": false,
       "properties": {
         "default": {
-          "type": "string",
-          "description": "Name of the default notebook to use"
+          "description": "Name of the default notebook to use",
+          "type": "string"
         },
         "global": {
           "$ref": "#/$defs/GlobalNotebookConfig",
           "description": "Configuration for the system-wide global notebook"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     },
     "NotebooksConfig": {
+      "additionalProperties": false,
       "properties": {
         "definitions": {
           "additionalProperties": {
             "$ref": "#/$defs/Notebook"
           },
-          "type": "object",
-          "description": "Map of notebook name to notebook configuration"
+          "description": "Map of notebook name to notebook configuration",
+          "type": "object"
         },
         "rules": {
           "$ref": "#/$defs/NotebookRules",
           "description": "Rules for notebook usage (default notebook"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     },
     "NvimEmbedConfig": {
+      "additionalProperties": false,
       "properties": {
         "user_config": {
-          "type": "boolean",
-          "description": "If true"
+          "description": "If true",
+          "type": "boolean"
         }
       },
-      "additionalProperties": false,
-      "type": "object",
       "required": [
         "user_config"
-      ]
+      ],
+      "type": "object",
+      "x-status": "alpha",
+      "x-status-message": "Experimental Neovim embedding"
+    },
+    "SearchPathConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "enabled"
+      ],
+      "type": "object"
     },
     "TUIConfig": {
+      "additionalProperties": false,
       "properties": {
         "icons": {
-          "type": "string",
+          "description": "Icon set to use: nerd or ascii",
           "enum": [
             "nerd",
             "ascii"
           ],
-          "description": "Icon set to use: nerd or ascii",
+          "type": "string",
           "x-layer": "global",
           "x-priority": "52"
-        },
-        "theme": {
-          "type": "string",
-          "enum": [
-            "kanagawa",
-            "gruvbox",
-            "terminal"
-          ],
-          "description": "Color theme for terminal interfaces",
-          "x-layer": "global",
-          "x-priority": "51"
         },
         "nvim_embed": {
           "$ref": "#/$defs/NvimEmbedConfig",
           "description": "Embedded Neovim configuration",
           "x-layer": "global",
-          "x-priority": "53"
+          "x-priority": "53",
+          "x-status": "alpha",
+          "x-status-message": "Experimental Neovim embedding",
+          "x-status-since": "v0.6.0",
+          "x-status-target": "v1.0"
+        },
+        "theme": {
+          "description": "Color theme for terminal interfaces",
+          "enum": [
+            "kanagawa",
+            "gruvbox",
+            "terminal"
+          ],
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "51"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     }
   },
+  "$id": "https://github.com/grovetools/core/config/base-config",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Base schema for core grove.yml properties.",
   "properties": {
-    "name": {
-      "type": "string",
-      "description": "Name of the project or ecosystem",
-      "x-layer": "ecosystem",
-      "x-priority": "10"
-    },
-    "version": {
-      "type": "string",
-      "description": "Configuration version (e.g. 1.0)",
-      "x-layer": "global",
-      "x-priority": "100"
-    },
-    "workspaces": {
+    "build_after": {
+      "description": "Projects that must be built before this one",
       "items": {
         "type": "string"
       },
       "type": "array",
-      "description": "Glob patterns for workspace directories in this ecosystem",
-      "x-layer": "ecosystem",
-      "x-priority": "11"
+      "x-layer": "project",
+      "x-priority": "21"
     },
     "build_cmd": {
-      "type": "string",
       "description": "Custom build command (default: make build)",
+      "type": "string",
       "x-layer": "project",
       "x-priority": "20"
     },
-    "build_after": {
+    "context": {
+      "$ref": "#/$defs/ContextConfig",
+      "description": "Configuration for the cx (context) tool",
+      "x-layer": "global",
+      "x-priority": "80"
+    },
+    "explicit_projects": {
+      "description": "Specific projects to include without discovery",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/ExplicitProject"
       },
       "type": "array",
-      "description": "Projects that must be built before this one",
-      "x-layer": "project",
-      "x-priority": "21"
+      "x-layer": "global",
+      "x-priority": "5"
+    },
+    "groves": {
+      "additionalProperties": {
+        "$ref": "#/$defs/GroveSourceConfig"
+      },
+      "description": "Root directories to search for projects and ecosystems",
+      "type": "object",
+      "x-layer": "global",
+      "x-priority": "1",
+      "x-wizard": true
+    },
+    "name": {
+      "description": "Name of the project or ecosystem",
+      "type": "string",
+      "x-layer": "ecosystem",
+      "x-priority": "10"
     },
     "notebooks": {
       "$ref": "#/$defs/NotebooksConfig",
@@ -299,40 +336,47 @@
       "x-priority": "2",
       "x-wizard": true
     },
+    "search_paths": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SearchPathConfig"
+      },
+      "description": "DEPRECATED: Use groves instead",
+      "type": "object",
+      "x-deprecated": true,
+      "x-deprecated-message": "Use 'groves' for project discovery",
+      "x-deprecated-removal": "v1.0.0",
+      "x-deprecated-replacement": "groves",
+      "x-deprecated-version": "v0.5.0",
+      "x-layer": "global",
+      "x-priority": "1000",
+      "x-status": "deprecated",
+      "x-status-message": "Use 'groves' for project discovery",
+      "x-status-replaced-by": "groves",
+      "x-status-since": "v0.5.0",
+      "x-status-target": "v1.0.0"
+    },
     "tui": {
       "$ref": "#/$defs/TUIConfig",
       "description": "TUI appearance and behavior settings",
       "x-layer": "global",
       "x-priority": "50"
     },
-    "context": {
-      "$ref": "#/$defs/ContextConfig",
-      "description": "Configuration for the cx (context) tool",
+    "version": {
+      "description": "Configuration version (e.g. 1.0)",
+      "type": "string",
       "x-layer": "global",
-      "x-priority": "80"
+      "x-priority": "100"
     },
-    "groves": {
-      "additionalProperties": {
-        "$ref": "#/$defs/GroveSourceConfig"
-      },
-      "type": "object",
-      "description": "Root directories to search for projects and ecosystems",
-      "x-layer": "global",
-      "x-priority": "1",
-      "x-wizard": true
-    },
-    "explicit_projects": {
+    "workspaces": {
+      "description": "Glob patterns for workspace directories in this ecosystem",
       "items": {
-        "$ref": "#/$defs/ExplicitProject"
+        "type": "string"
       },
       "type": "array",
-      "description": "Specific projects to include without discovery",
-      "x-layer": "global",
-      "x-priority": "5"
+      "x-layer": "ecosystem",
+      "x-priority": "11"
     }
   },
-  "additionalProperties": false,
-  "type": "object",
   "title": "Grove Core Configuration",
-  "description": "Base schema for core grove.yml properties."
+  "type": "object"
 }

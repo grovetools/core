@@ -219,6 +219,25 @@
       ],
       "type": "object"
     },
+    "SearchPathConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "enabled"
+      ],
+      "type": "object"
+    },
     "TUIConfig": {
       "additionalProperties": false,
       "properties": {
@@ -310,6 +329,20 @@
       "x-layer": "global",
       "x-priority": "2",
       "x-wizard": true
+    },
+    "search_paths": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SearchPathConfig"
+      },
+      "description": "DEPRECATED: Use groves instead",
+      "type": "object",
+      "x-deprecated": true,
+      "x-deprecated-message": "Use 'groves' for project discovery",
+      "x-deprecated-removal": "v1.0.0",
+      "x-deprecated-replacement": "groves",
+      "x-deprecated-version": "v0.5.0",
+      "x-layer": "global",
+      "x-priority": "1000"
     },
     "tui": {
       "$ref": "#/$defs/TUIConfig",
