@@ -63,26 +63,26 @@
         "description": {
           "description": "Human-readable description of this grove",
           "type": "string",
-          "x-priority": "4",
-          "x-wizard": true
+          "x-important": true,
+          "x-priority": "4"
         },
         "enabled": {
           "description": "Whether this grove is enabled (default: true)",
           "type": "boolean",
-          "x-priority": "2",
-          "x-wizard": true
+          "x-important": true,
+          "x-priority": "2"
         },
         "notebook": {
           "description": "Name of the notebook to use for projects in this grove",
           "type": "string",
-          "x-priority": "3",
-          "x-wizard": true
+          "x-important": true,
+          "x-priority": "3"
         },
         "path": {
           "description": "Absolute path to the grove root directory",
           "type": "string",
-          "x-priority": "1",
-          "x-wizard": true
+          "x-important": true,
+          "x-priority": "1"
         }
       },
       "required": [
@@ -323,9 +323,9 @@
       },
       "description": "Root directories to search for projects and ecosystems",
       "type": "object",
+      "x-important": true,
       "x-layer": "global",
-      "x-priority": "1",
-      "x-wizard": true
+      "x-priority": "1"
     },
     "name": {
       "description": "Name of the project or ecosystem",
@@ -336,9 +336,9 @@
     "notebooks": {
       "$ref": "#/$defs/NotebooksConfig",
       "description": "Notebook configuration",
+      "x-important": true,
       "x-layer": "global",
-      "x-priority": "2",
-      "x-wizard": true
+      "x-priority": "2"
     },
     "search_paths": {
       "additionalProperties": {
