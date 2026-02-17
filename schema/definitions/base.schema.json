@@ -90,6 +90,45 @@
       ],
       "type": "object"
     },
+    "LoggingSchemaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Named collections of component loggers for filtering",
+          "type": "object"
+        },
+        "level": {
+          "default": "info",
+          "description": "Minimum log level (debug",
+          "type": "string"
+        },
+        "log_startup": {
+          "description": "Log 'Grove binary started' on first init",
+          "type": "boolean"
+        },
+        "report_caller": {
+          "default": true,
+          "description": "Include file/line/function in output",
+          "type": "boolean"
+        },
+        "show_current_project": {
+          "description": "Always show logs from current project regardless of filters",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "level",
+        "report_caller",
+        "log_startup"
+      ],
+      "type": "object"
+    },
     "NoteTypeConfig": {
       "additionalProperties": false,
       "properties": {
@@ -326,6 +365,12 @@
       "x-important": true,
       "x-layer": "global",
       "x-priority": "1"
+    },
+    "logging": {
+      "$ref": "#/$defs/LoggingSchemaConfig",
+      "description": "Logging configuration",
+      "x-layer": "global",
+      "x-priority": "60"
     },
     "name": {
       "description": "Name of the project or ecosystem",

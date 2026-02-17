@@ -29,6 +29,16 @@ func GenerateSchema() ([]byte, error) {
 	// Create a temporary struct that omits the Extensions field
 	// so it's not included in the base schema.
 	// UI metadata (x-layer, x-priority, x-important) is added via jsonschema_extras.
+
+	// LoggingSchemaConfig mirrors logging.Config for schema generation (avoids circular import)
+	type LoggingSchemaConfig struct {
+		Level              string              `yaml:"level" jsonschema:"description=Minimum log level (debug, info, warn, error),default=info"`
+		ReportCaller       bool                `yaml:"report_caller" jsonschema:"description=Include file/line/function in output,default=true"`
+		LogStartup         bool                `yaml:"log_startup" jsonschema:"description=Log 'Grove binary started' on first init"`
+		Groups             map[string][]string `yaml:"groups,omitempty" jsonschema:"description=Named collections of component loggers for filtering"`
+		ShowCurrentProject *bool               `yaml:"show_current_project,omitempty" jsonschema:"description=Always show logs from current project regardless of filters"`
+	}
+
 	type BaseConfig struct {
 		Name             string                       `yaml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem" jsonschema_extras:"x-layer=ecosystem,x-priority=10"`
 		Version          string                       `yaml:"version,omitempty" jsonschema:"description=Configuration version (e.g. 1.0)" jsonschema_extras:"x-layer=global,x-priority=100"`
@@ -36,6 +46,7 @@ func GenerateSchema() ([]byte, error) {
 		BuildCmd         string                       `yaml:"build_cmd,omitempty" jsonschema:"description=Custom build command (default: make build)" jsonschema_extras:"x-layer=project,x-priority=20"`
 		BuildAfter       []string                     `yaml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one" jsonschema_extras:"x-layer=project,x-priority=21"`
 		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Notebook configuration" jsonschema_extras:"x-layer=global,x-priority=2,x-important=true"`
+		Logging          *LoggingSchemaConfig         `yaml:"logging,omitempty" jsonschema:"description=Logging configuration" jsonschema_extras:"x-layer=global,x-priority=60"`
 		TUI              *TUIConfig                   `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
 		Context          *ContextConfig               `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
