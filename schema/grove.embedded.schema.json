@@ -63,22 +63,26 @@
         "description": {
           "description": "Human-readable description of this grove",
           "type": "string",
-          "x-priority": "4"
+          "x-priority": "4",
+          "x-wizard": true
         },
         "enabled": {
           "description": "Whether this grove is enabled (default: true)",
           "type": "boolean",
-          "x-priority": "2"
+          "x-priority": "2",
+          "x-wizard": true
         },
         "notebook": {
           "description": "Name of the notebook to use for projects in this grove",
           "type": "string",
-          "x-priority": "3"
+          "x-priority": "3",
+          "x-wizard": true
         },
         "path": {
           "description": "Absolute path to the grove root directory",
           "type": "string",
-          "x-priority": "1"
+          "x-priority": "1",
+          "x-wizard": true
         }
       },
       "required": [
@@ -340,9 +344,13 @@
       "additionalProperties": {
         "$ref": "#/$defs/SearchPathConfig"
       },
-      "deprecated": true,
-      "description": "Root directories to scan for projects",
+      "description": "DEPRECATED: Use groves instead",
       "type": "object",
+      "x-deprecated": true,
+      "x-deprecated-message": "Use 'groves' for project discovery",
+      "x-deprecated-removal": "v1.0.0",
+      "x-deprecated-replacement": "groves",
+      "x-deprecated-version": "v0.5.0",
       "x-layer": "global",
       "x-priority": "1000",
       "x-status": "deprecated",

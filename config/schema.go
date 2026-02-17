@@ -104,5 +104,19 @@ func GenerateSchema() ([]byte, error) {
 		}
 	}
 
+	// 3. Inject x-wizard into GroveSourceConfig fields
+	// Path: $defs -> GroveSourceConfig -> properties -> *
+	if defs := getMap(rawSchema, "$defs"); defs != nil {
+		if groveConfig := getMap(defs, "GroveSourceConfig"); groveConfig != nil {
+			if props := getMap(groveConfig, "properties"); props != nil {
+				for _, fieldName := range []string{"path", "enabled", "description", "notebook"} {
+					if field := getMap(props, fieldName); field != nil {
+						field["x-wizard"] = true
+					}
+				}
+			}
+		}
+	}
+
 	return json.MarshalIndent(rawSchema, "", "  ")
 }
