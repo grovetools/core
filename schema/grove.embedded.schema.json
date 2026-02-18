@@ -49,7 +49,8 @@
       "properties": {
         "root_dir": {
           "description": "Absolute path to the global notebook root directory",
-          "type": "string"
+          "type": "string",
+          "x-important": true
         }
       },
       "required": [
@@ -196,7 +197,8 @@
         },
         "root_dir": {
           "description": "Absolute path to the notebook root (enables Centralized Mode)",
-          "type": "string"
+          "type": "string",
+          "x-important": true
         },
         "sync": {
           "description": "Synchronization configuration for this notebook"
@@ -223,11 +225,13 @@
       "properties": {
         "default": {
           "description": "Name of the default notebook to use",
-          "type": "string"
+          "type": "string",
+          "x-important": true
         },
         "global": {
           "$ref": "#/$defs/GlobalNotebookConfig",
-          "description": "Configuration for the system-wide global notebook"
+          "description": "Configuration for the system-wide global notebook",
+          "x-important": true
         }
       },
       "type": "object"
@@ -293,6 +297,7 @@
             "ascii"
           ],
           "type": "string",
+          "x-important": true,
           "x-layer": "global",
           "x-priority": "52"
         },
@@ -314,6 +319,7 @@
             "terminal"
           ],
           "type": "string",
+          "x-important": true,
           "x-layer": "global",
           "x-priority": "51"
         }

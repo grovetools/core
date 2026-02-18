@@ -127,6 +127,38 @@ func GenerateSchema() ([]byte, error) {
 				}
 			}
 		}
+
+		// 4. Inject x-important into Notebook fields
+		// Path: $defs -> Notebook -> properties -> root_dir
+		if notebook := getMap(defs, "Notebook"); notebook != nil {
+			if props := getMap(notebook, "properties"); props != nil {
+				if rootDir := getMap(props, "root_dir"); rootDir != nil {
+					rootDir["x-important"] = true
+				}
+			}
+		}
+
+		// 5. Inject x-important into NotebookRules fields
+		// Path: $defs -> NotebookRules -> properties -> default, global
+		if notebookRules := getMap(defs, "NotebookRules"); notebookRules != nil {
+			if props := getMap(notebookRules, "properties"); props != nil {
+				for _, fieldName := range []string{"default", "global"} {
+					if field := getMap(props, fieldName); field != nil {
+						field["x-important"] = true
+					}
+				}
+			}
+		}
+
+		// 6. Inject x-important into GlobalNotebookConfig fields
+		// Path: $defs -> GlobalNotebookConfig -> properties -> root_dir
+		if globalNotebook := getMap(defs, "GlobalNotebookConfig"); globalNotebook != nil {
+			if props := getMap(globalNotebook, "properties"); props != nil {
+				if rootDir := getMap(props, "root_dir"); rootDir != nil {
+					rootDir["x-important"] = true
+				}
+			}
+		}
 	}
 
 	return json.MarshalIndent(rawSchema, "", "  ")
