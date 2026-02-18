@@ -7,6 +7,7 @@ import (
 )
 
 //go:generate go run ../tools/schema-generator/
+//go:generate sh -c "cd .. && go run ./tools/schema-composer/"
 //go:generate sh -c "cd .. && go run ./tools/notebook-schema-generator/"
 
 
