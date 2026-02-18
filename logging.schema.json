@@ -8,19 +8,28 @@
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Strict whitelist of components/groups to show (ignores show/hide)",
+          "x-layer": "global",
+          "x-priority": "85"
         },
         "show": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Components/groups to always show (overrides hide)",
+          "x-layer": "global",
+          "x-priority": "86"
         },
         "hide": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Components/groups to hide from log output",
+          "x-layer": "global",
+          "x-priority": "87"
         }
       },
       "type": "object"
@@ -29,14 +38,27 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true
+          "description": "Enable file logging",
+          "default": true,
+          "x-layer": "global",
+          "x-priority": "70"
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "Full path to the log file",
+          "x-layer": "global",
+          "x-priority": "71"
         },
         "format": {
           "type": "string",
-          "default": "json"
+          "enum": [
+            "text",
+            "json"
+          ],
+          "description": "File log format: text or json",
+          "default": "json",
+          "x-layer": "global",
+          "x-priority": "72"
         }
       },
       "type": "object",
@@ -48,16 +70,41 @@
     "FormatConfig": {
       "properties": {
         "preset": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "default",
+            "simple",
+            "json"
+          ],
+          "description": "Log format preset: default (rich)/simple/json",
+          "x-layer": "global",
+          "x-priority": "75"
         },
         "disable_timestamp": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Disable timestamp in log output",
+          "default": false,
+          "x-layer": "global",
+          "x-priority": "76"
         },
         "disable_component": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Disable component name in log output",
+          "default": false,
+          "x-layer": "global",
+          "x-priority": "77"
         },
         "structured_to_stderr": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "description": "When to send structured logs to stderr",
+          "default": "auto",
+          "x-layer": "global",
+          "x-priority": "78"
         }
       },
       "type": "object",
@@ -72,20 +119,42 @@
   "properties": {
     "level": {
       "type": "string",
-      "default": "info"
+      "enum": [
+        "debug",
+        "info",
+        "warn",
+        "error"
+      ],
+      "description": "Minimum log level (debug/info/warn/error)",
+      "default": "info",
+      "x-layer": "global",
+      "x-priority": "60"
     },
     "report_caller": {
       "type": "boolean",
-      "default": true
+      "description": "Include file/line/function in log output",
+      "default": true,
+      "x-layer": "global",
+      "x-priority": "65"
     },
     "log_startup": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Log 'Grove binary started' on first init",
+      "default": false,
+      "x-layer": "global",
+      "x-priority": "90"
     },
     "file": {
-      "$ref": "#/$defs/FileSinkConfig"
+      "$ref": "#/$defs/FileSinkConfig",
+      "description": "File logging sink configuration",
+      "x-layer": "global",
+      "x-priority": "70"
     },
     "format": {
-      "$ref": "#/$defs/FormatConfig"
+      "$ref": "#/$defs/FormatConfig",
+      "description": "Log output format settings",
+      "x-layer": "global",
+      "x-priority": "75"
     },
     "groups": {
       "additionalProperties": {
@@ -94,13 +163,22 @@
         },
         "type": "array"
       },
-      "type": "object"
+      "type": "object",
+      "description": "Named collections of component loggers for filtering",
+      "x-layer": "global",
+      "x-priority": "80"
     },
     "component_filtering": {
-      "$ref": "#/$defs/ComponentFilteringConfig"
+      "$ref": "#/$defs/ComponentFilteringConfig",
+      "description": "Rules for filtering logs by component",
+      "x-layer": "global",
+      "x-priority": "85"
     },
     "show_current_project": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Always show logs from current project regardless of filters",
+      "x-layer": "global",
+      "x-priority": "88"
     }
   },
   "type": "object",
