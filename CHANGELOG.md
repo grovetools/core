@@ -1,3 +1,39 @@
+## v0.6.3 (2026-02-19)
+
+This release focuses heavily on enriching the JSON schema with metadata to drive user interfaces and documentation. A new system of `x-*` extensions has been implemented to provide hints about configuration layering, priority, and field importance (cf0cc36, 7e1c1e0), alongside structural improvements to ensure logging configuration nests correctly within the schema (1b0ce18).
+
+Several improvements target the schema generation process itself. Fixes include adding the schema composer to the generation chain (787298a) and implementing post-processing logic to ensure `x-status` fields are correctly injected into nested structures (067a584). Additionally, a new gear icon has been added to the theme system to support settings interfaces (fdc336e).
+
+### Features
+* Add x-* extensions for config UI metadata including layer and priority hints (cf0cc36)
+* Add logging to base config schema for proper nesting structure (1b0ce18)
+* Mark key notebook configuration fields as important in schema (8bca276)
+* Add metadata tags to logging and TUI configuration fields (7e1c1e0)
+* Mark grove source fields with wizard steps metadata (bba2cf8)
+* Add IconGear to theme icons for settings UIs (fdc336e)
+
+### Bug Fixes
+* Add schema-composer to go generate chain to ensure distributed schema updates (787298a)
+* Use JSON-level post-processing for x-status extras to fix nested struct marshaling (067a584)
+* Migrate search_paths from legacy x-deprecated to standard x-status fields (9203ddd)
+
+### Refactoring
+* Rename x-wizard schema extension to x-important (8055f56)
+
+### File Changes
+```
+ config/schema.go                           | 144 +++++++++-
+ config/schema/definitions/base.schema.json | 414 +++++++++++++++++++----------
+ config/types.go                            |  20 +-
+ logging.schema.json                        | 114 ++++++--
+ logging/config.go                          |  36 +--
+ pkg/docs/docs.json                         |  19 +-
+ schema/definitions/base.schema.json        | 411 ++++++++++++++++++----------
+ schema/grove.embedded.schema.json          | 187 +++++++++++--
+ tui/theme/icons.go                         |  18 ++
+ 9 files changed, 1002 insertions(+), 361 deletions(-)
+```
+
 ## v0.6.2 (2026-02-10)
 
 This release introduces the `grove-daemon` (`groved`), shifting state management to a centralized background process. This includes the new `core groved` subcommand for lifecycle management (d75b602), a robust client infrastructure enabling local/remote fallback (891966f), and a collector engine (42df574) that gathers git, session, and workspace data in the background.
