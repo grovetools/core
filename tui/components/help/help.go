@@ -141,19 +141,34 @@ func (m *Model) setViewportContent() {
 		gutterWidth      = 4
 	)
 
-	// Get all keybinding groups
-	var helpGroups [][]key.Binding
+	var sections []keymap.Section
+	var helpGroups [][]key.Binding // fallback for older implementation
+
+	// Prefer SectionedKeyMap interface, fall back to FullHelp
 	switch k := m.Keys.(type) {
+	case keymap.SectionedKeyMap:
+		sections = k.Sections()
 	case keymap.Base:
-		helpGroups = k.FullHelp()
+		sections = k.Sections()
 	case interface{ FullHelp() [][]key.Binding }:
 		helpGroups = k.FullHelp()
 	}
+
+	// Handle custom help bindings
 	if m.CustomHelp != nil {
-		helpGroups = append(helpGroups, m.CustomHelp...)
+		if len(sections) > 0 {
+			// Convert custom help to a section
+			var customBindings []key.Binding
+			for _, group := range m.CustomHelp {
+				customBindings = append(customBindings, group...)
+			}
+			sections = append(sections, keymap.Section{Name: "Custom", Bindings: customBindings})
+		} else {
+			helpGroups = append(helpGroups, m.CustomHelp...)
+		}
 	}
 
-	content := m.renderHelpContent(helpGroups, verticalMargin, horizontalMargin, gutterWidth)
+	content := m.renderHelpContent(sections, helpGroups, verticalMargin, horizontalMargin, gutterWidth)
 	m.viewport.SetContent(content)
 
 	// Set viewport dimensions with a margin
@@ -161,23 +176,32 @@ func (m *Model) setViewportContent() {
 	m.viewport.Height = m.Height - verticalMargin
 }
 
-// renderHelpContent tries to fit the help text into the available space,
-// first as a single column, then two columns, before falling back to a
-// scrollable single column view.
-func (m *Model) renderHelpContent(groups [][]key.Binding, vMargin, hMargin, gutter int) string {
-	// 1. Try single-column layout
-	singleCol := m.renderTable(groups)
-	if lipgloss.Height(singleCol) <= m.Height-vMargin {
-		return singleCol
-	}
-
-	// 2. Try two-column layout if content is too tall
-	// Collect all rows first to split them evenly
-	allRows := m.collectRows(groups)
+// renderHelpContent renders help content, preferring two-column layout when
+// content is tall. The viewport handles scrolling automatically.
+func (m *Model) renderHelpContent(sections []keymap.Section, groups [][]key.Binding, vMargin, hMargin, gutter int) string {
+	// Collect all rows first
+	allRows := m.collectRows(sections, groups)
 	if len(allRows) == 0 {
 		return ""
 	}
 
+	// Build title
+	titleText := m.Title
+	if titleText == "" {
+		titleText = "Help"
+	}
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(m.Theme.Info.GetForeground()).
+		MarginBottom(1)
+
+	// 1. Try single-column layout first
+	singleCol := m.renderTable(sections, groups)
+	if lipgloss.Height(singleCol) <= m.Height-vMargin {
+		return singleCol
+	}
+
+	// 2. Content is too tall - use two-column layout (with scrolling if needed)
 	// Split rows in half for balanced columns
 	mid := len(allRows) / 2
 	leftRows := allRows[:mid]
@@ -187,30 +211,43 @@ func (m *Model) renderHelpContent(groups [][]key.Binding, vMargin, hMargin, gutt
 	rightCol := m.renderTableFromRows(rightRows)
 	twoCol := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, strings.Repeat(" ", gutter), rightCol)
 
-	// Add title above the two-column layout
-	titleText := m.Title
-	if titleText == "" {
-		titleText = "Help"
-	}
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(m.Theme.Info.GetForeground()).
-		MarginBottom(1).
-		Align(lipgloss.Center)
-
-	twoColWithTitle := lipgloss.JoinVertical(lipgloss.Center, titleStyle.Render(titleText), twoCol)
-
-	if lipgloss.Height(twoColWithTitle) <= m.Height-vMargin && lipgloss.Width(twoColWithTitle) <= m.Width-hMargin {
-		return twoColWithTitle
+	// Check if two columns fit width-wise
+	if lipgloss.Width(twoCol) <= m.Width-hMargin {
+		return lipgloss.JoinVertical(lipgloss.Center, titleStyle.Align(lipgloss.Center).Render(titleText), twoCol)
 	}
 
-	// 3. Fallback to scrollable single-column layout
+	// 3. Two columns too wide - fall back to single column (viewport will scroll)
 	return singleCol
 }
 
-// collectRows collects all rows from all keybinding groups.
-func (m *Model) collectRows(groups [][]key.Binding) [][]string {
+// collectRows collects all rows from sections and/or legacy keybinding groups.
+func (m *Model) collectRows(sections []keymap.Section, groups [][]key.Binding) [][]string {
 	var rows [][]string
+
+	// Process sections first (preferred)
+	for _, section := range sections {
+		if section.IsEmpty() {
+			continue
+		}
+		// Add section header
+		rows = append(rows, []string{m.Theme.Info.Bold(true).Render(section.Name), ""})
+		// Add bindings in this section
+		for _, binding := range section.Bindings {
+			if !binding.Enabled() {
+				continue
+			}
+			keyStr := binding.Help().Key
+			desc := binding.Help().Desc
+			if keyStr != "" && desc != "" {
+				rows = append(rows, []string{
+					m.Theme.Highlight.Render(keyStr),
+					m.Theme.Muted.Render(desc),
+				})
+			}
+		}
+	}
+
+	// Process legacy groups (fallback for keymaps not using sections)
 	for _, group := range groups {
 		if len(group) == 0 {
 			continue
@@ -221,6 +258,7 @@ func (m *Model) collectRows(groups [][]key.Binding) [][]string {
 			}
 			keyStr := binding.Help().Key
 			desc := binding.Help().Desc
+			// Empty key with description = section header (legacy format)
 			if keyStr == "" && desc != "" {
 				rows = append(rows, []string{m.Theme.Info.Bold(true).Render(desc), ""})
 			} else if keyStr != "" && desc != "" {
@@ -253,9 +291,9 @@ func (m *Model) renderTableFromRows(rows [][]string) string {
 	return table.String()
 }
 
-// renderTable renders a set of keybinding groups into a styled table string.
-func (m *Model) renderTable(groups [][]key.Binding) string {
-	if len(groups) == 0 {
+// renderTable renders sections and/or keybinding groups into a styled table string.
+func (m *Model) renderTable(sections []keymap.Section, groups [][]key.Binding) string {
+	if len(sections) == 0 && len(groups) == 0 {
 		return ""
 	}
 
@@ -269,7 +307,7 @@ func (m *Model) renderTable(groups [][]key.Binding) string {
 		MarginBottom(1).
 		Align(lipgloss.Left) // Align left for table headers
 
-	rows := m.collectRows(groups)
+	rows := m.collectRows(sections, groups)
 	if len(rows) == 0 {
 		return ""
 	}

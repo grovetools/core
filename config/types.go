@@ -83,8 +83,9 @@ type KeybindingsConfig struct {
 	Fold       KeybindingSectionConfig `yaml:"fold,omitempty" toml:"fold,omitempty" jsonschema:"description=Fold keybindings (open, close, toggle, open_all, close_all)"`
 	System     KeybindingSectionConfig `yaml:"system,omitempty" toml:"system,omitempty" jsonschema:"description=System keybindings (quit, help, refresh)"`
 
-	// Per-TUI overrides - keyed by TUI name (e.g., "nb.browser", "flow.status")
-	Overrides map[string]KeybindingSectionConfig `yaml:"overrides,omitempty" toml:"overrides,omitempty" jsonschema:"description=Per-TUI keybinding overrides (e.g., nb.browser, flow.status)"`
+	// Per-TUI overrides - nested by package then TUI name
+	// e.g., Overrides["nb"]["browser"]["create_note"] = ["n"]
+	Overrides map[string]map[string]KeybindingSectionConfig `yaml:"overrides,omitempty" toml:"overrides,omitempty" jsonschema:"description=Per-TUI keybinding overrides nested by package.tui (e.g., overrides.nb.browser, overrides.flow.status)"`
 }
 
 // TUIConfig holds TUI-specific settings.

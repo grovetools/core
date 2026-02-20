@@ -1,6 +1,8 @@
 package keymap
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/grovetools/core/config"
 )
@@ -372,9 +374,16 @@ func Load(cfg *config.Config, tuiName string) Base {
 	applySystemOverrides(&base, kb.System)
 
 	// Apply TUI-specific overrides
+	// tuiName is in format "package.tui" (e.g., "nb.browser", "flow.status")
 	if tuiName != "" && kb.Overrides != nil {
-		if tuiOverrides, ok := kb.Overrides[tuiName]; ok {
-			applyGenericOverrides(&base, tuiOverrides)
+		parts := strings.SplitN(tuiName, ".", 2)
+		if len(parts) == 2 {
+			pkgName, tui := parts[0], parts[1]
+			if pkgOverrides, ok := kb.Overrides[pkgName]; ok {
+				if tuiOverrides, ok := pkgOverrides[tui]; ok {
+					applyGenericOverrides(&base, tuiOverrides)
+				}
+			}
 		}
 	}
 
@@ -651,26 +660,54 @@ func (k Base) ShortHelp() []key.Binding {
 	}
 }
 
-// FullHelp returns a slice of all key bindings for the full help view
-func (k Base) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		// Navigation
-		{k.Up, k.Down, k.Left, k.Right},
-		{k.PageUp, k.PageDown, k.Top, k.Bottom},
-		// Actions
-		{k.Confirm, k.Cancel, k.Back, k.Edit},
-		{k.Delete, k.Yank},
-		// Search
-		{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch},
-		// Selection
-		{k.Select, k.SelectAll, k.SelectNone},
-		// View
-		{k.SwitchView, k.NextTab, k.PrevTab, k.TogglePreview},
-		// Fold
-		{k.FoldOpen, k.FoldClose, k.FoldToggle, k.FoldOpenAll, k.FoldCloseAll},
-		// Core
-		{k.Help, k.Quit},
+// Sections returns grouped sections of all key bindings for the full help view.
+// This implements the SectionedKeyMap interface and provides a structured way
+// to organize keybindings into logical categories.
+func (k Base) Sections() []Section {
+	return []Section{
+		{
+			Name:     "Navigation",
+			Bindings: []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown, k.Top, k.Bottom},
+		},
+		{
+			Name:     "Actions",
+			Bindings: []key.Binding{k.Confirm, k.Cancel, k.Back, k.Edit, k.Delete, k.Yank},
+		},
+		{
+			Name:     "Search",
+			Bindings: []key.Binding{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch},
+		},
+		{
+			Name:     "Selection",
+			Bindings: []key.Binding{k.Select, k.SelectAll, k.SelectNone},
+		},
+		{
+			Name:     "View",
+			Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.TogglePreview},
+		},
+		{
+			Name:     "Fold",
+			Bindings: []key.Binding{k.FoldOpen, k.FoldClose, k.FoldToggle, k.FoldOpenAll, k.FoldCloseAll},
+		},
+		{
+			Name:     "System",
+			Bindings: []key.Binding{k.Help, k.Quit},
+		},
 	}
+}
+
+// FullHelp returns a slice of all key bindings for the full help view.
+// This maintains backward compatibility with keymaps that use FullHelp().
+// New keymaps should prefer implementing Sections() instead.
+func (k Base) FullHelp() [][]key.Binding {
+	sections := k.Sections()
+	result := make([][]key.Binding, len(sections))
+	for i, s := range sections {
+		// Create a header binding followed by the section bindings
+		header := key.NewBinding(key.WithKeys(""), key.WithHelp("", s.Name))
+		result[i] = append([]key.Binding{header}, s.Bindings...)
+	}
+	return result
 }
 
 // DefaultKeyMap is the default keymap instance for the Grove ecosystem

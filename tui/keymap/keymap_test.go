@@ -149,9 +149,11 @@ func TestLoad_TUISpecificOverrides(t *testing.T) {
 				Navigation: config.KeybindingSectionConfig{
 					"up": {"w"}, // Global override
 				},
-				Overrides: map[string]config.KeybindingSectionConfig{
-					"nb.browser": {
-						"up": {"i"}, // TUI-specific override
+				Overrides: map[string]map[string]config.KeybindingSectionConfig{
+					"nb": {
+						"browser": {
+							"up": {"i"}, // TUI-specific override
+						},
 					},
 				},
 			},
@@ -242,19 +244,55 @@ func TestNewBase(t *testing.T) {
 	}
 }
 
+func TestSections(t *testing.T) {
+	km := DefaultVim()
+	sections := km.Sections()
+
+	// Should have multiple sections
+	if len(sections) < 5 {
+		t.Errorf("Expected at least 5 sections, got %d", len(sections))
+	}
+
+	// Check that all sections have bindings and names
+	for i, section := range sections {
+		if section.Name == "" {
+			t.Errorf("Section %d has no name", i)
+		}
+		if len(section.Bindings) == 0 {
+			t.Errorf("Section %q is empty", section.Name)
+		}
+	}
+
+	// Check expected section names
+	expectedNames := []string{"Navigation", "Actions", "Search", "Selection", "View", "Fold", "System"}
+	for i, name := range expectedNames {
+		if i >= len(sections) {
+			t.Errorf("Missing section %q", name)
+			continue
+		}
+		if sections[i].Name != name {
+			t.Errorf("Section %d: expected name %q, got %q", i, name, sections[i].Name)
+		}
+	}
+}
+
 func TestFullHelp(t *testing.T) {
 	km := DefaultVim()
 	help := km.FullHelp()
 
-	// Should have multiple groups
+	// Should have multiple groups (one per section)
 	if len(help) < 5 {
 		t.Errorf("Expected at least 5 help groups, got %d", len(help))
 	}
 
-	// Check that all groups have bindings
+	// Check that all groups have bindings (header + actual bindings)
 	for i, group := range help {
 		if len(group) == 0 {
 			t.Errorf("Help group %d is empty", i)
+		}
+		// First binding should be a section header (empty key)
+		if len(group) > 0 && group[0].Help().Key != "" {
+			t.Errorf("Help group %d should start with a header binding", i)
 		}
 	}
 }
