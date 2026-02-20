@@ -663,36 +663,86 @@ func (k Base) ShortHelp() []key.Binding {
 // Sections returns grouped sections of all key bindings for the full help view.
 // This implements the SectionedKeyMap interface and provides a structured way
 // to organize keybindings into logical categories.
+//
+// NOTE: Most TUIs should NOT use this method directly. Instead, use the individual
+// section getters (NavigationSection, SearchSection, etc.) to build a custom
+// Sections() that only includes the sections your TUI actually implements.
+// This prevents showing keybindings in help that don't actually work.
 func (k Base) Sections() []Section {
 	return []Section{
-		{
-			Name:     "Navigation",
-			Bindings: []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown, k.Top, k.Bottom},
-		},
-		{
-			Name:     "Actions",
-			Bindings: []key.Binding{k.Confirm, k.Cancel, k.Back, k.Edit, k.Delete, k.Yank},
-		},
-		{
-			Name:     "Search",
-			Bindings: []key.Binding{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch},
-		},
-		{
-			Name:     "Selection",
-			Bindings: []key.Binding{k.Select, k.SelectAll, k.SelectNone},
-		},
-		{
-			Name:     "View",
-			Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.TogglePreview},
-		},
-		{
-			Name:     "Fold",
-			Bindings: []key.Binding{k.FoldOpen, k.FoldClose, k.FoldToggle, k.FoldOpenAll, k.FoldCloseAll},
-		},
-		{
-			Name:     "System",
-			Bindings: []key.Binding{k.Help, k.Quit},
-		},
+		k.NavigationSection(),
+		k.ActionsSection(),
+		k.SearchSection(),
+		k.SelectionSection(),
+		k.ViewSection(),
+		k.FoldSection(),
+		k.SystemSection(),
+	}
+}
+
+// Individual section getters - use these to build TUI-specific Sections().
+// Only include sections for functionality your TUI actually implements.
+
+// NavigationSection returns the navigation keybindings section.
+// Use this if your TUI supports cursor movement with j/k, page up/down, etc.
+func (k Base) NavigationSection() Section {
+	return Section{
+		Name:     "Navigation",
+		Bindings: []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown, k.Top, k.Bottom},
+	}
+}
+
+// ActionsSection returns the actions keybindings section.
+// Use this if your TUI supports confirm, cancel, edit, delete, yank operations.
+func (k Base) ActionsSection() Section {
+	return Section{
+		Name:     "Actions",
+		Bindings: []key.Binding{k.Confirm, k.Cancel, k.Back, k.Edit, k.Delete, k.Yank},
+	}
+}
+
+// SearchSection returns the search keybindings section.
+// Use this if your TUI implements / search with n/N navigation.
+func (k Base) SearchSection() Section {
+	return Section{
+		Name:     "Search",
+		Bindings: []key.Binding{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch},
+	}
+}
+
+// SelectionSection returns the selection keybindings section.
+// Use this if your TUI supports multi-select with space, select all/none.
+func (k Base) SelectionSection() Section {
+	return Section{
+		Name:     "Selection",
+		Bindings: []key.Binding{k.Select, k.SelectAll, k.SelectNone},
+	}
+}
+
+// ViewSection returns the view management keybindings section.
+// Use this if your TUI supports tab switching, preview toggle, etc.
+func (k Base) ViewSection() Section {
+	return Section{
+		Name:     "View",
+		Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.TogglePreview},
+	}
+}
+
+// FoldSection returns the fold keybindings section.
+// Use this if your TUI is tree-based and supports vim-style folding (zo, zc, za, zR, zM).
+func (k Base) FoldSection() Section {
+	return Section{
+		Name:     "Fold",
+		Bindings: []key.Binding{k.FoldOpen, k.FoldClose, k.FoldToggle, k.FoldOpenAll, k.FoldCloseAll},
+	}
+}
+
+// SystemSection returns the system keybindings section.
+// This should always be included - it contains help and quit.
+func (k Base) SystemSection() Section {
+	return Section{
+		Name:     "System",
+		Bindings: []key.Binding{k.Help, k.Quit},
 	}
 }
 
