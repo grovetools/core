@@ -39,6 +39,30 @@ func GenerateSchema() ([]byte, error) {
 		ShowCurrentProject *bool               `yaml:"show_current_project,omitempty" jsonschema:"description=Always show logs from current project regardless of filters"`
 	}
 
+	// KeybindingSectionSchemaConfig mirrors KeybindingSectionConfig for schema generation
+	type KeybindingSectionSchemaConfig map[string][]string
+
+	// KeybindingsSchemaConfig mirrors KeybindingsConfig for schema generation
+	type KeybindingsSchemaConfig struct {
+		Navigation KeybindingSectionSchemaConfig            `yaml:"navigation,omitempty" jsonschema:"description=Navigation keybindings (up, down, left, right, page_up, page_down, top, bottom)"`
+		Selection  KeybindingSectionSchemaConfig            `yaml:"selection,omitempty" jsonschema:"description=Selection keybindings (select, select_all, select_none, toggle_select)"`
+		Actions    KeybindingSectionSchemaConfig            `yaml:"actions,omitempty" jsonschema:"description=Action keybindings (confirm, cancel, back, edit, delete, yank)"`
+		Search     KeybindingSectionSchemaConfig            `yaml:"search,omitempty" jsonschema:"description=Search keybindings (search, next_match, prev_match, clear_search, grep)"`
+		View       KeybindingSectionSchemaConfig            `yaml:"view,omitempty" jsonschema:"description=View keybindings (switch_view, next_tab, prev_tab, toggle_preview)"`
+		Fold       KeybindingSectionSchemaConfig            `yaml:"fold,omitempty" jsonschema:"description=Fold keybindings (open, close, toggle, open_all, close_all)"`
+		System     KeybindingSectionSchemaConfig            `yaml:"system,omitempty" jsonschema:"description=System keybindings (quit, help, refresh)"`
+		Overrides  map[string]KeybindingSectionSchemaConfig `yaml:"overrides,omitempty" jsonschema:"description=Per-TUI keybinding overrides (e.g., nb.browser, flow.status)"`
+	}
+
+	// TUISchemaConfig mirrors TUIConfig for schema generation
+	type TUISchemaConfig struct {
+		Icons       string                   `yaml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-important=true"`
+		Theme       string                   `yaml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-important=true"`
+		Preset      string                   `yaml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default) emacs or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-important=true"`
+		Keybindings *KeybindingsSchemaConfig `yaml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides"`
+		NvimEmbed   *NvimEmbedConfig         `yaml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
+	}
+
 	type BaseConfig struct {
 		Name             string                       `yaml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem" jsonschema_extras:"x-layer=ecosystem,x-priority=10"`
 		Version          string                       `yaml:"version,omitempty" jsonschema:"description=Configuration version (e.g. 1.0)" jsonschema_extras:"x-layer=global,x-priority=100"`
@@ -47,7 +71,7 @@ func GenerateSchema() ([]byte, error) {
 		BuildAfter       []string                     `yaml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one" jsonschema_extras:"x-layer=project,x-priority=21"`
 		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Notebook configuration" jsonschema_extras:"x-layer=global,x-priority=2,x-important=true"`
 		Logging          *LoggingSchemaConfig         `yaml:"logging,omitempty" jsonschema:"description=Logging configuration" jsonschema_extras:"x-layer=global,x-priority=60"`
-		TUI              *TUIConfig                   `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
+		TUI              *TUISchemaConfig             `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
 		Context          *ContextConfig               `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
 		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1000,x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`

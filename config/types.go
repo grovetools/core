@@ -68,11 +68,32 @@ type NvimEmbedConfig struct {
 	UserConfig bool `yaml:"user_config" toml:"user_config" jsonschema:"description=If true, loads the user's default Neovim config (~/.config/nvim)"`
 }
 
+// KeybindingSectionConfig defines keybindings for a specific section (navigation, actions, etc.)
+// Keys are action names (e.g., "up", "down", "quit"), values are lists of key combinations.
+type KeybindingSectionConfig map[string][]string
+
+// KeybindingsConfig defines the structure for custom keybindings.
+type KeybindingsConfig struct {
+	// Standard sections - apply to all TUIs
+	Navigation KeybindingSectionConfig `yaml:"navigation,omitempty" toml:"navigation,omitempty" jsonschema:"description=Navigation keybindings (up, down, left, right, page_up, page_down, top, bottom)"`
+	Selection  KeybindingSectionConfig `yaml:"selection,omitempty" toml:"selection,omitempty" jsonschema:"description=Selection keybindings (select, select_all, select_none, toggle_select)"`
+	Actions    KeybindingSectionConfig `yaml:"actions,omitempty" toml:"actions,omitempty" jsonschema:"description=Action keybindings (confirm, cancel, back, edit, delete, yank)"`
+	Search     KeybindingSectionConfig `yaml:"search,omitempty" toml:"search,omitempty" jsonschema:"description=Search keybindings (search, next_match, prev_match, clear_search, grep)"`
+	View       KeybindingSectionConfig `yaml:"view,omitempty" toml:"view,omitempty" jsonschema:"description=View keybindings (switch_view, next_tab, prev_tab, toggle_preview)"`
+	Fold       KeybindingSectionConfig `yaml:"fold,omitempty" toml:"fold,omitempty" jsonschema:"description=Fold keybindings (open, close, toggle, open_all, close_all)"`
+	System     KeybindingSectionConfig `yaml:"system,omitempty" toml:"system,omitempty" jsonschema:"description=System keybindings (quit, help, refresh)"`
+
+	// Per-TUI overrides - keyed by TUI name (e.g., "nb.browser", "flow.status")
+	Overrides map[string]KeybindingSectionConfig `yaml:"overrides,omitempty" toml:"overrides,omitempty" jsonschema:"description=Per-TUI keybinding overrides (e.g., nb.browser, flow.status)"`
+}
+
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
-	Icons     string           `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-layer=global,x-priority=52,x-important=true"`
-	Theme     string           `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-layer=global,x-priority=51,x-important=true"`
-	NvimEmbed *NvimEmbedConfig `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-status=alpha,x-layer=global,x-priority=53"`
+	Icons       string             `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-layer=global,x-priority=52,x-important=true"`
+	Theme       string             `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-layer=global,x-priority=51,x-important=true"`
+	Preset      string             `yaml:"preset,omitempty" toml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default), emacs, or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-layer=global,x-priority=50,x-important=true"`
+	Keybindings *KeybindingsConfig `yaml:"keybindings,omitempty" toml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides" jsonschema_extras:"x-layer=global,x-priority=54"`
+	NvimEmbed   *NvimEmbedConfig   `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-status=alpha,x-layer=global,x-priority=55"`
 }
 
 // ContextConfig holds configuration for the grove-context (cx) tool.

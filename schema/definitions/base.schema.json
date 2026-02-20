@@ -91,6 +91,56 @@
       ],
       "type": "object"
     },
+    "KeybindingSectionSchemaConfig": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    },
+    "KeybindingsSchemaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "Action keybindings (confirm"
+        },
+        "fold": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "Fold keybindings (open"
+        },
+        "navigation": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "Navigation keybindings (up"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/KeybindingSectionSchemaConfig"
+          },
+          "description": "Per-TUI keybinding overrides (e.g.",
+          "type": "object"
+        },
+        "search": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "Search keybindings (search"
+        },
+        "selection": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "Selection keybindings (select"
+        },
+        "system": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "System keybindings (quit"
+        },
+        "view": {
+          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "description": "View keybindings (switch_view"
+        }
+      },
+      "type": "object"
+    },
     "LoggingSchemaConfig": {
       "additionalProperties": false,
       "properties": {
@@ -287,7 +337,7 @@
       ],
       "type": "object"
     },
-    "TUIConfig": {
+    "TUISchemaConfig": {
       "additionalProperties": false,
       "properties": {
         "icons": {
@@ -297,19 +347,26 @@
             "ascii"
           ],
           "type": "string",
-          "x-important": true,
-          "x-layer": "global",
-          "x-priority": "52"
+          "x-important": true
+        },
+        "keybindings": {
+          "$ref": "#/$defs/KeybindingsSchemaConfig",
+          "description": "Custom keybinding overrides"
         },
         "nvim_embed": {
           "$ref": "#/$defs/NvimEmbedConfig",
-          "description": "Embedded Neovim configuration",
-          "x-layer": "global",
-          "x-priority": "53",
-          "x-status": "alpha",
-          "x-status-message": "Experimental Neovim embedding",
-          "x-status-since": "v0.6.0",
-          "x-status-target": "v1.0"
+          "description": "Embedded Neovim configuration"
+        },
+        "preset": {
+          "default": "vim",
+          "description": "Keybinding preset: vim (default) emacs or arrows",
+          "enum": [
+            "vim",
+            "emacs",
+            "arrows"
+          ],
+          "type": "string",
+          "x-important": true
         },
         "theme": {
           "description": "Color theme for terminal interfaces",
@@ -319,9 +376,7 @@
             "terminal"
           ],
           "type": "string",
-          "x-important": true,
-          "x-layer": "global",
-          "x-priority": "51"
+          "x-important": true
         }
       },
       "type": "object"
@@ -411,7 +466,7 @@
       "x-status-target": "v1.0.0"
     },
     "tui": {
-      "$ref": "#/$defs/TUIConfig",
+      "$ref": "#/$defs/TUISchemaConfig",
       "description": "TUI appearance and behavior settings",
       "x-layer": "global",
       "x-priority": "50"
