@@ -229,6 +229,7 @@ type apiStateUpdate struct {
 	UpdateType string                          `json:"update_type"`
 	Source     string                          `json:"source,omitempty"`
 	Scanned    int                             `json:"scanned,omitempty"`
+	ConfigFile string                          `json:"config_file,omitempty"`
 }
 
 // convertToAPIUpdate converts internal store.Update to the public API format.
@@ -266,6 +267,16 @@ func convertToAPIUpdate(u store.Update) *apiStateUpdate {
 			UpdateType: "focus",
 			Source:     u.Source,
 			Scanned:    u.Scanned,
+		}
+	case store.UpdateConfigReload:
+		configFile := ""
+		if file, ok := u.Payload.(string); ok {
+			configFile = file
+		}
+		return &apiStateUpdate{
+			UpdateType: "config_reload",
+			Source:     u.Source,
+			ConfigFile: configFile,
 		}
 	}
 	return nil

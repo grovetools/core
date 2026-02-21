@@ -23,6 +23,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// configWatchEnabled returns true if config watching is enabled in config.
+// Defaults to true if not explicitly set to false.
+func configWatchEnabled(cfg *config.Config) bool {
+	if cfg.Daemon == nil || cfg.Daemon.ConfigWatch == nil {
+		return true // Default enabled
+	}
+	return *cfg.Daemon.ConfigWatch
+}
+
+// configDebounceMs returns the config debounce setting or default (100ms).
+func configDebounceMs(cfg *config.Config) int {
+	if cfg.Daemon == nil || cfg.Daemon.ConfigDebounceMs <= 0 {
+		return 100
+	}
+	return cfg.Daemon.ConfigDebounceMs
+}
+
 // NewGrovedCmd returns the groved daemon command with subcommands.
 func NewGrovedCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -186,7 +203,22 @@ func newGrovedStartCmd() *cobra.Command {
 			// 6. Start Engine in background
 			go eng.Start(ctx)
 
-			// 7. Start Server (Blocking)
+			// 7. Start ConfigWatcher if enabled
+			if configWatchEnabled(cfg) {
+				debounceMs := configDebounceMs(cfg)
+				configWatcher, err := daemon.NewConfigWatcher(debounceMs, func(file string) {
+					// Broadcast config reload event to all subscribers
+					st.BroadcastConfigReload(file)
+				})
+				if err != nil {
+					logger.WithError(err).Warn("Failed to start config watcher, continuing without it")
+				} else {
+					logger.Info("Config watcher started")
+					go configWatcher.Start(ctx)
+				}
+			}
+
+			// 8. Start Server (Blocking)
 			logger.WithField("pid", os.Getpid()).Info("Starting daemon")
 			if err := srv.ListenAndServe(sockPath); err != nil {
 				return fmt.Errorf("server error: %w", err)
@@ -366,6 +398,12 @@ func newGrovedMonitorCmd() *cobra.Command {
 						timestamp, len(update.Sessions), running, pending, interactive, flowJobs, openCode)
 				case "focus":
 					fmt.Printf("[%s] Focus: %d workspaces\n", timestamp, update.Scanned)
+				case "config_reload":
+					configFile := update.ConfigFile
+					if configFile == "" {
+						configFile = "unknown"
+					}
+					fmt.Printf("[%s] Config Reload: %s\n", timestamp, configFile)
 				default:
 					fmt.Printf("[%s] Update: %s\n", timestamp, update.UpdateType)
 				}
@@ -389,6 +427,8 @@ func formatSource(source string) string {
 		return "Plan Stats"
 	case "note":
 		return "Note Counts"
+	case "config":
+		return "Config Watcher"
 	default:
 		return source
 	}

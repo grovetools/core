@@ -110,6 +110,8 @@ type DaemonConfig struct {
 	WorkspaceInterval string `yaml:"workspace_interval,omitempty" toml:"workspace_interval,omitempty" jsonschema:"description=How often to refresh workspace discovery (default: 30s)"`
 	PlanInterval      string `yaml:"plan_interval,omitempty" toml:"plan_interval,omitempty" jsonschema:"description=How often to poll plan stats (default: 30s)"`
 	NoteInterval      string `yaml:"note_interval,omitempty" toml:"note_interval,omitempty" jsonschema:"description=How often to poll note counts (default: 60s)"`
+	ConfigWatch       *bool  `yaml:"config_watch,omitempty" toml:"config_watch,omitempty" jsonschema:"description=Enable config watching (default: true)"`
+	ConfigDebounceMs  int    `yaml:"config_debounce_ms,omitempty" toml:"config_debounce_ms,omitempty" jsonschema:"description=Debounce window for rapid config changes in milliseconds (default: 100)"`
 }
 
 // HookCommand defines a command to be executed for a hook.
@@ -352,14 +354,15 @@ func (c *Config) UnmarshalExtension(key string, target interface{}) error {
 type ConfigSource string
 
 const (
-	SourceDefault        ConfigSource = "default"
-	SourceGlobal         ConfigSource = "global"
-	SourceGlobalOverride ConfigSource = "global-override"
-	SourceEnvOverlay     ConfigSource = "env-overlay" // GROVE_CONFIG_OVERLAY
-	SourceEcosystem      ConfigSource = "ecosystem"
-	SourceProject        ConfigSource = "project"
-	SourceOverride       ConfigSource = "override"
-	SourceUnknown        ConfigSource = "unknown"
+	SourceDefault         ConfigSource = "default"
+	SourceGlobal          ConfigSource = "global"
+	SourceGlobalFragment  ConfigSource = "global-fragment"
+	SourceGlobalOverride  ConfigSource = "global-override"
+	SourceEnvOverlay      ConfigSource = "env-overlay" // GROVE_CONFIG_OVERLAY
+	SourceEcosystem       ConfigSource = "ecosystem"
+	SourceProject         ConfigSource = "project"
+	SourceOverride        ConfigSource = "override"
+	SourceUnknown         ConfigSource = "unknown"
 )
 
 // OverrideSource holds a raw configuration from an override file and its path.
@@ -371,13 +374,14 @@ type OverrideSource struct {
 // LayeredConfig holds the raw configuration from each source file,
 // as well as the final merged configuration, for analysis purposes.
 type LayeredConfig struct {
-	Default        *Config                 // Config with only default values applied.
-	Global         *Config                 // Raw config from the global file.
-	GlobalOverride *OverrideSource         // Raw config from the global override file.
-	EnvOverlay     *OverrideSource         // Raw config from GROVE_CONFIG_OVERLAY env var.
-	Ecosystem      *Config                 // Raw config from the ecosystem file (if workspace is in an ecosystem).
-	Project        *Config                 // Raw config from the project file.
-	Overrides      []OverrideSource        // Raw configs from override files, in order of application.
-	Final          *Config                 // The fully merged and validated config.
-	FilePaths      map[ConfigSource]string // Maps sources to their file paths.
+	Default         *Config                 // Config with only default values applied.
+	Global          *Config                 // Raw config from the global file.
+	GlobalFragments []OverrideSource        // Raw configs from modular ~/.config/grove/*.toml files.
+	GlobalOverride  *OverrideSource         // Raw config from the global override file.
+	EnvOverlay      *OverrideSource         // Raw config from GROVE_CONFIG_OVERLAY env var.
+	Ecosystem       *Config                 // Raw config from the ecosystem file (if workspace is in an ecosystem).
+	Project         *Config                 // Raw config from the project file.
+	Overrides       []OverrideSource        // Raw configs from override files, in order of application.
+	Final           *Config                 // The fully merged and validated config.
+	FilePaths       map[ConfigSource]string // Maps sources to their file paths.
 }

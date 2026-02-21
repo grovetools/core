@@ -47,6 +47,27 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 	return config, nil
 }
 
+// deepMergeMaps recursively merges two maps, with src values overriding dst values.
+// When both dst and src have the same key pointing to maps, they are merged recursively.
+func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{})
+	for k, v := range dst {
+		out[k] = v
+	}
+	for k, vSrc := range src {
+		if vDst, ok := out[k]; ok {
+			if mapDst, okDst := vDst.(map[string]interface{}); okDst {
+				if mapSrc, okSrc := vSrc.(map[string]interface{}); okSrc {
+					out[k] = deepMergeMaps(mapDst, mapSrc)
+					continue
+				}
+			}
+		}
+		out[k] = vSrc
+	}
+	return out
+}
+
 // mergeConfigs merges override configuration into base
 func mergeConfigs(base, override *Config) *Config {
 	result := *base
@@ -162,32 +183,12 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
-	// Merge extensions
+	// Merge extensions with recursive deep merge
 	if override.Extensions != nil {
 		if result.Extensions == nil {
 			result.Extensions = make(map[string]interface{})
 		}
-		for key, value := range override.Extensions {
-			// If both base and override have the same extension key, merge them
-			if baseValue, exists := result.Extensions[key]; exists {
-				if baseMap, baseOk := baseValue.(map[string]interface{}); baseOk {
-					if overrideMap, overrideOk := value.(map[string]interface{}); overrideOk {
-						// Merge the maps
-						mergedMap := make(map[string]interface{})
-						for k, v := range baseMap {
-							mergedMap[k] = v
-						}
-						for k, v := range overrideMap {
-							mergedMap[k] = v
-						}
-						result.Extensions[key] = mergedMap
-						continue
-					}
-				}
-			}
-			// Otherwise just replace
-			result.Extensions[key] = value
-		}
+		result.Extensions = deepMergeMaps(result.Extensions, override.Extensions)
 	}
 
 	return &result

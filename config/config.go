@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/grovetools/core/errors"
@@ -15,6 +16,52 @@ import (
 )
 
 var envVarRegex = regexp.MustCompile(`\$\{([^}]+)\}`)
+
+// ConfigMeta holds metadata about the config file itself.
+// This is parsed from the [_grove] section and stripped from the final config.
+type ConfigMeta struct {
+	Priority int `toml:"priority" yaml:"priority"` // Loading priority (higher loads later, default: 50)
+}
+
+// DefaultPriority is the default priority for config fragments.
+const DefaultPriority = 50
+
+// configFragment holds a config file path and its priority for sorting.
+type configFragment struct {
+	path     string
+	priority int
+}
+
+// extractConfigMeta reads the [_grove] section from a config file to get metadata.
+// Returns default values if the section doesn't exist.
+func extractConfigMeta(data []byte, path string) ConfigMeta {
+	meta := ConfigMeta{Priority: DefaultPriority}
+
+	if strings.HasSuffix(path, ".toml") {
+		var raw struct {
+			Grove ConfigMeta `toml:"_grove"`
+		}
+		if err := toml.Unmarshal(data, &raw); err == nil && raw.Grove.Priority != 0 {
+			meta.Priority = raw.Grove.Priority
+		}
+	} else {
+		var raw struct {
+			Grove ConfigMeta `yaml:"_grove"`
+		}
+		if err := yaml.Unmarshal(data, &raw); err == nil && raw.Grove.Priority != 0 {
+			meta.Priority = raw.Grove.Priority
+		}
+	}
+
+	return meta
+}
+
+// stripGroveMeta removes the [_grove] section from Extensions after loading.
+func stripGroveMeta(cfg *Config) {
+	if cfg.Extensions != nil {
+		delete(cfg.Extensions, "_grove")
+	}
+}
 
 // coreConfigKeys lists the known top-level keys that are part of the core Config struct.
 // These are excluded from Extensions when loading TOML files.
@@ -31,6 +78,7 @@ var coreConfigKeys = map[string]bool{
 	"groves":            true,
 	"search_paths":      true,
 	"explicit_projects": true,
+	"_grove":            true, // Meta section for config metadata (priority, etc.)
 }
 
 // unmarshalConfig parses config data based on file extension (TOML or YAML).
@@ -132,6 +180,67 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 				}
 			} else {
 				logger.WithError(err).Warn("Failed to read global configuration, continuing without it")
+			}
+		}
+
+		// Glob and merge additional modular TOML files from config directory
+		// Files are sorted by priority ([_grove].priority), then alphabetically within same priority
+		globalDir := filepath.Dir(globalPath)
+		pattern := filepath.Join(globalDir, "*.toml")
+		if files, err := filepath.Glob(pattern); err == nil {
+			// First pass: collect fragments with their priorities
+			var fragments []configFragment
+			for _, file := range files {
+				baseName := filepath.Base(file)
+				// Skip main config and override files
+				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" {
+					continue
+				}
+
+				fragmentData, err := os.ReadFile(file)
+				if err != nil {
+					logger.WithError(err).Warnf("Failed to read config fragment %s, skipping", baseName)
+					continue
+				}
+
+				meta := extractConfigMeta(fragmentData, file)
+				fragments = append(fragments, configFragment{path: file, priority: meta.Priority})
+			}
+
+			// Sort by priority (stable sort maintains alphabetical order within same priority)
+			sort.SliceStable(fragments, func(i, j int) bool {
+				return fragments[i].priority < fragments[j].priority
+			})
+
+			// Second pass: merge in priority order
+			for _, frag := range fragments {
+				baseName := filepath.Base(frag.path)
+				logger.WithFields(logrus.Fields{
+					"path":     frag.path,
+					"priority": frag.priority,
+				}).Debug("Loading global config fragment")
+
+				fragmentData, err := os.ReadFile(frag.path)
+				if err != nil {
+					logger.WithError(err).Warnf("Failed to read config fragment %s, skipping", baseName)
+					continue
+				}
+
+				expanded := expandEnvVars(string(fragmentData))
+				fragmentConfig, parseErr := unmarshalConfig(frag.path, []byte(expanded))
+				if parseErr != nil {
+					logger.WithError(parseErr).Warnf("Failed to parse config fragment %s, skipping", baseName)
+					continue
+				}
+
+				// Strip _grove meta section
+				stripGroveMeta(fragmentConfig)
+
+				if finalConfig == nil {
+					finalConfig = fragmentConfig
+				} else {
+					finalConfig = mergeConfigs(finalConfig, fragmentConfig)
+				}
 			}
 		}
 	}
@@ -602,6 +711,53 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 				}
 			}
 		}
+
+		// 2.25. Load Global Fragment layers (modular *.toml files)
+		// Files are sorted by priority ([_grove].priority), then alphabetically within same priority
+		globalDir := filepath.Dir(globalPath)
+		pattern := filepath.Join(globalDir, "*.toml")
+		if files, err := filepath.Glob(pattern); err == nil {
+			// First pass: collect fragments with their priorities
+			var fragments []configFragment
+			for _, file := range files {
+				baseName := filepath.Base(file)
+				// Skip main config and override files
+				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" {
+					continue
+				}
+
+				fragmentData, err := os.ReadFile(file)
+				if err != nil {
+					continue
+				}
+
+				meta := extractConfigMeta(fragmentData, file)
+				fragments = append(fragments, configFragment{path: file, priority: meta.Priority})
+			}
+
+			// Sort by priority (stable sort maintains alphabetical order within same priority)
+			sort.SliceStable(fragments, func(i, j int) bool {
+				return fragments[i].priority < fragments[j].priority
+			})
+
+			// Second pass: load in priority order
+			for _, frag := range fragments {
+				fragmentData, err := os.ReadFile(frag.path)
+				if err != nil {
+					continue
+				}
+
+				expanded := expandEnvVars(string(fragmentData))
+				fragmentConfig, parseErr := unmarshalConfig(frag.path, []byte(expanded))
+				if parseErr == nil {
+					stripGroveMeta(fragmentConfig)
+					layeredConfig.GlobalFragments = append(layeredConfig.GlobalFragments, OverrideSource{
+						Path:   frag.path,
+						Config: fragmentConfig,
+					})
+				}
+			}
+		}
 	}
 
 	// 2.5. Load Global Override layer (optional)
@@ -730,6 +886,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	// Start with global if it exists
 	if layeredConfig.Global != nil {
 		finalConfig = layeredConfig.Global
+	}
+
+	// Merge global fragments (modular *.toml files)
+	for _, fragment := range layeredConfig.GlobalFragments {
+		finalConfig = mergeConfigs(finalConfig, fragment.Config)
 	}
 
 	// Merge global override

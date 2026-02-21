@@ -16,9 +16,10 @@ type State struct {
 type UpdateType string
 
 const (
-	UpdateWorkspaces UpdateType = "workspaces"
-	UpdateSessions   UpdateType = "sessions"
-	UpdateFocus      UpdateType = "focus"
+	UpdateWorkspaces    UpdateType = "workspaces"
+	UpdateSessions      UpdateType = "sessions"
+	UpdateFocus         UpdateType = "focus"
+	UpdateConfigReload  UpdateType = "config_reload"
 )
 
 // Update represents a change to the state.

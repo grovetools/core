@@ -150,3 +150,22 @@ func (s *Store) IsFocused(path string) bool {
 	_, ok := s.focus[path]
 	return ok
 }
+
+// BroadcastConfigReload sends a config reload notification to all subscribers.
+// This is used by the ConfigWatcher to notify clients when config files change.
+func (s *Store) BroadcastConfigReload(file string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	update := Update{
+		Type:    UpdateConfigReload,
+		Source:  "config",
+		Payload: file, // The file that changed
+	}
+	for ch := range s.subscribers {
+		select {
+		case ch <- update:
+		default:
+		}
+	}
+}
