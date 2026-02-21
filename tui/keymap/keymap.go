@@ -199,12 +199,12 @@ func DefaultVim() Base {
 			key.WithHelp("space", "select"),
 		),
 		SelectAll: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "all"),
+			key.WithKeys("ctrl+a"),
+			key.WithHelp("ctrl+a", "all"),
 		),
 		SelectNone: key.NewBinding(
-			key.WithKeys("A"),
-			key.WithHelp("A", "none"),
+			key.WithKeys("ctrl+d"),
+			key.WithHelp("ctrl+d", "none"),
 		),
 		ToggleSelect: key.NewBinding(
 			key.WithKeys("v"),
