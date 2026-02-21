@@ -51,7 +51,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("G", "go to end"),
 		),
 		Toggle: key.NewBinding(
-			key.WithKeys("space", "enter", "l"),
+			key.WithKeys(" ", "enter", "l"),
 			key.WithHelp("space/l", "expand"),
 		),
 		ExpandAll: key.NewBinding(

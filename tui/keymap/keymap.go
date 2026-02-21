@@ -23,14 +23,17 @@ type Base struct {
 	Bottom   key.Binding // G
 
 	// Core actions
-	Quit    key.Binding
-	Help    key.Binding
-	Confirm key.Binding
-	Cancel  key.Binding
-	Back    key.Binding
-	Edit    key.Binding
-	Delete  key.Binding // dd sequence
-	Yank    key.Binding // yy sequence
+	Quit     key.Binding
+	Help     key.Binding
+	Confirm  key.Binding
+	Cancel   key.Binding
+	Back     key.Binding
+	Edit     key.Binding
+	Delete   key.Binding // dd sequence
+	Yank     key.Binding // yy sequence
+	Rename   key.Binding
+	Refresh  key.Binding
+	CopyPath key.Binding // copy path to system clipboard
 
 	// Search
 	Search      key.Binding
@@ -48,10 +51,9 @@ type Base struct {
 	TogglePreview key.Binding
 
 	// Selection
-	Select       key.Binding
-	SelectAll    key.Binding
-	SelectNone   key.Binding
-	ToggleSelect key.Binding
+	Select     key.Binding
+	SelectAll  key.Binding
+	SelectNone key.Binding
 
 	// Fold operations (for tree-based TUIs)
 	FoldOpen     key.Binding // zo
@@ -79,12 +81,12 @@ func DefaultVim() Base {
 			key.WithHelp("j/down", "down"),
 		),
 		Left: key.NewBinding(
-			key.WithKeys("h", "left"),
-			key.WithHelp("h/left", "left"),
+			key.WithKeys("left"),
+			key.WithHelp("left", "left"),
 		),
 		Right: key.NewBinding(
-			key.WithKeys("l", "right"),
-			key.WithHelp("l/right", "right"),
+			key.WithKeys("right"),
+			key.WithHelp("right", "right"),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("ctrl+u", "pgup"),
@@ -125,8 +127,8 @@ func DefaultVim() Base {
 			key.WithHelp("enter", "confirm"),
 		),
 		Cancel: key.NewBinding(
-			key.WithKeys("n", "ctrl+g"),
-			key.WithHelp("n", "cancel"),
+			key.WithKeys("ctrl+g"),
+			key.WithHelp("ctrl+g", "cancel"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("esc"),
@@ -143,6 +145,18 @@ func DefaultVim() Base {
 		Yank: key.NewBinding(
 			key.WithKeys("yy"),
 			key.WithHelp("yy", "yank"),
+		),
+		Rename: key.NewBinding(
+			key.WithKeys("R"),
+			key.WithHelp("R", "rename"),
+		),
+		Refresh: key.NewBinding(
+			key.WithKeys("ctrl+r"),
+			key.WithHelp("ctrl+r", "refresh"),
+		),
+		CopyPath: key.NewBinding(
+			key.WithKeys("ctrl+y"),
+			key.WithHelp("ctrl+y", "copy path"),
 		),
 
 		// Search - '/' initiates search as per vim convention
@@ -195,7 +209,7 @@ func DefaultVim() Base {
 
 		// Selection
 		Select: key.NewBinding(
-			key.WithKeys("space", "x"),
+			key.WithKeys(" "),
 			key.WithHelp("space", "select"),
 		),
 		SelectAll: key.NewBinding(
@@ -203,12 +217,8 @@ func DefaultVim() Base {
 			key.WithHelp("ctrl+a", "all"),
 		),
 		SelectNone: key.NewBinding(
-			key.WithKeys("ctrl+d"),
-			key.WithHelp("ctrl+d", "none"),
-		),
-		ToggleSelect: key.NewBinding(
-			key.WithKeys("v"),
-			key.WithHelp("v", "toggle"),
+			key.WithKeys("-"),
+			key.WithHelp("-", "none"),
 		),
 
 		// Fold operations
@@ -450,9 +460,6 @@ func applySelectionOverrides(base *Base, sel config.KeybindingSectionConfig) {
 	if k, ok := sel["select_none"]; ok {
 		updateBinding(&base.SelectNone, k)
 	}
-	if k, ok := sel["toggle_select"]; ok {
-		updateBinding(&base.ToggleSelect, k)
-	}
 }
 
 func applyActionsOverrides(base *Base, actions config.KeybindingSectionConfig) {
@@ -476,6 +483,15 @@ func applyActionsOverrides(base *Base, actions config.KeybindingSectionConfig) {
 	}
 	if k, ok := actions["yank"]; ok {
 		updateBinding(&base.Yank, k)
+	}
+	if k, ok := actions["rename"]; ok {
+		updateBinding(&base.Rename, k)
+	}
+	if k, ok := actions["refresh"]; ok {
+		updateBinding(&base.Refresh, k)
+	}
+	if k, ok := actions["copy_path"]; ok {
+		updateBinding(&base.CopyPath, k)
 	}
 }
 
@@ -607,6 +623,15 @@ func applyGenericOverrides(base *Base, overrides config.KeybindingSectionConfig)
 	if k, ok := overrides["yank"]; ok {
 		updateBinding(&base.Yank, k)
 	}
+	if k, ok := overrides["rename"]; ok {
+		updateBinding(&base.Rename, k)
+	}
+	if k, ok := overrides["refresh"]; ok {
+		updateBinding(&base.Refresh, k)
+	}
+	if k, ok := overrides["copy_path"]; ok {
+		updateBinding(&base.CopyPath, k)
+	}
 	// Search
 	if k, ok := overrides["search"]; ok {
 		updateBinding(&base.Search, k)
@@ -693,11 +718,11 @@ func (k Base) NavigationSection() Section {
 }
 
 // ActionsSection returns the actions keybindings section.
-// Use this if your TUI supports confirm, cancel, edit, delete, yank operations.
+// Use this if your TUI supports confirm, cancel, edit, delete, yank, rename, refresh, copy path operations.
 func (k Base) ActionsSection() Section {
 	return Section{
 		Name:     "Actions",
-		Bindings: []key.Binding{k.Confirm, k.Cancel, k.Back, k.Edit, k.Delete, k.Yank},
+		Bindings: []key.Binding{k.Confirm, k.Cancel, k.Back, k.Edit, k.Delete, k.Yank, k.Rename, k.Refresh, k.CopyPath},
 	}
 }
 
@@ -840,7 +865,7 @@ func NewTreeKeyMap() TreeKeyMap {
 			key.WithHelp("c", "collapse"),
 		),
 		Toggle: key.NewBinding(
-			key.WithKeys("space", "enter"),
+			key.WithKeys(" ", "enter"),
 			key.WithHelp("space", "toggle"),
 		),
 	}
