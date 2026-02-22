@@ -12,6 +12,14 @@ const (
 	SectionView       = "View"
 	SectionFold       = "Fold"
 	SectionSystem     = "System"
+	// Common custom sections used across multiple TUIs
+	SectionFocus    = "Focus"
+	SectionFilter   = "Filter"
+	SectionToggle   = "Toggle"
+	SectionGit      = "Git"
+	SectionSettings = "Settings"
+	SectionContext  = "Context"
+	SectionRules    = "Rules"
 )
 
 // Section represents a logical grouping of keybindings for structured help display.
@@ -20,6 +28,7 @@ const (
 // of using empty key.Binding as section headers.
 type Section struct {
 	Name     string
+	Icon     string // Optional icon override (uses theme.Icon* constants)
 	Bindings []key.Binding
 }
 
@@ -50,6 +59,12 @@ type SectionedKeyMap interface {
 // Use this for TUI-specific sections that don't fit the standard categories.
 func NewSection(name string, bindings ...key.Binding) Section {
 	return Section{Name: name, Bindings: bindings}
+}
+
+// NewSectionWithIcon creates a section with a custom name and icon.
+// Use theme.Icon* constants for the icon parameter.
+func NewSectionWithIcon(name, icon string, bindings ...key.Binding) Section {
+	return Section{Name: name, Icon: icon, Bindings: bindings}
 }
 
 // NavigationSection creates a Navigation section with the specified bindings.
@@ -123,5 +138,11 @@ func (s Section) With(bindings ...key.Binding) Section {
 	combined := make([]key.Binding, len(s.Bindings), len(s.Bindings)+len(bindings))
 	copy(combined, s.Bindings)
 	combined = append(combined, bindings...)
-	return Section{Name: s.Name, Bindings: combined}
+	return Section{Name: s.Name, Icon: s.Icon, Bindings: combined}
+}
+
+// WithIcon returns a new section with the specified icon.
+// Use theme.Icon* constants for the icon parameter.
+func (s Section) WithIcon(icon string) Section {
+	return Section{Name: s.Name, Icon: icon, Bindings: s.Bindings}
 }
