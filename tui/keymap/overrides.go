@@ -11,7 +11,7 @@ import (
 
 // ApplyOverrides applies keybinding overrides from config to any KeyMap struct.
 // It uses reflection to automatically map config keys (snake_case) to struct fields (CamelCase).
-// Only fields of type key.Binding are processed.
+// Only fields of type key.Binding are processed. Embedded structs are recursively processed.
 //
 // Example:
 //
@@ -31,6 +31,11 @@ func ApplyOverrides(km interface{}, overrides config.KeybindingSectionConfig) {
 		return
 	}
 
+	applyOverridesRecursive(v, overrides)
+}
+
+// applyOverridesRecursive applies overrides to struct fields, recursing into embedded structs.
+func applyOverridesRecursive(v reflect.Value, overrides config.KeybindingSectionConfig) {
 	t := v.Type()
 	bindingType := reflect.TypeOf(key.Binding{})
 
@@ -40,6 +45,12 @@ func ApplyOverrides(km interface{}, overrides config.KeybindingSectionConfig) {
 
 		// Skip unexported fields
 		if !field.CanSet() {
+			continue
+		}
+
+		// If it's an embedded struct, recurse into it
+		if fieldType.Anonymous && field.Kind() == reflect.Struct {
+			applyOverridesRecursive(field, overrides)
 			continue
 		}
 

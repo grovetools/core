@@ -47,6 +47,29 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 	return config, nil
 }
 
+// mergeKeybindingSection merges override keybindings into base.
+// Override values replace base values for the same action key.
+func mergeKeybindingSection(base, override KeybindingSectionConfig) KeybindingSectionConfig {
+	if override == nil {
+		return base
+	}
+	if base == nil {
+		result := make(KeybindingSectionConfig)
+		for k, v := range override {
+			result[k] = v
+		}
+		return result
+	}
+	result := make(KeybindingSectionConfig)
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, v := range override {
+		result[k] = v
+	}
+	return result
+}
+
 // deepMergeMaps recursively merges two maps, with src values overriding dst values.
 // When both dst and src have the same key pointing to maps, they are merged recursively.
 func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
@@ -92,6 +115,78 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.ExplicitProjects != nil {
 		result.ExplicitProjects = override.ExplicitProjects
+	}
+
+	// Merge TUI configuration
+	if override.TUI != nil {
+		if result.TUI == nil {
+			result.TUI = &TUIConfig{}
+		}
+		if override.TUI.Icons != "" {
+			result.TUI.Icons = override.TUI.Icons
+		}
+		if override.TUI.Theme != "" {
+			result.TUI.Theme = override.TUI.Theme
+		}
+		if override.TUI.Preset != "" {
+			result.TUI.Preset = override.TUI.Preset
+		}
+		if override.TUI.NvimEmbed != nil {
+			result.TUI.NvimEmbed = override.TUI.NvimEmbed
+		}
+
+		// Merge Keybindings
+		if override.TUI.Keybindings != nil {
+			if result.TUI.Keybindings == nil {
+				result.TUI.Keybindings = &KeybindingsConfig{}
+			}
+
+			// Merge standard sections
+			result.TUI.Keybindings.Navigation = mergeKeybindingSection(result.TUI.Keybindings.Navigation, override.TUI.Keybindings.Navigation)
+			result.TUI.Keybindings.Selection = mergeKeybindingSection(result.TUI.Keybindings.Selection, override.TUI.Keybindings.Selection)
+			result.TUI.Keybindings.Actions = mergeKeybindingSection(result.TUI.Keybindings.Actions, override.TUI.Keybindings.Actions)
+			result.TUI.Keybindings.Search = mergeKeybindingSection(result.TUI.Keybindings.Search, override.TUI.Keybindings.Search)
+			result.TUI.Keybindings.View = mergeKeybindingSection(result.TUI.Keybindings.View, override.TUI.Keybindings.View)
+			result.TUI.Keybindings.Fold = mergeKeybindingSection(result.TUI.Keybindings.Fold, override.TUI.Keybindings.Fold)
+			result.TUI.Keybindings.System = mergeKeybindingSection(result.TUI.Keybindings.System, override.TUI.Keybindings.System)
+
+			// Merge TUIOverrides (per-TUI overrides) - these have yaml:"-" toml:"-" tags
+			// so they must be manually merged to preserve them across config merges
+			if override.TUI.Keybindings.TUIOverrides != nil {
+				if result.TUI.Keybindings.TUIOverrides == nil {
+					result.TUI.Keybindings.TUIOverrides = make(map[string]map[string]KeybindingSectionConfig)
+				}
+				for pkgName, pkgOverrides := range override.TUI.Keybindings.TUIOverrides {
+					if result.TUI.Keybindings.TUIOverrides[pkgName] == nil {
+						result.TUI.Keybindings.TUIOverrides[pkgName] = make(map[string]KeybindingSectionConfig)
+					}
+					for tuiName, tuiOverrides := range pkgOverrides {
+						result.TUI.Keybindings.TUIOverrides[pkgName][tuiName] = mergeKeybindingSection(
+							result.TUI.Keybindings.TUIOverrides[pkgName][tuiName],
+							tuiOverrides,
+						)
+					}
+				}
+			}
+
+			// Merge legacy Overrides map for backward compatibility
+			if override.TUI.Keybindings.Overrides != nil {
+				if result.TUI.Keybindings.Overrides == nil {
+					result.TUI.Keybindings.Overrides = make(map[string]map[string]KeybindingSectionConfig)
+				}
+				for pkgName, pkgOverrides := range override.TUI.Keybindings.Overrides {
+					if result.TUI.Keybindings.Overrides[pkgName] == nil {
+						result.TUI.Keybindings.Overrides[pkgName] = make(map[string]KeybindingSectionConfig)
+					}
+					for tuiName, tuiOverrides := range pkgOverrides {
+						result.TUI.Keybindings.Overrides[pkgName][tuiName] = mergeKeybindingSection(
+							result.TUI.Keybindings.Overrides[pkgName][tuiName],
+							tuiOverrides,
+						)
+					}
+				}
+			}
+		}
 	}
 
 	// Merge Notebooks configuration (now nested under NotebooksConfig)

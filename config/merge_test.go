@@ -358,6 +358,138 @@ gemini:
 	// }
 }
 
+// TestTUIOverridesMerging tests that TUIOverrides are properly merged across config files
+func TestTUIOverridesMerging(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+
+	// Set HOME to avoid loading global config
+	origHome := os.Getenv("HOME")
+	origXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() {
+		os.Setenv("HOME", origHome)
+		os.Setenv("XDG_CONFIG_HOME", origXDG)
+	}()
+	os.Setenv("HOME", tmpDir)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	// Create global config dir
+	globalDir := filepath.Join(tmpDir, ".config", "grove")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create global config with keybindings
+	globalConfig := `version = "1.0"
+
+[tui]
+preset = "vim"
+
+[tui.keybindings.navigation]
+up = ["k", "up"]
+
+[tui.keybindings.flow.plan-init]
+toggle_advanced = ["a"]
+`
+	if err := os.WriteFile(filepath.Join(globalDir, "grove.toml"), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create project directory
+	projectDir := filepath.Join(tmpDir, "project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create project config with keybinding overrides
+	projectConfig := `version = "1.0"
+
+[tui.keybindings.flow.plan-init]
+toggle_advanced = ["A"]
+submit = ["enter", "ctrl+s"]
+
+[tui.keybindings.nb.browser]
+create_note = ["n"]
+`
+	if err := os.WriteFile(filepath.Join(projectDir, "grove.toml"), []byte(projectConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load configuration
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+
+	cfg, err := LoadFromWithLogger(projectDir, logger)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Verify TUI config exists
+	if cfg.TUI == nil {
+		t.Fatal("Expected TUI config to be set")
+	}
+
+	// Verify preset from global
+	if cfg.TUI.Preset != "vim" {
+		t.Errorf("Expected preset 'vim', got '%s'", cfg.TUI.Preset)
+	}
+
+	// Verify keybindings
+	if cfg.TUI.Keybindings == nil {
+		t.Fatal("Expected Keybindings to be set")
+	}
+
+	// Verify global navigation overrides
+	if cfg.TUI.Keybindings.Navigation == nil {
+		t.Fatal("Expected Navigation section to be set")
+	}
+	if up, ok := cfg.TUI.Keybindings.Navigation["up"]; !ok || len(up) != 2 || up[0] != "k" {
+		t.Errorf("Expected navigation.up = ['k', 'up'], got %v", up)
+	}
+
+	// Verify TUIOverrides were merged
+	tuiOverrides := cfg.TUI.Keybindings.GetTUIOverrides()
+	if tuiOverrides == nil {
+		t.Fatal("Expected TUIOverrides to be set")
+	}
+
+	// Check flow.plan-init overrides (project should override global)
+	flowOverrides, ok := tuiOverrides["flow"]
+	if !ok {
+		t.Fatal("Expected flow package overrides")
+	}
+
+	planInitOverrides, ok := flowOverrides["plan-init"]
+	if !ok {
+		t.Fatal("Expected plan-init overrides")
+	}
+
+	// toggle_advanced should be from project (A), not global (a)
+	if ta, ok := planInitOverrides["toggle_advanced"]; !ok || len(ta) != 1 || ta[0] != "A" {
+		t.Errorf("Expected toggle_advanced = ['A'] from project, got %v", ta)
+	}
+
+	// submit should be from project
+	if submit, ok := planInitOverrides["submit"]; !ok || len(submit) != 2 || submit[0] != "enter" {
+		t.Errorf("Expected submit = ['enter', 'ctrl+s'], got %v", submit)
+	}
+
+	// Check nb.browser overrides (project only)
+	nbOverrides, ok := tuiOverrides["nb"]
+	if !ok {
+		t.Fatal("Expected nb package overrides")
+	}
+
+	browserOverrides, ok := nbOverrides["browser"]
+	if !ok {
+		t.Fatal("Expected browser overrides")
+	}
+
+	if cn, ok := browserOverrides["create_note"]; !ok || len(cn) != 1 || cn[0] != "n" {
+		t.Errorf("Expected create_note = ['n'], got %v", cn)
+	}
+}
+
 // TestNoEcosystemFallback tests that ecosystem configs work standalone without fallback
 func TestNoEcosystemFallback(t *testing.T) {
 	// Create temp directory

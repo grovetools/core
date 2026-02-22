@@ -129,3 +129,51 @@ func TestApplyOverrides_NonPointer(t *testing.T) {
 		t.Errorf("ViewLogs keys = %v, want [l]", keys)
 	}
 }
+
+func TestApplyOverrides_EmbeddedStruct(t *testing.T) {
+	km := TestKeyMap{
+		Base: NewBase(),
+		ViewLogs: key.NewBinding(
+			key.WithKeys("l"),
+			key.WithHelp("l", "view logs"),
+		),
+		RunJob: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "run job"),
+		),
+	}
+
+	overrides := config.KeybindingSectionConfig{
+		"view_logs": []string{"L"},      // Top-level field
+		"up":        []string{"w"},      // From embedded Base struct
+		"quit":      []string{"Q", "x"}, // From embedded Base struct
+	}
+
+	ApplyOverrides(&km, overrides)
+
+	// Check ViewLogs was updated (top-level field)
+	if keys := km.ViewLogs.Keys(); len(keys) != 1 || keys[0] != "L" {
+		t.Errorf("ViewLogs keys = %v, want [L]", keys)
+	}
+
+	// Check Up was updated (embedded Base field)
+	if keys := km.Base.Up.Keys(); len(keys) != 1 || keys[0] != "w" {
+		t.Errorf("Base.Up keys = %v, want [w]", keys)
+	}
+
+	// Check Quit was updated with multiple keys (embedded Base field)
+	if keys := km.Base.Quit.Keys(); len(keys) != 2 || keys[0] != "Q" || keys[1] != "x" {
+		t.Errorf("Base.Quit keys = %v, want [Q x]", keys)
+	}
+
+	// Check RunJob was NOT updated (no override provided)
+	if keys := km.RunJob.Keys(); len(keys) != 1 || keys[0] != "r" {
+		t.Errorf("RunJob keys = %v, want [r]", keys)
+	}
+
+	// Check Down was NOT updated (no override provided, should remain default)
+	defaultDownKeys := NewBase().Down.Keys()
+	if keys := km.Base.Down.Keys(); len(keys) != len(defaultDownKeys) || keys[0] != defaultDownKeys[0] {
+		t.Errorf("Base.Down keys = %v, want %v", keys, defaultDownKeys)
+	}
+}
