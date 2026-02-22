@@ -546,7 +546,7 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Let the list handle other keys when filtering
 		} else {
 			// Handle double 'g' for goto top (only when not filtering)
-			if msg.String() == "g" {
+			if key.Matches(msg, logKeys.GotoTop) {
 				if time.Since(m.lastGotoG) < 500*time.Millisecond {
 					// Double 'g' pressed - go to top
 					m.list.Select(0)
@@ -565,7 +565,7 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.help.Toggle()
 				return m, nil
 
-			case key.Matches(msg, logKeys.SwitchFocus) || msg.String() == "enter":
+			case key.Matches(msg, logKeys.SwitchFocus) || key.Matches(msg, logKeys.Expand):
 				if m.focus == listPane {
 					m.focus = viewportPane
 					// Expand viewport to full height (minus status line)

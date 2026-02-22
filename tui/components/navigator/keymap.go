@@ -7,8 +7,15 @@ import (
 // KeyMap defines the keybindings for the navigator
 type KeyMap struct {
 	// Navigation
-	Up   key.Binding
-	Down key.Binding
+	Up       key.Binding
+	Down     key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+	GotoTop  key.Binding
+	GotoEnd  key.Binding
+	// Selection
+	Select key.Binding
+	Search key.Binding
 	// Focus management
 	FocusEcosystem  key.Binding
 	ClearFocus      key.Binding
@@ -27,6 +34,30 @@ var defaultKeyMap = KeyMap{
 	Down: key.NewBinding(
 		key.WithKeys("down", "j", "ctrl+n"),
 		key.WithHelp("↓/j", "down"),
+	),
+	PageUp: key.NewBinding(
+		key.WithKeys("ctrl+u"),
+		key.WithHelp("ctrl+u", "page up"),
+	),
+	PageDown: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "page down"),
+	),
+	GotoTop: key.NewBinding(
+		key.WithKeys("g"),
+		key.WithHelp("g", "go to top"),
+	),
+	GotoEnd: key.NewBinding(
+		key.WithKeys("G"),
+		key.WithHelp("G", "go to end"),
+	),
+	Select: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "select"),
+	),
+	Search: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "search"),
 	),
 	FocusEcosystem: key.NewBinding(
 		key.WithKeys("ctrl+f", "@"),

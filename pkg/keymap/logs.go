@@ -55,8 +55,8 @@ func NewLogKeyMap() LogKeyMap {
 			key.WithHelp("G", "go to end"),
 		),
 		Expand: key.NewBinding(
-			key.WithKeys(" "),
-			key.WithHelp("space", "expand/collapse"),
+			key.WithKeys(" ", "enter"),
+			key.WithHelp("space/enter", "expand/collapse"),
 		),
 		Search: key.NewBinding(
 			key.WithKeys("/"),

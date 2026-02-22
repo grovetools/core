@@ -261,25 +261,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Normal mode (when filter is not focused)
-		switch msg.Type {
-		case tea.KeyUp, tea.KeyCtrlP:
+		// Normal mode (when filter is not focused) - use key.Matches for configurable bindings
+		switch {
+		case key.Matches(msg, defaultKeyMap.Up):
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case tea.KeyDown, tea.KeyCtrlN:
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.Down):
 			if m.cursor < len(m.filtered)-1 {
 				m.cursor++
 			}
-		case tea.KeyCtrlU:
-			// Page up (vim-style)
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.PageUp):
 			pageSize := 10
 			m.cursor -= pageSize
 			if m.cursor < 0 {
 				m.cursor = 0
 			}
-		case tea.KeyCtrlD:
-			// Page down (vim-style)
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.PageDown):
 			pageSize := 10
 			m.cursor += pageSize
 			if m.cursor >= len(m.filtered) {
@@ -288,40 +292,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < 0 {
 				m.cursor = 0
 			}
-		case tea.KeyRunes:
-			switch msg.String() {
-			case "j":
-				// Vim-style down navigation
-				if m.cursor < len(m.filtered)-1 {
-					m.cursor++
-				}
-				return m, nil
-			case "k":
-				// Vim-style up navigation
-				if m.cursor > 0 {
-					m.cursor--
-				}
-				return m, nil
-			case "g":
-				// Go to top
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.GotoTop):
+			m.cursor = 0
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.GotoEnd):
+			m.cursor = len(m.filtered) - 1
+			if m.cursor < 0 {
 				m.cursor = 0
-				return m, nil
-			case "G":
-				// Go to bottom
-				m.cursor = len(m.filtered) - 1
-				if m.cursor < 0 {
-					m.cursor = 0
-				}
-				return m, nil
-			case "?":
-				m.help.Toggle()
-				return m, nil
-			case "/":
-				// Focus filter input for search
-				m.filterInput.Focus()
-				return m, textinput.Blink
 			}
-		case tea.KeyEnter:
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.Help):
+			m.help.Toggle()
+			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.Search):
+			m.filterInput.Focus()
+			return m, textinput.Blink
+
+		case key.Matches(msg, defaultKeyMap.Select):
 			// Handle ecosystem picker mode
 			if m.ecosystemPickerMode {
 				if m.cursor < len(m.filtered) {
@@ -344,11 +336,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Default behavior is to quit, returning the selected item.
 				return m, tea.Quit
 			}
-		case tea.KeyEsc, tea.KeyCtrlC:
-			return m, tea.Quit
-		default:
-			// Handle other keys normally
 			return m, nil
+
+		case key.Matches(msg, defaultKeyMap.Quit):
+			return m, tea.Quit
 		}
 	}
 
