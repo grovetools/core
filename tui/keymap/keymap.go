@@ -771,6 +771,56 @@ func (k Base) SystemSection() Section {
 	}
 }
 
+// --- Binding Group Helpers ---
+// These return slices of related bindings that TUIs commonly use together.
+// Use these with the section builder functions for concise section definitions.
+//
+// Example:
+//
+//	keymap.NavigationSection(append(k.VerticalNav(), customJumpBinding)...)
+
+// VerticalNav returns vertical navigation bindings (up/down movement).
+// Includes: Up, Down, PageUp, PageDown, Top, Bottom
+func (k Base) VerticalNav() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.PageUp, k.PageDown, k.Top, k.Bottom}
+}
+
+// BasicNav returns minimal navigation bindings.
+// Includes: Up, Down
+func (k Base) BasicNav() []key.Binding {
+	return []key.Binding{k.Up, k.Down}
+}
+
+// FullNav returns all navigation bindings including horizontal.
+// Includes: Up, Down, Left, Right, PageUp, PageDown, Top, Bottom
+func (k Base) FullNav() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown, k.Top, k.Bottom}
+}
+
+// SearchNav returns search navigation bindings (next/prev match).
+// Includes: Search, SearchNext, SearchPrev, ClearSearch
+func (k Base) SearchNav() []key.Binding {
+	return []key.Binding{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch}
+}
+
+// FoldNav returns all fold operation bindings.
+// Includes: FoldOpen, FoldClose, FoldToggle, FoldOpenAll, FoldCloseAll
+func (k Base) FoldNav() []key.Binding {
+	return []key.Binding{k.FoldOpen, k.FoldClose, k.FoldToggle, k.FoldOpenAll, k.FoldCloseAll}
+}
+
+// SelectNav returns selection bindings.
+// Includes: Select, SelectAll, SelectNone
+func (k Base) SelectNav() []key.Binding {
+	return []key.Binding{k.Select, k.SelectAll, k.SelectNone}
+}
+
+// SystemNav returns system bindings (help and quit).
+// Includes: Help, Quit
+func (k Base) SystemNav() []key.Binding {
+	return []key.Binding{k.Help, k.Quit}
+}
+
 // FullHelp returns a slice of all key bindings for the full help view.
 // This maintains backward compatibility with keymaps that use FullHelp().
 // New keymaps should prefer implementing Sections() instead.
