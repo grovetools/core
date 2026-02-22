@@ -78,6 +78,25 @@ func applyOverridesRecursive(v reflect.Value, overrides config.KeybindingSection
 	}
 }
 
+// ApplyTUIOverrides applies TUI-specific keybinding overrides from config.
+// This is a convenience wrapper that handles the nested config lookup.
+//
+// Example:
+//
+//	km := MyKeyMap{Base: keymap.Load(cfg, "flow.status"), ...}
+//	keymap.ApplyTUIOverrides(cfg, "flow", "status", &km)
+func ApplyTUIOverrides(cfg *config.Config, pkg, tui string, km interface{}) {
+	if cfg == nil || cfg.TUI == nil || cfg.TUI.Keybindings == nil {
+		return
+	}
+	tuiOverrides := cfg.TUI.Keybindings.GetTUIOverrides()
+	if pkgOverrides, ok := tuiOverrides[pkg]; ok {
+		if overrides, ok := pkgOverrides[tui]; ok {
+			ApplyOverrides(km, overrides)
+		}
+	}
+}
+
 // camelToSnake converts a CamelCase string to snake_case.
 // Examples: ViewLogs -> view_logs, GoToTop -> go_to_top, HTTPServer -> http_server
 func camelToSnake(s string) string {
