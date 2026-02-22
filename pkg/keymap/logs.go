@@ -3,6 +3,7 @@ package keymap
 
 import (
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/tui/keymap"
 )
 
@@ -26,10 +27,10 @@ type LogKeyMap struct {
 	SwitchFocus     key.Binding
 }
 
-// NewLogKeyMap creates a new LogKeyMap with default bindings.
-func NewLogKeyMap() LogKeyMap {
-	return LogKeyMap{
-		Base: keymap.NewBase(),
+// NewLogKeyMap creates a new LogKeyMap with user configuration applied.
+func NewLogKeyMap(cfg *config.Config) LogKeyMap {
+	km := LogKeyMap{
+		Base: keymap.Load(cfg, "core.logs"),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
 			key.WithHelp("pgup", "page up"),
@@ -91,6 +92,11 @@ func NewLogKeyMap() LogKeyMap {
 			key.WithHelp("tab", "switch focus"),
 		),
 	}
+
+	// Apply TUI-specific overrides from config
+	keymap.ApplyTUIOverrides(cfg, "core", "logs", &km)
+
+	return km
 }
 
 // ShortHelp returns keybindings to be shown in the mini help view.
@@ -132,6 +138,6 @@ func KeymapInfo() keymap.TUIInfo {
 		"core-logs",
 		"core",
 		"Aggregated log viewer with filtering and search",
-		NewLogKeyMap(),
+		NewLogKeyMap(nil),
 	)
 }

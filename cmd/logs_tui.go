@@ -308,7 +308,10 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 }
 
 // logKeys is the singleton instance of the logs TUI keymap.
-var logKeys = logskeymap.NewLogKeyMap()
+var logKeys = func() logskeymap.LogKeyMap {
+	cfg, _ := config.LoadDefault()
+	return logskeymap.NewLogKeyMap(cfg)
+}()
 
 // Main TUI model
 type logModel struct {
