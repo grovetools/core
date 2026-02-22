@@ -103,6 +103,8 @@ func unmarshalConfig(path string, data []byte) (*Config, error) {
 				cfg.Extensions = extensions
 			}
 		}
+		// Post-process TOML keybindings to handle simplified path format
+		postProcessTOMLKeybindings(&cfg, data)
 	} else {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return nil, err
@@ -110,6 +112,84 @@ func unmarshalConfig(path string, data []byte) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// postProcessTOMLKeybindings handles the simplified keybinding path format for TOML.
+// It parses [tui.keybindings.package.tui] sections and populates TUIOverrides.
+func postProcessTOMLKeybindings(cfg *Config, data []byte) {
+	// Parse raw TOML to find keybinding sections
+	var raw map[string]interface{}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return
+	}
+
+	tuiRaw, ok := raw["tui"].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	kbRaw, ok := tuiRaw["keybindings"].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	// Known section names that apply globally (not package names)
+	sectionNames := map[string]bool{
+		"navigation": true, "selection": true, "actions": true,
+		"search": true, "view": true, "fold": true, "system": true,
+		"overrides": true, // Also skip the legacy overrides key
+	}
+
+	// Ensure TUI and Keybindings structs exist
+	if cfg.TUI == nil {
+		cfg.TUI = &TUIConfig{}
+	}
+	if cfg.TUI.Keybindings == nil {
+		cfg.TUI.Keybindings = &KeybindingsConfig{}
+	}
+
+	// Process non-section keys as package names
+	for pkgName, pkgValue := range kbRaw {
+		if sectionNames[pkgName] {
+			continue
+		}
+
+		// This should be a package name with TUI sub-keys
+		pkgMap, ok := pkgValue.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		for tuiName, tuiValue := range pkgMap {
+			tuiMap, ok := tuiValue.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Convert to KeybindingSectionConfig
+			sectionConfig := make(KeybindingSectionConfig)
+			for action, keys := range tuiMap {
+				if arr, ok := keys.([]interface{}); ok {
+					var strKeys []string
+					for _, k := range arr {
+						if s, ok := k.(string); ok {
+							strKeys = append(strKeys, s)
+						}
+					}
+					sectionConfig[action] = strKeys
+				}
+			}
+
+			// Add to TUIOverrides
+			if cfg.TUI.Keybindings.TUIOverrides == nil {
+				cfg.TUI.Keybindings.TUIOverrides = make(map[string]map[string]KeybindingSectionConfig)
+			}
+			if cfg.TUI.Keybindings.TUIOverrides[pkgName] == nil {
+				cfg.TUI.Keybindings.TUIOverrides[pkgName] = make(map[string]KeybindingSectionConfig)
+			}
+			cfg.TUI.Keybindings.TUIOverrides[pkgName][tuiName] = sectionConfig
+		}
+	}
 }
 
 // Load reads and parses a Grove configuration file

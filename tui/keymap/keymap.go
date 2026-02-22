@@ -385,13 +385,14 @@ func Load(cfg *config.Config, tuiName string) Base {
 
 	// Apply TUI-specific overrides
 	// tuiName is in format "package.tui" (e.g., "nb.browser", "flow.status")
-	if tuiName != "" && kb.Overrides != nil {
+	tuiOverrides := kb.GetTUIOverrides()
+	if tuiName != "" && tuiOverrides != nil {
 		parts := strings.SplitN(tuiName, ".", 2)
 		if len(parts) == 2 {
 			pkgName, tui := parts[0], parts[1]
-			if pkgOverrides, ok := kb.Overrides[pkgName]; ok {
-				if tuiOverrides, ok := pkgOverrides[tui]; ok {
-					applyGenericOverrides(&base, tuiOverrides)
+			if pkgOverrides, ok := tuiOverrides[pkgName]; ok {
+				if overrides, ok := pkgOverrides[tui]; ok {
+					applyGenericOverrides(&base, overrides)
 				}
 			}
 		}

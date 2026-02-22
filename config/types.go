@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+
 	"github.com/mitchellh/mapstructure"
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -84,8 +86,182 @@ type KeybindingsConfig struct {
 	System     KeybindingSectionConfig `yaml:"system,omitempty" toml:"system,omitempty" jsonschema:"description=System keybindings (quit, help, refresh)"`
 
 	// Per-TUI overrides - nested by package then TUI name
-	// e.g., Overrides["nb"]["browser"]["create_note"] = ["n"]
-	Overrides map[string]map[string]KeybindingSectionConfig `yaml:"overrides,omitempty" toml:"overrides,omitempty" jsonschema:"description=Per-TUI keybinding overrides nested by package.tui (e.g., overrides.nb.browser, overrides.flow.status)"`
+	// e.g., TUIOverrides["nb"]["browser"]["create_note"] = ["n"]
+	// Config path: [tui.keybindings.nb.browser]
+	TUIOverrides map[string]map[string]KeybindingSectionConfig `yaml:"-" toml:"-" jsonschema:"-"`
+
+	// Overrides is kept for backward compatibility with old config format
+	// [tui.keybindings.overrides.flow.status] -> migrated to TUIOverrides
+	Overrides map[string]map[string]KeybindingSectionConfig `yaml:"overrides,omitempty" toml:"overrides,omitempty" jsonschema:"-"`
+}
+
+// GetTUIOverrides returns the per-TUI keybinding overrides, checking both
+// the new TUIOverrides field and the legacy Overrides field for backward compatibility.
+func (k *KeybindingsConfig) GetTUIOverrides() map[string]map[string]KeybindingSectionConfig {
+	// Prefer TUIOverrides (new format) if populated
+	if len(k.TUIOverrides) > 0 {
+		return k.TUIOverrides
+	}
+	// Fall back to Overrides (old format) for backward compatibility
+	return k.Overrides
+}
+
+// keybindingsSectionNames lists the reserved section names that apply globally.
+var keybindingsSectionNames = map[string]bool{
+	"navigation": true,
+	"selection":  true,
+	"actions":    true,
+	"search":     true,
+	"view":       true,
+	"fold":       true,
+	"system":     true,
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for KeybindingsConfig.
+// Any key that's not a known section name is treated as a package name for per-TUI overrides.
+func (k *KeybindingsConfig) UnmarshalYAML(node *yaml.Node) error {
+	// First, decode into a map to get all keys
+	var raw map[string]yaml.Node
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	// Process known sections
+	if navNode, ok := raw["navigation"]; ok {
+		if err := navNode.Decode(&k.Navigation); err != nil {
+			return fmt.Errorf("failed to decode navigation: %w", err)
+		}
+	}
+	if selNode, ok := raw["selection"]; ok {
+		if err := selNode.Decode(&k.Selection); err != nil {
+			return fmt.Errorf("failed to decode selection: %w", err)
+		}
+	}
+	if actNode, ok := raw["actions"]; ok {
+		if err := actNode.Decode(&k.Actions); err != nil {
+			return fmt.Errorf("failed to decode actions: %w", err)
+		}
+	}
+	if searchNode, ok := raw["search"]; ok {
+		if err := searchNode.Decode(&k.Search); err != nil {
+			return fmt.Errorf("failed to decode search: %w", err)
+		}
+	}
+	if viewNode, ok := raw["view"]; ok {
+		if err := viewNode.Decode(&k.View); err != nil {
+			return fmt.Errorf("failed to decode view: %w", err)
+		}
+	}
+	if foldNode, ok := raw["fold"]; ok {
+		if err := foldNode.Decode(&k.Fold); err != nil {
+			return fmt.Errorf("failed to decode fold: %w", err)
+		}
+	}
+	if sysNode, ok := raw["system"]; ok {
+		if err := sysNode.Decode(&k.System); err != nil {
+			return fmt.Errorf("failed to decode system: %w", err)
+		}
+	}
+
+	// Process unknown keys as package names (per-TUI overrides)
+	for key, valueNode := range raw {
+		if keybindingsSectionNames[key] {
+			continue // Already processed
+		}
+
+		// This is a package name - decode its TUI map
+		var tuiMap map[string]KeybindingSectionConfig
+		if err := valueNode.Decode(&tuiMap); err != nil {
+			return fmt.Errorf("failed to decode TUI overrides for package %q: %w", key, err)
+		}
+
+		if k.TUIOverrides == nil {
+			k.TUIOverrides = make(map[string]map[string]KeybindingSectionConfig)
+		}
+		k.TUIOverrides[key] = tuiMap
+	}
+
+	return nil
+}
+
+// UnmarshalTOML implements custom TOML unmarshaling for KeybindingsConfig.
+// Any key that's not a known section name is treated as a package name for per-TUI overrides.
+func (k *KeybindingsConfig) UnmarshalTOML(data []byte) error {
+	// First, decode into a map to get all keys
+	var raw map[string]interface{}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	// Helper to decode a section
+	decodeSection := func(key string, target *KeybindingSectionConfig) error {
+		if v, ok := raw[key]; ok {
+			if m, ok := v.(map[string]interface{}); ok {
+				*target = make(KeybindingSectionConfig)
+				for action, keys := range m {
+					if arr, ok := keys.([]interface{}); ok {
+						var strKeys []string
+						for _, k := range arr {
+							if s, ok := k.(string); ok {
+								strKeys = append(strKeys, s)
+							}
+						}
+						(*target)[action] = strKeys
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	// Process known sections
+	decodeSection("navigation", &k.Navigation)
+	decodeSection("selection", &k.Selection)
+	decodeSection("actions", &k.Actions)
+	decodeSection("search", &k.Search)
+	decodeSection("view", &k.View)
+	decodeSection("fold", &k.Fold)
+	decodeSection("system", &k.System)
+
+	// Process unknown keys as package names (per-TUI overrides)
+	for key, value := range raw {
+		if keybindingsSectionNames[key] {
+			continue // Already processed
+		}
+
+		// This is a package name - decode its TUI map
+		pkgMap, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		if k.TUIOverrides == nil {
+			k.TUIOverrides = make(map[string]map[string]KeybindingSectionConfig)
+		}
+
+		k.TUIOverrides[key] = make(map[string]KeybindingSectionConfig)
+		for tuiName, tuiValue := range pkgMap {
+			tuiMap, ok := tuiValue.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			k.TUIOverrides[key][tuiName] = make(KeybindingSectionConfig)
+			for action, keys := range tuiMap {
+				if arr, ok := keys.([]interface{}); ok {
+					var strKeys []string
+					for _, kv := range arr {
+						if s, ok := kv.(string); ok {
+							strKeys = append(strKeys, s)
+						}
+					}
+					k.TUIOverrides[key][tuiName][action] = strKeys
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // TUIConfig holds TUI-specific settings.
