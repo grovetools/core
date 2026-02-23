@@ -111,6 +111,8 @@ const (
 	nerdIconNotebook = "󰠮" // md-notebook (U+F082E)
 	nerdIconDocs     = "󰡯" // md-file_question (U+F086F)
 	nerdIconGear     = "󰒓" // md-cog (U+F0493)
+	nerdIconKeyboard = "󰌌" // md-keyboard (U+F030C)
+	nerdIconLock     = "󰌾" // md-lock (U+F033E)
 
 	nerdIconFileTree      = "󰙅" // md-file_tree (U+F0645)
 	nerdIconPineTreeBox   = "󰐆" // md-pine_tree_box (U+F0406)
@@ -269,6 +271,8 @@ const (
 	asciiIconNotebook = "[N]" // Notebook
 	asciiIconDocs     = "[D]" // Docs
 	asciiIconGear     = "[G]" // Gear/Settings
+	asciiIconKeyboard = "[K]" // Keyboard
+	asciiIconLock     = "[#]" // Lock
 
 	asciiIconFileTree      = "[F]"   // File tree
 	asciiIconFish          = "[><>]" // Fish
@@ -427,6 +431,8 @@ var (
 	IconNotebook string
 	IconDocs     string
 	IconGear     string
+	IconKeyboard string
+	IconLock     string
 
 	IconFileTree      string
 	IconFish          string
@@ -595,6 +601,8 @@ func init() {
 		IconNotebook = asciiIconNotebook
 		IconDocs = asciiIconDocs
 		IconGear = asciiIconGear
+		IconKeyboard = asciiIconKeyboard
+		IconLock = asciiIconLock
 		IconFileTree = asciiIconFileTree
 		IconFish = asciiIconFish
 		IconPineTreeBox = asciiIconPineTreeBox
@@ -743,6 +751,8 @@ func init() {
 		IconNotebook = nerdIconNotebook
 		IconDocs = nerdIconDocs
 		IconGear = nerdIconGear
+		IconKeyboard = nerdIconKeyboard
+		IconLock = nerdIconLock
 		IconFileTree = nerdIconFileTree
 		IconFish = nerdIconFish
 		IconPineTreeBox = nerdIconPineTreeBox
