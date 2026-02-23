@@ -30,8 +30,8 @@ var DefaultHooks = []ConfigHook{
 		Name:    "tmux popup bindings",
 	},
 	{
-		Section: "keys.nav",
-		Command: []string{"nav", "generate-bindings"},
+		Section: "nav",
+		Command: []string{"nav", "key", "regenerate"},
 		Name:    "nav key bindings",
 	},
 }
