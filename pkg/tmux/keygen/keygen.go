@@ -23,7 +23,16 @@ const (
 	// ModeSubTableRoot creates a sub-table under a root key.
 	// prefix = "C-g" (any key combo) enters a custom key table
 	ModeSubTableRoot
+	// ModeGroveDirect binds directly to the grove-popups table.
+	// prefix = "<grove>"
+	ModeGroveDirect
+	// ModeGroveSubTable creates a sub-table under grove-popups.
+	// prefix = "<grove> X" where X is the key to enter the sub-table from grove-popups
+	ModeGroveSubTable
 )
+
+// GrovePopupsTable is the standard name for the grove-popups key table.
+const GrovePopupsTable = "grove-popups"
 
 // Config holds prefix configuration for tmux key generation.
 type Config struct {
@@ -44,11 +53,17 @@ func (c *Config) Mode() PrefixMode {
 	if strings.HasPrefix(c.Prefix, "<prefix> ") {
 		return ModeSubTablePrefix
 	}
+	if c.Prefix == "<grove>" {
+		return ModeGroveDirect
+	}
+	if strings.HasPrefix(c.Prefix, "<grove> ") {
+		return ModeGroveSubTable
+	}
 	return ModeSubTableRoot
 }
 
 // GenerateEntryPoint returns bind-key lines for entering the key table.
-// Returns empty slice for ModeDirectRoot and ModeDirectPrefix.
+// Returns empty slice for ModeDirectRoot, ModeDirectPrefix, and ModeGroveDirect.
 func (c *Config) GenerateEntryPoint() []string {
 	mode := c.Mode()
 	var lines []string
@@ -67,6 +82,15 @@ func (c *Config) GenerateEntryPoint() []string {
 		lines = append(lines, "# --- Direct Prefix Table Mode ---")
 		lines = append(lines, "# Bindings are added directly to tmux prefix table")
 		lines = append(lines, "")
+	case ModeGroveDirect:
+		lines = append(lines, "# --- Grove Popups Table Mode ---")
+		lines = append(lines, "# Bindings are added directly to grove-popups table")
+		lines = append(lines, "")
+	case ModeGroveSubTable:
+		lines = append(lines, "# --- Grove Sub-table Entry Point ---")
+		groveKey := strings.TrimPrefix(c.Prefix, "<grove> ")
+		lines = append(lines, fmt.Sprintf("bind-key -T %s %s switch-client -T %s", GrovePopupsTable, EscapeKey(groveKey), c.TableName))
+		lines = append(lines, "")
 	}
 	// ModeDirectRoot has no entry point
 
@@ -78,15 +102,23 @@ func (c *Config) GenerateEntryPoint() []string {
 // Returns empty slice for modes without a sub-table.
 func (c *Config) GenerateEscapeHatches(helpCmd string) []string {
 	mode := c.Mode()
-	if mode != ModeSubTablePrefix && mode != ModeSubTableRoot {
+
+	// These modes don't have sub-tables, so no escape hatches needed
+	if mode == ModeDirectRoot || mode == ModeDirectPrefix || mode == ModeGroveDirect {
 		return nil
+	}
+
+	// Determine where to escape to
+	escapeTarget := "root"
+	if mode == ModeGroveSubTable {
+		escapeTarget = GrovePopupsTable
 	}
 
 	lines := []string{
 		"# --- Built-in Table Commands ---",
-		fmt.Sprintf("bind-key -T %s Escape switch-client -T root", c.TableName),
-		fmt.Sprintf("bind-key -T %s C-c switch-client -T root", c.TableName),
-		fmt.Sprintf("bind-key -T %s q switch-client -T root", c.TableName),
+		fmt.Sprintf("bind-key -T %s Escape switch-client -T %s", c.TableName, escapeTarget),
+		fmt.Sprintf("bind-key -T %s C-c switch-client -T %s", c.TableName, escapeTarget),
+		fmt.Sprintf("bind-key -T %s q switch-client -T %s", c.TableName, escapeTarget),
 	}
 
 	// For root key mode, add passthrough for the prefix key itself
@@ -105,7 +137,8 @@ func (c *Config) GenerateEscapeHatches(helpCmd string) []string {
 // BindTarget returns the bind-key flag for this mode:
 // - ModeDirectRoot: "-n"
 // - ModeDirectPrefix: "" (no flag)
-// - ModeSubTablePrefix/ModeSubTableRoot: "-T <TableName>"
+// - ModeGroveDirect: "-T grove-popups"
+// - ModeSubTablePrefix/ModeSubTableRoot/ModeGroveSubTable: "-T <TableName>"
 func (c *Config) BindTarget() string {
 	mode := c.Mode()
 	switch mode {
@@ -113,6 +146,8 @@ func (c *Config) BindTarget() string {
 		return "-n"
 	case ModeDirectPrefix:
 		return ""
+	case ModeGroveDirect:
+		return "-T " + GrovePopupsTable
 	default:
 		return "-T " + c.TableName
 	}

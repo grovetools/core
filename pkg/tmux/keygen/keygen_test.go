@@ -16,6 +16,8 @@ func TestMode(t *testing.T) {
 		{"sub-table under prefix", "<prefix> g", ModeSubTablePrefix},
 		{"root key", "C-g", ModeSubTableRoot},
 		{"alt root key", "M-w", ModeSubTableRoot},
+		{"grove direct", "<grove>", ModeGroveDirect},
+		{"grove sub-table", "<grove> n", ModeGroveSubTable},
 	}
 
 	for _, tt := range tests {
@@ -59,6 +61,18 @@ func TestGenerateEntryPoint(t *testing.T) {
 			prefix:        "C-g",
 			tableName:     "grove-popups",
 			expectContent: "bind-key -n C-g switch-client -T grove-popups",
+		},
+		{
+			name:          "grove direct mode",
+			prefix:        "<grove>",
+			tableName:     "nav-workspaces",
+			expectContent: "Grove Popups Table Mode",
+		},
+		{
+			name:          "grove sub-table",
+			prefix:        "<grove> n",
+			tableName:     "nav-workspaces",
+			expectContent: "bind-key -T grove-popups n switch-client -T nav-workspaces",
 		},
 	}
 
@@ -132,6 +146,25 @@ func TestGenerateEscapeHatches(t *testing.T) {
 				"bind-key -T grove-popups C-g send-keys C-g",
 			},
 		},
+		{
+			name:        "grove direct has no escape hatches",
+			prefix:      "<grove>",
+			tableName:   "nav-workspaces",
+			helpCmd:     "nav key list",
+			expectEmpty: true,
+		},
+		{
+			name:      "grove sub-table escapes to grove-popups",
+			prefix:    "<grove> n",
+			tableName: "nav-workspaces",
+			helpCmd:   "nav key list",
+			expectItems: []string{
+				"bind-key -T nav-workspaces Escape switch-client -T grove-popups",
+				"bind-key -T nav-workspaces C-c switch-client -T grove-popups",
+				"bind-key -T nav-workspaces q switch-client -T grove-popups",
+				"bind-key -T nav-workspaces ? display-popup",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -167,6 +200,8 @@ func TestBindTarget(t *testing.T) {
 		{"direct prefix", "<prefix>", "test", ""},
 		{"sub-table prefix", "<prefix> g", "grove-popups", "-T grove-popups"},
 		{"root key", "C-g", "grove-popups", "-T grove-popups"},
+		{"grove direct", "<grove>", "nav-workspaces", "-T grove-popups"},
+		{"grove sub-table", "<grove> n", "nav-workspaces", "-T nav-workspaces"},
 	}
 
 	for _, tt := range tests {
@@ -221,6 +256,23 @@ func TestFormatBindKey(t *testing.T) {
 			key:       "p",
 			action:    "display-popup",
 			expected:  "bind-key -T grove-popups p display-popup",
+		},
+		{
+			name:      "grove direct binds to grove-popups",
+			prefix:    "<grove>",
+			tableName: "nav-workspaces",
+			key:       "w",
+			action:    "run-shell \"nav sessionize\"",
+			expected:  "bind-key -T grove-popups w run-shell \"nav sessionize\"",
+		},
+		{
+			name:       "grove sub-table",
+			prefix:     "<grove> n",
+			tableName:  "nav-workspaces",
+			key:        "w",
+			action:     "run-shell \"nav sessionize\"",
+			extraFlags: []string{"-r"},
+			expected:   "bind-key -r -T nav-workspaces w run-shell \"nav sessionize\"",
 		},
 	}
 
