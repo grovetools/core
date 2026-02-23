@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pelletier/go-toml/v2"
@@ -512,8 +513,9 @@ func (c *Config) UnmarshalExtension(key string, target interface{}) error {
 	// into the strongly-typed target struct. We configure it to use
 	// `yaml` tags for consistency.
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:  target,
-		TagName: "yaml",
+		Result:     target,
+		TagName:    "yaml",
+		DecodeHook: stringToPathStructHook(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create mapstructure decoder: %w", err)
@@ -524,6 +526,36 @@ func (c *Config) UnmarshalExtension(key string, target interface{}) error {
 	}
 
 	return nil
+}
+
+// stringToPathStructHook returns a DecodeHookFunc that converts strings to structs
+// with a single "path" or "Path" field. This enables shorthand config syntax like:
+//
+//	[nav.groups.personal.sessions]
+//	o = "/path/to/dir"
+//
+// Instead of the verbose:
+//
+//	[nav.groups.personal.sessions.o]
+//	path = "/path/to/dir"
+func stringToPathStructHook() mapstructure.DecodeHookFunc {
+	return func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+		// Only handle string -> struct conversions
+		if from.Kind() != reflect.String || to.Kind() != reflect.Struct {
+			return data, nil
+		}
+
+		// Check if target struct has a "Path" field
+		pathField, hasPath := to.FieldByName("Path")
+		if !hasPath || pathField.Type.Kind() != reflect.String {
+			return data, nil
+		}
+
+		// Create a new instance of the target struct and set the Path field
+		result := reflect.New(to).Elem()
+		result.FieldByName("Path").SetString(data.(string))
+		return result.Interface(), nil
+	}
 }
 
 // ConfigSource identifies the origin of a configuration value.
