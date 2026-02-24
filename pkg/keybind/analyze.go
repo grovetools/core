@@ -352,3 +352,14 @@ func (s *Stack) FindBindingForKey(key string) *Binding {
 
 	return nil
 }
+
+// FindBindingInLayer looks for a specific key in a specific layer.
+func (s *Stack) FindBindingInLayer(key string, layer Layer) *Binding {
+	normalizedKey := Normalize(key, "")
+	for _, b := range s.Layers[layer] {
+		if Normalize(b.Key, b.Source) == normalizedKey {
+			return &b
+		}
+	}
+	return nil
+}
