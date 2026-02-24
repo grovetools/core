@@ -164,6 +164,11 @@ func DefaultCollectors(ctx context.Context) []Collector {
 	// L5: Grove collector (reads from config)
 	collectors = append(collectors, NewGroveCollector())
 
+	// L6: Neovim collector (if nvim is available)
+	if IsNeovimAvailable() {
+		collectors = append(collectors, NewNeovimCollector())
+	}
+
 	return collectors
 }
 

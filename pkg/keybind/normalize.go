@@ -33,6 +33,8 @@ func Normalize(key, source string) string {
 		return normalizeZsh(key)
 	case "tmux", "tmux-root", "tmux-prefix", "tmux-table", "grove":
 		return normalizeTmux(key)
+	case "nvim":
+		return normalizeNvim(key)
 	default:
 		// Default: try to detect and normalize
 		return normalizeAuto(key)
@@ -227,6 +229,91 @@ func normalizeTmux(key string) string {
 	return normalizeCommon(result)
 }
 
+// normalizeNvim converts Neovim key notation to standard form.
+// Nvim uses: <C-x> for Ctrl, <M-x> for Meta, <CR> for Enter, etc.
+func normalizeNvim(key string) string {
+	// Handle special keys (nvim format uses angle brackets)
+	switch strings.ToLower(key) {
+	case "<cr>", "<enter>", "<return>":
+		return "Enter"
+	case "<tab>":
+		return "Tab"
+	case "<esc>", "<escape>":
+		return "Escape"
+	case "<space>":
+		return "Space"
+	case "<bs>", "<backspace>":
+		return "Backspace"
+	case "<del>", "<delete>":
+		return "Delete"
+	case "<up>":
+		return "Up"
+	case "<down>":
+		return "Down"
+	case "<left>":
+		return "Left"
+	case "<right>":
+		return "Right"
+	case "<home>":
+		return "Home"
+	case "<end>":
+		return "End"
+	case "<pageup>":
+		return "PageUp"
+	case "<pagedown>":
+		return "PageDown"
+	case "<insert>":
+		return "Insert"
+	case "<leader>":
+		return "Leader"
+	}
+
+	// Handle function keys <F1>-<F12>
+	if strings.HasPrefix(strings.ToLower(key), "<f") && strings.HasSuffix(key, ">") {
+		inner := key[1 : len(key)-1] // Remove < and >
+		return strings.ToUpper(inner[:1]) + inner[1:]
+	}
+
+	// Handle modifier keys <C-x>, <M-x>, <C-M-x>, etc.
+	if strings.HasPrefix(key, "<") && strings.HasSuffix(key, ">") {
+		inner := key[1 : len(key)-1] // Remove < and >
+
+		var ctrl, meta bool
+		remaining := inner
+
+		// Parse modifiers (case insensitive)
+		for {
+			upper := strings.ToUpper(remaining)
+			if strings.HasPrefix(upper, "C-") {
+				ctrl = true
+				remaining = remaining[2:]
+			} else if strings.HasPrefix(upper, "M-") || strings.HasPrefix(upper, "A-") {
+				meta = true
+				remaining = remaining[2:]
+			} else if strings.HasPrefix(upper, "S-") {
+				// Shift modifier - skip for now
+				remaining = remaining[2:]
+			} else {
+				break
+			}
+		}
+
+		// Build standard notation
+		if ctrl && meta {
+			return "C-M-" + strings.ToUpper(remaining)
+		}
+		if ctrl {
+			return "C-" + strings.ToUpper(remaining)
+		}
+		if meta {
+			return "M-" + strings.ToUpper(remaining)
+		}
+		return strings.ToUpper(remaining)
+	}
+
+	return normalizeCommon(key)
+}
+
 // normalizeAuto tries to detect the format and normalize accordingly.
 func normalizeAuto(key string) string {
 	// Fish-style \cx
@@ -304,10 +391,324 @@ func normalizeCommon(key string) string {
 }
 
 // Denormalize converts standard key notation to a target format.
-// Currently returns the key unchanged; full implementation in Phase 2.
+// Standard form uses C-, M-, S- modifiers with uppercase base.
+// Supported targets: "fish", "bash", "zsh", "tmux", "nvim".
+//
+// Examples:
+//   - fish: C-G -> \cg, M-F -> \ef, C-M-X -> \e\cx
+//   - bash: C-G -> \C-g, M-F -> \M-f, C-M-X -> \C-\M-x
+//   - zsh: C-G -> ^g, M-F -> ^[f, C-M-X -> ^[^x
+//   - tmux: returns key unchanged (tmux uses standard notation)
+//   - nvim: C-G -> <C-g>, M-F -> <M-f>, Enter -> <CR>
 func Denormalize(key, target string) string {
-	// TODO: Implement for shell config generation (Phase 2)
-	return key
+	if key == "" {
+		return ""
+	}
+
+	switch target {
+	case "fish":
+		return denormalizeFish(key)
+	case "bash":
+		return denormalizeBash(key)
+	case "zsh":
+		return denormalizeZsh(key)
+	case "tmux":
+		return key // Tmux uses standard notation
+	case "nvim":
+		return denormalizeNvim(key)
+	default:
+		return key
+	}
+}
+
+// denormalizeFish converts standard notation to fish shell format.
+// C-G -> \cg, M-F -> \ef, C-M-X -> \e\cx
+func denormalizeFish(key string) string {
+	// Handle special keys first
+	switch key {
+	case "Enter":
+		return "\\r"
+	case "Tab":
+		return "\\t"
+	case "Escape":
+		return "\\e"
+	case "Backspace":
+		return "\\b"
+	case "Delete":
+		return "\\x7f"
+	case "Space":
+		return " "
+	case "Up":
+		return "\\e[A"
+	case "Down":
+		return "\\e[B"
+	case "Right":
+		return "\\e[C"
+	case "Left":
+		return "\\e[D"
+	case "Home":
+		return "\\e[H"
+	case "End":
+		return "\\e[F"
+	case "PageUp":
+		return "\\e[5~"
+	case "PageDown":
+		return "\\e[6~"
+	}
+
+	// Handle function keys F1-F12
+	if len(key) >= 2 && key[0] == 'F' {
+		return "\\e" + key // Fish uses \eF1, \eF2, etc.
+	}
+
+	// Parse modifiers
+	ctrl, meta, base := extractModifiersForDenorm(key)
+
+	// Build fish notation
+	if ctrl && meta {
+		// C-M-X -> \e\cx
+		return "\\e\\c" + strings.ToLower(base)
+	}
+	if ctrl {
+		// C-X -> \cx
+		return "\\c" + strings.ToLower(base)
+	}
+	if meta {
+		// M-X -> \ex
+		return "\\e" + strings.ToLower(base)
+	}
+
+	// Single character: return lowercase
+	return strings.ToLower(base)
+}
+
+// denormalizeBash converts standard notation to bash/readline format.
+// C-G -> \C-g, M-F -> \M-f, C-M-X -> \C-\M-x
+func denormalizeBash(key string) string {
+	// Handle special keys first
+	switch key {
+	case "Enter":
+		return "\\C-m"
+	case "Tab":
+		return "\\C-i"
+	case "Escape":
+		return "\\e"
+	case "Backspace":
+		return "\\C-h"
+	case "Delete":
+		return "\\C-?"
+	case "Space":
+		return " "
+	case "Up":
+		return "\\e[A"
+	case "Down":
+		return "\\e[B"
+	case "Right":
+		return "\\e[C"
+	case "Left":
+		return "\\e[D"
+	case "Home":
+		return "\\e[H"
+	case "End":
+		return "\\e[F"
+	case "PageUp":
+		return "\\e[5~"
+	case "PageDown":
+		return "\\e[6~"
+	}
+
+	// Handle function keys F1-F12
+	if len(key) >= 2 && key[0] == 'F' {
+		return "\\e" + key
+	}
+
+	// Parse modifiers
+	ctrl, meta, base := extractModifiersForDenorm(key)
+
+	// Build bash notation
+	if ctrl && meta {
+		// C-M-X -> \C-\M-x
+		return "\\C-\\M-" + strings.ToLower(base)
+	}
+	if ctrl {
+		// C-X -> \C-x
+		return "\\C-" + strings.ToLower(base)
+	}
+	if meta {
+		// M-X -> \M-x
+		return "\\M-" + strings.ToLower(base)
+	}
+
+	// Single character: return lowercase
+	return strings.ToLower(base)
+}
+
+// denormalizeZsh converts standard notation to zsh format.
+// C-G -> ^g, M-F -> ^[f, C-M-X -> ^[^x
+func denormalizeZsh(key string) string {
+	// Handle special keys first
+	switch key {
+	case "Enter":
+		return "^m"
+	case "Tab":
+		return "^i"
+	case "Escape":
+		return "^["
+	case "Backspace":
+		return "^h"
+	case "Delete":
+		return "^?"
+	case "Space":
+		return " "
+	case "Up":
+		return "^[[A"
+	case "Down":
+		return "^[[B"
+	case "Right":
+		return "^[[C"
+	case "Left":
+		return "^[[D"
+	case "Home":
+		return "^[[H"
+	case "End":
+		return "^[[F"
+	case "PageUp":
+		return "^[[5~"
+	case "PageDown":
+		return "^[[6~"
+	}
+
+	// Handle function keys F1-F12
+	if len(key) >= 2 && key[0] == 'F' {
+		return "^[" + key
+	}
+
+	// Parse modifiers
+	ctrl, meta, base := extractModifiersForDenorm(key)
+
+	// Build zsh notation
+	if ctrl && meta {
+		// C-M-X -> ^[^x (meta first, then ctrl)
+		return "^[^" + strings.ToLower(base)
+	}
+	if ctrl {
+		// C-X -> ^x
+		return "^" + strings.ToLower(base)
+	}
+	if meta {
+		// M-X -> ^[x
+		return "^[" + strings.ToLower(base)
+	}
+
+	// Single character: return lowercase
+	return strings.ToLower(base)
+}
+
+// denormalizeNvim converts standard notation to Neovim format.
+// C-G -> <C-g>, M-F -> <M-f>, C-M-X -> <C-M-x>
+// Neovim uses <> notation for special keys and modifiers.
+func denormalizeNvim(key string) string {
+	// Handle special keys first
+	switch key {
+	case "Enter":
+		return "<CR>"
+	case "Tab":
+		return "<Tab>"
+	case "Escape":
+		return "<Esc>"
+	case "Space":
+		return "<Space>"
+	case "Backspace":
+		return "<BS>"
+	case "Delete":
+		return "<Del>"
+	case "Up":
+		return "<Up>"
+	case "Down":
+		return "<Down>"
+	case "Left":
+		return "<Left>"
+	case "Right":
+		return "<Right>"
+	case "Home":
+		return "<Home>"
+	case "End":
+		return "<End>"
+	case "PageUp":
+		return "<PageUp>"
+	case "PageDown":
+		return "<PageDown>"
+	case "Insert":
+		return "<Insert>"
+	}
+
+	// Handle function keys F1-F12
+	if len(key) >= 2 && key[0] == 'F' && unicode.IsDigit(rune(key[1])) {
+		return "<" + key + ">"
+	}
+
+	// Handle leader key
+	if strings.ToLower(key) == "leader" {
+		return "<leader>"
+	}
+
+	// Parse modifiers
+	ctrl, meta, base := extractModifiersForDenorm(key)
+
+	// Build nvim notation with <> brackets
+	if ctrl || meta {
+		var sb strings.Builder
+		sb.WriteString("<")
+		if ctrl {
+			sb.WriteString("C-")
+		}
+		if meta {
+			sb.WriteString("M-")
+		}
+		sb.WriteString(strings.ToLower(base))
+		sb.WriteString(">")
+		return sb.String()
+	}
+
+	// Single character: return as-is
+	return base
+}
+
+// extractModifiersForDenorm extracts ctrl, meta, and base key from standard notation.
+// Used specifically by denormalization functions.
+// "C-M-X" -> (true, true, "X")
+// "C-P" -> (true, false, "P")
+// "M-F" -> (false, true, "F")
+// "X" -> (false, false, "X")
+func extractModifiersForDenorm(key string) (ctrl, meta bool, base string) {
+	remaining := key
+
+	// Check for C- prefix
+	if strings.HasPrefix(remaining, "C-") {
+		ctrl = true
+		remaining = remaining[2:]
+	}
+
+	// Check for M- prefix
+	if strings.HasPrefix(remaining, "M-") {
+		meta = true
+		remaining = remaining[2:]
+	}
+
+	// Also check for M-C- order (normalize to C-M-)
+	if strings.HasPrefix(remaining, "C-") {
+		ctrl = true
+		remaining = remaining[2:]
+	}
+
+	// Check for S- prefix (shift) - we'll ignore it for shell denormalization
+	// since shells typically don't use shift modifier notation
+	if strings.HasPrefix(remaining, "S-") {
+		remaining = remaining[2:]
+	}
+
+	base = remaining
+	return
 }
 
 // ParseKeySequence splits a key sequence string into individual keys.
