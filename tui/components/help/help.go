@@ -21,7 +21,8 @@ type Model struct {
 	Height     int
 	Theme      *theme.Theme
 	CustomHelp [][]key.Binding // Additional custom key bindings to display
-	Title      string      // Title for the full help view
+	Title      string          // Title for the full help view
+	Legend     string          // Optional legend text to display under the title
 	viewport   viewport.Model
 }
 
@@ -209,9 +210,22 @@ func (m *Model) renderHelpContent(sections []keymap.Section, groups [][]key.Bind
 		MarginBottom(1).
 		Align(lipgloss.Center)
 
+	legendStyle := m.Theme.Muted.Align(lipgloss.Center).MarginBottom(1)
+
+	// Build the header (title + optional legend)
+	var header string
+	if m.Legend != "" {
+		header = lipgloss.JoinVertical(lipgloss.Center,
+			titleStyle.Render(titleText),
+			legendStyle.Render(m.Legend),
+		)
+	} else {
+		header = titleStyle.Render(titleText)
+	}
+
 	// 1. Try single-column layout first
 	singleCol := lipgloss.JoinVertical(lipgloss.Left, blocks...)
-	singleColWithTitle := lipgloss.JoinVertical(lipgloss.Center, titleStyle.Width(lipgloss.Width(singleCol)).Render(titleText), singleCol)
+	singleColWithTitle := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Width(lipgloss.Width(singleCol)).Render(header), singleCol)
 
 	if lipgloss.Height(singleColWithTitle) <= m.Height-vMargin-1 {
 		return singleColWithTitle
@@ -220,7 +234,7 @@ func (m *Model) renderHelpContent(sections []keymap.Section, groups [][]key.Bind
 	// 2. Content is too tall - try three-column layout first (if we have enough blocks)
 	if len(blocks) >= 3 {
 		threeCol := m.buildMultiColumnLayout(blocks, 3, gutter)
-		threeColWithTitle := lipgloss.JoinVertical(lipgloss.Center, titleStyle.Width(lipgloss.Width(threeCol)).Render(titleText), threeCol)
+		threeColWithTitle := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Width(lipgloss.Width(threeCol)).Render(header), threeCol)
 
 		// Check if three columns fit width-wise (scrolling handles height)
 		if lipgloss.Width(threeColWithTitle) <= m.Width-hMargin {
@@ -230,7 +244,7 @@ func (m *Model) renderHelpContent(sections []keymap.Section, groups [][]key.Bind
 
 	// 3. Try two-column layout
 	twoCol := m.buildMultiColumnLayout(blocks, 2, gutter)
-	twoColWithTitle := lipgloss.JoinVertical(lipgloss.Center, titleStyle.Width(lipgloss.Width(twoCol)).Render(titleText), twoCol)
+	twoColWithTitle := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Width(lipgloss.Width(twoCol)).Render(header), twoCol)
 
 	// Check if two columns fit width-wise (scrolling handles height)
 	if lipgloss.Width(twoColWithTitle) <= m.Width-hMargin {
@@ -508,6 +522,12 @@ func (b *Builder) WithCustomHelp(customHelp [][]key.Binding) *Builder {
 // WithTitle sets the title for the full help view dialog
 func (b *Builder) WithTitle(title string) *Builder {
 	b.model.Title = title
+	return b
+}
+
+// WithLegend sets the legend text for the full help view dialog
+func (b *Builder) WithLegend(legend string) *Builder {
+	b.model.Legend = legend
 	return b
 }
 
