@@ -47,6 +47,7 @@ const (
 	nerdIconArrowLeftBold  = "󰜱" // md-arrow_left_bold (U+F0731)
 	nerdIconArrowRightBold = "󰜴" // md-arrow_right_bold (U+F0734)
 	nerdIconFilter         = "󱣬" // md-filter_check (U+F18EC)
+	nerdIconSearch         = "󰍉" // md-magnify (U+F0349)
 	nerdIconSave           = "󰉉" // md-floppy (U+F0249)
 	nerdIconSelectAll      = "󰒆" // md-select_all (U+F0486)
 	nerdIconAudited        = "󰳈" // md-shield_check_outline (U+F0CC8)
@@ -207,6 +208,7 @@ const (
 	asciiIconArrowLeftBold  = "<="  //  Arrow left bold
 	asciiIconArrowRightBold = "=>"  //  Arrow right bold
 	asciiIconFilter         = "⊲"   // Filter
+	asciiIconSearch         = "/"   // Search
 	asciiIconSave           = "[S]" // Save
 	asciiIconSelectAll      = "[*]" //  Select all
 	asciiIconAudited        = "*"   // Audited
@@ -367,6 +369,7 @@ var (
 	IconArrowLeftBold  string
 	IconArrowRightBold string
 	IconFilter         string
+	IconSearch         string
 	IconSave           string
 	IconSelectAll      string
 	IconAudited        string
@@ -541,6 +544,7 @@ func init() {
 		IconArrowLeftBold = asciiIconArrowLeftBold
 		IconArrowRightBold = asciiIconArrowRightBold
 		IconFilter = asciiIconFilter
+		IconSearch = asciiIconSearch
 		IconSave = asciiIconSave
 		IconSelectAll = asciiIconSelectAll
 		IconAudited = asciiIconAudited
@@ -691,6 +695,7 @@ func init() {
 		IconArrowLeftBold = nerdIconArrowLeftBold
 		IconArrowRightBold = nerdIconArrowRightBold
 		IconFilter = nerdIconFilter
+		IconSearch = nerdIconSearch
 		IconSave = nerdIconSave
 		IconSelectAll = nerdIconSelectAll
 		IconAudited = nerdIconAudited
