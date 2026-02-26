@@ -305,13 +305,15 @@ type HooksConfig struct {
 
 // SyncthingConfig holds settings for automated Syncthing folder setup.
 type SyncthingConfig struct {
-	Devices []string `yaml:"devices,omitempty" toml:"devices,omitempty" jsonschema:"description=Syncthing device IDs to share this notebook with" jsonschema_extras:"x-layer=global,x-priority=40,x-important=true"`
+	Devices     []string `yaml:"devices,omitempty" toml:"devices,omitempty" jsonschema:"description=Syncthing device IDs to share this notebook with" jsonschema_extras:"x-layer=global,x-priority=40,x-important=true"`
+	FolderTitle string   `yaml:"folder_title,omitempty" toml:"folder_title,omitempty" jsonschema:"description=Custom title for the Syncthing folder (defaults to grove-<notebook>)" jsonschema_extras:"x-layer=global,x-priority=41"`
 }
 
 // ObsidianConfig holds settings for automated Obsidian vault setup.
 type ObsidianConfig struct {
 	VaultName      string `yaml:"vault_name,omitempty" toml:"vault_name,omitempty" jsonschema:"description=Display name for the generated Obsidian vault" jsonschema_extras:"x-layer=global,x-priority=45"`
 	AutoLinkPlugin bool   `yaml:"auto_link_plugin,omitempty" toml:"auto_link_plugin,omitempty" jsonschema:"description=Automatically symlink the nb-integration plugin on setup,default=false" jsonschema_extras:"x-layer=global,x-priority=46"`
+	TemplateRepo   string `yaml:"template_repo,omitempty" toml:"template_repo,omitempty" jsonschema:"description=Git repo URL containing .obsidian template (e.g. github.com/user/obsidian-dotfiles)" jsonschema_extras:"x-layer=global,x-priority=47"`
 }
 
 // Notebook defines the configuration for a single, named notebook system.

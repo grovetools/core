@@ -336,6 +336,12 @@
           "x-layer": "global",
           "x-priority": "46"
         },
+        "template_repo": {
+          "description": "Git repo URL containing .obsidian template (e.g. github.com/user/obsidian-dotfiles)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "47"
+        },
         "vault_name": {
           "description": "Display name for the generated Obsidian vault",
           "type": "string",
@@ -376,6 +382,12 @@
           "x-important": true,
           "x-layer": "global",
           "x-priority": "40"
+        },
+        "folder_title": {
+          "description": "Custom title for the Syncthing folder (defaults to grove-\u003cnotebook\u003e)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "41"
         }
       },
       "type": "object"

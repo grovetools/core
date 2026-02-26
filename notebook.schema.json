@@ -49,6 +49,12 @@
           "default": false,
           "x-layer": "global",
           "x-priority": "46"
+        },
+        "template_repo": {
+          "type": "string",
+          "description": "Git repo URL containing .obsidian template (e.g. github.com/user/obsidian-dotfiles)",
+          "x-layer": "global",
+          "x-priority": "47"
         }
       },
       "type": "object"
@@ -64,6 +70,12 @@
           "x-important": true,
           "x-layer": "global",
           "x-priority": "40"
+        },
+        "folder_title": {
+          "type": "string",
+          "description": "Custom title for the Syncthing folder (defaults to grove-\u003cnotebook\u003e)",
+          "x-layer": "global",
+          "x-priority": "41"
         }
       },
       "type": "object"
