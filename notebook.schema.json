@@ -34,6 +34,39 @@
         }
       },
       "type": "object"
+    },
+    "ObsidianConfig": {
+      "properties": {
+        "vault_name": {
+          "type": "string",
+          "description": "Display name for the generated Obsidian vault",
+          "x-layer": "global",
+          "x-priority": "45"
+        },
+        "auto_link_plugin": {
+          "type": "boolean",
+          "description": "Automatically symlink the nb-integration plugin on setup",
+          "default": false,
+          "x-layer": "global",
+          "x-priority": "46"
+        }
+      },
+      "type": "object"
+    },
+    "SyncthingConfig": {
+      "properties": {
+        "devices": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Syncthing device IDs to share this notebook with",
+          "x-important": true,
+          "x-layer": "global",
+          "x-priority": "40"
+        }
+      },
+      "type": "object"
     }
   },
   "properties": {
@@ -82,6 +115,14 @@
     },
     "sync": {
       "description": "Synchronization configuration for this notebook"
+    },
+    "syncthing": {
+      "$ref": "#/$defs/SyncthingConfig",
+      "description": "Syncthing automated setup configuration"
+    },
+    "obsidian": {
+      "$ref": "#/$defs/ObsidianConfig",
+      "description": "Obsidian vault automated setup configuration"
     }
   },
   "type": "object",

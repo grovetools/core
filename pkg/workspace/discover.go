@@ -10,6 +10,7 @@ import (
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/repo"
+	"github.com/grovetools/core/util/pathutil"
 	"github.com/sirupsen/logrus"
 )
 
@@ -239,7 +240,8 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		NonGroveDirectories: []string{},
 	}
 
-	// Track seen paths to avoid duplicates when groves overlap
+	// Track seen paths to avoid duplicates when groves overlap.
+	// We use normalized paths as keys to handle case-insensitive filesystems (macOS/Windows).
 	seenProjects := make(map[string]bool)
 	seenEcosystems := make(map[string]bool)
 	seenNonGrove := make(map[string]bool)
@@ -437,23 +439,36 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}()
 
 	// Collect results with deduplication (merge worktrees from duplicates)
-	projectMap := make(map[string]*Project) // Map by path for easy lookup
+	// Use normalized paths as map keys to handle case-insensitive filesystems (macOS/Windows)
+	projectMap := make(map[string]*Project) // Map by normalized path for easy lookup
+
+	// Helper to get a normalized path for deduplication keys
+	normalizeKey := func(path string) string {
+		normalized, err := pathutil.NormalizeForLookup(path)
+		if err != nil {
+			return path // Fall back to original if normalization fails
+		}
+		return normalized
+	}
 
 	for groveRes := range resultsChan {
 		for _, eco := range groveRes.ecosystems {
-			if !seenEcosystems[eco.Path] {
+			ecoKey := normalizeKey(eco.Path)
+			if !seenEcosystems[ecoKey] {
 				result.Ecosystems = append(result.Ecosystems, eco)
-				seenEcosystems[eco.Path] = true
+				seenEcosystems[ecoKey] = true
 			}
 		}
 		for _, proj := range groveRes.projects {
-			if existing, found := projectMap[proj.Path]; found {
+			projKey := normalizeKey(proj.Path)
+			if existing, found := projectMap[projKey]; found {
 				// Merge worktrees from duplicate project
 				for _, ws := range proj.Workspaces {
 					// Check if this worktree is already in the existing project
+					wsKey := normalizeKey(ws.Path)
 					isDuplicate := false
 					for _, existingWs := range existing.Workspaces {
-						if existingWs.Path == ws.Path {
+						if normalizeKey(existingWs.Path) == wsKey {
 							isDuplicate = true
 							break
 						}
@@ -464,15 +479,16 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 				}
 			} else {
 				// New project - add to map and result
-				projectMap[proj.Path] = &proj
+				projectMap[projKey] = &proj
 				result.Projects = append(result.Projects, proj)
-				seenProjects[proj.Path] = true
+				seenProjects[projKey] = true
 			}
 		}
 		for _, path := range groveRes.nonGrove {
-			if !seenNonGrove[path] {
+			pathKey := normalizeKey(path)
+			if !seenNonGrove[pathKey] {
 				result.NonGroveDirectories = append(result.NonGroveDirectories, path)
-				seenNonGrove[path] = true
+				seenNonGrove[pathKey] = true
 			}
 		}
 	}
@@ -498,7 +514,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 			}
 
 			// Skip if already discovered
-			if seenProjects[absPath] {
+			if seenProjects[normalizeKey(absPath)] {
 				continue
 			}
 
@@ -539,7 +555,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 			}
 
 			result.Projects = append(result.Projects, proj)
-			seenProjects[absPath] = true
+			seenProjects[normalizeKey(absPath)] = true
 		}
 	}
 

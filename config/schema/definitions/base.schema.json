@@ -233,6 +233,10 @@
           "description": "Path template for notes directory",
           "type": "string"
         },
+        "obsidian": {
+          "$ref": "#/$defs/ObsidianConfig",
+          "description": "Obsidian vault automated setup configuration"
+        },
         "plans_path_template": {
           "description": "Path template for plans directory",
           "type": "string"
@@ -252,6 +256,10 @@
         },
         "sync": {
           "description": "Synchronization configuration for this notebook"
+        },
+        "syncthing": {
+          "$ref": "#/$defs/SyncthingConfig",
+          "description": "Syncthing automated setup configuration"
         },
         "templates_path_template": {
           "description": "Path template for templates directory",
@@ -318,6 +326,25 @@
       "x-status": "alpha",
       "x-status-message": "Experimental Neovim embedding"
     },
+    "ObsidianConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "auto_link_plugin": {
+          "default": false,
+          "description": "Automatically symlink the nb-integration plugin on setup",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "46"
+        },
+        "vault_name": {
+          "description": "Display name for the generated Obsidian vault",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "45"
+        }
+      },
+      "type": "object"
+    },
     "SearchPathConfig": {
       "additionalProperties": false,
       "properties": {
@@ -335,6 +362,22 @@
         "path",
         "enabled"
       ],
+      "type": "object"
+    },
+    "SyncthingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "devices": {
+          "description": "Syncthing device IDs to share this notebook with",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-important": true,
+          "x-layer": "global",
+          "x-priority": "40"
+        }
+      },
       "type": "object"
     },
     "TUISchemaConfig": {

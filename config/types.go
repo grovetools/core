@@ -303,6 +303,17 @@ type HooksConfig struct {
 	OnStop []HookCommand `yaml:"on_stop,omitempty" toml:"on_stop,omitempty" jsonschema:"description=Commands to run when a session stops"`
 }
 
+// SyncthingConfig holds settings for automated Syncthing folder setup.
+type SyncthingConfig struct {
+	Devices []string `yaml:"devices,omitempty" toml:"devices,omitempty" jsonschema:"description=Syncthing device IDs to share this notebook with" jsonschema_extras:"x-layer=global,x-priority=40,x-important=true"`
+}
+
+// ObsidianConfig holds settings for automated Obsidian vault setup.
+type ObsidianConfig struct {
+	VaultName      string `yaml:"vault_name,omitempty" toml:"vault_name,omitempty" jsonschema:"description=Display name for the generated Obsidian vault" jsonschema_extras:"x-layer=global,x-priority=45"`
+	AutoLinkPlugin bool   `yaml:"auto_link_plugin,omitempty" toml:"auto_link_plugin,omitempty" jsonschema:"description=Automatically symlink the nb-integration plugin on setup,default=false" jsonschema_extras:"x-layer=global,x-priority=46"`
+}
+
 // Notebook defines the configuration for a single, named notebook system.
 type Notebook struct {
 	RootDir                string                     `yaml:"root_dir" toml:"root_dir" jsonschema:"description=Absolute path to the notebook root (enables Centralized Mode)"`
@@ -316,6 +327,8 @@ type Notebook struct {
 	PromptsPathTemplate    string                     `yaml:"prompts_path_template,omitempty" toml:"prompts_path_template,omitempty" jsonschema:"description=Path template for prompts directory"`
 	Types                  map[string]*NoteTypeConfig `yaml:"types,omitempty" toml:"types,omitempty" jsonschema:"description=Map of note type name to configuration"`
 	Sync                   interface{}                `yaml:"sync,omitempty" toml:"sync,omitempty" jsonschema:"description=Synchronization configuration for this notebook"`
+	Syncthing              *SyncthingConfig           `yaml:"syncthing,omitempty" toml:"syncthing,omitempty" jsonschema:"description=Syncthing automated setup configuration"`
+	Obsidian               *ObsidianConfig            `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
 }
 
 // Config represents the grove.yml configuration
