@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/grovetools/core/pkg/enrichment"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/sessions"
 	"github.com/grovetools/core/pkg/workspace"
@@ -30,23 +29,30 @@ func (c *LocalClient) GetWorkspaces(ctx context.Context) ([]*workspace.Workspace
 	return workspace.GetProjects(c.logger)
 }
 
-// GetEnrichedWorkspaces returns workspaces with enrichment data.
-func (c *LocalClient) GetEnrichedWorkspaces(ctx context.Context, opts *enrichment.EnrichmentOptions) ([]*enrichment.EnrichedWorkspace, error) {
+// GetEnrichedWorkspaces returns workspaces without enrichment data.
+// The daemon provides enrichment - in local mode, only basic workspace info is returned.
+func (c *LocalClient) GetEnrichedWorkspaces(ctx context.Context, opts *models.EnrichmentOptions) ([]*models.EnrichedWorkspace, error) {
 	nodes, err := c.GetWorkspaces(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return enrichment.EnrichWorkspaces(ctx, nodes, opts), nil
+	result := make([]*models.EnrichedWorkspace, len(nodes))
+	for i, n := range nodes {
+		result[i] = &models.EnrichedWorkspace{WorkspaceNode: n}
+	}
+	return result, nil
 }
 
-// GetPlanStats returns aggregated plan statistics.
-func (c *LocalClient) GetPlanStats(ctx context.Context) (map[string]*enrichment.PlanStats, error) {
-	return enrichment.FetchPlanStatsMap()
+// GetPlanStats returns an empty map in local mode.
+// The daemon provides enrichment data - this is a graceful degradation.
+func (c *LocalClient) GetPlanStats(ctx context.Context) (map[string]*models.PlanStats, error) {
+	return make(map[string]*models.PlanStats), nil
 }
 
-// GetNoteCounts returns aggregated note counts.
-func (c *LocalClient) GetNoteCounts(ctx context.Context) (map[string]*enrichment.NoteCounts, error) {
-	return enrichment.FetchNoteCountsMap()
+// GetNoteCounts returns an empty map in local mode.
+// The daemon provides enrichment data - this is a graceful degradation.
+func (c *LocalClient) GetNoteCounts(ctx context.Context) (map[string]*models.NoteCounts, error) {
+	return make(map[string]*models.NoteCounts), nil
 }
 
 // GetSessions returns active sessions from all sources.

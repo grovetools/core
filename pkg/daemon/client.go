@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/grovetools/core/pkg/enrichment"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/workspace"
 )
@@ -29,13 +28,13 @@ type Client interface {
 	GetWorkspaces(ctx context.Context) ([]*workspace.WorkspaceNode, error)
 
 	// GetEnrichedWorkspaces returns workspaces with enrichment data.
-	GetEnrichedWorkspaces(ctx context.Context, opts *enrichment.EnrichmentOptions) ([]*enrichment.EnrichedWorkspace, error)
+	GetEnrichedWorkspaces(ctx context.Context, opts *models.EnrichmentOptions) ([]*models.EnrichedWorkspace, error)
 
 	// GetPlanStats returns aggregated plan statistics indexed by workspace path.
-	GetPlanStats(ctx context.Context) (map[string]*enrichment.PlanStats, error)
+	GetPlanStats(ctx context.Context) (map[string]*models.PlanStats, error)
 
 	// GetNoteCounts returns aggregated note counts indexed by workspace name.
-	GetNoteCounts(ctx context.Context) (map[string]*enrichment.NoteCounts, error)
+	GetNoteCounts(ctx context.Context) (map[string]*models.NoteCounts, error)
 
 	// GetSessions returns active sessions from all sources.
 	GetSessions(ctx context.Context) ([]*models.Session, error)
@@ -67,11 +66,11 @@ type Client interface {
 
 // StateUpdate represents an update pushed from the daemon to subscribers.
 type StateUpdate struct {
-	Workspaces []*enrichment.EnrichedWorkspace `json:"workspaces,omitempty"`
-	Sessions   []*models.Session               `json:"sessions,omitempty"`
-	UpdateType string                          `json:"update_type"`           // "full", "workspace", "session", "enrichment", "config_reload", "skill_sync"
-	Source     string                          `json:"source,omitempty"`      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note", "config", "skills")
-	Scanned    int                             `json:"scanned,omitempty"`     // Number of items actually scanned (for focused updates)
-	ConfigFile string                          `json:"config_file,omitempty"` // The config file that changed (for "config_reload" events)
-	Payload    interface{}                     `json:"payload,omitempty"`     // Generic payload for events like skill_sync
+	Workspaces []*models.EnrichedWorkspace `json:"workspaces,omitempty"`
+	Sessions   []*models.Session           `json:"sessions,omitempty"`
+	UpdateType string                      `json:"update_type"`           // "full", "workspace", "session", "enrichment", "config_reload", "skill_sync"
+	Source     string                      `json:"source,omitempty"`      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note", "config", "skills")
+	Scanned    int                         `json:"scanned,omitempty"`     // Number of items actually scanned (for focused updates)
+	ConfigFile string                      `json:"config_file,omitempty"` // The config file that changed (for "config_reload" events)
+	Payload    interface{}                 `json:"payload,omitempty"`     // Generic payload for events like skill_sync
 }

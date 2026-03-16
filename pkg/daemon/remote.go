@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/grovetools/core/pkg/enrichment"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/workspace"
 )
@@ -66,7 +65,7 @@ func (c *RemoteClient) GetWorkspaces(ctx context.Context) ([]*workspace.Workspac
 }
 
 // GetEnrichedWorkspaces returns workspaces with enrichment data from the daemon.
-func (c *RemoteClient) GetEnrichedWorkspaces(ctx context.Context, opts *enrichment.EnrichmentOptions) ([]*enrichment.EnrichedWorkspace, error) {
+func (c *RemoteClient) GetEnrichedWorkspaces(ctx context.Context, opts *models.EnrichmentOptions) ([]*models.EnrichedWorkspace, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/workspaces", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -82,7 +81,7 @@ func (c *RemoteClient) GetEnrichedWorkspaces(ctx context.Context, opts *enrichme
 		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
 
-	var workspaces []*enrichment.EnrichedWorkspace
+	var workspaces []*models.EnrichedWorkspace
 	if err := json.NewDecoder(resp.Body).Decode(&workspaces); err != nil {
 		return nil, fmt.Errorf("failed to decode workspaces: %w", err)
 	}
@@ -91,13 +90,13 @@ func (c *RemoteClient) GetEnrichedWorkspaces(ctx context.Context, opts *enrichme
 
 // GetPlanStats returns aggregated plan statistics indexed by workspace path.
 // Extracts PlanStats from enriched workspaces.
-func (c *RemoteClient) GetPlanStats(ctx context.Context) (map[string]*enrichment.PlanStats, error) {
+func (c *RemoteClient) GetPlanStats(ctx context.Context) (map[string]*models.PlanStats, error) {
 	enriched, err := c.GetEnrichedWorkspaces(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	stats := make(map[string]*enrichment.PlanStats)
+	stats := make(map[string]*models.PlanStats)
 	for _, ew := range enriched {
 		if ew.PlanStats != nil {
 			stats[ew.Path] = ew.PlanStats
@@ -108,13 +107,13 @@ func (c *RemoteClient) GetPlanStats(ctx context.Context) (map[string]*enrichment
 
 // GetNoteCounts returns aggregated note counts indexed by workspace name.
 // Extracts NoteCounts from enriched workspaces.
-func (c *RemoteClient) GetNoteCounts(ctx context.Context) (map[string]*enrichment.NoteCounts, error) {
+func (c *RemoteClient) GetNoteCounts(ctx context.Context) (map[string]*models.NoteCounts, error) {
 	enriched, err := c.GetEnrichedWorkspaces(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	counts := make(map[string]*enrichment.NoteCounts)
+	counts := make(map[string]*models.NoteCounts)
 	for _, ew := range enriched {
 		if ew.NoteCounts != nil {
 			counts[ew.Name] = ew.NoteCounts

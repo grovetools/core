@@ -1,11 +1,24 @@
-// Package enrichment provides workspace enrichment types and functions.
-// This centralizes enrichment logic previously scattered across nav and hooks.
-package enrichment
+// Package models provides shared types used across the grove ecosystem.
+// This file contains enrichment types that define the API contract between
+// the daemon and its consumers (nav, hooks, grove, etc.).
+package models
 
 import (
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
 )
+
+// EnrichmentOptions controls which data to fetch and for which projects.
+type EnrichmentOptions struct {
+	FetchNoteCounts   bool
+	FetchGitStatus    bool
+	FetchPlanStats    bool
+	FetchReleaseInfo  bool
+	FetchBinaryStatus bool
+	FetchCxStats      bool
+	FetchRemoteURL    bool
+	GitStatusPaths    map[string]bool // nil means all projects
+}
 
 // NoteCounts holds counts of notes by type.
 type NoteCounts struct {
