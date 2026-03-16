@@ -308,5 +308,132 @@ func (c *RemoteClient) Close() error {
 	return nil
 }
 
+// GetSession returns a specific session by ID from the daemon.
+func (c *RemoteClient) GetSession(ctx context.Context, sessionID string) (*models.Session, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/sessions/"+sessionID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil // Not found
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var session models.Session
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		return nil, fmt.Errorf("failed to decode session: %w", err)
+	}
+	return &session, nil
+}
+
+// RegisterSessionIntent pre-registers a session before the agent is launched.
+func (c *RemoteClient) RegisterSessionIntent(ctx context.Context, intent SessionIntent) error {
+	body, err := json.Marshal(intent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session intent: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/sessions/intent", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to register session intent: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// ConfirmSession links a pre-registered intent with the actual running agent.
+func (c *RemoteClient) ConfirmSession(ctx context.Context, confirmation SessionConfirmation) error {
+	body, err := json.Marshal(confirmation)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session confirmation: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/sessions/confirm", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to confirm session: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// UpdateSessionStatus updates the status of an active session.
+func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID string, status string) error {
+	body, err := json.Marshal(map[string]string{"status": status})
+	if err != nil {
+		return fmt.Errorf("failed to marshal status update: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", baseURL+"/api/sessions/"+jobID+"/status", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update session status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// EndSession marks a session as complete or interrupted.
+func (c *RemoteClient) EndSession(ctx context.Context, jobID string, outcome string) error {
+	body, err := json.Marshal(map[string]string{"outcome": outcome})
+	if err != nil {
+		return fmt.Errorf("failed to marshal end session request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/sessions/"+jobID+"/end", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to end session: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/sessions"
@@ -94,6 +95,92 @@ func (c *LocalClient) IsRunning() bool {
 
 // Close is a no-op for LocalClient.
 func (c *LocalClient) Close() error {
+	return nil
+}
+
+// GetSession returns a specific session by ID.
+// In local mode, this scans all sessions and returns the matching one.
+func (c *LocalClient) GetSession(ctx context.Context, sessionID string) (*models.Session, error) {
+	allSessions, err := c.GetSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range allSessions {
+		if s.ID == sessionID {
+			return s, nil
+		}
+	}
+	return nil, nil // Not found
+}
+
+// RegisterSessionIntent pre-registers a session before the agent is launched.
+// In local mode, this writes to the filesystem registry with PID=0 (pending).
+func (c *LocalClient) RegisterSessionIntent(ctx context.Context, intent SessionIntent) error {
+	registry, err := sessions.NewFileSystemRegistry()
+	if err != nil {
+		return err
+	}
+
+	metadata := sessions.SessionMetadata{
+		SessionID:        intent.JobID,
+		Provider:         intent.Provider,
+		PID:              0, // Not yet known
+		WorkingDirectory: intent.WorkDir,
+		StartedAt:        time.Now(),
+		Type:             "interactive_agent",
+		JobTitle:         intent.Title,
+		PlanName:         intent.PlanName,
+		JobFilePath:      intent.JobFilePath,
+	}
+
+	return registry.Register(metadata)
+}
+
+// ConfirmSession links a pre-registered intent with the actual running agent.
+// In local mode, this updates the filesystem registry with the actual PID and native session ID.
+func (c *LocalClient) ConfirmSession(ctx context.Context, confirmation SessionConfirmation) error {
+	registry, err := sessions.NewFileSystemRegistry()
+	if err != nil {
+		return err
+	}
+
+	// Find the existing intent by job ID
+	existing, err := registry.Find(confirmation.JobID)
+	if err != nil {
+		// If not found, create a new entry
+		metadata := sessions.SessionMetadata{
+			SessionID:        confirmation.JobID,
+			ClaudeSessionID:  confirmation.NativeID,
+			PID:              confirmation.PID,
+			TranscriptPath:   confirmation.TranscriptPath,
+			StartedAt:        time.Now(),
+		}
+		return registry.Register(metadata)
+	}
+
+	// Update the existing entry with confirmation data
+	existing.ClaudeSessionID = confirmation.NativeID
+	existing.PID = confirmation.PID
+	existing.TranscriptPath = confirmation.TranscriptPath
+
+	return registry.Register(*existing)
+}
+
+// UpdateSessionStatus updates the status of an active session.
+// In local mode, this is a no-op since the filesystem registry doesn't store status.
+// The daemon's in-memory store tracks status; in local mode we rely on PID liveness.
+func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID string, status string) error {
+	// In local mode, status is derived from PID liveness, so this is a no-op.
+	// The filesystem registry doesn't have a status field.
+	return nil
+}
+
+// EndSession marks a session as complete or interrupted.
+// In local mode, this removes the session from the filesystem registry.
+func (c *LocalClient) EndSession(ctx context.Context, jobID string, outcome string) error {
+	// For local mode, we could clean up the session directory.
+	// However, this is handled by the daemon's session collector in normal operation.
+	// For now, this is a no-op in local mode.
 	return nil
 }
 

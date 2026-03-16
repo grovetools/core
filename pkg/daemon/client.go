@@ -11,6 +11,26 @@ import (
 	"github.com/grovetools/core/pkg/workspace"
 )
 
+// SessionIntent represents the intent to start a session, registered before agent launch.
+// This enables race-free session tracking by pre-registering before the agent process exists.
+type SessionIntent struct {
+	JobID       string `json:"job_id"`
+	Provider    string `json:"provider"`     // "claude", "codex", "opencode"
+	JobFilePath string `json:"job_file_path"` // Path to the job markdown file
+	PlanName    string `json:"plan_name"`
+	Title       string `json:"title"`
+	WorkDir     string `json:"work_dir"`
+}
+
+// SessionConfirmation contains the data needed to confirm a session after agent startup.
+// This links the pre-registered intent with the actual running process.
+type SessionConfirmation struct {
+	JobID          string `json:"job_id"`           // Matches the intent's JobID
+	NativeID       string `json:"native_id"`        // Agent's native session ID (e.g., Claude's UUID)
+	PID            int    `json:"pid"`              // Process ID of the running agent
+	TranscriptPath string `json:"transcript_path"`  // Path to the agent's transcript file
+}
+
 // RunningConfig holds the active configuration intervals being used by the daemon.
 type RunningConfig struct {
 	GitInterval       time.Duration `json:"git_interval"`
@@ -39,6 +59,9 @@ type Client interface {
 	// GetSessions returns active sessions from all sources.
 	GetSessions(ctx context.Context) ([]*models.Session, error)
 
+	// GetSession returns a specific session by ID.
+	GetSession(ctx context.Context, sessionID string) (*models.Session, error)
+
 	// StreamState subscribes to real-time state updates from the daemon.
 	// Returns a channel that receives updates and a function to stop the stream.
 	// For LocalClient, this returns an error since streaming is only available via daemon.
@@ -62,6 +85,33 @@ type Client interface {
 
 	// Close cleans up any resources used by the client.
 	Close() error
+
+	// --- Session Lifecycle Management ---
+	// These methods enable race-free session tracking by allowing:
+	// 1. Pre-registration of intent before agent launch (flow)
+	// 2. Confirmation with actual PID after agent starts (hooks)
+	// 3. Status updates during agent execution (hooks)
+	// 4. Session end notification (hooks/flow)
+
+	// RegisterSessionIntent pre-registers a session before the agent is launched.
+	// This eliminates PID race conditions by establishing the session record first.
+	// For LocalClient, this writes to the filesystem registry as a fallback.
+	RegisterSessionIntent(ctx context.Context, intent SessionIntent) error
+
+	// ConfirmSession links a pre-registered intent with the actual running agent.
+	// Called by hooks after the agent process has started and its PID is known.
+	// For LocalClient, this updates the filesystem registry.
+	ConfirmSession(ctx context.Context, confirmation SessionConfirmation) error
+
+	// UpdateSessionStatus updates the status of an active session.
+	// Valid statuses: "running", "idle", "pending_user"
+	// For LocalClient, this updates the filesystem registry.
+	UpdateSessionStatus(ctx context.Context, jobID string, status string) error
+
+	// EndSession marks a session as complete or interrupted.
+	// Valid outcomes: "completed", "interrupted", "failed"
+	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
+	EndSession(ctx context.Context, jobID string, outcome string) error
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.
