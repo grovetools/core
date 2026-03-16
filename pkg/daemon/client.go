@@ -69,8 +69,9 @@ type Client interface {
 type StateUpdate struct {
 	Workspaces []*enrichment.EnrichedWorkspace `json:"workspaces,omitempty"`
 	Sessions   []*models.Session               `json:"sessions,omitempty"`
-	UpdateType string                          `json:"update_type"`           // "full", "workspace", "session", "enrichment", "config_reload"
-	Source     string                          `json:"source,omitempty"`      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note", "config")
+	UpdateType string                          `json:"update_type"`           // "full", "workspace", "session", "enrichment", "config_reload", "skill_sync"
+	Source     string                          `json:"source,omitempty"`      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note", "config", "skills")
 	Scanned    int                             `json:"scanned,omitempty"`     // Number of items actually scanned (for focused updates)
 	ConfigFile string                          `json:"config_file,omitempty"` // The config file that changed (for "config_reload" events)
+	Payload    interface{}                     `json:"payload,omitempty"`     // Generic payload for events like skill_sync
 }

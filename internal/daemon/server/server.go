@@ -230,6 +230,7 @@ type apiStateUpdate struct {
 	Source     string                          `json:"source,omitempty"`
 	Scanned    int                             `json:"scanned,omitempty"`
 	ConfigFile string                          `json:"config_file,omitempty"`
+	Payload    interface{}                     `json:"payload,omitempty"`
 }
 
 // convertToAPIUpdate converts internal store.Update to the public API format.
@@ -277,6 +278,12 @@ func convertToAPIUpdate(u store.Update) *apiStateUpdate {
 			UpdateType: "config_reload",
 			Source:     u.Source,
 			ConfigFile: configFile,
+		}
+	case store.UpdateSkillSync:
+		return &apiStateUpdate{
+			UpdateType: "skill_sync",
+			Source:     u.Source,
+			Payload:    u.Payload,
 		}
 	}
 	return nil

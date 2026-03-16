@@ -20,7 +20,16 @@ const (
 	UpdateSessions      UpdateType = "sessions"
 	UpdateFocus         UpdateType = "focus"
 	UpdateConfigReload  UpdateType = "config_reload"
+	UpdateSkillSync     UpdateType = "skill_sync"
 )
+
+// SkillSyncPayload contains data broadcasted after a skill sync operation
+type SkillSyncPayload struct {
+	Workspace    string   `json:"workspace"`
+	SyncedSkills []string `json:"synced_skills"`
+	DestPaths    []string `json:"dest_paths"`
+	Error        string   `json:"error,omitempty"`
+}
 
 // Update represents a change to the state.
 type Update struct {

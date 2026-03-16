@@ -17,6 +17,7 @@ import (
 	"github.com/grovetools/core/internal/daemon/pidfile"
 	"github.com/grovetools/core/internal/daemon/server"
 	"github.com/grovetools/core/internal/daemon/store"
+	"github.com/grovetools/core/internal/daemon/watcher"
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/daemon"
 	"github.com/grovetools/core/pkg/paths"
@@ -218,6 +219,27 @@ func newGrovedStartCmd() *cobra.Command {
 				}
 			}
 
+			// 7.5. Start SkillWatcher if enabled
+			autoSync := true
+			if cfg.Daemon != nil && cfg.Daemon.AutoSyncSkills != nil {
+				autoSync = *cfg.Daemon.AutoSyncSkills
+			}
+
+			if autoSync {
+				debounceMs := 1000
+				if cfg.Daemon != nil && cfg.Daemon.SkillSyncDebounceMs > 0 {
+					debounceMs = cfg.Daemon.SkillSyncDebounceMs
+				}
+
+				skillWatcher, err := watcher.NewSkillWatcher(st, cfg, debounceMs)
+				if err != nil {
+					logger.WithError(err).Warn("Failed to start skill watcher, continuing without it")
+				} else {
+					logger.Info("Skill watcher started")
+					go skillWatcher.Start(ctx)
+				}
+			}
+
 			// 8. Start Server (Blocking)
 			logger.WithField("pid", os.Getpid()).Info("Starting daemon")
 			if err := srv.ListenAndServe(sockPath); err != nil {
@@ -404,6 +426,19 @@ func newGrovedMonitorCmd() *cobra.Command {
 						configFile = "unknown"
 					}
 					fmt.Printf("[%s] Config Reload: %s\n", timestamp, configFile)
+				case "skill_sync":
+					// Payload is a generic map after JSON unmarshaling over the stream
+					if p, ok := update.Payload.(map[string]interface{}); ok {
+						workspace, _ := p["workspace"].(string)
+						errStr, _ := p["error"].(string)
+
+						if errStr != "" {
+							fmt.Printf("[%s] Skill Sync Error: %s - %s\n", timestamp, workspace, errStr)
+						} else if skillsList, ok := p["synced_skills"].([]interface{}); ok && len(skillsList) > 0 {
+							fmt.Printf("[%s] Skill Sync: %s synced %d skills to %v\n",
+								timestamp, workspace, len(skillsList), p["dest_paths"])
+						}
+					}
 				default:
 					fmt.Printf("[%s] Update: %s\n", timestamp, update.UpdateType)
 				}
