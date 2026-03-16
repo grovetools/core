@@ -102,14 +102,26 @@ func (w *SkillWatcher) handleStoreUpdates(ctx context.Context, updates chan stor
 				return
 			}
 			if update.Type == store.UpdateConfigReload {
-				w.log.Info("Config reload detected, syncing all skills")
+				w.log.Info("Config reload detected, reloading config and syncing all skills")
+
+				// Reload config to pick up changes
+				newCfg, err := config.LoadDefault()
+				if err != nil {
+					w.log.WithError(err).Error("Failed to reload config")
+					continue
+				}
+				w.cfg = newCfg
+				w.locator = workspace.NewNotebookLocator(newCfg)
+
 				w.syncAllWorkspaces()
 			}
 		}
 	}
 }
 
-// syncAllWorkspaces syncs skills for all workspaces that have skills configured
+// syncAllWorkspaces syncs skills for all workspaces.
+// This includes workspaces with no skills configured, since they may have
+// previously had skills that need to be cleaned up.
 func (w *SkillWatcher) syncAllWorkspaces() {
 	workspaces := w.store.GetWorkspaces()
 	for _, ew := range workspaces {
@@ -118,15 +130,8 @@ func (w *SkillWatcher) syncAllWorkspaces() {
 			continue
 		}
 
-		// Check if this workspace has skills configured
-		skillsCfg, err := skills.LoadSkillsConfig(w.cfg, node)
-		if err != nil || skillsCfg == nil {
-			continue
-		}
-		if len(skillsCfg.Use) == 0 && len(skillsCfg.Dependencies) == 0 {
-			continue
-		}
-
+		// Sync all workspaces - SyncForNode handles cleanup for workspaces
+		// that no longer have skills configured
 		w.syncWorkspace(node)
 	}
 }
