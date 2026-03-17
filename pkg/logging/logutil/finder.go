@@ -7,9 +7,15 @@ import (
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/util/pathutil"
 )
+
+// GetSystemLogsDir returns the path to the central system logs directory.
+func GetSystemLogsDir() string {
+	return filepath.Join(paths.StateDir(), "logs")
+}
 
 // FindLogFileForWorkspace determines the log file path for a given workspace.
 // Returns the log file path and the logs directory path.

@@ -7,18 +7,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/grovetools/core/cli"
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/logging/logutil"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/grovetools/core/tui/theme"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -76,6 +74,9 @@ Examples:
 	cmd.Flags().StringSlice("also-show", []string{}, "Temporarily show components/groups, overriding hide rules")
 	cmd.Flags().StringSlice("ignore-hide", []string{}, "Temporarily show components/groups that would be hidden by config")
 
+	cmd.Flags().Bool("system", false, "Only show global system logs (ignores workspace logs)")
+	cmd.Flags().Bool("include-system", false, "Include global system events that have no specific workspace context")
+
 	return cmd
 }
 
@@ -114,11 +115,16 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 
 	ecosystem, _ := cmd.Flags().GetBool("ecosystem")
 	wsFilter, _ := cmd.Flags().GetStringSlice("workspaces")
+	systemOnly, _ := cmd.Flags().GetBool("system")
+	includeSystem, _ := cmd.Flags().GetBool("include-system")
 
 	var workspaces []*workspace.WorkspaceNode
 
 	// Determine which workspaces to show
-	if ecosystem || len(wsFilter) > 0 {
+	if systemOnly {
+		// Skip workspace discovery entirely - only show system logs
+		workspaces = []*workspace.WorkspaceNode{}
+	} else if ecosystem || len(wsFilter) > 0 {
 		// 1. Discover all workspaces in ecosystem
 		allWorkspaces, err := workspace.GetProjects(logger)
 		if err != nil {
@@ -163,7 +169,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(workspaces) == 0 {
+	if len(workspaces) == 0 && !systemOnly {
 		logger.Info("No matching workspaces found.")
 		return nil
 	}
@@ -173,7 +179,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	follow, _ := cmd.Flags().GetBool("follow")
 
 	if tuiMode {
-		return runLogsTUI(workspaces, follow, overrideOpts)
+		return runLogsTUI(workspaces, follow, overrideOpts, systemOnly, includeSystem, ecosystem)
 	}
 
 	// 3. Find log files and start tailing
@@ -223,26 +229,72 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Also tail the central system log directory for daemon/system events
+	systemLogsDir := filepath.Join(paths.StateDir(), "logs")
+	if _, err := os.Stat(systemLogsDir); err == nil {
+		wg.Add(1)
+		if follow || systemOnly {
+			go tailDirectory("system", systemLogsDir, lineChan, &wg, follow || systemOnly, tail)
+		} else {
+			if sysLogFile, err := logutil.FindLatestLogFile(systemLogsDir); err == nil {
+				go tailFile("system", sysLogFile, lineChan, &wg, follow, tail)
+			} else {
+				wg.Done()
+			}
+		}
+	} else if systemOnly {
+		logger.Info("No system logs found yet.")
+		return nil
+	}
+
 	// Close channel when all tailing goroutines are done
 	go func() {
 		wg.Wait()
 		close(lineChan)
 	}()
 
+	// Build a set of workspace names for filtering system log entries
+	wsNameSet := make(map[string]bool, len(workspaces))
+	for _, w := range workspaces {
+		wsNameSet[w.Name] = true
+	}
+
 	// 4. Process and print logs from the channel
 	for tailedLine := range lineChan {
 		stats.total++
-		// Filter based on component visibility config
+
 		var logMap map[string]interface{}
-		if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err == nil {
-			if component, ok := logMap["component"].(string); ok {
-				result := logging.GetComponentVisibility(component, &logCfg, overrideOpts)
-				if !result.Visible {
-					stats.hidden++
-					stats.lastReason = result.Reason
-					stats.lastRule = result.Rule
+		if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
+			// Non-JSON line, print raw
+			stats.shown++
+			fmt.Println(tailedLine.Line)
+			continue
+		}
+
+		// Handle system log filtering
+		if tailedLine.Workspace == "system" {
+			wsContext, _ := logMap["workspace"].(string)
+			if !systemOnly {
+				if wsContext != "" {
+					if !wsNameSet[wsContext] {
+						continue
+					}
+				} else if !includeSystem && !ecosystem {
 					continue
 				}
+			}
+		} else if systemOnly {
+			continue
+		}
+
+		// Filter based on component visibility config
+		if component, ok := logMap["component"].(string); ok {
+			result := logging.GetComponentVisibility(component, &logCfg, overrideOpts)
+			if !result.Visible {
+				stats.hidden++
+				stats.lastReason = result.Reason
+				stats.lastRule = result.Rule
+				continue
 			}
 		}
 		stats.shown++
@@ -253,20 +305,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 			outputFormat = "json"
 		}
 
-		switch outputFormat {
-		case "json":
-			printLogJSON(tailedLine)
-		case "pretty":
-			printLogPretty(tailedLine, true, compact) // with ANSI
-		case "pretty-text":
-			printLogPretty(tailedLine, false, compact) // without ANSI
-		case "full":
-			printLogFull(tailedLine, compact)
-		case "rich":
-			printLogRich(tailedLine, compact)
-		default: // "text"
-			printLogText(tailedLine)
-		}
+		fmt.Print(logutil.FormatLogLine(logMap, tailedLine.Workspace, outputFormat, compact))
 	}
 
 	// For non-follow commands, print filter statistics at the end.
@@ -443,291 +482,3 @@ func tailDirectory(wsName, logsDir string, lineChan chan<- TailedLine, wg *sync.
 	}
 }
 
-// printLogJSON prints a log line in JSON format, enriched with the workspace name.
-// Filters out pretty_ansi (keeps pretty_text for clean searchable output).
-func printLogJSON(tailedLine TailedLine) {
-	var logMap map[string]interface{}
-	err := json.Unmarshal([]byte(tailedLine.Line), &logMap)
-	if err != nil {
-		// Fallback for non-JSON lines
-		fallback := map[string]interface{}{
-			"workspace": tailedLine.Workspace,
-			"raw_line":  tailedLine.Line,
-			"error":     "failed to parse original log line as JSON",
-		}
-		jsonData, _ := json.Marshal(fallback)
-		fmt.Println(string(jsonData))
-		return
-	}
-
-	// Filter out pretty_ansi (ANSI codes don't belong in JSON output)
-	delete(logMap, "pretty_ansi")
-
-	logMap["workspace"] = tailedLine.Workspace
-	jsonData, _ := json.Marshal(logMap)
-	fmt.Println(string(jsonData))
-}
-
-// printLogPretty prints only the pretty output from the unified logger.
-// If withANSI is true, uses pretty_ansi (styled); otherwise uses pretty_text (plain).
-// If compact is true, no spacing is added between entries.
-func printLogPretty(tailedLine TailedLine, withANSI bool, compact bool) {
-	var logMap map[string]interface{}
-	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
-		// Not JSON, print raw line
-		fmt.Println(tailedLine.Line)
-		if !compact {
-			fmt.Println()
-		}
-		return
-	}
-
-	// Choose which pretty field to use
-	var prettyOutput string
-	if withANSI {
-		if v, ok := logMap["pretty_ansi"].(string); ok && v != "" {
-			prettyOutput = v
-		}
-	} else {
-		if v, ok := logMap["pretty_text"].(string); ok && v != "" {
-			prettyOutput = v
-		}
-	}
-
-	// If no pretty output available, fall back to msg
-	if prettyOutput == "" {
-		if msg, ok := logMap["msg"].(string); ok {
-			prettyOutput = msg
-		} else {
-			return // Nothing to print
-		}
-	}
-
-	fmt.Println(prettyOutput)
-	if !compact {
-		fmt.Println() // blank line for spacing between entries
-	}
-}
-
-// printLogRich prints time, component, level, and pretty output on one line.
-// Format: 12:40:43 [grove-flow] INFO 󰄬 Job completed
-// If compact is true, no spacing is added between entries.
-func printLogRich(tailedLine TailedLine, compact bool) {
-	var logMap map[string]interface{}
-	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
-		// Print as a raw line if not JSON
-		fmt.Println(tailedLine.Line)
-		if !compact {
-			fmt.Println()
-		}
-		return
-	}
-
-	// Extract fields
-	ts, _ := logMap["time"].(string)
-	level, _ := logMap["level"].(string)
-	component, _ := logMap["component"].(string)
-
-	// Parse time for formatting
-	parsedTime, err := time.Parse(time.RFC3339Nano, ts)
-	if err != nil {
-		parsedTime, _ = time.Parse(time.RFC3339, ts)
-	}
-	timeStr := parsedTime.Format("15:04:05")
-
-	// Style level
-	var levelStyle lipgloss.Style
-	switch strings.ToLower(level) {
-	case "error", "fatal", "panic":
-		levelStyle = theme.DefaultTheme.Error
-	case "warning":
-		levelStyle = theme.DefaultTheme.Warning
-	case "info":
-		levelStyle = theme.DefaultTheme.Info
-	default:
-		levelStyle = theme.DefaultTheme.Muted
-	}
-	levelStr := levelStyle.Render(strings.ToUpper(level))
-
-	// Get pretty output, fall back to msg
-	prettyOutput := ""
-	if v, ok := logMap["pretty_ansi"].(string); ok && v != "" {
-		prettyOutput = v
-	} else if msg, ok := logMap["msg"].(string); ok {
-		prettyOutput = msg
-	}
-
-	// Check if multi-line
-	isMultiLine := strings.Contains(prettyOutput, "\n")
-
-	if isMultiLine {
-		// Multi-line: metadata on first line, pretty output below
-		fmt.Printf("%s [%s] %s\n",
-			theme.DefaultTheme.Muted.Render(timeStr),
-			theme.DefaultTheme.Muted.Render(component),
-			levelStr,
-		)
-		fmt.Println(prettyOutput)
-	} else {
-		// Single line: all on one line
-		fmt.Printf("%s [%s] %s %s\n",
-			theme.DefaultTheme.Muted.Render(timeStr),
-			theme.DefaultTheme.Muted.Render(component),
-			levelStr,
-			prettyOutput,
-		)
-	}
-
-	if !compact {
-		fmt.Println()
-	}
-}
-
-// printLogFull prints the standard text format plus the pretty output indented below.
-// If compact is true, no spacing is added between entries.
-func printLogFull(tailedLine TailedLine, compact bool) {
-	var logMap map[string]interface{}
-	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
-		// Print as a raw line if not JSON
-		fmt.Printf("[%s] %s\n",
-			theme.DefaultTheme.Accent.Render(tailedLine.Workspace),
-			tailedLine.Line,
-		)
-		return
-	}
-
-	// Extract common fields
-	ts, _ := logMap["time"].(string)
-	level, _ := logMap["level"].(string)
-	msg, _ := logMap["msg"].(string)
-	component, _ := logMap["component"].(string)
-
-	// Parse time for formatting
-	parsedTime, err := time.Parse(time.RFC3339Nano, ts)
-	if err != nil {
-		parsedTime, _ = time.Parse(time.RFC3339, ts)
-	}
-	timeStr := parsedTime.Format("15:04:05")
-
-	// Style level
-	var levelStyle lipgloss.Style
-	switch strings.ToLower(level) {
-	case "error", "fatal", "panic":
-		levelStyle = theme.DefaultTheme.Error
-	case "warning":
-		levelStyle = theme.DefaultTheme.Warning
-	case "info":
-		levelStyle = theme.DefaultTheme.Info
-	default:
-		levelStyle = theme.DefaultTheme.Muted
-	}
-	levelStr := levelStyle.Render(strings.ToUpper(level))
-
-	// Get other fields (excluding pretty_* and standard fields)
-	otherFields := []string{}
-	sortedKeys := []string{}
-	excludeFields := map[string]bool{
-		"time": true, "level": true, "msg": true, "component": true,
-		"workspace": true, "pretty_ansi": true, "pretty_text": true,
-	}
-	for k := range logMap {
-		if !excludeFields[k] {
-			sortedKeys = append(sortedKeys, k)
-		}
-	}
-	sort.Strings(sortedKeys)
-
-	for _, k := range sortedKeys {
-		otherFields = append(otherFields, fmt.Sprintf("%s=%v", theme.DefaultTheme.Muted.Render(k), logMap[k]))
-	}
-
-	fieldsStr := strings.Join(otherFields, " ")
-
-	// Print the main log line
-	fmt.Printf("%s [%s] %s %s [%s] %s\n",
-		timeStr,
-		theme.DefaultTheme.Accent.Render(tailedLine.Workspace),
-		levelStr,
-		msg,
-		theme.DefaultTheme.Muted.Render(component),
-		fieldsStr,
-	)
-
-	// Print pretty output indented below if available
-	if prettyAnsi, ok := logMap["pretty_ansi"].(string); ok && prettyAnsi != "" {
-		if compact {
-			fmt.Printf("         %s %s\n", theme.DefaultTheme.Muted.Render("└─"), prettyAnsi)
-		} else {
-			fmt.Printf("         %s %s\n\n", theme.DefaultTheme.Muted.Render("└─"), prettyAnsi)
-		}
-	}
-}
-
-// printLogText pretty-prints a log line for human consumption.
-func printLogText(tailedLine TailedLine) {
-	var logMap map[string]interface{}
-	if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
-		// Print as a raw line if not JSON
-		fmt.Printf("[%s] %s\n",
-			theme.DefaultTheme.Accent.Render(tailedLine.Workspace),
-			tailedLine.Line,
-		)
-		return
-	}
-
-	// Extract common fields
-	ts, _ := logMap["time"].(string)
-	level, _ := logMap["level"].(string)
-	msg, _ := logMap["msg"].(string)
-	component, _ := logMap["component"].(string)
-
-	// Parse time for formatting
-	parsedTime, err := time.Parse(time.RFC3339Nano, ts)
-	if err != nil {
-		parsedTime, _ = time.Parse(time.RFC3339, ts)
-	}
-	timeStr := parsedTime.Format("15:04:05")
-
-	// Style level
-	var levelStyle lipgloss.Style
-	switch strings.ToLower(level) {
-	case "error", "fatal", "panic":
-		levelStyle = theme.DefaultTheme.Error
-	case "warning":
-		levelStyle = theme.DefaultTheme.Warning
-	case "info":
-		levelStyle = theme.DefaultTheme.Info
-	default:
-		levelStyle = theme.DefaultTheme.Muted
-	}
-	levelStr := levelStyle.Render(strings.ToUpper(level))
-
-	// Get other fields (excluding pretty_* which are handled separately)
-	otherFields := []string{}
-	sortedKeys := []string{}
-	excludeFields := map[string]bool{
-		"time": true, "level": true, "msg": true, "component": true,
-		"workspace": true, "pretty_ansi": true, "pretty_text": true,
-	}
-	for k := range logMap {
-		if !excludeFields[k] {
-			sortedKeys = append(sortedKeys, k)
-		}
-	}
-	sort.Strings(sortedKeys)
-
-	for _, k := range sortedKeys {
-		otherFields = append(otherFields, fmt.Sprintf("%s=%v", theme.DefaultTheme.Muted.Render(k), logMap[k]))
-	}
-
-	fieldsStr := strings.Join(otherFields, " ")
-
-	fmt.Printf("%s [%s] %s %s [%s] %s\n",
-		timeStr,
-		theme.DefaultTheme.Accent.Render(tailedLine.Workspace),
-		levelStr,
-		msg,
-		theme.DefaultTheme.Muted.Render(component),
-		fieldsStr,
-	)
-}

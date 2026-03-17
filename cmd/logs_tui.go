@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	stdlog "log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -24,6 +25,7 @@ import (
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
 	logskeymap "github.com/grovetools/core/pkg/keymap"
+	"github.com/grovetools/core/pkg/logging/logutil"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/tui/components/help"
 	"github.com/grovetools/core/tui/components/jsontree"
@@ -343,6 +345,10 @@ type logModel struct {
 	jsonView        bool
 	logConfig       *logging.Config // logging config for component filtering
 	overrideOpts    *logging.OverrideOptions
+	systemOnly      bool   // Only show system logs
+	includeSystem   bool   // Include global system events
+	ecosystem       bool   // Ecosystem mode
+	wsNameSet       map[string]bool // workspace names for system log filtering
 }
 
 // Messages
@@ -829,6 +835,22 @@ func (m *logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		component, _ := msg.data["component"].(string)
 		timeStr, _ := msg.data["time"].(string)
 
+		// Filter system log entries
+		if msg.workspace == "system" {
+			wsContext, _ := msg.data["workspace"].(string)
+			if !m.systemOnly {
+				if wsContext != "" {
+					if !m.wsNameSet[wsContext] {
+						return m, m.waitForLogs()
+					}
+				} else if !m.includeSystem && !m.ecosystem {
+					return m, m.waitForLogs()
+				}
+			}
+		} else if m.systemOnly {
+			return m, m.waitForLogs()
+		}
+
 		// Filter based on component visibility config if filters are enabled
 		if m.filtersEnabled {
 			if m.logConfig != nil {
@@ -1097,7 +1119,7 @@ func getWorkspaceStyle(workspace string) lipgloss.Style {
 }
 
 // Run the logs TUI
-func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions) error {
+func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, systemOnly bool, includeSystem bool, ecosystem bool) error {
 	logger := logging.NewLogger("logs-tui")
 
 	// Load logging config for component filtering, starting with defaults
@@ -1148,17 +1170,30 @@ func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts
 		}()
 	}
 
-	// Helper to discover and tail log files for all workspaces
+	// Helper to discover and tail log files for all workspaces and system logs
 	discoverAndTailFiles := func() {
-		for _, ws := range workspaces {
-			logDir := filepath.Join(ws.Path, ".grove", "logs")
-			files, err := filepath.Glob(filepath.Join(logDir, "*.log"))
-			if err != nil {
-				continue
-			}
+		if !systemOnly {
+			for _, ws := range workspaces {
+				logDir := filepath.Join(ws.Path, ".grove", "logs")
+				files, err := filepath.Glob(filepath.Join(logDir, "*.log"))
+				if err != nil {
+					continue
+				}
 
-			for _, file := range files {
-				startTailing(file, ws.Name)
+				for _, file := range files {
+					startTailing(file, ws.Name)
+				}
+			}
+		}
+
+		// Also tail the central system logs directory
+		systemLogsDir := logutil.GetSystemLogsDir()
+		if _, err := os.Stat(systemLogsDir); err == nil {
+			files, err := filepath.Glob(filepath.Join(systemLogsDir, "*.log"))
+			if err == nil {
+				for _, file := range files {
+					startTailing(file, "system")
+				}
 			}
 		}
 	}
@@ -1198,6 +1233,12 @@ func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts
 	s.Spinner = spinner.Dot
 	s.Style = theme.DefaultTheme.Highlight
 
+	// Build workspace name set for system log filtering
+	wsNameSet := make(map[string]bool, len(workspaces))
+	for _, w := range workspaces {
+		wsNameSet[w.Name] = true
+	}
+
 	// Initialize model
 	model := &logModel{
 		list:            l,
@@ -1213,6 +1254,10 @@ func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts
 		ready:           false,
 		logConfig:       &logCfg,
 		overrideOpts:    overrideOpts,
+		systemOnly:      systemOnly,
+		includeSystem:   includeSystem,
+		ecosystem:       ecosystem,
+		wsNameSet:       wsNameSet,
 	}
 
 	// Set the delegate with model reference

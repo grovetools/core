@@ -13,10 +13,40 @@ import (
 
 	"github.com/mattn/go-isatty"
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/version"
 	"github.com/sirupsen/logrus"
 )
+
+// LogScope defines the execution scope for log routing.
+type LogScope int
+
+const (
+	// ScopeWorkspace routes logs to the local project's .grove/logs directory.
+	ScopeWorkspace LogScope = iota
+	// ScopeSystem routes logs to the central XDG state directory (~/.local/state/grove/logs).
+	ScopeSystem
+)
+
+var (
+	activeScope LogScope = ScopeWorkspace
+	scopeMu     sync.RWMutex
+)
+
+// SetGlobalScope configures the destination scope for all loggers created in this process.
+func SetGlobalScope(scope LogScope) {
+	scopeMu.Lock()
+	activeScope = scope
+	scopeMu.Unlock()
+}
+
+// GetGlobalScope returns the current global log scope.
+func GetGlobalScope() LogScope {
+	scopeMu.RLock()
+	defer scopeMu.RUnlock()
+	return activeScope
+}
 
 var (
 	loggers   = make(map[string]*logrus.Entry)
@@ -301,7 +331,19 @@ func NewLogger(component string) *logrus.Entry {
 	// Configure File Sink
 	if logCfg.File.Enabled {
 		var logFilePath string
-		if logCfg.File.Path != "" {
+
+		scopeMu.RLock()
+		currentScope := activeScope
+		scopeMu.RUnlock()
+
+		if envPath := os.Getenv("GROVE_LOG_FILE"); envPath != "" {
+			logFilePath = expandPath(envPath)
+		} else if currentScope == ScopeSystem {
+			// System scope: write to central XDG state directory
+			now := time.Now()
+			dateStr := now.Format("2006-01-02")
+			logFilePath = filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", dateStr))
+		} else if logCfg.File.Path != "" {
 			// Use explicitly configured path
 			logFilePath = expandPath(logCfg.File.Path)
 		} else {
@@ -327,11 +369,19 @@ func NewLogger(component string) *logrus.Entry {
 				if err == nil && node != nil {
 					// Use the workspace root path for logs
 					logBasePath = node.Path
+				} else {
+					// Not in a valid Grove project - fall back to system log
+					// to prevent dropping .grove/logs/ folders in random directories
+					now := time.Now()
+					dateStr := now.Format("2006-01-02")
+					logFilePath = filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", dateStr))
 				}
 
-				now := time.Now()
-				dateStr := now.Format("2006-01-02")
-				logFilePath = filepath.Join(logBasePath, ".grove", "logs", fmt.Sprintf("workspace-%s.log", dateStr))
+				if logFilePath == "" {
+					now := time.Now()
+					dateStr := now.Format("2006-01-02")
+					logFilePath = filepath.Join(logBasePath, ".grove", "logs", fmt.Sprintf("workspace-%s.log", dateStr))
+				}
 			}
 		}
 
@@ -479,5 +529,9 @@ func Reset() {
 	initOnce = sync.Once{}
 	currentProjectOnce = sync.Once{}
 	currentProjectName = ""
+
+	scopeMu.Lock()
+	activeScope = ScopeWorkspace
+	scopeMu.Unlock()
 }
 
