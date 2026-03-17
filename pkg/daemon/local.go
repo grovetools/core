@@ -204,5 +204,15 @@ func (c *LocalClient) ListJobs(ctx context.Context, filter models.JobFilter) ([]
 	return nil, errors.New("job execution requires the grove daemon")
 }
 
+// StreamJobLogs returns an error since log streaming requires the daemon.
+func (c *LocalClient) StreamJobLogs(ctx context.Context, jobID string) (<-chan models.JobStreamEvent, error) {
+	return nil, errors.New("log streaming requires the grove daemon; use daemon.NewWithAutoStart()")
+}
+
+// GetJobLogs returns an error since log fetching requires the daemon.
+func (c *LocalClient) GetJobLogs(ctx context.Context, jobID string) ([]models.LogLine, error) {
+	return nil, errors.New("log fetching requires the grove daemon; use daemon.NewWithAutoStart()")
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

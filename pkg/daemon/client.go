@@ -128,6 +128,16 @@ type Client interface {
 
 	// ListJobs returns jobs matching the given filter.
 	ListJobs(ctx context.Context, filter models.JobFilter) ([]*models.JobInfo, error)
+
+	// --- Log Streaming ---
+	// These methods enable streaming and fetching job logs via the daemon's LogStreamer.
+
+	// StreamJobLogs subscribes to real-time log output for a specific job.
+	// Returns a channel that receives log and status events. Closed when the job completes or context is cancelled.
+	StreamJobLogs(ctx context.Context, jobID string) (<-chan models.JobStreamEvent, error)
+
+	// GetJobLogs returns the historical log content for a completed or running job.
+	GetJobLogs(ctx context.Context, jobID string) ([]models.LogLine, error)
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.

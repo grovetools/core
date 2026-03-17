@@ -154,6 +154,15 @@ type LogLine struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// JobStreamEvent encapsulates events sent over the job log SSE stream.
+// Event types: "log" for log lines, "status" for job status changes.
+type JobStreamEvent struct {
+	Event  string   `json:"event"`            // "log" or "status"
+	Line   *LogLine `json:"line,omitempty"`   // Present when Event == "log"
+	Status string   `json:"status,omitempty"` // Present when Event == "status"
+	Error  string   `json:"error,omitempty"`  // Present when Event == "status" and job failed
+}
+
 // Helper method to parse time strings from API requests
 func ParseTimeString(timeStr string) (time.Time, error) {
 	// Try common time formats

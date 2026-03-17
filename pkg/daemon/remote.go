@@ -540,5 +540,125 @@ func (c *RemoteClient) ListJobs(ctx context.Context, filter models.JobFilter) ([
 	return jobs, nil
 }
 
+// GetJobLogs returns historical log content for a job.
+func (c *RemoteClient) GetJobLogs(ctx context.Context, jobID string) ([]models.LogLine, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/jobs/"+jobID+"/logs", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get job logs: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("job %s not found", jobID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var lines []models.LogLine
+	if err := json.NewDecoder(resp.Body).Decode(&lines); err != nil {
+		return nil, fmt.Errorf("failed to decode log lines: %w", err)
+	}
+	return lines, nil
+}
+
+// StreamJobLogs subscribes to real-time log output for a specific job via SSE.
+func (c *RemoteClient) StreamJobLogs(ctx context.Context, jobID string) (<-chan models.JobStreamEvent, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/jobs/"+jobID+"/logs/stream", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stream request: %w", err)
+	}
+
+	// Use a separate client with no timeout for streaming
+	streamTransport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(dialCtx, "unix", c.socketPath)
+		},
+	}
+	streamClient := &http.Client{
+		Transport: streamTransport,
+		Timeout:   0, // No timeout for streaming
+	}
+
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to log stream: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("log stream returned status %d", resp.StatusCode)
+	}
+
+	ch := make(chan models.JobStreamEvent, 100)
+
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		defer streamTransport.CloseIdleConnections()
+
+		scanner := bufio.NewScanner(resp.Body)
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 1*1024*1024)
+
+		var currentEvent string
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			// Skip comments and empty lines
+			if strings.HasPrefix(line, ":") || line == "" {
+				currentEvent = "" // Reset on empty line (end of SSE message)
+				continue
+			}
+
+			if strings.HasPrefix(line, "event: ") {
+				currentEvent = strings.TrimPrefix(line, "event: ")
+				continue
+			}
+
+			if strings.HasPrefix(line, "data: ") {
+				jsonStr := strings.TrimPrefix(line, "data: ")
+
+				var event models.JobStreamEvent
+				if currentEvent == "log" {
+					var logLine models.LogLine
+					if err := json.Unmarshal([]byte(jsonStr), &logLine); err == nil {
+						event = models.JobStreamEvent{
+							Event: "log",
+							Line:  &logLine,
+						}
+					} else {
+						continue
+					}
+				} else if currentEvent == "status" {
+					if err := json.Unmarshal([]byte(jsonStr), &event); err != nil {
+						continue
+					}
+					event.Event = "status"
+				} else {
+					// Generic fallback
+					if err := json.Unmarshal([]byte(jsonStr), &event); err != nil {
+						continue
+					}
+				}
+
+				select {
+				case ch <- event:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)
