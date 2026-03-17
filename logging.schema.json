@@ -130,6 +130,18 @@
       "x-layer": "global",
       "x-priority": "60"
     },
+    "system_level": {
+      "type": "string",
+      "enum": [
+        "debug",
+        "info",
+        "warn",
+        "error"
+      ],
+      "description": "Minimum log level for system/daemon logs (debug/info/warn/error)",
+      "x-layer": "global",
+      "x-priority": "61"
+    },
     "report_caller": {
       "type": "boolean",
       "description": "Include file/line/function in log output",
