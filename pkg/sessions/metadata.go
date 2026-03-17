@@ -13,6 +13,7 @@ type SessionMetadata struct {
 	TmuxKey          string    `json:"tmux_key,omitempty"`
 	WorkingDirectory string    `json:"working_directory"`
 	User             string    `json:"user"`
+	Status           string    `json:"status,omitempty"` // Last known status (running, idle, pending_user)
 	StartedAt        time.Time `json:"started_at"`
 	TranscriptPath   string    `json:"transcript_path,omitempty"`
 	Type             string    `json:"type,omitempty"`
