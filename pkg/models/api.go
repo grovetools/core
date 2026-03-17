@@ -125,12 +125,21 @@ type JobFilter struct {
 	Limit  int    `json:"limit,omitempty"`
 }
 
+// JobType represents the type of a job (e.g., chat, oneshot, interactive_agent).
+type JobType string
+
 // JobInfo represents the current state of a job in the daemon.
 type JobInfo struct {
 	ID          string            `json:"id"`
+	Title       string            `json:"title,omitempty"`
+	Type        JobType           `json:"type,omitempty"`
 	PlanDir     string            `json:"plan_dir"`
+	PlanName    string            `json:"plan_name,omitempty"`
 	JobFile     string            `json:"job_file"`
-	Status      string            `json:"status"` // queued, running, completed, failed, cancelled
+	WorkDir     string            `json:"work_dir,omitempty"`
+	Repo        string            `json:"repo,omitempty"`
+	Branch      string            `json:"branch,omitempty"`
+	Status      string            `json:"status"` // queued, running, completed, failed, cancelled, idle, pending_user
 	Priority    int               `json:"priority,omitempty"`
 	TimeoutStr  string            `json:"timeout,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
