@@ -56,6 +56,12 @@ type Config struct {
 	// Can be overridden by the GROVE_LOG_LEVEL environment variable.
 	Level string `yaml:"level" toml:"level" jsonschema:"description=Minimum log level (debug/info/warn/error),default=info,enum=debug,enum=info,enum=warn,enum=error" jsonschema_extras:"x-layer=global,x-priority=60"`
 
+	// SystemLevel is the minimum log level for system-scoped logging (daemon, global tools).
+	// When set, overrides Level for processes running in ScopeSystem.
+	// Useful for capturing debug events in ~/.local/state/grove/logs/ without
+	// affecting workspace log verbosity.
+	SystemLevel string `yaml:"system_level,omitempty" toml:"system_level,omitempty" jsonschema:"description=Minimum log level for system/daemon logs (debug/info/warn/error),enum=debug,enum=info,enum=warn,enum=error" jsonschema_extras:"x-layer=global,x-priority=61"`
+
 	// ReportCaller, if true, includes the file, line, and function name in the log output.
 	// Can be enabled with the GROVE_LOG_CALLER=true environment variable.
 	ReportCaller bool `yaml:"report_caller" toml:"report_caller" jsonschema:"description=Include file/line/function in log output,default=true" jsonschema_extras:"x-layer=global,x-priority=65"`

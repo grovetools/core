@@ -301,8 +301,16 @@ func NewLogger(component string) *logrus.Entry {
 	levelStr := "info" // Default level
 	if os.Getenv("GROVE_LOG_LEVEL") != "" {
 		levelStr = os.Getenv("GROVE_LOG_LEVEL")
-	} else if logCfg.Level != "" {
-		levelStr = logCfg.Level
+	} else {
+		scopeMu.RLock()
+		isSystem := activeScope == ScopeSystem
+		scopeMu.RUnlock()
+
+		if isSystem && logCfg.SystemLevel != "" {
+			levelStr = logCfg.SystemLevel
+		} else if logCfg.Level != "" {
+			levelStr = logCfg.Level
+		}
 	}
 	level, err := logrus.ParseLevel(levelStr)
 	if err != nil {
