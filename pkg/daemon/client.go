@@ -112,6 +112,22 @@ type Client interface {
 	// Valid outcomes: "completed", "interrupted", "failed"
 	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
 	EndSession(ctx context.Context, jobID string, outcome string) error
+
+	// --- Job Management ---
+	// These methods enable submitting and managing jobs via the daemon's JobRunner.
+
+	// SubmitJob submits a job to the daemon for execution.
+	// Returns the created JobInfo with assigned ID and status.
+	SubmitJob(ctx context.Context, req models.JobSubmitRequest) (*models.JobInfo, error)
+
+	// CancelJob cancels a running or queued job.
+	CancelJob(ctx context.Context, jobID string) error
+
+	// GetJob returns the current state of a specific job.
+	GetJob(ctx context.Context, jobID string) (*models.JobInfo, error)
+
+	// ListJobs returns jobs matching the given filter.
+	ListJobs(ctx context.Context, filter models.JobFilter) ([]*models.JobInfo, error)
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.

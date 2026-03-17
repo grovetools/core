@@ -280,18 +280,28 @@ type ContextConfig struct {
 	DefaultRulesPath string  `yaml:"default_rules_path,omitempty" toml:"default_rules_path,omitempty" jsonschema:"description=Default rules file path for context filtering" jsonschema_extras:"x-layer=project,x-priority=81"`
 }
 
+// DaemonJobsConfig holds configuration for the in-process job runner.
+type DaemonJobsConfig struct {
+	Enabled          *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Enable the background job runner (default: true)"`
+	MaxConcurrent    int    `yaml:"max_concurrent,omitempty" toml:"max_concurrent,omitempty" jsonschema:"description=Maximum number of concurrent jobs (default: 4)"`
+	DefaultTimeout   string `yaml:"default_timeout,omitempty" toml:"default_timeout,omitempty" jsonschema:"description=Default timeout for jobs (default: 30m)"`
+	QueuePersistence *bool  `yaml:"queue_persistence,omitempty" toml:"queue_persistence,omitempty" jsonschema:"description=Persist job queue across daemon restarts (default: true)"`
+	PersistDir       string `yaml:"persist_dir,omitempty" toml:"persist_dir,omitempty" jsonschema:"description=Directory to persist job state"`
+}
+
 // DaemonConfig holds configuration for the grove daemon (groved).
 type DaemonConfig struct {
-	GitInterval         string        `yaml:"git_interval,omitempty" toml:"git_interval,omitempty" jsonschema:"description=How often to poll git status (default: 10s)"`
-	SessionInterval     string        `yaml:"session_interval,omitempty" toml:"session_interval,omitempty" jsonschema:"description=How often to poll sessions (default: 2s)"`
-	WorkspaceInterval   string        `yaml:"workspace_interval,omitempty" toml:"workspace_interval,omitempty" jsonschema:"description=How often to refresh workspace discovery (default: 30s)"`
-	PlanInterval        string        `yaml:"plan_interval,omitempty" toml:"plan_interval,omitempty" jsonschema:"description=How often to poll plan stats (default: 30s)"`
-	NoteInterval        string        `yaml:"note_interval,omitempty" toml:"note_interval,omitempty" jsonschema:"description=How often to poll note counts (default: 60s)"`
-	ConfigWatch         *bool         `yaml:"config_watch,omitempty" toml:"config_watch,omitempty" jsonschema:"description=Enable config watching (default: true)"`
-	ConfigDebounceMs    int           `yaml:"config_debounce_ms,omitempty" toml:"config_debounce_ms,omitempty" jsonschema:"description=Debounce window for rapid config changes in milliseconds (default: 100)"`
-	AutoSyncSkills      *bool         `yaml:"auto_sync_skills,omitempty" toml:"auto_sync_skills,omitempty" jsonschema:"description=Enable automatic syncing of skills on file change (default: true)"`
-	SkillSyncDebounceMs int           `yaml:"skill_sync_debounce_ms,omitempty" toml:"skill_sync_debounce_ms,omitempty" jsonschema:"description=Debounce window for skill syncs in milliseconds (default: 1000)"`
-	Hooks               *DaemonHooks  `yaml:"hooks,omitempty" toml:"hooks,omitempty" jsonschema:"description=Daemon-specific hooks configuration"`
+	GitInterval         string            `yaml:"git_interval,omitempty" toml:"git_interval,omitempty" jsonschema:"description=How often to poll git status (default: 10s)"`
+	SessionInterval     string            `yaml:"session_interval,omitempty" toml:"session_interval,omitempty" jsonschema:"description=How often to poll sessions (default: 2s)"`
+	WorkspaceInterval   string            `yaml:"workspace_interval,omitempty" toml:"workspace_interval,omitempty" jsonschema:"description=How often to refresh workspace discovery (default: 30s)"`
+	PlanInterval        string            `yaml:"plan_interval,omitempty" toml:"plan_interval,omitempty" jsonschema:"description=How often to poll plan stats (default: 30s)"`
+	NoteInterval        string            `yaml:"note_interval,omitempty" toml:"note_interval,omitempty" jsonschema:"description=How often to poll note counts (default: 60s)"`
+	ConfigWatch         *bool             `yaml:"config_watch,omitempty" toml:"config_watch,omitempty" jsonschema:"description=Enable config watching (default: true)"`
+	ConfigDebounceMs    int               `yaml:"config_debounce_ms,omitempty" toml:"config_debounce_ms,omitempty" jsonschema:"description=Debounce window for rapid config changes in milliseconds (default: 100)"`
+	AutoSyncSkills      *bool             `yaml:"auto_sync_skills,omitempty" toml:"auto_sync_skills,omitempty" jsonschema:"description=Enable automatic syncing of skills on file change (default: true)"`
+	SkillSyncDebounceMs int               `yaml:"skill_sync_debounce_ms,omitempty" toml:"skill_sync_debounce_ms,omitempty" jsonschema:"description=Debounce window for skill syncs in milliseconds (default: 1000)"`
+	Hooks               *DaemonHooks      `yaml:"hooks,omitempty" toml:"hooks,omitempty" jsonschema:"description=Daemon-specific hooks configuration"`
+	Jobs                *DaemonJobsConfig `yaml:"jobs,omitempty" toml:"jobs,omitempty" jsonschema:"description=Job runner configuration"`
 }
 
 // DaemonHooks defines hooks that are triggered by daemon events.

@@ -108,6 +108,52 @@ func SessionFromClaudeSession(cs interface{}) *Session {
 	return nil
 }
 
+// --- Job Runner API Types ---
+
+// JobSubmitRequest represents a request to submit a job to the daemon.
+type JobSubmitRequest struct {
+	PlanDir  string            `json:"plan_dir"`
+	JobFile  string            `json:"job_file"`
+	Priority int               `json:"priority,omitempty"`
+	Timeout  string            `json:"timeout,omitempty"` // e.g., "30m"
+	Env      map[string]string `json:"env,omitempty"`
+}
+
+// JobFilter represents query parameters for listing jobs.
+type JobFilter struct {
+	Status string `json:"status,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+}
+
+// JobInfo represents the current state of a job in the daemon.
+type JobInfo struct {
+	ID          string            `json:"id"`
+	PlanDir     string            `json:"plan_dir"`
+	JobFile     string            `json:"job_file"`
+	Status      string            `json:"status"` // queued, running, completed, failed, cancelled
+	Priority    int               `json:"priority,omitempty"`
+	TimeoutStr  string            `json:"timeout,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
+	SubmittedAt time.Time         `json:"submitted_at"`
+	StartedAt   *time.Time        `json:"started_at,omitempty"`
+	CompletedAt *time.Time        `json:"completed_at,omitempty"`
+	Error       string            `json:"error,omitempty"`
+}
+
+// PlanRunOptions represents options for running an entire plan.
+type PlanRunOptions struct {
+	Mode     string   `json:"mode"` // "next", "all", "specific"
+	JobFiles []string `json:"job_files,omitempty"`
+	Parallel int      `json:"parallel,omitempty"`
+	AutoRun  bool     `json:"autorun,omitempty"`
+}
+
+// LogLine represents a single streamed log entry.
+type LogLine struct {
+	Line      string    `json:"line"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // Helper method to parse time strings from API requests
 func ParseTimeString(timeStr string) (time.Time, error) {
 	// Try common time formats

@@ -184,5 +184,25 @@ func (c *LocalClient) EndSession(ctx context.Context, jobID string, outcome stri
 	return nil
 }
 
+// SubmitJob returns an error since job execution requires the daemon.
+func (c *LocalClient) SubmitJob(ctx context.Context, req models.JobSubmitRequest) (*models.JobInfo, error) {
+	return nil, errors.New("job execution requires the grove daemon; use daemon.NewWithAutoStart()")
+}
+
+// CancelJob returns an error since job execution requires the daemon.
+func (c *LocalClient) CancelJob(ctx context.Context, jobID string) error {
+	return errors.New("job execution requires the grove daemon; use daemon.NewWithAutoStart()")
+}
+
+// GetJob returns an error since job queries require the daemon.
+func (c *LocalClient) GetJob(ctx context.Context, jobID string) (*models.JobInfo, error) {
+	return nil, errors.New("job execution requires the grove daemon")
+}
+
+// ListJobs returns an error since job queries require the daemon.
+func (c *LocalClient) ListJobs(ctx context.Context, filter models.JobFilter) ([]*models.JobInfo, error) {
+	return nil, errors.New("job execution requires the grove daemon")
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)
