@@ -79,6 +79,19 @@ func (r *AliasResolver) InitProvider() {
 	})
 }
 
+// InitProviderFromNodes initializes the provider from pre-built WorkspaceNodes,
+// avoiding the expensive disk-based discovery. This is used when workspace data
+// is already available from the daemon's cache.
+func (r *AliasResolver) InitProviderFromNodes(nodes []*workspace.WorkspaceNode) {
+	r.providerOnce.Do(func() {
+		r.Provider = workspace.NewProviderFromNodes(nodes)
+
+		// Initialize NotebookLocator with config (same as InitProvider)
+		cfg, _ := config.LoadDefault()
+		r.notebookLocator = workspace.NewNotebookLocator(cfg)
+	})
+}
+
 // Resolve translates an alias string into an absolute filesystem path. It supports
 // two primary types of aliases:
 //
