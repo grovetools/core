@@ -141,6 +141,13 @@ func (w *ConfigWatcher) Start(ctx context.Context) {
 			if !ok {
 				return
 			}
+
+			// Skip CHMOD-only events — macOS fires these frequently due to
+			// metadata updates (Spotlight, backup tools, access time changes)
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
+				continue
+			}
+
 			w.logger.Debugf("fsnotify event: %s op=%v", event.Name, event.Op)
 
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
