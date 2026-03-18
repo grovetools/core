@@ -28,7 +28,7 @@ type LogLineMsg struct {
 type Model struct {
 	viewport   viewport.Model
 	tails      []*tail.Tail
-	mu         sync.Mutex
+	mu         *sync.Mutex
 	follow     bool
 	ready      bool
 	width      int
@@ -43,6 +43,7 @@ func New(width, height int) Model {
 	vp := viewport.New(width, height-1) // Leave space for a status bar
 	return Model{
 		viewport:   vp,
+		mu:         &sync.Mutex{},
 		follow:     true,
 		width:      width,
 		height:     height,
