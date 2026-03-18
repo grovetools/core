@@ -660,5 +660,59 @@ func (c *RemoteClient) StreamJobLogs(ctx context.Context, jobID string) (<-chan 
 	return ch, nil
 }
 
+// GetNoteIndex returns the daemon's cached note index, optionally filtered by workspace.
+func (c *RemoteClient) GetNoteIndex(ctx context.Context, workspace string) ([]*models.NoteIndexEntry, error) {
+	url := baseURL + "/api/notes/index"
+	if workspace != "" {
+		url += "?workspace=" + workspace
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note index from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var entries []*models.NoteIndexEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to decode note index: %w", err)
+	}
+	return entries, nil
+}
+
+// NotifyNoteEvent sends a note mutation event to the daemon.
+func (c *RemoteClient) NotifyNoteEvent(ctx context.Context, event models.NoteEvent) error {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal note event: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/notes/event", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send note event: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)

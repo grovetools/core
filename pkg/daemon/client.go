@@ -86,6 +86,14 @@ type Client interface {
 	// Close cleans up any resources used by the client.
 	Close() error
 
+	// GetNoteIndex returns the daemon's cached note index, optionally filtered by workspace.
+	// Returns nil, nil when the daemon is unavailable (graceful degradation for TUI fallback).
+	GetNoteIndex(ctx context.Context, workspace string) ([]*models.NoteIndexEntry, error)
+
+	// NotifyNoteEvent sends a note mutation event to the daemon for incremental count updates.
+	// This is fire-and-forget from the caller's perspective.
+	NotifyNoteEvent(ctx context.Context, event models.NoteEvent) error
+
 	// --- Session Lifecycle Management ---
 	// These methods enable race-free session tracking by allowing:
 	// 1. Pre-registration of intent before agent launch (flow)

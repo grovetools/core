@@ -214,5 +214,15 @@ func (c *LocalClient) GetJobLogs(ctx context.Context, jobID string) ([]models.Lo
 	return nil, errors.New("log fetching requires the grove daemon; use daemon.NewWithAutoStart()")
 }
 
+// GetNoteIndex returns nil in local mode — TUI falls back to filesystem.
+func (c *LocalClient) GetNoteIndex(ctx context.Context, workspace string) ([]*models.NoteIndexEntry, error) {
+	return nil, nil
+}
+
+// NotifyNoteEvent is a no-op for LocalClient since there's no daemon to notify.
+func (c *LocalClient) NotifyNoteEvent(ctx context.Context, event models.NoteEvent) error {
+	return nil
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)
