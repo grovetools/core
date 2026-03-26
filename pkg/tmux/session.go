@@ -394,7 +394,11 @@ func (c *Client) SetPaneEnvironment(ctx context.Context, paneTarget string, env 
 
 // NewWindowWithOptions creates a new window with extended options.
 func (c *Client) NewWindowWithOptions(ctx context.Context, opts NewWindowOptions) error {
-	args := []string{"new-window", "-t", opts.Target, "-n", opts.WindowName}
+	args := []string{"new-window"}
+	if opts.Detached {
+		args = append(args, "-d")
+	}
+	args = append(args, "-t", opts.Target, "-n", opts.WindowName)
 	if opts.WorkingDir != "" {
 		args = append(args, "-c", opts.WorkingDir)
 	}

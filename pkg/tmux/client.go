@@ -74,7 +74,16 @@ func Command(args ...string) *exec.Cmd {
 	if socket := os.Getenv("GROVE_TMUX_SOCKET"); socket != "" {
 		args = append([]string{"-L", socket}, args...)
 	}
-	return exec.Command("tmux", args...)
+	cmd := exec.Command("tmux", args...)
+	// Clear TMUX env to prevent routing to wrong server (see run() comment).
+	cmd.Env = filterEnv(os.Environ(), "TMUX")
+	return cmd
+}
+
+// Run executes an arbitrary tmux command with the correct socket targeting.
+// Use this for tmux operations not covered by dedicated Client methods.
+func (c *Client) Run(ctx context.Context, args ...string) (string, error) {
+	return c.run(ctx, args...)
 }
 
 func (c *Client) run(ctx context.Context, args ...string) (string, error) {
@@ -89,6 +98,14 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	}
 
 	execCmd := cmd.Exec()
+
+	// Clear the TMUX env var from child processes to ensure tmux targets the
+	// correct server. Without this, a process running inside one tmux server
+	// (e.g., tmux -L groved) would have its tmux commands silently routed to
+	// that server instead of the default server. When c.socket is set, the -L
+	// flag already overrides this, but we clear TMUX unconditionally for safety.
+	execCmd.Env = filterEnv(os.Environ(), "TMUX")
+
 	output, err := execCmd.CombinedOutput()
 	if err != nil {
 		cmdStr := "tmux " + strings.Join(args, " ")
@@ -96,4 +113,16 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	}
 
 	return string(output), nil
+}
+
+// filterEnv returns a copy of env with entries matching the given key removed.
+func filterEnv(env []string, key string) []string {
+	prefix := key + "="
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }

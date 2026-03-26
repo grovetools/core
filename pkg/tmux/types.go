@@ -31,5 +31,6 @@ type NewWindowOptions struct {
 	WindowName string
 	Command    string
 	WorkingDir string
+	Detached   bool     // If true, creates window without selecting it (-d flag)
 	Env        []string // Environment variables in "KEY=VALUE" format
 }
