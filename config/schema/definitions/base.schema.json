@@ -3,6 +3,12 @@
     "ContextConfig": {
       "additionalProperties": false,
       "properties": {
+        "default_rules": {
+          "description": "Name of the default rules preset to use",
+          "type": "string",
+          "x-layer": "project",
+          "x-priority": "82"
+        },
         "default_rules_path": {
           "description": "Default rules file path for context filtering",
           "type": "string",
