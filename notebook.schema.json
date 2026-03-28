@@ -118,6 +118,10 @@
       "type": "string",
       "description": "Path template for prompts directory"
     },
+    "context_path_template": {
+      "type": "string",
+      "description": "Path template for context directory"
+    },
     "types": {
       "additionalProperties": {
         "$ref": "#/$defs/NoteTypeConfig"

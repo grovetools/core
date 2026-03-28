@@ -225,6 +225,10 @@
           "description": "Path template for completed items",
           "type": "string"
         },
+        "context_path_template": {
+          "description": "Path template for context directory",
+          "type": "string"
+        },
         "in_progress_path_template": {
           "description": "Path template for in-progress items",
           "type": "string"

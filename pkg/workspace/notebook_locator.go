@@ -22,6 +22,7 @@ const (
 	defaultCompletedPathTemplate   = "workspaces/{{ .Workspace.Name }}/completed"
 	defaultPromptsPathTemplate     = "workspaces/{{ .Workspace.Name }}/docgen/prompts"
 	defaultDocgenDirPathTemplate   = "workspaces/{{ .Workspace.Name }}/docgen"
+	defaultContextPathTemplate     = "workspaces/{{ .Workspace.Name }}/context"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -747,6 +748,103 @@ func (l *NotebookLocator) GetSkillsDir(node *WorkspaceNode) (string, error) {
 	return filepath.Join(rootDir, renderedPath), nil
 }
 
+// GetContextDir returns the absolute path to the context directory for a given workspace node.
+// The context directory holds rules, presets, generated context, and caches.
+func (l *NotebookLocator) GetContextDir(node *WorkspaceNode) (string, error) {
+	// Handle global case first
+	if node.Name == "global" {
+		if l.config != nil && l.config.Notebooks != nil && l.config.Notebooks.Rules != nil && l.config.Notebooks.Rules.Global != nil {
+			rootDir, err := pathutil.Expand(l.config.Notebooks.Rules.Global.RootDir)
+			if err != nil {
+				return "", fmt.Errorf("expanding global notebook root_dir: %w", err)
+			}
+			return filepath.Join(rootDir, "context"), nil
+		}
+		// Fallback for when global is not explicitly configured
+		return pathutil.Expand("~/.grove/notebooks/global/context")
+	}
+
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
+		// Local Mode: Context is inside the project's root .notebook directory.
+		// Use GetGroupingKey to correctly handle worktrees.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "context"), nil
+	}
+
+	// Centralized Mode
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+
+	tplStr := notebook.ContextPathTemplate
+	if tplStr == "" {
+		tplStr = defaultContextPathTemplate
+	}
+
+	// Determine the correct workspace name for different node kinds
+	contextNode := getContextNodeForPath(node)
+
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
+// GetContextRulesFile returns the path to the rules file within the context directory.
+func (l *NotebookLocator) GetContextRulesFile(node *WorkspaceNode) (string, error) {
+	contextDir, err := l.GetContextDir(node)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(contextDir, "rules"), nil
+}
+
+// GetContextPresetsDir returns the path to the presets directory within the context directory.
+func (l *NotebookLocator) GetContextPresetsDir(node *WorkspaceNode) (string, error) {
+	contextDir, err := l.GetContextDir(node)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(contextDir, "presets"), nil
+}
+
+// GetContextPresetsWorkDir returns the path to the presets work directory within the context directory.
+func (l *NotebookLocator) GetContextPresetsWorkDir(node *WorkspaceNode) (string, error) {
+	contextDir, err := l.GetContextDir(node)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(contextDir, "presets.work"), nil
+}
+
+// GetContextGeneratedDir returns the path to the generated directory within the context directory.
+func (l *NotebookLocator) GetContextGeneratedDir(node *WorkspaceNode) (string, error) {
+	contextDir, err := l.GetContextDir(node)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(contextDir, "generated"), nil
+}
+
+// GetContextCacheDir returns the path to the cache directory within the context directory.
+func (l *NotebookLocator) GetContextCacheDir(node *WorkspaceNode) (string, error) {
+	contextDir, err := l.GetContextDir(node)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(contextDir, "cache"), nil
+}
+
 // GetGroupDir resolves the absolute path for any group directory (e.g., "inbox", "plans", "plans/my-feature").
 // This is the centralized method for resolving all note-related directory paths.
 func (l *NotebookLocator) GetGroupDir(node *WorkspaceNode, groupName string) (string, error) {
@@ -775,6 +873,8 @@ func (l *NotebookLocator) GetGroupDir(node *WorkspaceNode, groupName string) (st
 		basePath, err = l.GetCompletedDir(node)
 	case "skills":
 		basePath, err = l.GetSkillsDir(node)
+	case "context":
+		basePath, err = l.GetContextDir(node)
 	default:
 		// For all other types, it's a subdirectory under the main notes directory.
 		basePath, err = l.GetNotesDir(node, groupName)

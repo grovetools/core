@@ -345,6 +345,7 @@ type Notebook struct {
 	InProgressPathTemplate string                     `yaml:"in_progress_path_template,omitempty" toml:"in_progress_path_template,omitempty" jsonschema:"description=Path template for in-progress items"`
 	CompletedPathTemplate  string                     `yaml:"completed_path_template,omitempty" toml:"completed_path_template,omitempty" jsonschema:"description=Path template for completed items"`
 	PromptsPathTemplate    string                     `yaml:"prompts_path_template,omitempty" toml:"prompts_path_template,omitempty" jsonschema:"description=Path template for prompts directory"`
+	ContextPathTemplate    string                     `yaml:"context_path_template,omitempty" toml:"context_path_template,omitempty" jsonschema:"description=Path template for context directory"`
 	Types                  map[string]*NoteTypeConfig `yaml:"types,omitempty" toml:"types,omitempty" jsonschema:"description=Map of note type name to configuration"`
 	Sync                   interface{}                `yaml:"sync,omitempty" toml:"sync,omitempty" jsonschema:"description=Synchronization configuration for this notebook"`
 	Syncthing              *SyncthingConfig           `yaml:"syncthing,omitempty" toml:"syncthing,omitempty" jsonschema:"description=Syncthing automated setup configuration"`
