@@ -278,6 +278,22 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge Context configuration
+	if override.Context != nil {
+		if result.Context == nil {
+			result.Context = &ContextConfig{}
+		}
+		if override.Context.DefaultRules != "" {
+			result.Context.DefaultRules = override.Context.DefaultRules
+		}
+		if override.Context.DefaultRulesPath != "" {
+			result.Context.DefaultRulesPath = override.Context.DefaultRulesPath
+		}
+		if override.Context.ReposDir != nil {
+			result.Context.ReposDir = override.Context.ReposDir
+		}
+	}
+
 	// Merge extensions with recursive deep merge
 	if override.Extensions != nil {
 		if result.Extensions == nil {
