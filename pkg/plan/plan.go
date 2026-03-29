@@ -26,19 +26,20 @@ const (
 
 // ActivePlan returns the name of the currently active flow plan.
 // It checks in order:
-//  1. State key "flow.active_plan" (set explicitly by flow)
-//  2. Legacy state key "active_plan" (auto-migrated to new key)
-//  3. Branch match — if a plan directory exists matching the current git branch
+//  1. Branch match — if a plan directory exists matching the current git branch
+//     (preferred because it's always correct for the current worktree)
+//  2. State key "flow.active_plan" (set explicitly by flow)
+//  3. Legacy state key "active_plan" (auto-migrated to new key)
 //
 // Returns empty string if no active plan can be determined.
 func ActivePlan(workDir string) string {
-	// 1. Check state (with legacy migration)
-	if name := activePlanFromState(); name != "" {
+	// 1. Check branch match first — always correct for the current worktree
+	if name := activePlanFromBranch(workDir); name != "" {
 		return name
 	}
 
-	// 2. Fall back to branch-to-plan directory matching
-	return activePlanFromBranch(workDir)
+	// 2. Fall back to state (for main-branch plans with explicit flow set)
+	return activePlanFromState()
 }
 
 // activePlanFromState reads the active plan from state, handling legacy key migration.
@@ -97,6 +98,36 @@ func DefaultRulesPath(workDir, planName string) string {
 		return ""
 	}
 	return filepath.Join(plansDir, planName, "rules", DefaultRulesFile)
+}
+
+// ContextPath returns the path to plans/<plan>/context/generated/context
+// for the given plan, or empty string if paths cannot be resolved.
+func ContextPath(workDir, planName string) string {
+	planDir := ResolvePlanDir(workDir, planName)
+	if planDir == "" {
+		return ""
+	}
+	return filepath.Join(planDir, "context", "generated", "context")
+}
+
+// CachedContextPath returns the path to plans/<plan>/context/cache/cached-context
+// for the given plan, or empty string if paths cannot be resolved.
+func CachedContextPath(workDir, planName string) string {
+	planDir := ResolvePlanDir(workDir, planName)
+	if planDir == "" {
+		return ""
+	}
+	return filepath.Join(planDir, "context", "cache", "cached-context")
+}
+
+// CachedContextFilesListPath returns the path to plans/<plan>/context/cache/cached-context-files
+// for the given plan, or empty string if paths cannot be resolved.
+func CachedContextFilesListPath(workDir, planName string) string {
+	planDir := ResolvePlanDir(workDir, planName)
+	if planDir == "" {
+		return ""
+	}
+	return filepath.Join(planDir, "context", "cache", "cached-context-files")
 }
 
 // resolvePlansDir returns the plans directory for the workspace containing workDir.
