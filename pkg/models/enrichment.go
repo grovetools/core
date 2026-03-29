@@ -78,3 +78,16 @@ type EnrichedWorkspace struct {
 	CxStats      *CxStats               `json:"cx_stats,omitempty"`
 	GitRemoteURL string                 `json:"git_remote_url,omitempty"`
 }
+
+// WorkspaceDelta carries only the fields that changed for a specific workspace.
+// Pointers distinguish between an unchanged field (nil) and a zero value.
+type WorkspaceDelta struct {
+	Path         string                 `json:"path"`
+	GitStatus    *git.ExtendedGitStatus `json:"git_status,omitempty"`
+	NoteCounts   *NoteCounts            `json:"note_counts,omitempty"`
+	PlanStats    *PlanStats             `json:"plan_stats,omitempty"`
+	ReleaseInfo  *ReleaseInfo           `json:"release_info,omitempty"`
+	ActiveBinary *BinaryStatus          `json:"active_binary,omitempty"`
+	CxStats      *CxStats               `json:"cx_stats,omitempty"`
+	GitRemoteURL *string                `json:"git_remote_url,omitempty"`
+}
