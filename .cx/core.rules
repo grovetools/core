@@ -1,3 +1,0 @@
-pkg/**/*.go
-config/**/*.go
-tui/**/*.go
