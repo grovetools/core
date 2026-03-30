@@ -47,6 +47,7 @@ This is useful for debugging configuration issues.`,
 				printLayer("GLOBAL OVERRIDE CONFIG", layered.FilePaths[config.SourceGlobalOverride], layered.GlobalOverride.Config)
 			}
 			printLayer("ECOSYSTEM CONFIG", layered.FilePaths[config.SourceEcosystem], layered.Ecosystem)
+			printLayer("PROJECT NOTEBOOK CONFIG", layered.FilePaths[config.SourceProjectNotebook], layered.ProjectNotebook)
 			printLayer("PROJECT CONFIG", layered.FilePaths[config.SourceProject], layered.Project)
 			for _, override := range layered.Overrides {
 				printLayer("OVERRIDE CONFIG", override.Path, override.Config)

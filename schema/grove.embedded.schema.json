@@ -3,6 +3,12 @@
     "ContextConfig": {
       "additionalProperties": false,
       "properties": {
+        "default_rules": {
+          "description": "Name of the default rules preset to use",
+          "type": "string",
+          "x-layer": "project",
+          "x-priority": "82"
+        },
         "default_rules_path": {
           "description": "Default rules file path for context filtering",
           "type": "string",
@@ -61,6 +67,10 @@
     "GroveSourceConfig": {
       "additionalProperties": false,
       "properties": {
+        "depth": {
+          "description": "How many directory levels deep to scan for projects (nil=current behavior",
+          "type": "integer"
+        },
         "description": {
           "description": "Human-readable description of this grove",
           "type": "string",
@@ -72,6 +82,20 @@
           "type": "boolean",
           "x-important": true,
           "x-priority": "2"
+        },
+        "exclude_repos": {
+          "description": "List of directory names or relative paths to explicitly exclude",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include_repos": {
+          "description": "List of directory names or relative paths to explicitly include as projects",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "notebook": {
           "description": "Name of the notebook to use for projects in this grove",
@@ -225,6 +249,10 @@
           "description": "Path template for completed items",
           "type": "string"
         },
+        "context_path_template": {
+          "description": "Path template for context directory",
+          "type": "string"
+        },
         "in_progress_path_template": {
           "description": "Path template for in-progress items",
           "type": "string"
@@ -232,6 +260,10 @@
         "notes_path_template": {
           "description": "Path template for notes directory",
           "type": "string"
+        },
+        "obsidian": {
+          "$ref": "#/$defs/ObsidianConfig",
+          "description": "Obsidian vault automated setup configuration"
         },
         "plans_path_template": {
           "description": "Path template for plans directory",
@@ -252,6 +284,10 @@
         },
         "sync": {
           "description": "Synchronization configuration for this notebook"
+        },
+        "syncthing": {
+          "$ref": "#/$defs/SyncthingConfig",
+          "description": "Syncthing automated setup configuration"
         },
         "templates_path_template": {
           "description": "Path template for templates directory",
@@ -318,6 +354,31 @@
       "x-status": "alpha",
       "x-status-message": "Experimental Neovim embedding"
     },
+    "ObsidianConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "auto_link_plugin": {
+          "default": false,
+          "description": "Automatically symlink the nb-integration plugin on setup",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "46"
+        },
+        "template_repo": {
+          "description": "Git repo URL containing .obsidian template (e.g. github.com/user/obsidian-dotfiles)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "47"
+        },
+        "vault_name": {
+          "description": "Display name for the generated Obsidian vault",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "45"
+        }
+      },
+      "type": "object"
+    },
     "SearchPathConfig": {
       "additionalProperties": false,
       "properties": {
@@ -335,6 +396,28 @@
         "path",
         "enabled"
       ],
+      "type": "object"
+    },
+    "SyncthingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "devices": {
+          "description": "Syncthing device IDs to share this notebook with",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-important": true,
+          "x-layer": "global",
+          "x-priority": "40"
+        },
+        "folder_title": {
+          "description": "Custom title for the Syncthing folder (defaults to grove-\u003cnotebook\u003e)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "41"
+        }
+      },
       "type": "object"
     },
     "TUISchemaConfig": {

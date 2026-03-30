@@ -67,6 +67,10 @@
     "GroveSourceConfig": {
       "additionalProperties": false,
       "properties": {
+        "depth": {
+          "description": "How many directory levels deep to scan for projects. Unset keeps current behavior; 1 means immediate children only.",
+          "type": "integer"
+        },
         "description": {
           "description": "Human-readable description of this grove",
           "type": "string",
@@ -78,6 +82,20 @@
           "type": "boolean",
           "x-important": true,
           "x-priority": "2"
+        },
+        "exclude_repos": {
+          "description": "List of directory names or relative paths to explicitly exclude",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include_repos": {
+          "description": "List of directory names or relative paths to explicitly include as projects",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "notebook": {
           "description": "Name of the notebook to use for projects in this grove",

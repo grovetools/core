@@ -24,10 +24,13 @@ type SearchPathConfig struct {
 
 // GroveSourceConfig defines the configuration for a single grove source.
 type GroveSourceConfig struct {
-	Path        string `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the grove root directory" jsonschema_extras:"x-priority=1,x-important=true"`
-	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Whether this grove is enabled (default: true)" jsonschema_extras:"x-priority=2,x-important=true"`
-	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this grove" jsonschema_extras:"x-priority=4,x-important=true"`
-	Notebook    string `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Name of the notebook to use for projects in this grove" jsonschema_extras:"x-priority=3,x-important=true"`
+	Path         string   `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the grove root directory" jsonschema_extras:"x-priority=1,x-important=true"`
+	Enabled      *bool    `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Whether this grove is enabled (default: true)" jsonschema_extras:"x-priority=2,x-important=true"`
+	Description  string   `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=Human-readable description of this grove" jsonschema_extras:"x-priority=4,x-important=true"`
+	Notebook     string   `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Name of the notebook to use for projects in this grove" jsonschema_extras:"x-priority=3,x-important=true"`
+	Depth        *int     `yaml:"depth,omitempty" toml:"depth,omitempty" jsonschema:"description=How many directory levels deep to scan for projects. Unset keeps current behavior; 1 means immediate children only."`
+	IncludeRepos []string `yaml:"include_repos,omitempty" toml:"include_repos,omitempty" jsonschema:"description=List of directory names or relative paths to explicitly include as projects"`
+	ExcludeRepos []string `yaml:"exclude_repos,omitempty" toml:"exclude_repos,omitempty" jsonschema:"description=List of directory names or relative paths to explicitly exclude"`
 }
 
 // ExplicitProject defines a specific project to include regardless of discovery.
@@ -603,6 +606,7 @@ const (
 	SourceGlobalOverride  ConfigSource = "global-override"
 	SourceEnvOverlay      ConfigSource = "env-overlay" // GROVE_CONFIG_OVERLAY
 	SourceEcosystem       ConfigSource = "ecosystem"
+	SourceProjectNotebook ConfigSource = "project-notebook"
 	SourceProject         ConfigSource = "project"
 	SourceOverride        ConfigSource = "override"
 	SourceUnknown         ConfigSource = "unknown"
@@ -623,7 +627,8 @@ type LayeredConfig struct {
 	GlobalOverride  *OverrideSource         // Raw config from the global override file.
 	EnvOverlay      *OverrideSource         // Raw config from GROVE_CONFIG_OVERLAY env var.
 	Ecosystem       *Config                 // Raw config from the ecosystem file (if workspace is in an ecosystem).
-	Project         *Config                 // Raw config from the project file.
+	ProjectNotebook *Config                 // Raw config from the project's notebook directory.
+	Project         *Config                 // Raw config from the local project file.
 	Overrides       []OverrideSource        // Raw configs from override files, in order of application.
 	Final           *Config                 // The fully merged and validated config.
 	FilePaths       map[ConfigSource]string // Maps sources to their file paths.

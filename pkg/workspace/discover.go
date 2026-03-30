@@ -139,7 +139,10 @@ func processEcosystem(path string, cfg *config.Config) Ecosystem {
 
 // processProject handles discovery of a project directory and its worktrees
 func processProject(path string, cfg *config.Config) Project {
-	projectName := cfg.Name
+	var projectName string
+	if cfg != nil {
+		projectName = cfg.Name
+	}
 	if projectName == "" {
 		projectName = filepath.Base(path)
 	}
@@ -344,12 +347,65 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					return err
 				}
 
+				// Hardcoded skip-list for heavy/irrelevant directories
+				if d.IsDir() {
+					name := d.Name()
+					switch name {
+					case ".git", "node_modules", "vendor", "dist", "build", ".venv", "venv", "__pycache__", ".tox":
+						return filepath.SkipDir
+					}
+				}
+
+				// Calculate relative path and current depth from grove root
+				relPath, relErr := filepath.Rel(grovePath, path)
+				if relErr != nil {
+					return nil
+				}
+
+				currentDepth := 0
+				if relPath != "." {
+					currentDepth = len(strings.Split(relPath, string(filepath.Separator)))
+				}
+
+				// Apply ExcludeRepos
+				for _, exc := range currentGroveCfg.ExcludeRepos {
+					if relPath == exc || filepath.Base(path) == exc {
+						if d.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+					}
+				}
+
 				// Classify the directory
 				entityType, groveCfg, classifyErr := classifyDirectory(path, d)
 				if classifyErr != nil {
 					// Log but continue on classification errors
 					s.logger.Warnf("Error classifying directory %s: %v", path, classifyErr)
 					return nil
+				}
+
+				// Promote non-grove repos to projects based on Depth or IncludeRepos
+				if entityType == typeNonGroveRepo {
+					shouldPromote := false
+
+					// Promote if within configured depth bounds
+					if currentGroveCfg.Depth != nil && currentDepth <= *currentGroveCfg.Depth {
+						shouldPromote = true
+					}
+
+					// Promote if explicitly included
+					for _, inc := range currentGroveCfg.IncludeRepos {
+						if relPath == inc || filepath.Base(path) == inc {
+							shouldPromote = true
+							break
+						}
+					}
+
+					if shouldPromote {
+						entityType = typeProject
+						groveCfg = nil // No local config; will use defaults
+					}
 				}
 
 				// Handle based on classification
@@ -376,19 +432,18 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					return nil
 
 				case typeNonGroveRepo:
-					// This is a git repo without grove.yml. Before classifying it as a non-Grove repo,
-					// check if it's part of a known notebook structure. If so, we should continue
-					// descending into it as if it were a regular directory.
+					// This is a git repo without grove.yml that wasn't promoted.
+					// Check if it's part of a known notebook structure.
 					if layeredCfg != nil && layeredCfg.Final != nil && layeredCfg.Final.Notebooks != nil && layeredCfg.Final.Notebooks.Definitions != nil {
 						for _, notebookDef := range layeredCfg.Final.Notebooks.Definitions {
 							if notebookDef != nil && notebookDef.RootDir != "" {
 								notebookRoot, absErr := filepath.Abs(expandPath(notebookDef.RootDir))
 								if absErr != nil {
-									continue // Skip if path can't be resolved
+									continue
 								}
 								if strings.HasPrefix(path, notebookRoot+string(filepath.Separator)) {
 									s.logger.Debugf("Path %s is inside notebook %s, continuing descent despite .git", path, notebookRoot)
-									return nil // Continue walking into the directory
+									return nil
 								}
 							}
 						}
@@ -404,21 +459,23 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					return nil
 
 				case typeUnknown:
-					// If the current path is the root of this specific search,
-					// we must descend into it, even if its type is unknown.
+					// If depth is configured, allow descending into unknown directories up to the depth limit
+					if currentGroveCfg.Depth != nil {
+						if currentDepth >= *currentGroveCfg.Depth && d.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+					}
+
+					// Default behavior (no depth set): only descend if it's the grove root
 					if path == grovePath {
 						return nil
 					}
 
-					// For any other directory that is not a recognized entity (ecosystem, project, git repo),
-					// we should not walk further down. This prevents deep scans into irrelevant directories
-					// (e.g., a notes folder) that might contain nested git repos.
-					// If a directory is meant to be a collection of projects, it should be added
-					// as its own 'search_path' in the configuration.
 					if d.IsDir() {
 						return filepath.SkipDir
 					}
-					return nil // It's a file, just ignore.
+					return nil
 
 				default:
 					return nil

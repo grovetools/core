@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -435,10 +436,52 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 			}
 		}
 
+		// Load notebook config (after ecosystem, before project local)
+		//
+		// Determine the correct project root for notebook resolution.
+		// When the found config is an ecosystem config (has workspaces) and
+		// startDir is a subdirectory, use startDir's git root as the project
+		// root. This handles promoted projects (depth/include_repos) that have
+		// no local grove.toml — FindConfigFile traverses up and finds the
+		// ecosystem config, but the notebook config is keyed by the actual
+		// project directory name, not the ecosystem root.
+		projectRoot := filepath.Dir(projectPath)
+		if len(projectConfig.Workspaces) > 0 {
+			absStart, _ := filepath.Abs(startDir)
+			absProjectRoot, _ := filepath.Abs(projectRoot)
+			if absStart != absProjectRoot {
+				// startDir is inside the ecosystem — use git root or startDir
+				if gitRoot, gitErr := getGitRoot(startDir); gitErr == nil && gitRoot != "" {
+					projectRoot = gitRoot
+				} else {
+					projectRoot = startDir
+				}
+			}
+		}
+		notebookConfigPath := findNotebookConfigPath(projectRoot, finalConfig)
+		if notebookConfigPath != "" {
+			logger.WithField("path", notebookConfigPath).Debug("Loading project notebook configuration")
+			nbData, err := os.ReadFile(notebookConfigPath)
+			if err == nil {
+				expandedNb := expandEnvVars(string(nbData))
+				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
+				if parseErr == nil {
+					stripGroveMeta(nbConfig)
+					if finalConfig == nil {
+						finalConfig = nbConfig
+					} else {
+						finalConfig = mergeConfigs(finalConfig, nbConfig)
+					}
+				} else {
+					logger.WithError(parseErr).Warn("Failed to parse project notebook config, skipping")
+				}
+			}
+		}
+
 		if finalConfig == nil {
 			finalConfig = projectConfig
 		} else {
-			logger.Debug("Merging project configuration over global/ecosystem configuration")
+			logger.Debug("Merging project configuration over global/ecosystem/notebook configuration")
 			finalConfig = mergeConfigs(finalConfig, projectConfig)
 		}
 
@@ -472,6 +515,27 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 				}
 
 				finalConfig = mergeConfigs(finalConfig, overrideConfig)
+			}
+		}
+	}
+
+	// If no project config was found, still try loading notebook config
+	if projectPath == "" && finalConfig != nil {
+		projectRoot := startDir
+		if gitRoot, err := getGitRoot(startDir); err == nil && gitRoot != "" {
+			projectRoot = gitRoot
+		}
+		notebookConfigPath := findNotebookConfigPath(projectRoot, finalConfig)
+		if notebookConfigPath != "" {
+			logger.WithField("path", notebookConfigPath).Debug("Loading project notebook configuration (no local project config)")
+			nbData, err := os.ReadFile(notebookConfigPath)
+			if err == nil {
+				expandedNb := expandEnvVars(string(nbData))
+				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
+				if parseErr == nil {
+					stripGroveMeta(nbConfig)
+					finalConfig = mergeConfigs(finalConfig, nbConfig)
+				}
 			}
 		}
 	}
@@ -759,6 +823,157 @@ func FindEcosystemConfig(startDir string) string {
 	return ""
 }
 
+// findNotebookConfigPath resolves the path to a project's configuration file
+// stored in its notebook directory. It uses the global config to find the grove
+// the project belongs to, determine the notebook name, and construct the path.
+func findNotebookConfigPath(projectRoot string, globalCfg *Config) string {
+	if globalCfg == nil || len(globalCfg.Groves) == 0 {
+		return ""
+	}
+
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return ""
+	}
+
+	var bestMatchGrove string
+	var bestMatchNotebook string
+
+	// Find the grove this project belongs to (longest prefix match)
+	for _, grove := range globalCfg.Groves {
+		if grove.Enabled != nil && !*grove.Enabled {
+			continue
+		}
+		expandedGrove := expandPath(grove.Path)
+		absGrove, err := filepath.Abs(expandedGrove)
+		if err != nil {
+			continue
+		}
+
+		if absRoot == absGrove || strings.HasPrefix(absRoot, absGrove+string(filepath.Separator)) {
+			if len(absGrove) > len(bestMatchGrove) {
+				bestMatchGrove = absGrove
+				bestMatchNotebook = grove.Notebook
+			}
+		}
+	}
+
+	if bestMatchGrove == "" {
+		return ""
+	}
+
+	// Extract workspace name as relative path from grove root
+	workspaceName, err := filepath.Rel(bestMatchGrove, absRoot)
+	if err != nil || workspaceName == "." {
+		return ""
+	}
+
+	// Resolve the notebook name
+	notebookName := bestMatchNotebook
+	if notebookName == "" && globalCfg.Notebooks != nil && globalCfg.Notebooks.Rules != nil {
+		notebookName = globalCfg.Notebooks.Rules.Default
+	}
+	if notebookName == "" {
+		notebookName = "nb"
+	}
+
+	// Resolve the notebook root directory
+	var notebookRootDir string
+	if globalCfg.Notebooks != nil && globalCfg.Notebooks.Definitions != nil {
+		if nb, ok := globalCfg.Notebooks.Definitions[notebookName]; ok && nb != nil {
+			notebookRootDir = expandPath(nb.RootDir)
+		}
+	}
+
+	if notebookRootDir == "" {
+		return ""
+	}
+
+	// Check for config file existence
+	configNames := []string{"grove.toml", "grove.yml", "grove.yaml"}
+	for _, name := range configNames {
+		configPath := filepath.Join(notebookRootDir, "workspaces", workspaceName, name)
+		if info, err := os.Stat(configPath); err == nil && !info.IsDir() {
+			return configPath
+		}
+	}
+
+	return ""
+}
+
+// ResolveNotebookDir returns the notebook workspace directory for a project.
+// Unlike findNotebookConfigPath (which checks for existing files), this returns
+// the directory where a notebook config *should* be placed, even if it doesn't
+// exist yet. Returns the directory path and the workspace name, or empty strings
+// if the project is not in a grove or has no notebook configured.
+func ResolveNotebookDir(projectRoot string) (dir string, workspaceName string, err error) {
+	cfg, loadErr := LoadDefault()
+	if loadErr != nil {
+		return "", "", fmt.Errorf("failed to load config: %w", loadErr)
+	}
+	return resolveNotebookDirWithConfig(projectRoot, cfg)
+}
+
+func resolveNotebookDirWithConfig(projectRoot string, cfg *Config) (string, string, error) {
+	if cfg == nil || len(cfg.Groves) == 0 {
+		return "", "", fmt.Errorf("no groves configured")
+	}
+
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve project root: %w", err)
+	}
+
+	var bestMatchGrove string
+	var bestMatchNotebook string
+
+	for _, grove := range cfg.Groves {
+		if grove.Enabled != nil && !*grove.Enabled {
+			continue
+		}
+		expandedGrove := expandPath(grove.Path)
+		absGrove, err := filepath.Abs(expandedGrove)
+		if err != nil {
+			continue
+		}
+		if absRoot == absGrove || strings.HasPrefix(absRoot, absGrove+string(filepath.Separator)) {
+			if len(absGrove) > len(bestMatchGrove) {
+				bestMatchGrove = absGrove
+				bestMatchNotebook = grove.Notebook
+			}
+		}
+	}
+
+	if bestMatchGrove == "" {
+		return "", "", fmt.Errorf("project is not inside a configured grove")
+	}
+
+	wsName, err := filepath.Rel(bestMatchGrove, absRoot)
+	if err != nil || wsName == "." {
+		return "", "", fmt.Errorf("could not determine workspace name")
+	}
+
+	notebookName := bestMatchNotebook
+	if notebookName == "" && cfg.Notebooks != nil && cfg.Notebooks.Rules != nil {
+		notebookName = cfg.Notebooks.Rules.Default
+	}
+	if notebookName == "" {
+		notebookName = "nb"
+	}
+
+	var notebookRootDir string
+	if cfg.Notebooks != nil && cfg.Notebooks.Definitions != nil {
+		if nb, ok := cfg.Notebooks.Definitions[notebookName]; ok && nb != nil {
+			notebookRootDir = expandPath(nb.RootDir)
+		}
+	}
+	if notebookRootDir == "" {
+		return "", "", fmt.Errorf("notebook %q has no root_dir configured", notebookName)
+	}
+
+	return filepath.Join(notebookRootDir, "workspaces", wsName), wsName, nil
+}
+
 // LoadLayered finds and loads all configuration layers (global, project, overrides)
 // without merging them, for analysis purposes. It also computes the final merged config.
 func LoadLayered(startDir string) (*LayeredConfig, error) {
@@ -926,6 +1141,52 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 	}
 
+	// 3.75. Load Project Notebook layer (optional)
+	// Build a lookup config from global layers to resolve notebook paths
+	lookupConfig := &Config{}
+	if layeredConfig.Global != nil {
+		lookupConfig = layeredConfig.Global
+	}
+	for _, fragment := range layeredConfig.GlobalFragments {
+		lookupConfig = mergeConfigs(lookupConfig, fragment.Config)
+	}
+	if layeredConfig.GlobalOverride != nil {
+		lookupConfig = mergeConfigs(lookupConfig, layeredConfig.GlobalOverride.Config)
+	}
+
+	projectRoot := startDir
+	if projectPath != "" {
+		projectRoot = filepath.Dir(projectPath)
+		// When the found config is an ecosystem (has workspaces) and startDir
+		// is a subdirectory, use startDir's git root as the project root.
+		if layeredConfig.Project != nil && len(layeredConfig.Project.Workspaces) > 0 {
+			absStart, _ := filepath.Abs(startDir)
+			absProjectRoot, _ := filepath.Abs(projectRoot)
+			if absStart != absProjectRoot {
+				if gitRoot, gitErr := getGitRoot(startDir); gitErr == nil && gitRoot != "" {
+					projectRoot = gitRoot
+				} else {
+					projectRoot = startDir
+				}
+			}
+		}
+	} else if gitRoot, err := getGitRoot(startDir); err == nil && gitRoot != "" {
+		projectRoot = gitRoot
+	}
+	notebookConfigPath := findNotebookConfigPath(projectRoot, lookupConfig)
+	if notebookConfigPath != "" {
+		nbData, err := os.ReadFile(notebookConfigPath)
+		if err == nil {
+			expandedNb := expandEnvVars(string(nbData))
+			nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
+			if parseErr == nil {
+				stripGroveMeta(nbConfig)
+				layeredConfig.ProjectNotebook = nbConfig
+				layeredConfig.FilePaths[SourceProjectNotebook] = notebookConfigPath
+			}
+		}
+	}
+
 	// 4. Load Override layers (optional)
 	if projectPath != "" {
 		projectDir := filepath.Dir(projectPath)
@@ -983,9 +1244,14 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		applyOverlay(finalConfig, layeredConfig.EnvOverlay.Config)
 	}
 
-	// Merge ecosystem config (after global, before project)
+	// Merge ecosystem config (after global, before notebook)
 	if layeredConfig.Ecosystem != nil {
 		finalConfig = mergeConfigs(finalConfig, layeredConfig.Ecosystem)
+	}
+
+	// Merge project notebook config (after ecosystem, before project local)
+	if layeredConfig.ProjectNotebook != nil {
+		finalConfig = mergeConfigs(finalConfig, layeredConfig.ProjectNotebook)
 	}
 
 	// Merge project config
