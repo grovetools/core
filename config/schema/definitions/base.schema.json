@@ -31,6 +31,13 @@
           "description": "Path to provider binary (exec plugins only). If empty, searches PATH for grove-env-\u003cprovider\u003e.",
           "type": "string"
         },
+        "commands": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Named commands that run in the context of this environment",
+          "type": "object"
+        },
         "config": {
           "description": "Provider-specific configuration",
           "type": "object"
@@ -511,9 +518,18 @@
     },
     "environment": {
       "$ref": "#/$defs/EnvironmentConfig",
-      "description": "Development environment provider configuration",
+      "description": "Default environment provider configuration",
       "x-layer": "project",
       "x-priority": "25"
+    },
+    "environments": {
+      "additionalProperties": {
+        "$ref": "#/$defs/EnvironmentConfig"
+      },
+      "description": "Named environment profiles selected via --env flag",
+      "type": "object",
+      "x-layer": "project",
+      "x-priority": "26"
     },
     "explicit_projects": {
       "description": "Specific projects to include without discovery",
