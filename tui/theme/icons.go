@@ -112,6 +112,7 @@ const (
 	nerdIconNotebook = "󰠮" // md-notebook (U+F082E)
 	nerdIconDocs     = "󰡯" // md-file_question (U+F086F)
 	nerdIconGear     = "󰒓" // md-cog (U+F0493)
+	nerdIconConfig   = "" // seti-config (U+E615)
 	nerdIconKeyboard = "󰌌" // md-keyboard (U+F030C)
 	nerdIconLock     = "󰌾" // md-lock (U+F033E)
 
@@ -273,6 +274,7 @@ const (
 	asciiIconNotebook = "[N]" // Notebook
 	asciiIconDocs     = "[D]" // Docs
 	asciiIconGear     = "[G]" // Gear/Settings
+	asciiIconConfig   = "[C]" // Config
 	asciiIconKeyboard = "[K]" // Keyboard
 	asciiIconLock     = "[#]" // Lock
 
@@ -434,6 +436,7 @@ var (
 	IconNotebook string
 	IconDocs     string
 	IconGear     string
+	IconConfig   string
 	IconKeyboard string
 	IconLock     string
 
@@ -605,6 +608,7 @@ func init() {
 		IconNotebook = asciiIconNotebook
 		IconDocs = asciiIconDocs
 		IconGear = asciiIconGear
+		IconConfig = asciiIconConfig
 		IconKeyboard = asciiIconKeyboard
 		IconLock = asciiIconLock
 		IconFileTree = asciiIconFileTree
@@ -756,6 +760,7 @@ func init() {
 		IconNotebook = nerdIconNotebook
 		IconDocs = nerdIconDocs
 		IconGear = nerdIconGear
+		IconConfig = nerdIconConfig
 		IconKeyboard = nerdIconKeyboard
 		IconLock = nerdIconLock
 		IconFileTree = nerdIconFileTree
