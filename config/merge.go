@@ -294,6 +294,11 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge Environment configuration (replace if present)
+	if override.Environment != nil {
+		result.Environment = override.Environment
+	}
+
 	// Merge extensions with recursive deep merge
 	if override.Extensions != nil {
 		if result.Extensions == nil {

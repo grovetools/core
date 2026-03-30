@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/workspace"
 )
@@ -712,6 +713,58 @@ func (c *RemoteClient) NotifyNoteEvent(ctx context.Context, event models.NoteEve
 		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// EnvUp requests the daemon to spin up an environment.
+func (c *RemoteClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal env request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/env/up", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call daemon env up: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result env.EnvResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode env response: %w", err)
+	}
+	return &result, nil
+}
+
+// EnvDown requests the daemon to tear down an environment.
+func (c *RemoteClient) EnvDown(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal env request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/env/down", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call daemon env down: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result env.EnvResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode env response: %w", err)
+	}
+	return &result, nil
 }
 
 // Ensure RemoteClient implements Client interface.

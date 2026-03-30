@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/sessions"
 	"github.com/grovetools/core/pkg/workspace"
@@ -222,6 +223,16 @@ func (c *LocalClient) GetNoteIndex(ctx context.Context, workspace string) ([]*mo
 // NotifyNoteEvent is a no-op for LocalClient since there's no daemon to notify.
 func (c *LocalClient) NotifyNoteEvent(ctx context.Context, event models.NoteEvent) error {
 	return nil
+}
+
+// EnvUp returns an error since built-in environment providers require the daemon.
+func (c *LocalClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
+	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")
+}
+
+// EnvDown returns an error since built-in environment providers require the daemon.
+func (c *LocalClient) EnvDown(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
+	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")
 }
 
 // Ensure LocalClient implements Client interface.

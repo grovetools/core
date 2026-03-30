@@ -73,6 +73,7 @@ func GenerateSchema() ([]byte, error) {
 		Logging          *LoggingSchemaConfig         `yaml:"logging,omitempty" jsonschema:"description=Logging configuration" jsonschema_extras:"x-layer=global,x-priority=60"`
 		TUI              *TUISchemaConfig             `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
 		Context          *ContextConfig               `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
+		Environment      *EnvironmentConfig           `yaml:"environment,omitempty" jsonschema:"description=Development environment provider configuration" jsonschema_extras:"x-layer=project,x-priority=25"`
 		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
 		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1000,x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery" jsonschema_extras:"x-layer=global,x-priority=5"`

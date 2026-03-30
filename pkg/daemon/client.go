@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/workspace"
 )
@@ -120,6 +121,14 @@ type Client interface {
 	// Valid outcomes: "completed", "interrupted", "failed"
 	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
 	EndSession(ctx context.Context, jobID string, outcome string) error
+
+	// --- Environment Management ---
+
+	// EnvUp requests the daemon to spin up an environment for a workspace.
+	EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error)
+
+	// EnvDown requests the daemon to tear down an environment for a workspace.
+	EnvDown(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error)
 
 	// --- Job Management ---
 	// These methods enable submitting and managing jobs via the daemon's JobRunner.

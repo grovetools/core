@@ -76,6 +76,7 @@ var coreConfigKeys = map[string]bool{
 	"tui":               true,
 	"context":           true,
 	"daemon":            true,
+	"environment":       true,
 	"groves":            true,
 	"search_paths":      true,
 	"explicit_projects": true,
