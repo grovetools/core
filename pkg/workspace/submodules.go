@@ -12,8 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// SetupSubmodules initializes submodules, creating linked worktrees where possible.
-// It accepts a Provider containing pre-discovered workspaces to avoid redundant filesystem scans.
+// SetupSubmodules creates linked worktrees for ecosystem sub-projects.
+// The workspace provider is the primary source of truth for what projects exist.
+// .gitmodules is only used as a fallback to initialize submodules that haven't
+// been cloned yet (and thus aren't discoverable by the provider).
 func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, provider *Provider, setupHandlers ...func(worktreePath, gitRoot string) error) error {
 	// If no provider is given, create a temporary one
 	if provider == nil {
@@ -28,37 +30,8 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		provider = NewProvider(result)
 	}
 
-	gitmodulesPath := filepath.Join(worktreePath, ".gitmodules")
-	hasGitmodules := true
-	if _, err := os.Stat(gitmodulesPath); os.IsNotExist(err) {
-		hasGitmodules = false
-		// If no .gitmodules but repos are specified, still try to create linked worktrees
-		if len(repos) == 0 {
-			return nil // No submodules and no repos specified
-		}
-	}
-
-	var submodulePaths map[string]string
-	if hasGitmodules {
-		var err error
-		submodulePaths, err = parseGitmodules(gitmodulesPath)
-		if err != nil {
-			return setupSubmodulesStandard(ctx, worktreePath, branchName)
-		}
-	} else {
-		// No gitmodules, but repos are specified - create synthetic paths
-		submodulePaths = make(map[string]string)
-		for _, repo := range repos {
-			// Use repo name as both the key and the path
-			submodulePaths[repo] = repo
-		}
-	}
-
-	// Get local workspaces from the provider
+	gitRoot := filepath.Dir(filepath.Dir(worktreePath))
 	localWorkspaces := provider.LocalWorkspaces()
-	if len(localWorkspaces) == 0 && hasGitmodules {
-		return setupSubmodulesStandard(ctx, worktreePath, branchName)
-	}
 
 	repoFilter := make(map[string]bool)
 	if len(repos) > 0 {
@@ -66,94 +39,98 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 			repoFilter[repo] = true
 		}
 	}
-	
-	gitRoot := filepath.Dir(filepath.Dir(worktreePath))
-	var externalSubmodules []string
 
-	for submoduleName, submodulePath := range submodulePaths {
-		if len(repoFilter) > 0 && !repoFilter[submoduleName] {
-			fmt.Printf("%s: skipping (not in repos filter)\n", submoduleName)
+	// Build the project list from discovered workspaces.
+	// This includes both submodules and non-submodule projects (e.g., private
+	// repos that are gitignored but present locally).
+	projects := make(map[string]string) // name -> relative path within ecosystem
+	for name, localPath := range localWorkspaces {
+		// Only include projects that are direct children of this ecosystem root
+		if filepath.Dir(localPath) == gitRoot {
+			rel, err := filepath.Rel(gitRoot, localPath)
+			if err != nil {
+				rel = name
+			}
+			projects[name] = rel
+		}
+	}
+
+	// Parse .gitmodules to find uninitialized submodules not yet discovered
+	// by the workspace provider (no grove.toml on disk yet).
+	gitmodulesPath := filepath.Join(worktreePath, ".gitmodules")
+	if submodulePaths, err := parseGitmodules(gitmodulesPath); err == nil {
+		for name, path := range submodulePaths {
+			if _, alreadyDiscovered := projects[name]; !alreadyDiscovered {
+				projects[name] = path
+			}
+		}
+	}
+
+	if len(projects) == 0 && len(repos) == 0 {
+		return nil
+	}
+
+	var uninitializedSubmodules []string
+
+	for projectName, projectPath := range projects {
+		if len(repoFilter) > 0 && !repoFilter[projectName] {
+			fmt.Printf("%s: skipping (not in repos filter)\n", projectName)
 			continue
 		}
-		targetPath := filepath.Join(worktreePath, submodulePath)
-		mainSubmodulePath := filepath.Join(gitRoot, submodulePath)
-		
-		if _, err := os.Stat(filepath.Join(mainSubmodulePath, ".git")); err == nil {
-			fmt.Printf("%s: creating linked worktree\n", submoduleName)
+
+		targetPath := filepath.Join(worktreePath, projectPath)
+		mainProjectPath := filepath.Join(gitRoot, projectPath)
+
+		// Skip if worktree already exists at target
+		if _, err := os.Stat(filepath.Join(targetPath, ".git")); err == nil {
+			continue
+		}
+
+		// Try to create a linked worktree from the main checkout
+		if _, err := os.Stat(filepath.Join(mainProjectPath, ".git")); err == nil {
+			fmt.Printf("%s: creating linked worktree\n", projectName)
 			os.MkdirAll(filepath.Dir(targetPath), 0755)
-			if _, err := os.Stat(filepath.Join(targetPath, ".git")); err != nil {
-				os.RemoveAll(targetPath)
-				cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
-				cmdWorktree.Dir = mainSubmodulePath
-				if err := cmdWorktree.Run(); err == nil {
-					// Run setup handlers for the newly created worktree
-					for _, handler := range setupHandlers {
-						if err := handler(targetPath, mainSubmodulePath); err != nil {
-							fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
-						}
+			os.RemoveAll(targetPath)
+			cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
+			cmdWorktree.Dir = mainProjectPath
+			if err := cmdWorktree.Run(); err == nil {
+				for _, handler := range setupHandlers {
+					if err := handler(targetPath, mainProjectPath); err != nil {
+						fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
 					}
 				}
 			}
 			continue
 		}
-		
-		if localRepoPath, hasLocal := localWorkspaces[submoduleName]; hasLocal {
-			fmt.Printf("%s: creating linked worktree\n", submoduleName)
+
+		// Try via provider lookup (project may be elsewhere on disk)
+		if localRepoPath, hasLocal := localWorkspaces[projectName]; hasLocal {
+			fmt.Printf("%s: creating linked worktree\n", projectName)
 			os.MkdirAll(filepath.Dir(targetPath), 0755)
-			if _, err := os.Stat(filepath.Join(targetPath, ".git")); err != nil {
-				os.RemoveAll(targetPath)
-				cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
-				cmdWorktree.Dir = localRepoPath
-				if err := cmdWorktree.Run(); err == nil {
-					// Run setup handlers for the newly created worktree
-					for _, handler := range setupHandlers {
-						if err := handler(targetPath, localRepoPath); err != nil {
-							fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
-						}
+			os.RemoveAll(targetPath)
+			cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
+			cmdWorktree.Dir = localRepoPath
+			if err := cmdWorktree.Run(); err == nil {
+				for _, handler := range setupHandlers {
+					if err := handler(targetPath, localRepoPath); err != nil {
+						fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
 					}
 				}
 			}
-		} else {
-			externalSubmodules = append(externalSubmodules, submodulePath)
+			continue
 		}
+
+		// Not found locally — must be an uninitialized submodule
+		uninitializedSubmodules = append(uninitializedSubmodules, projectPath)
 	}
 
-	if len(externalSubmodules) > 0 {
-		for _, submodulePath := range externalSubmodules {
-			cmdUpdate := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive", "--", submodulePath)
-			cmdUpdate.Dir = worktreePath
-			cmdUpdate.Run()
-		}
+	// Initialize any submodules that weren't available locally
+	for _, submodulePath := range uninitializedSubmodules {
+		cmdUpdate := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive", "--", submodulePath)
+		cmdUpdate.Dir = worktreePath
+		cmdUpdate.Run()
 	}
 	return nil
-}
-
-func setupSubmodulesStandard(ctx context.Context, worktreePath, branchName string) error {
-	cmdUpdate := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive")
-	cmdUpdate.Dir = worktreePath
-	cmdUpdate.Run()
-	return nil
-}
-
-// discoverLocalWorkspacesFromService uses the DiscoveryService to find projects and their primary workspace paths.
-func discoverLocalWorkspacesFromService(ctx context.Context, ds *DiscoveryService) (map[string]string, error) {
-	if ds == nil {
-		return make(map[string]string), fmt.Errorf("discovery service is nil")
-	}
-
-	result, err := ds.DiscoverAll()
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover all workspaces: %w", err)
-	}
-
-	workspaceMap := make(map[string]string)
-	for _, proj := range result.Projects {
-		// The primary workspace path is the project's own path.
-		if proj.Path != "" {
-			workspaceMap[proj.Name] = proj.Path
-		}
-	}
-	return workspaceMap, nil
 }
 
 
