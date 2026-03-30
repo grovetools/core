@@ -62,6 +62,11 @@ func main() {
 		// NvimDemoScenario(),
 		// NvimDemoFileBrowserScenario(),
 		// NvimDemoFileOpenScenario(),
+
+		// Notebook TOML / Relaxed Discovery scenarios
+		NbTomlsRelaxedDiscoveryScenario(),
+		NbTomlsNotebookConfigScenario(),
+		NbTomlsFullFeatureFlowScenario(),
 	}
 
 	// Setup signal handling for graceful shutdown.
