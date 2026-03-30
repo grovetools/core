@@ -77,6 +77,7 @@ var coreConfigKeys = map[string]bool{
 	"context":           true,
 	"daemon":            true,
 	"environment":       true,
+	"environments":      true,
 	"groves":            true,
 	"search_paths":      true,
 	"explicit_projects": true,

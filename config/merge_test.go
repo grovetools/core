@@ -548,3 +548,152 @@ settings:
 		t.Errorf("Expected workspaces ['workspace-*'], got %v", cfg.Workspaces)
 	}
 }
+
+// TestMergeEnvironments tests deep-merging of named environments across config layers.
+func TestMergeEnvironments(t *testing.T) {
+	base := &Config{
+		Environment: &EnvironmentConfig{
+			Provider: "native",
+			Config: map[string]interface{}{
+				"domain": "grove.local",
+			},
+			Commands: map[string]string{
+				"build": "make build",
+				"test":  "make test",
+			},
+		},
+		Environments: map[string]*EnvironmentConfig{
+			"docker": {
+				Provider: "docker",
+				Config: map[string]interface{}{
+					"services": map[string]interface{}{
+						"web": "nginx",
+					},
+				},
+				Commands: map[string]string{
+					"build": "docker compose build",
+				},
+			},
+		},
+	}
+
+	overlay := &Config{
+		Environments: map[string]*EnvironmentConfig{
+			"docker": {
+				Config: map[string]interface{}{
+					"services": map[string]interface{}{
+						"api": "golang", // Adds a new service
+					},
+				},
+				Commands: map[string]string{
+					"logs": "docker compose logs -f", // Adds a new command
+				},
+			},
+			"cloud": {
+				Provider: "cloud",
+				Config: map[string]interface{}{
+					"region": "us-central1",
+				},
+			},
+		},
+	}
+
+	merged := mergeConfigs(base, overlay)
+
+	// Docker profile should have both services (deep merge)
+	docker := merged.Environments["docker"]
+	if docker == nil {
+		t.Fatal("expected docker environment to exist")
+	}
+	if docker.Provider != "docker" {
+		t.Errorf("expected docker provider, got %q", docker.Provider)
+	}
+	services, ok := docker.Config["services"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected docker services to be a map")
+	}
+	if services["web"] != "nginx" {
+		t.Errorf("expected web service 'nginx', got %v", services["web"])
+	}
+	if services["api"] != "golang" {
+		t.Errorf("expected api service 'golang', got %v", services["api"])
+	}
+
+	// Docker commands: build from base, logs from overlay
+	if docker.Commands["build"] != "docker compose build" {
+		t.Errorf("expected build from base, got %q", docker.Commands["build"])
+	}
+	if docker.Commands["logs"] != "docker compose logs -f" {
+		t.Errorf("expected logs from overlay, got %q", docker.Commands["logs"])
+	}
+
+	// Cloud profile should exist from overlay
+	cloud := merged.Environments["cloud"]
+	if cloud == nil {
+		t.Fatal("expected cloud environment to exist")
+	}
+	if cloud.Provider != "cloud" {
+		t.Errorf("expected cloud provider, got %q", cloud.Provider)
+	}
+	if cloud.Config["region"] != "us-central1" {
+		t.Errorf("expected region 'us-central1', got %v", cloud.Config["region"])
+	}
+}
+
+// TestMergeEnvironmentDefault tests that the default environment is deep-merged, not replaced.
+func TestMergeEnvironmentDefault(t *testing.T) {
+	base := &Config{
+		Environment: &EnvironmentConfig{
+			Provider: "native",
+			Command:  "grove-env-native",
+			Config: map[string]interface{}{
+				"host": "localhost",
+				"port": 8080,
+			},
+			Commands: map[string]string{
+				"build": "make build",
+				"test":  "make test",
+			},
+		},
+	}
+
+	overlay := &Config{
+		Environment: &EnvironmentConfig{
+			Config: map[string]interface{}{
+				"port":     9090, // Override
+				"database": "postgres://localhost:5432",
+			},
+			Commands: map[string]string{
+				"build": "npm run build", // Override
+				"seed":  "npm run seed",  // New
+			},
+		},
+	}
+
+	merged := mergeConfigs(base, overlay)
+
+	if merged.Environment.Provider != "native" {
+		t.Errorf("expected provider 'native' preserved, got %q", merged.Environment.Provider)
+	}
+	if merged.Environment.Command != "grove-env-native" {
+		t.Errorf("expected command preserved, got %q", merged.Environment.Command)
+	}
+	if merged.Environment.Config["host"] != "localhost" {
+		t.Errorf("expected host 'localhost' preserved, got %v", merged.Environment.Config["host"])
+	}
+	if merged.Environment.Config["port"] != 9090 {
+		t.Errorf("expected port overridden to 9090, got %v", merged.Environment.Config["port"])
+	}
+	if merged.Environment.Config["database"] != "postgres://localhost:5432" {
+		t.Errorf("expected database added, got %v", merged.Environment.Config["database"])
+	}
+	if merged.Environment.Commands["build"] != "npm run build" {
+		t.Errorf("expected build overridden, got %q", merged.Environment.Commands["build"])
+	}
+	if merged.Environment.Commands["test"] != "make test" {
+		t.Errorf("expected test preserved, got %q", merged.Environment.Commands["test"])
+	}
+	if merged.Environment.Commands["seed"] != "npm run seed" {
+		t.Errorf("expected seed added, got %q", merged.Environment.Commands["seed"])
+	}
+}

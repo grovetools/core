@@ -294,9 +294,76 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
-	// Merge Environment configuration (replace if present)
+	// Merge Environment configuration (deep merge)
 	if override.Environment != nil {
-		result.Environment = override.Environment
+		if result.Environment == nil {
+			result.Environment = &EnvironmentConfig{}
+		}
+		if override.Environment.Provider != "" {
+			result.Environment.Provider = override.Environment.Provider
+		}
+		if override.Environment.Command != "" {
+			result.Environment.Command = override.Environment.Command
+		}
+		if override.Environment.Config != nil {
+			if result.Environment.Config == nil {
+				result.Environment.Config = make(map[string]interface{})
+			}
+			result.Environment.Config = deepMergeMaps(result.Environment.Config, override.Environment.Config)
+		}
+		if override.Environment.Commands != nil {
+			if result.Environment.Commands == nil {
+				result.Environment.Commands = make(map[string]string)
+			}
+			for k, v := range override.Environment.Commands {
+				result.Environment.Commands[k] = v
+			}
+		}
+	}
+
+	// Merge Named Environments
+	if override.Environments != nil {
+		if result.Environments == nil {
+			result.Environments = make(map[string]*EnvironmentConfig)
+		}
+		for name, envOverride := range override.Environments {
+			existing, exists := result.Environments[name]
+			if !exists || existing == nil {
+				// Deep copy to avoid pointer pollution
+				envCopy := *envOverride
+				if envOverride.Config != nil {
+					envCopy.Config = deepMergeMaps(nil, envOverride.Config)
+				}
+				if envOverride.Commands != nil {
+					envCopy.Commands = make(map[string]string)
+					for k, v := range envOverride.Commands {
+						envCopy.Commands[k] = v
+					}
+				}
+				result.Environments[name] = &envCopy
+			} else {
+				if envOverride.Provider != "" {
+					existing.Provider = envOverride.Provider
+				}
+				if envOverride.Command != "" {
+					existing.Command = envOverride.Command
+				}
+				if envOverride.Config != nil {
+					if existing.Config == nil {
+						existing.Config = make(map[string]interface{})
+					}
+					existing.Config = deepMergeMaps(existing.Config, envOverride.Config)
+				}
+				if envOverride.Commands != nil {
+					if existing.Commands == nil {
+						existing.Commands = make(map[string]string)
+					}
+					for k, v := range envOverride.Commands {
+						existing.Commands[k] = v
+					}
+				}
+			}
+		}
 	}
 
 	// Merge extensions with recursive deep merge

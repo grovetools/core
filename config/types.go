@@ -298,6 +298,7 @@ type EnvironmentConfig struct {
 	Provider string                 `yaml:"provider,omitempty" toml:"provider,omitempty" jsonschema:"description=Provider type (native\\, docker\\, cloud\\, or custom exec plugin name)"`
 	Command  string                 `yaml:"command,omitempty" toml:"command,omitempty" jsonschema:"description=Path to provider binary (exec plugins only). If empty\\, searches PATH for grove-env-<provider>."`
 	Config   map[string]interface{} `yaml:"config,omitempty" toml:"config,omitempty" jsonschema:"description=Provider-specific configuration"`
+	Commands map[string]string      `yaml:"commands,omitempty" toml:"commands,omitempty" jsonschema:"description=Named commands that run in the context of this environment"`
 }
 
 // DaemonConfig holds configuration for the grove daemon (groved).
@@ -376,7 +377,8 @@ type Config struct {
 	Context   *ContextConfig   `yaml:"context,omitempty" toml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool"`
 	Daemon    *DaemonConfig    `yaml:"daemon,omitempty" toml:"daemon,omitempty" jsonschema:"description=Configuration for the grove daemon (groved)"`
 
-	Environment *EnvironmentConfig `yaml:"environment,omitempty" toml:"environment,omitempty" jsonschema:"description=Development environment provider configuration"`
+	Environment  *EnvironmentConfig            `yaml:"environment,omitempty" toml:"environment,omitempty" jsonschema:"description=Development environment provider configuration"`
+	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty" toml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag"`
 
 	Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
 	SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" toml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
@@ -400,8 +402,9 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		TUI              *TUIConfig                   `yaml:"tui,omitempty"`
 		Context          *ContextConfig               `yaml:"context,omitempty"`
 		Daemon           *DaemonConfig                `yaml:"daemon,omitempty"`
-		Environment      *EnvironmentConfig           `yaml:"environment,omitempty"`
-		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty"`
+		Environment      *EnvironmentConfig            `yaml:"environment,omitempty"`
+		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
+		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty"`
 		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
 		Extensions       map[string]interface{}       `yaml:",inline"`
 
@@ -428,6 +431,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Context = raw.Context
 	c.Daemon = raw.Daemon
 	c.Environment = raw.Environment
+	c.Environments = raw.Environments
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Extensions = raw.Extensions
 

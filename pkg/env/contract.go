@@ -24,7 +24,8 @@ type EnvResponse struct {
 
 // EnvStateFile represents the persistent state written to the notebook plan directory.
 type EnvStateFile struct {
-	Provider string            `json:"provider"`
-	Command  string            `json:"command,omitempty"` // Binary path for exec plugins (empty = search PATH)
-	State    map[string]string `json:"state"`
+	Provider    string            `json:"provider"`
+	Command     string            `json:"command,omitempty"`     // Binary path for exec plugins (empty = search PATH)
+	Environment string            `json:"environment,omitempty"` // Named environment profile used for this plan
+	State       map[string]string `json:"state"`
 }
