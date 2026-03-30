@@ -23,7 +23,7 @@ type DaemonEnvClient interface {
 // it is used as the binary path instead of searching PATH for grove-env-<name>.
 func ResolveProvider(name string, client DaemonEnvClient, command string) Provider {
 	switch name {
-	case "native", "docker":
+	case "native", "docker", "terraform":
 		return NewDaemonProvider(client)
 	default:
 		return NewExecProvider(name, command)
