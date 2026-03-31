@@ -31,6 +31,7 @@ const (
 	nerdIconInteractiveAgent  = "" // fa-robot (U+EE0D)
 	nerdIconHeadlessAgent     = "󰭆" // md-robot_industrial (U+F0B46)
 	nerdIconShell             = "" // seti-shell (U+E691)
+	nerdIconClaw              = "󱚣" // md-robot_excited (U+F16A3)
 	nerdIconStatusCompleted   = "󰄳" // md-checkbox_marked_circle (U+F0133)
 	nerdIconStatusRunning     = "󰔟" // md-timer_sand (U+F051F)
 	nerdIconStatusFailed      = "" // oct-x (U+F467)
@@ -193,6 +194,7 @@ const (
 	asciiIconInteractiveAgent  = "⚙"
 	asciiIconHeadlessAgent     = "◆"
 	asciiIconShell             = "▶"
+	asciiIconClaw              = "✦"
 	asciiIconStatusCompleted   = "●"
 	asciiIconStatusRunning     = "◐"
 	asciiIconStatusFailed      = "x"
@@ -355,6 +357,7 @@ var (
 	IconInteractiveAgent  string
 	IconHeadlessAgent     string
 	IconShell             string
+	IconClaw              string
 	IconStatusCompleted   string
 	IconStatusRunning     string
 	IconStatusFailed      string
@@ -532,6 +535,7 @@ func init() {
 		IconInteractiveAgent = asciiIconInteractiveAgent
 		IconHeadlessAgent = asciiIconHeadlessAgent
 		IconShell = asciiIconShell
+		IconClaw = asciiIconClaw
 		IconStatusCompleted = asciiIconStatusCompleted
 		IconStatusRunning = asciiIconStatusRunning
 		IconStatusFailed = asciiIconStatusFailed
@@ -684,6 +688,7 @@ func init() {
 		IconInteractiveAgent = nerdIconInteractiveAgent
 		IconHeadlessAgent = nerdIconHeadlessAgent
 		IconShell = nerdIconShell
+		IconClaw = nerdIconClaw
 		IconStatusCompleted = nerdIconStatusCompleted
 		IconStatusRunning = nerdIconStatusRunning
 		IconStatusFailed = nerdIconStatusFailed
