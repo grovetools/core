@@ -282,6 +282,13 @@ type ContextConfig struct {
 	ReposDir         *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty" jsonschema:"description=Directory where cx repo stores bare repositories (default: ~/.grove/cx)" jsonschema_extras:"x-layer=global,x-priority=80"`
 	DefaultRulesPath string  `yaml:"default_rules_path,omitempty" toml:"default_rules_path,omitempty" jsonschema:"description=Default rules file path for context filtering" jsonschema_extras:"x-layer=project,x-priority=81"`
 	DefaultRules     string  `yaml:"default_rules,omitempty" toml:"default_rules,omitempty" jsonschema:"description=Name of the default rules preset to use" jsonschema_extras:"x-layer=project,x-priority=82"`
+	// IncludedWorkspaces is a strict allowlist: if set, only these workspaces are scanned for context.
+	IncludedWorkspaces []string `yaml:"included_workspaces,omitempty" toml:"included_workspaces,omitempty" jsonschema:"description=Allowlist of workspace names to include in context scanning" jsonschema_extras:"x-layer=project,x-priority=83"`
+	// ExcludedWorkspaces is a denylist: these workspaces are excluded from context scanning.
+	ExcludedWorkspaces []string `yaml:"excluded_workspaces,omitempty" toml:"excluded_workspaces,omitempty" jsonschema:"description=Denylist of workspace names to exclude from context scanning" jsonschema_extras:"x-layer=project,x-priority=84"`
+	// AllowedPaths is a list of additional paths that can be included in context,
+	// regardless of workspace boundaries.
+	AllowedPaths []string `yaml:"allowed_paths,omitempty" toml:"allowed_paths,omitempty" jsonschema:"description=Additional paths allowed for context inclusion regardless of workspace boundaries" jsonschema_extras:"x-layer=project,x-priority=85"`
 }
 
 // DaemonJobsConfig holds configuration for the in-process job runner.
