@@ -3,6 +3,15 @@
     "ContextConfig": {
       "additionalProperties": false,
       "properties": {
+        "allowed_paths": {
+          "description": "Additional paths allowed for context inclusion regardless of workspace boundaries",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-layer": "project",
+          "x-priority": "85"
+        },
         "default_rules": {
           "description": "Name of the default rules preset to use",
           "type": "string",
@@ -14,6 +23,24 @@
           "type": "string",
           "x-layer": "project",
           "x-priority": "81"
+        },
+        "excluded_workspaces": {
+          "description": "Denylist of workspace names to exclude from context scanning",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-layer": "project",
+          "x-priority": "84"
+        },
+        "included_workspaces": {
+          "description": "Allowlist of workspace names to include in context scanning",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-layer": "project",
+          "x-priority": "83"
         },
         "repos_dir": {
           "description": "Directory where cx repo stores bare repositories (default: ~/.grove/cx)",
