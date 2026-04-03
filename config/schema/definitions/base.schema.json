@@ -149,6 +149,10 @@
           },
           "type": "array"
         },
+        "memory": {
+          "description": "Whether to index this grove's notebook content into the memory store for semantic search (default: false)",
+          "type": "boolean"
+        },
         "notebook": {
           "description": "Name of the notebook to use for projects in this grove",
           "type": "string",

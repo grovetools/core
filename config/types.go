@@ -31,6 +31,7 @@ type GroveSourceConfig struct {
 	Depth        *int     `yaml:"depth,omitempty" toml:"depth,omitempty" jsonschema:"description=How many directory levels deep to scan for projects. Unset keeps current behavior; 1 means immediate children only."`
 	IncludeRepos []string `yaml:"include_repos,omitempty" toml:"include_repos,omitempty" jsonschema:"description=List of directory names or relative paths to explicitly include as projects"`
 	ExcludeRepos []string `yaml:"exclude_repos,omitempty" toml:"exclude_repos,omitempty" jsonschema:"description=List of directory names or relative paths to explicitly exclude"`
+	Memory       *bool    `yaml:"memory,omitempty" toml:"memory,omitempty" jsonschema:"description=Whether to index this grove's notebook content into the memory store for semantic search (default: false)"`
 }
 
 // ExplicitProject defines a specific project to include regardless of discovery.
