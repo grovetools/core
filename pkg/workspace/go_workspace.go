@@ -16,8 +16,10 @@ func SetupGoWorkspaceForWorktree(worktreePath string, gitRoot string) error {
 	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
 		return nil // Not a Go project
 	}
-	
-	config, err := FindRootGoWorkspace(gitRoot)
+
+	// Start searching from the parent of gitRoot to avoid finding the worktree's
+	// own go.work file (which we're about to overwrite).
+	config, err := FindRootGoWorkspace(filepath.Dir(gitRoot))
 	if err != nil || config == nil {
 		return nil // No go.work file found, nothing to do
 	}
@@ -166,11 +168,9 @@ func parseGoModRequires(goModPath string, workspaceModules []string) ([]string, 
 			matches := moduleRegex.FindStringSubmatch(moduleLine)
 			if len(matches) > 1 {
 				moduleName := matches[1]
-				for _, workspaceModule := range moduleMap {
-					if strings.Contains(moduleName, workspaceModule) {
-						requiredModules = append(requiredModules, workspaceModule)
-						break
-					}
+				moduleBaseName := filepath.Base(moduleName)
+				if _, ok := moduleMap[moduleBaseName]; ok {
+					requiredModules = append(requiredModules, moduleBaseName)
 				}
 			}
 		}
