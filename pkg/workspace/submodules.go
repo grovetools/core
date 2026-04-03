@@ -45,13 +45,15 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 	// repos that are gitignored but present locally).
 	projects := make(map[string]string) // name -> relative path within ecosystem
 	for name, localPath := range localWorkspaces {
-		// Only include projects that are direct children of this ecosystem root
-		if filepath.Dir(localPath) == gitRoot {
-			rel, err := filepath.Rel(gitRoot, localPath)
-			if err != nil {
-				rel = name
-			}
-			projects[name] = rel
+		// Only include projects that are direct children of this ecosystem root.
+		// Use case-insensitive comparison for macOS where /Users/x/Code and
+		// /Users/x/code refer to the same directory but have different cases
+		// depending on how the path was resolved.
+		if strings.EqualFold(filepath.Dir(localPath), gitRoot) {
+			// Use filepath.Base instead of filepath.Rel since we already know
+			// it's a direct child. filepath.Rel fails when paths differ only
+			// in case (common on macOS case-insensitive filesystems).
+			projects[name] = filepath.Base(localPath)
 		}
 	}
 
