@@ -244,18 +244,37 @@ func (c *Client) GetSessionPath(ctx context.Context, sessionName string) (string
 }
 
 // GetSessionPID returns the process ID of the tmux server for a given session.
+// Retries briefly to handle race conditions where the session was just created
+// but hasn't fully initialized yet.
 func (c *Client) GetSessionPID(ctx context.Context, sessionName string) (int, error) {
-	output, err := c.run(ctx, "display-message", "-p", "-t", "="+sessionName, "#{session_pid}")
-	if err != nil {
-		return 0, fmt.Errorf("failed to get session PID from tmux: %w", err)
+	for attempt := 0; attempt < 3; attempt++ {
+		output, err := c.run(ctx, "display-message", "-p", "-t", "="+sessionName, "#{pid}")
+		if err != nil {
+			if attempt < 2 {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			return 0, fmt.Errorf("failed to get session PID from tmux: %w", err)
+		}
+
+		trimmed := strings.TrimSpace(output)
+		if trimmed == "" {
+			if attempt < 2 {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			return 0, fmt.Errorf("tmux session PID is empty after retries for session '%s'", sessionName)
+		}
+
+		pid, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse session PID from tmux output '%s': %w", output, err)
+		}
+
+		return pid, nil
 	}
 
-	pid, err := strconv.Atoi(strings.TrimSpace(output))
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse session PID from tmux output '%s': %w", output, err)
-	}
-
-	return pid, nil
+	return 0, fmt.Errorf("failed to get session PID after retries for session '%s'", sessionName)
 }
 
 // GetCursorPosition returns the 1-based row and column of the cursor in the specified session's active pane.
