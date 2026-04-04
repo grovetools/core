@@ -162,6 +162,103 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 	return nil
 }
 
+// FindByIdentifier resolves a colon-delimited alias to a WorkspaceNode using
+// progressive disambiguation. It tries exact fully-qualified matches first,
+// then falls back to short name matching with context-aware scoping.
+func (p *Provider) FindByIdentifier(identifier string, currentPath string) *WorkspaceNode {
+	components := strings.Split(identifier, ":")
+
+	// 1. For multi-component identifiers, try exact fully qualified match
+	if len(components) > 1 {
+		for _, node := range p.nodes {
+			if node.Identifier(":") == identifier {
+				return node
+			}
+		}
+	}
+
+	// 2. Try matching against node names for short aliases (e.g. "cx")
+	if len(components) == 1 {
+		name := identifier
+		var matches []*WorkspaceNode
+		for _, node := range p.nodes {
+			if node.Name == name {
+				matches = append(matches, node)
+			}
+		}
+
+		if len(matches) == 1 {
+			return matches[0]
+		}
+
+		// Disambiguate using current path's ecosystem
+		if len(matches) > 1 && currentPath != "" {
+			currentNode := p.FindByPath(currentPath)
+			// Fallback: if FindByPath didn't match (e.g., path normalization issues),
+			// try direct path comparison against node paths
+			if currentNode == nil {
+				for _, node := range p.nodes {
+					if node.Path == currentPath {
+						currentNode = node
+						break
+					}
+				}
+			}
+			if currentNode != nil {
+				// Priority 1: direct child of current ecosystem
+				if currentNode.IsEcosystem() {
+					for _, match := range matches {
+						if match.ParentEcosystemPath == currentNode.Path {
+							return match
+						}
+					}
+				}
+				// Priority 2: sibling in same ecosystem
+				if currentNode.ParentEcosystemPath != "" {
+					for _, match := range matches {
+						if match.ParentEcosystemPath == currentNode.ParentEcosystemPath {
+							return match
+						}
+					}
+				}
+				// Priority 3: same root ecosystem
+				for _, match := range matches {
+					if match.RootEcosystemPath == currentNode.RootEcosystemPath {
+						return match
+					}
+				}
+			}
+		}
+
+		// Fallback: prefer shallowest match
+		if len(matches) > 0 {
+			best := matches[0]
+			for _, m := range matches[1:] {
+				if m.Depth < best.Depth {
+					best = m
+				}
+			}
+			return best
+		}
+	}
+
+	// 3. Try partial identifier matching for multi-component aliases
+	// e.g., "eco-worktree:project" should match nodes where the last components match
+	for _, node := range p.nodes {
+		nodeID := node.Identifier(":")
+		// Check if identifier matches a suffix of the node's full identifier
+		if strings.HasSuffix(nodeID, identifier) {
+			// Verify it's a clean component boundary (preceded by ":" or is the full string)
+			prefixLen := len(nodeID) - len(identifier)
+			if prefixLen == 0 || nodeID[prefixLen-1] == ':' {
+				return node
+			}
+		}
+	}
+
+	return nil
+}
+
 // Ecosystems returns all nodes that are ecosystem roots.
 func (p *Provider) Ecosystems() []*WorkspaceNode {
 	var ecosystems []*WorkspaceNode

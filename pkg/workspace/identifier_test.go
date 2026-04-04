@@ -111,7 +111,80 @@ func TestWorkspaceNode_Identifier(t *testing.T) {
 			}
 			tt.project.Path = filepath.FromSlash(tt.project.Path)
 
-			assert.Equal(t, tt.expected, tt.project.Identifier())
+			assert.Equal(t, tt.expected, tt.project.Identifier("_"))
+		})
+	}
+}
+
+func TestWorkspaceNode_Identifier_ColonDelimiter(t *testing.T) {
+	tests := []struct {
+		name     string
+		project  *WorkspaceNode
+		expected string
+	}{
+		{
+			name: "Standalone project uses no delimiter",
+			project: &WorkspaceNode{
+				Name: "my-project",
+				Path: "/path/to/my-project",
+				Kind: KindStandaloneProject,
+			},
+			expected: "my-project",
+		},
+		{
+			name: "Ecosystem sub-project with colon",
+			project: &WorkspaceNode{
+				Name:                "sub-project",
+				Path:                "/path/to/my-ecosystem/sub-project",
+				Kind:                KindEcosystemSubProject,
+				ParentEcosystemPath: "/path/to/my-ecosystem",
+			},
+			expected: "my-ecosystem:sub-project",
+		},
+		{
+			name: "Ecosystem worktree sub-project with colon",
+			project: &WorkspaceNode{
+				Name:                "sub-project",
+				Path:                "/path/to/my-ecosystem/.grove-worktrees/eco-feature/sub-project",
+				Kind:                KindEcosystemWorktreeSubProject,
+				ParentEcosystemPath: "/path/to/my-ecosystem/.grove-worktrees/eco-feature",
+			},
+			expected: "my-ecosystem:eco-feature:sub-project",
+		},
+		{
+			name: "Standalone project worktree with colon",
+			project: &WorkspaceNode{
+				Name:              "feature-branch",
+				Path:              "/path/to/my-project/.grove-worktrees/feature-branch",
+				Kind:              KindStandaloneProjectWorktree,
+				ParentProjectPath: "/path/to/my-project",
+			},
+			expected: "my-project:feature-branch",
+		},
+		{
+			name: "Ecosystem sub-project worktree with colon",
+			project: &WorkspaceNode{
+				Name:                "feature-branch",
+				Path:                "/path/to/my-ecosystem/sub-project/.grove-worktrees/feature-branch",
+				Kind:                KindEcosystemSubProjectWorktree,
+				ParentProjectPath:   "/path/to/my-ecosystem/sub-project",
+				ParentEcosystemPath: "/path/to/my-ecosystem",
+			},
+			expected: "my-ecosystem:sub-project:feature-branch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.project.ParentProjectPath != "" {
+				tt.project.ParentProjectPath = filepath.FromSlash(tt.project.ParentProjectPath)
+			}
+			if tt.project.ParentEcosystemPath != "" {
+				tt.project.ParentEcosystemPath = filepath.FromSlash(tt.project.ParentEcosystemPath)
+			}
+			tt.project.Path = filepath.FromSlash(tt.project.Path)
+
+			assert.Equal(t, tt.expected, tt.project.Identifier(":"))
 		})
 	}
 }

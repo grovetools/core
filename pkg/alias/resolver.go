@@ -149,128 +149,15 @@ func (r *AliasResolver) Resolve(alias string) (string, error) {
 		alias = strings.TrimPrefix(alias, "project:")
 	}
 
-	allNodes := r.Provider.All()
-	components := strings.Split(alias, ":")
-
-	// Context-aware resolution for single-component aliases
-	if len(components) == 1 {
-		name := components[0]
-		if r.workDir != "" {
-			// Normalize the workDir to handle macOS /private/var symlink
-			normalizedWorkDir := r.workDir
-			// On macOS, /private/var is symlinked to /var, but EvalSymlinks doesn't always resolve it
-			// Try stripping /private prefix if it exists
-			if strings.HasPrefix(normalizedWorkDir, "/private/") {
-				normalizedWorkDir = strings.TrimPrefix(normalizedWorkDir, "/private")
-			}
-
-			currentNode := r.Provider.FindByPath(normalizedWorkDir)
-			// If not found with /private stripped, try the original path
-			if currentNode == nil && normalizedWorkDir != r.workDir {
-				currentNode = r.Provider.FindByPath(r.workDir)
-			}
-
-			if currentNode != nil {
-				// Priority 1: If the current node is an ecosystem (e.g., an ecosystem worktree root),
-				// prioritize finding a direct child project with the alias name.
-				if currentNode.IsEcosystem() {
-					for _, node := range allNodes {
-						if node.Name == name && node.ParentEcosystemPath == currentNode.Path {
-							return node.Path, nil // Found a direct child.
-						}
-					}
-				}
-
-				// Priority 2: If the current node is a project within an ecosystem, prioritize finding a sibling project.
-				// This handles resolving aliases between projects in the same ecosystem or ecosystem worktree.
-				if currentNode.ParentEcosystemPath != "" {
-					for _, node := range allNodes {
-						if node.Name == name && node.ParentEcosystemPath == currentNode.ParentEcosystemPath {
-							return node.Path, nil // Found a sibling.
-						}
-					}
-				}
-			}
-		}
-
-		// Fallback for single-component alias: find a top-level project or best match
-		var topLevelMatch *workspace.WorkspaceNode
-		var shallowerMatch *workspace.WorkspaceNode
-		var anyMatch *workspace.WorkspaceNode
-		for _, node := range allNodes {
-			if node.Name == name {
-				depth := node.Depth // Use pre-calculated depth
-				if depth == 0 {     // Top-level nodes (standalone projects, ecosystems)
-					if topLevelMatch == nil {
-						topLevelMatch = node
-					}
-				}
-				// Prefer shallower nodes (e.g., ecosystem sub-projects over worktree sub-projects)
-				if shallowerMatch == nil || node.Depth < shallowerMatch.Depth {
-					shallowerMatch = node
-				}
-				if anyMatch == nil {
-					anyMatch = node
-				}
-			}
-		}
-		if topLevelMatch != nil {
-			return topLevelMatch.Path, nil
-		}
-		if shallowerMatch != nil {
-			return shallowerMatch.Path, nil
-		}
-		if anyMatch != nil {
-			return anyMatch.Path, nil
-		}
-		return "", fmt.Errorf("alias not found: '%s'", alias)
+	// Normalize workDir for macOS /private/var symlink
+	currentPath := r.workDir
+	if strings.HasPrefix(currentPath, "/private/") {
+		currentPath = strings.TrimPrefix(currentPath, "/private")
 	}
 
-	// Resolution for multi-component aliases
-	for _, node := range allNodes {
-		switch len(components) {
-		case 2: // ecosystem:repo OR repo:worktree OR eco-worktree:project
-			comp1 := components[0]
-			comp2 := components[1]
-			// ecosystem:repo
-			if node.Kind == workspace.KindEcosystemSubProject && filepath.Base(node.ParentEcosystemPath) == comp1 && node.Name == comp2 {
-				return node.Path, nil
-			}
-			// repo:worktree
-			if node.IsWorktree() && node.ParentProjectPath != "" && filepath.Base(node.ParentProjectPath) == comp1 && node.Name == comp2 {
-				return node.Path, nil
-			}
-			// eco-worktree:project (e.g., general-refactoring:grove-core)
-			if node.ParentEcosystemPath != "" && filepath.Base(node.ParentEcosystemPath) == comp1 && node.Name == comp2 {
-				return node.Path, nil
-			}
-
-		case 3: // ecosystem:repo:worktree OR root-eco:eco-worktree:project
-			comp1 := components[0]
-			comp2 := components[1]
-			comp3 := components[2]
-			// ecosystem:repo:worktree
-			if node.IsWorktree() && node.ParentProjectPath != "" && node.ParentEcosystemPath != "" &&
-				filepath.Base(node.ParentEcosystemPath) == comp1 &&
-				filepath.Base(node.ParentProjectPath) == comp2 &&
-				node.Name == comp3 {
-				return node.Path, nil
-			}
-			// root-eco:eco-worktree:project (e.g., grove-ecosystem:general-refactoring:grove-core)
-			if node.ParentEcosystemPath != "" && node.Name == comp3 && filepath.Base(node.ParentEcosystemPath) == comp2 {
-				// Check for root ecosystem name by traversing up from the parent ecosystem path
-				// ParentEcosystemPath is like /path/to/root-eco/.grove-worktrees/eco-worktree
-				ecoWorktreeParentDir := filepath.Dir(node.ParentEcosystemPath)
-				if filepath.Base(ecoWorktreeParentDir) == ".grove-worktrees" {
-					rootEcoPath := filepath.Dir(ecoWorktreeParentDir)
-					if filepath.Base(rootEcoPath) == comp1 {
-						return node.Path, nil
-					}
-				}
-			}
-		default:
-			return "", fmt.Errorf("invalid alias format '%s', must have 1 to 3 components separated by ':'", alias)
-		}
+	node := r.Provider.FindByIdentifier(alias, currentPath)
+	if node != nil {
+		return node.Path, nil
 	}
 
 	return "", fmt.Errorf("alias not found: '%s'", alias)
