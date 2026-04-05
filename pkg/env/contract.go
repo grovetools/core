@@ -14,6 +14,14 @@ type EnvRequest struct {
 	Config    map[string]interface{}   `json:"config,omitempty"`    // Provider-specific config from grove.yml
 	ManagedBy string                   `json:"managed_by,omitempty"` // Who owns this env: "plan:<slug>", "user", or empty
 	Force     bool                     `json:"force,omitempty"`     // Force teardown even if not the owner
+	Clean     bool                     `json:"clean,omitempty"`     // Remove all volumes including persistent ones
+}
+
+// VolumeState tracks a volume's path and persistence setting for teardown.
+type VolumeState struct {
+	Path          string `json:"path"`                     // Host path (relative to workspace root)
+	Persist       bool   `json:"persist,omitempty"`        // If true, survives env down (but not --clean)
+	ContainerPath string `json:"container_path,omitempty"` // Mount target inside container (docker provider)
 }
 
 // EnvResponse is the payload returned by providers (via daemon API or exec plugin stdout).
@@ -22,7 +30,8 @@ type EnvResponse struct {
 	EnvVars      map[string]string `json:"env_vars,omitempty"`      // Written to .env.local in worktree
 	Endpoints    []string          `json:"endpoints,omitempty"`     // Display to the user
 	State        map[string]string `json:"state,omitempty"`         // Saved to state.json
-	CleanupPaths []string          `json:"cleanup_paths,omitempty"` // Relative paths to remove on env down
+	CleanupPaths []string          `json:"cleanup_paths,omitempty"` // Deprecated: use Volumes instead
+	Volumes      []VolumeState     `json:"volumes,omitempty"`       // Volume state for teardown
 	Error        string            `json:"error,omitempty"`
 }
 
@@ -43,8 +52,23 @@ type EnvStateFile struct {
 	Services        []ServiceState    `json:"services,omitempty"`         // Per-service runtime state
 	ServiceCommands map[string]string `json:"service_commands,omitempty"` // Service name -> shell command (for native restart)
 	EnvVars         map[string]string `json:"env_vars,omitempty"`         // Env vars produced by the provider
-	CleanupPaths    []string          `json:"cleanup_paths,omitempty"`    // Relative paths to remove on env down
+	CleanupPaths    []string          `json:"cleanup_paths,omitempty"`    // Deprecated: use Volumes instead
+	Volumes         []VolumeState     `json:"volumes,omitempty"`          // Volume state for teardown
 	State           map[string]string `json:"state"`                      // Opaque provider state
+}
+
+// EffectiveVolumes returns the volumes to consider for teardown, migrating
+// legacy CleanupPaths entries as non-persistent volumes when no Volumes are set.
+func (s *EnvStateFile) EffectiveVolumes() []VolumeState {
+	if len(s.Volumes) > 0 {
+		return s.Volumes
+	}
+	// Backward compat: treat old cleanup_paths as non-persistent volumes
+	vols := make([]VolumeState, 0, len(s.CleanupPaths))
+	for _, p := range s.CleanupPaths {
+		vols = append(vols, VolumeState{Path: p, Persist: false})
+	}
+	return vols
 }
 
 // EffectiveStateDir returns the state directory to use, preferring StateDir over PlanDir.
