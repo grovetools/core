@@ -18,11 +18,12 @@ type EnvRequest struct {
 
 // EnvResponse is the payload returned by providers (via daemon API or exec plugin stdout).
 type EnvResponse struct {
-	Status    string            `json:"status"`              // "running", "stopped", "failed"
-	EnvVars   map[string]string `json:"env_vars,omitempty"`  // Written to .env.local in worktree
-	Endpoints []string          `json:"endpoints,omitempty"` // Display to the user
-	State     map[string]string `json:"state,omitempty"`     // Saved to state.json
-	Error     string            `json:"error,omitempty"`
+	Status       string            `json:"status"`                  // "running", "stopped", "failed"
+	EnvVars      map[string]string `json:"env_vars,omitempty"`      // Written to .env.local in worktree
+	Endpoints    []string          `json:"endpoints,omitempty"`     // Display to the user
+	State        map[string]string `json:"state,omitempty"`         // Saved to state.json
+	CleanupPaths []string          `json:"cleanup_paths,omitempty"` // Relative paths to remove on env down
+	Error        string            `json:"error,omitempty"`
 }
 
 // ServiceState tracks the runtime state of an individual service within an environment.
@@ -42,6 +43,7 @@ type EnvStateFile struct {
 	Services        []ServiceState    `json:"services,omitempty"`         // Per-service runtime state
 	ServiceCommands map[string]string `json:"service_commands,omitempty"` // Service name -> shell command (for native restart)
 	EnvVars         map[string]string `json:"env_vars,omitempty"`         // Env vars produced by the provider
+	CleanupPaths    []string          `json:"cleanup_paths,omitempty"`    // Relative paths to remove on env down
 	State           map[string]string `json:"state"`                      // Opaque provider state
 }
 
