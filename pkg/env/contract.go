@@ -34,14 +34,15 @@ type ServiceState struct {
 
 // EnvStateFile represents the persistent state written to .grove/env/state.json.
 type EnvStateFile struct {
-	Provider    string            `json:"provider"`
-	Command     string            `json:"command,omitempty"`     // Binary path for exec plugins (empty = search PATH)
-	Environment string            `json:"environment,omitempty"` // Named environment profile used for this plan
-	ManagedBy   string            `json:"managed_by,omitempty"`  // "plan:<slug>", "user", or empty
-	Ports       map[string]int    `json:"ports,omitempty"`       // Service name -> allocated port
-	Services    []ServiceState    `json:"services,omitempty"`    // Per-service runtime state
-	EnvVars     map[string]string `json:"env_vars,omitempty"`    // Env vars produced by the provider
-	State       map[string]string `json:"state"`                 // Opaque provider state
+	Provider        string            `json:"provider"`
+	Command         string            `json:"command,omitempty"`          // Binary path for exec plugins (empty = search PATH)
+	Environment     string            `json:"environment,omitempty"`      // Named environment profile used for this plan
+	ManagedBy       string            `json:"managed_by,omitempty"`       // "plan:<slug>", "user", or empty
+	Ports           map[string]int    `json:"ports,omitempty"`            // Service name -> allocated port
+	Services        []ServiceState    `json:"services,omitempty"`         // Per-service runtime state
+	ServiceCommands map[string]string `json:"service_commands,omitempty"` // Service name -> shell command (for native restart)
+	EnvVars         map[string]string `json:"env_vars,omitempty"`         // Env vars produced by the provider
+	State           map[string]string `json:"state"`                      // Opaque provider state
 }
 
 // EffectiveStateDir returns the state directory to use, preferring StateDir over PlanDir.
