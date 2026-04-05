@@ -29,3 +29,7 @@ func (m *MockDaemonEnvClient) EnvDown(ctx context.Context, req EnvRequest) (*Env
 	m.LastDownReq = req
 	return m.DownResponse, m.DownError
 }
+
+func (m *MockDaemonEnvClient) EnvStatus(ctx context.Context, worktree string) (*EnvResponse, error) {
+	return &EnvResponse{Status: "stopped"}, nil
+}

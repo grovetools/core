@@ -130,6 +130,9 @@ type Client interface {
 	// EnvDown requests the daemon to tear down an environment for a workspace.
 	EnvDown(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error)
 
+	// EnvStatus returns the current status of an environment for a worktree.
+	EnvStatus(ctx context.Context, worktree string) (*env.EnvResponse, error)
+
 	// --- Job Management ---
 	// These methods enable submitting and managing jobs via the daemon's JobRunner.
 

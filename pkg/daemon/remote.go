@@ -767,5 +767,25 @@ func (c *RemoteClient) EnvDown(ctx context.Context, req env.EnvRequest) (*env.En
 	return &result, nil
 }
 
+// EnvStatus requests environment status from the daemon.
+func (c *RemoteClient) EnvStatus(ctx context.Context, worktree string) (*env.EnvResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/env/status?worktree="+worktree, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call daemon env status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result env.EnvResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode env response: %w", err)
+	}
+	return &result, nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)

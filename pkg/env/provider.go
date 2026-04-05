@@ -15,6 +15,7 @@ type Provider interface {
 type DaemonEnvClient interface {
 	EnvUp(ctx context.Context, req EnvRequest) (*EnvResponse, error)
 	EnvDown(ctx context.Context, req EnvRequest) (*EnvResponse, error)
+	EnvStatus(ctx context.Context, worktree string) (*EnvResponse, error)
 }
 
 // ResolveProvider returns the appropriate Provider implementation based on the name.
