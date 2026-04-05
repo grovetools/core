@@ -209,7 +209,8 @@ func SelectableTable(headers []string, rows [][]string, selectedIndex int) strin
 
 // SelectableTableOptions provides configuration for SelectableTable
 type SelectableTableOptions struct {
-	HighlightColumn int // Column index to highlight (0-based), -1 for no highlight
+	HighlightColumn int                    // Column index to highlight (0-based), -1 for no highlight
+	BorderColor     lipgloss.TerminalColor // Border color override (nil uses default)
 }
 
 // SelectableTableWithOptions creates a table with custom highlighting options
@@ -222,9 +223,13 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		styledHeaders[i] = t.TableHeader.Render(h)
 	}
 
+	borderColor := lipgloss.TerminalColor(theme.Border)
+	if opts.BorderColor != nil {
+		borderColor = opts.BorderColor
+	}
 	table := ltable.New().
 		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(theme.Border)).
+		BorderStyle(lipgloss.NewStyle().Foreground(borderColor)).
 		Headers(styledHeaders...)
 
 	// Apply styling without selection background
