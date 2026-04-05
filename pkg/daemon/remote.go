@@ -19,8 +19,9 @@ import (
 // RemoteClient implements Client by calling the daemon's HTTP API over a Unix socket.
 // This provides fast, cached access to workspace and session data when the daemon is running.
 type RemoteClient struct {
-	httpClient *http.Client
-	socketPath string
+	httpClient    *http.Client
+	envHttpClient *http.Client // longer timeout for env up/down operations
+	socketPath    string
 }
 
 // NewRemoteClient creates a new RemoteClient connected to the daemon socket.
@@ -41,9 +42,15 @@ func NewRemoteClient(socketPath string) (*RemoteClient, error) {
 		Timeout:   10 * time.Second,
 	}
 
+	envClient := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Minute,
+	}
+
 	return &RemoteClient{
-		httpClient: client,
-		socketPath: socketPath,
+		httpClient:    client,
+		envHttpClient: envClient,
+		socketPath:    socketPath,
 	}, nil
 }
 
@@ -716,6 +723,7 @@ func (c *RemoteClient) NotifyNoteEvent(ctx context.Context, event models.NoteEve
 }
 
 // EnvUp requests the daemon to spin up an environment.
+// Uses a 10-minute timeout to accommodate slow operations like docker builds.
 func (c *RemoteClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -728,7 +736,7 @@ func (c *RemoteClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvR
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.envHttpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call daemon env up: %w", err)
 	}
@@ -742,6 +750,7 @@ func (c *RemoteClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvR
 }
 
 // EnvDown requests the daemon to tear down an environment.
+// Uses a 10-minute timeout to accommodate slow teardown operations.
 func (c *RemoteClient) EnvDown(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -754,7 +763,7 @@ func (c *RemoteClient) EnvDown(ctx context.Context, req env.EnvRequest) (*env.En
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.envHttpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call daemon env down: %w", err)
 	}
