@@ -34,6 +34,13 @@ type Session struct {
 	ClaudeSessionID string `json:"claude_session_id,omitempty" db:"claude_session_id"`
 	Provider        string `json:"provider,omitempty" db:"provider"`
 
+	// Channel & Autonomous support
+	Channels       []string          `json:"channels,omitempty" db:"-"`
+	Autonomous     *AutonomousConfig `json:"autonomous,omitempty" db:"-"`
+	TmuxTarget     string            `json:"tmux_target,omitempty" db:"-"`
+	LastIdlePingAt *time.Time        `json:"last_idle_ping_at,omitempty" db:"-"`
+	LastSender     string            `json:"last_sender,omitempty" db:"-"`
+
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`
 	IsDeleted bool `json:"-" db:"is_deleted"` // Keep as internal field

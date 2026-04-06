@@ -16,11 +16,16 @@ import (
 // This enables race-free session tracking by pre-registering before the agent process exists.
 type SessionIntent struct {
 	JobID       string `json:"job_id"`
-	Provider    string `json:"provider"`     // "claude", "codex", "opencode"
+	Provider    string `json:"provider"`      // "claude", "codex", "opencode"
 	JobFilePath string `json:"job_file_path"` // Path to the job markdown file
 	PlanName    string `json:"plan_name"`
 	Title       string `json:"title"`
 	WorkDir     string `json:"work_dir"`
+
+	// Channel & Autonomous support (optional, set when job has claw features)
+	Channels   []string                 `json:"channels,omitempty"`
+	Autonomous *models.AutonomousConfig `json:"autonomous,omitempty"`
+	TmuxTarget string                   `json:"tmux_target,omitempty"`
 }
 
 // SessionConfirmation contains the data needed to confirm a session after agent startup.
@@ -121,6 +126,23 @@ type Client interface {
 	// Valid outcomes: "completed", "interrupted", "failed"
 	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
 	EndSession(ctx context.Context, jobID string, outcome string) error
+
+	// --- Channel & Autonomous Management ---
+
+	// UpdateSessionChannels updates the active channels for a session.
+	UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error
+
+	// UpdateSessionAutonomous updates the autonomous config for a session.
+	UpdateSessionAutonomous(ctx context.Context, jobID string, config *models.AutonomousConfig) error
+
+	// UpdateSessionTmuxTarget updates the tmux target for a session (after detach/attach).
+	UpdateSessionTmuxTarget(ctx context.Context, jobID string, target string) error
+
+	// SendChannelMessage sends a message via an external channel (e.g., Signal).
+	SendChannelMessage(ctx context.Context, req models.ChannelSendRequest) (*models.ChannelSendResponse, error)
+
+	// GetChannelStatus returns the status of the channel system.
+	GetChannelStatus(ctx context.Context) (*models.ChannelStatusResponse, error)
 
 	// --- Environment Management ---
 

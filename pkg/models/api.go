@@ -108,6 +108,53 @@ func SessionFromClaudeSession(cs interface{}) *Session {
 	return nil
 }
 
+// --- Channel & Autonomous Configuration ---
+
+// AutonomousConfig holds settings for autonomous idle pinging on a session.
+type AutonomousConfig struct {
+	Enabled     bool   `json:"enabled" yaml:"enabled"`
+	IdleMinutes int    `json:"idle_minutes" yaml:"idle_minutes"`
+	Prompt      string `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+}
+
+// ChannelSendRequest represents a request to send a message via a channel.
+type ChannelSendRequest struct {
+	JobID     string `json:"job_id"`
+	Recipient string `json:"recipient,omitempty"` // Empty = use LastSender or broadcast
+	Message   string `json:"message"`
+}
+
+// ChannelSendResponse represents the result of sending a channel message.
+type ChannelSendResponse struct {
+	Timestamp int64  `json:"timestamp"`
+	Status    string `json:"status"`
+}
+
+// ChannelStatusResponse represents the status of the channel system.
+type ChannelStatusResponse struct {
+	SignalCLIRunning bool `json:"signal_cli_running"`
+	ActiveRoutes     int  `json:"active_routes"`
+	RefCount         int  `json:"ref_count"`
+}
+
+// SessionChannelsRequest represents a request to update session channels.
+type SessionChannelsRequest struct {
+	Channels []string `json:"channels"`
+}
+
+// SessionAutonomousRequest represents a request to update session autonomous config.
+type SessionAutonomousRequest struct {
+	Enabled     bool   `json:"enabled"`
+	IdleMinutes int    `json:"idle_minutes,omitempty"`
+	Prompt      string `json:"prompt,omitempty"`
+}
+
+// SessionPatchRequest represents a partial update to session metadata.
+type SessionPatchRequest struct {
+	TmuxTarget string `json:"tmux_target,omitempty"`
+	LastSender string `json:"last_sender,omitempty"`
+}
+
 // --- Job Runner API Types ---
 
 // JobSubmitRequest represents a request to submit a job to the daemon.

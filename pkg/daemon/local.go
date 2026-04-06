@@ -240,5 +240,27 @@ func (c *LocalClient) EnvStatus(ctx context.Context, worktree string) (*env.EnvR
 	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")
 }
 
+// --- Channel & Autonomous stubs (require daemon) ---
+
+func (c *LocalClient) UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error {
+	return errors.New("channel management requires the grove daemon")
+}
+
+func (c *LocalClient) UpdateSessionAutonomous(ctx context.Context, jobID string, config *models.AutonomousConfig) error {
+	return errors.New("autonomous management requires the grove daemon")
+}
+
+func (c *LocalClient) UpdateSessionTmuxTarget(ctx context.Context, jobID string, target string) error {
+	return errors.New("tmux target updates require the grove daemon")
+}
+
+func (c *LocalClient) SendChannelMessage(ctx context.Context, req models.ChannelSendRequest) (*models.ChannelSendResponse, error) {
+	return nil, errors.New("channel messaging requires the grove daemon")
+}
+
+func (c *LocalClient) GetChannelStatus(ctx context.Context) (*models.ChannelStatusResponse, error) {
+	return nil, errors.New("channel status requires the grove daemon")
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

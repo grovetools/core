@@ -796,5 +796,138 @@ func (c *RemoteClient) EnvStatus(ctx context.Context, worktree string) (*env.Env
 	return &result, nil
 }
 
+// --- Channel & Autonomous Management ---
+
+// UpdateSessionChannels updates the active channels for a session.
+func (c *RemoteClient) UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error {
+	payload := models.SessionChannelsRequest{Channels: channels}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal channels request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://daemon/api/sessions/%s/channels", jobID), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// UpdateSessionAutonomous updates the autonomous config for a session.
+func (c *RemoteClient) UpdateSessionAutonomous(ctx context.Context, jobID string, config *models.AutonomousConfig) error {
+	body, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal autonomous config: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://daemon/api/sessions/%s/autonomous", jobID), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// UpdateSessionTmuxTarget updates the tmux target for a session.
+func (c *RemoteClient) UpdateSessionTmuxTarget(ctx context.Context, jobID string, target string) error {
+	payload := models.SessionPatchRequest{TmuxTarget: target}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal patch request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("http://daemon/api/sessions/%s", jobID), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// SendChannelMessage sends a message via an external channel.
+func (c *RemoteClient) SendChannelMessage(ctx context.Context, req models.ChannelSendRequest) (*models.ChannelSendResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal send request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", "http://daemon/api/channels/send", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var result models.ChannelSendResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetChannelStatus returns the status of the channel system.
+func (c *RemoteClient) GetChannelStatus(ctx context.Context) (*models.ChannelStatusResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://daemon/api/channels/status", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var result models.ChannelStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)
