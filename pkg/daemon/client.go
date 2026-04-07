@@ -189,6 +189,11 @@ type Client interface {
 	// GetNavBindings returns the current nav binding state.
 	GetNavBindings(ctx context.Context) (*models.NavSessionsFile, error)
 
+	// GetNavConfig returns the static nav configuration (group prefixes, etc.)
+	// loaded from the grove config files. This is the source of truth for
+	// group prefix transitions in non-nav clients.
+	GetNavConfig(ctx context.Context) (*models.NavConfig, error)
+
 	// UpdateNavGroup updates the session state for a single group.
 	UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error
 

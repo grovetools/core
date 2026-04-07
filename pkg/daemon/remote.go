@@ -1024,6 +1024,35 @@ func (c *RemoteClient) GetNavBindings(ctx context.Context) (*models.NavSessionsF
 	return &file, nil
 }
 
+// GetNavConfig returns the static nav configuration from the daemon.
+// Falls back to LocalClient on 404 (stale daemon binary that doesn't expose
+// /api/nav/config yet) so older daemons keep working.
+func (c *RemoteClient) GetNavConfig(ctx context.Context) (*models.NavConfig, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/nav/config", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nav config from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.GetNavConfig(ctx)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var cfg models.NavConfig
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to decode nav config: %w", err)
+	}
+	return &cfg, nil
+}
+
 // UpdateNavGroup updates the session state for a single group via the daemon.
 // Falls back to LocalClient on 404 (stale daemon binary).
 func (c *RemoteClient) UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error {

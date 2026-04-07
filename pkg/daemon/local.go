@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/paths"
@@ -351,6 +352,42 @@ func (c *LocalClient) writeNavBindings(file *models.NavSessionsFile) error {
 		return fmt.Errorf("failed to create nav state directory: %w", err)
 	}
 	return os.WriteFile(sessionsPath, data, 0o644)
+}
+
+// GetNavConfig loads the static nav config from the grove config files
+// (the same hierarchical merge that nav itself uses) and projects it onto
+// the public NavConfig type. The result includes a "default" group entry
+// derived from the top-level nav.prefix so callers can treat all groups
+// uniformly.
+func (c *LocalClient) GetNavConfig(ctx context.Context) (*models.NavConfig, error) {
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		return &models.NavConfig{Groups: map[string]models.NavGroupConfig{}}, nil
+	}
+
+	var navCfg struct {
+		Prefix string `toml:"prefix" yaml:"prefix"`
+		Groups map[string]struct {
+			Prefix string `toml:"prefix" yaml:"prefix"`
+		} `toml:"groups" yaml:"groups"`
+	}
+	// Errors here mean the nav extension is missing or malformed; we still
+	// return a valid (possibly empty) config rather than failing the call.
+	_ = cfg.UnmarshalExtension("nav", &navCfg)
+
+	result := &models.NavConfig{Groups: make(map[string]models.NavGroupConfig)}
+
+	defaultPrefix := navCfg.Prefix
+	if defaultPrefix == "" {
+		defaultPrefix = "<prefix>"
+	}
+	result.Groups["default"] = models.NavGroupConfig{Prefix: defaultPrefix}
+
+	for name, g := range navCfg.Groups {
+		result.Groups[name] = models.NavGroupConfig{Prefix: g.Prefix}
+	}
+
+	return result, nil
 }
 
 // Ensure LocalClient implements Client interface.

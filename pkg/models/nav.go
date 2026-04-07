@@ -1,5 +1,25 @@
 package models
 
+// NavConfig represents the static portion of nav configuration that lives in
+// the grove config files (e.g. grove.toml, keys.toml). Unlike NavSessionsFile,
+// which is dynamic state mutated at runtime, NavConfig is loaded from the
+// declarative config and exposed via the daemon so non-nav clients (terminal,
+// studio) can resolve group prefix transitions without re-implementing the
+// nav config loader.
+type NavConfig struct {
+	// Groups maps the group name to its static config. The "default" group
+	// uses the top-level nav.prefix and is included here so callers do not
+	// need a separate special case.
+	Groups map[string]NavGroupConfig `json:"groups"`
+}
+
+// NavGroupConfig is the per-group static configuration exposed to clients.
+// It currently carries only the prefix, which is what the leader-chord
+// state machine needs to detect group prefix transitions.
+type NavGroupConfig struct {
+	Prefix string `json:"prefix"`
+}
+
 // NavSessionsFile represents the sessions file stored in ~/.local/state/grove/nav/sessions.yml.
 // This is the dynamic binding state that the daemon and nav CLI share.
 type NavSessionsFile struct {
