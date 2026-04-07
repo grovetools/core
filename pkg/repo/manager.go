@@ -21,6 +21,34 @@ type Manager struct {
 	mu           sync.Mutex
 }
 
+// ensuredCache tracks repo URLs that have already been ensured (fetched) in
+// this process so we don't refetch the same repo multiple times within a
+// single command invocation. Many call sites construct a fresh Manager and
+// each one used to trigger its own `git fetch --all --prune` — for tools
+// like cx that resolve dozens of @a:git: aliases per command, that meant
+// dozens of network roundtrips and >20s wall time even when nothing had
+// changed. Cache scope is process lifetime, so background changes are still
+// picked up by the next invocation.
+var (
+	ensuredMu    sync.Mutex
+	ensuredRepos = map[string]struct{}{}
+)
+
+// markEnsured records that a repo URL has been fetched in this process.
+func markEnsured(repoURL string) {
+	ensuredMu.Lock()
+	ensuredRepos[repoURL] = struct{}{}
+	ensuredMu.Unlock()
+}
+
+// alreadyEnsured reports whether a repo URL has been fetched in this process.
+func alreadyEnsured(repoURL string) bool {
+	ensuredMu.Lock()
+	_, ok := ensuredRepos[repoURL]
+	ensuredMu.Unlock()
+	return ok
+}
+
 type WorktreeInfo struct {
 	Path      string    `json:"path"`
 	Commit    string    `json:"commit"`
@@ -128,11 +156,18 @@ func (m *Manager) Ensure(repoURL string) error {
 		if err := m.cloneRepository(repoURL, barePath); err != nil {
 			return fmt.Errorf("cloning repository: %w", err)
 		}
-	} else {
-		// Fetch updates for existing bare repository
+		markEnsured(repoURL)
+	} else if !alreadyEnsured(repoURL) {
+		// Fetch updates for existing bare repository, but only once per
+		// process. Subsequent calls within the same command reuse the
+		// cached state instead of re-running `git fetch --all --prune`,
+		// which can be 100s of ms per call against large repos and was
+		// the dominant cost for cx commands that resolve many @a:git:
+		// aliases (>20s for ~25 ghostty references in a single rules file).
 		if err := m.fetchRepository(barePath); err != nil {
 			return fmt.Errorf("fetching repository: %w", err)
 		}
+		markEnsured(repoURL)
 	}
 
 	// Update manifest
