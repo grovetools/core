@@ -46,6 +46,14 @@ type EditFinishedMsg struct {
 	Err error
 }
 
+// PreviewRequestMsg is emitted by a sub-TUI when it wants the host to preview
+// a file (e.g., open it in a side pane or split) without transferring focus
+// from the sub-TUI. Hosts that don't support previewing should treat this as
+// a no-op rather than as an EditRequestMsg.
+type PreviewRequestMsg struct {
+	Path string
+}
+
 // CloseRequestMsg is emitted by a sub-TUI to request closure from the host.
 // Hosts may intercept this to confirm with the user before closing.
 type CloseRequestMsg struct{}
