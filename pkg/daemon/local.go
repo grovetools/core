@@ -3,13 +3,18 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/sessions"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 // LocalClient implements Client by calling library functions directly.
@@ -260,6 +265,71 @@ func (c *LocalClient) SendChannelMessage(ctx context.Context, req models.Channel
 
 func (c *LocalClient) GetChannelStatus(ctx context.Context) (*models.ChannelStatusResponse, error) {
 	return nil, errors.New("channel status requires the grove daemon")
+}
+
+// GetNavBindings reads the nav binding state directly from the sessions.yml file.
+func (c *LocalClient) GetNavBindings(ctx context.Context) (*models.NavSessionsFile, error) {
+	sessionsPath := filepath.Join(paths.StateDir(), "nav", "sessions.yml")
+	data, err := os.ReadFile(sessionsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &models.NavSessionsFile{
+				Sessions: make(map[string]models.NavSessionConfig),
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to read sessions file: %w", err)
+	}
+
+	var file models.NavSessionsFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return nil, fmt.Errorf("failed to parse sessions file: %w", err)
+	}
+	if file.Sessions == nil {
+		file.Sessions = make(map[string]models.NavSessionConfig)
+	}
+	return &file, nil
+}
+
+// UpdateNavGroup updates a single group in the sessions.yml file directly.
+func (c *LocalClient) UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error {
+	file, err := c.GetNavBindings(ctx)
+	if err != nil {
+		return err
+	}
+
+	if group == "default" || group == "" {
+		file.Sessions = state.Sessions
+	} else {
+		if file.Groups == nil {
+			file.Groups = make(map[string]models.NavGroupState)
+		}
+		file.Groups[group] = state
+	}
+
+	return c.writeNavBindings(file)
+}
+
+// UpdateNavLockedKeys updates the locked keys in the sessions.yml file directly.
+func (c *LocalClient) UpdateNavLockedKeys(ctx context.Context, keys []string) error {
+	file, err := c.GetNavBindings(ctx)
+	if err != nil {
+		return err
+	}
+
+	file.LockedKeys = keys
+	return c.writeNavBindings(file)
+}
+
+func (c *LocalClient) writeNavBindings(file *models.NavSessionsFile) error {
+	sessionsPath := filepath.Join(paths.StateDir(), "nav", "sessions.yml")
+	data, err := yaml.Marshal(file)
+	if err != nil {
+		return fmt.Errorf("failed to marshal sessions: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(sessionsPath), 0o755); err != nil {
+		return fmt.Errorf("failed to create nav state directory: %w", err)
+	}
+	return os.WriteFile(sessionsPath, data, 0o644)
 }
 
 // Ensure LocalClient implements Client interface.

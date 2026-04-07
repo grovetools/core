@@ -929,5 +929,79 @@ func (c *RemoteClient) GetChannelStatus(ctx context.Context) (*models.ChannelSta
 	return &result, nil
 }
 
+// GetNavBindings returns the current nav binding state from the daemon.
+func (c *RemoteClient) GetNavBindings(ctx context.Context) (*models.NavSessionsFile, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/nav/bindings", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nav bindings from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var file models.NavSessionsFile
+	if err := json.NewDecoder(resp.Body).Decode(&file); err != nil {
+		return nil, fmt.Errorf("failed to decode nav bindings: %w", err)
+	}
+	return &file, nil
+}
+
+// UpdateNavGroup updates the session state for a single group via the daemon.
+func (c *RemoteClient) UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error {
+	body, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshal nav group state: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", baseURL+"/api/nav/groups/"+group, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update nav group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// UpdateNavLockedKeys updates the global locked keys list via the daemon.
+func (c *RemoteClient) UpdateNavLockedKeys(ctx context.Context, keys []string) error {
+	body, err := json.Marshal(keys)
+	if err != nil {
+		return fmt.Errorf("failed to marshal locked keys: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", baseURL+"/api/nav/locked-keys", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update nav locked keys: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)

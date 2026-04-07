@@ -171,6 +171,19 @@ type Client interface {
 	// ListJobs returns jobs matching the given filter.
 	ListJobs(ctx context.Context, filter models.JobFilter) ([]*models.JobInfo, error)
 
+	// --- Nav Bindings Management ---
+	// These methods enable reading and writing nav key bindings via the daemon.
+	// The daemon is the source of truth; LocalClient falls back to direct file I/O.
+
+	// GetNavBindings returns the current nav binding state.
+	GetNavBindings(ctx context.Context) (*models.NavSessionsFile, error)
+
+	// UpdateNavGroup updates the session state for a single group.
+	UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error
+
+	// UpdateNavLockedKeys updates the global locked keys list.
+	UpdateNavLockedKeys(ctx context.Context, keys []string) error
+
 	// --- Log Streaming ---
 	// These methods enable streaming and fetching job logs via the daemon's LogStreamer.
 
