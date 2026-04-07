@@ -212,6 +212,20 @@ type Client interface {
 
 	// GetJobLogs returns the historical log content for a completed or running job.
 	GetJobLogs(ctx context.Context, jobID string) ([]models.LogLine, error)
+
+	// --- Memory Search ---
+	// These methods expose the memory SQLite store (hybrid BM25 + vector search)
+	// over the daemon. The daemon owns the store connection and Gemini embedder;
+	// LocalClient returns an error instructing callers to start groved.
+
+	// SearchMemory runs a hybrid search against the daemon's memory store.
+	SearchMemory(ctx context.Context, req models.MemorySearchRequest) ([]models.MemorySearchResult, error)
+
+	// GetMemoryCoverage returns documentation coverage for a target path.
+	GetMemoryCoverage(ctx context.Context, req models.MemoryCoverageRequest) (*models.MemoryCoverageReport, error)
+
+	// GetMemoryStatus returns database stats (size, document/chunk counts, doctype distribution).
+	GetMemoryStatus(ctx context.Context) (*models.MemoryStatusResponse, error)
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.

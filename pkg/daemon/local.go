@@ -390,5 +390,24 @@ func (c *LocalClient) GetNavConfig(ctx context.Context) (*models.NavConfig, erro
 	return result, nil
 }
 
+// --- Memory (require daemon) ---
+
+// SearchMemory returns an error since memory search requires daemon-managed
+// SQLite + Gemini embedder state.
+func (c *LocalClient) SearchMemory(ctx context.Context, req models.MemorySearchRequest) ([]models.MemorySearchResult, error) {
+	return nil, errors.New("memory operations require the grove daemon; start groved first")
+}
+
+// GetMemoryCoverage returns an error since coverage analysis requires the
+// daemon's memory store.
+func (c *LocalClient) GetMemoryCoverage(ctx context.Context, req models.MemoryCoverageRequest) (*models.MemoryCoverageReport, error) {
+	return nil, errors.New("memory operations require the grove daemon; start groved first")
+}
+
+// GetMemoryStatus returns an error since status requires the daemon's memory store.
+func (c *LocalClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatusResponse, error) {
+	return nil, errors.New("memory operations require the grove daemon; start groved first")
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

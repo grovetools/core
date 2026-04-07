@@ -1140,5 +1140,101 @@ func (c *RemoteClient) SetNavLastAccessedGroup(ctx context.Context, group string
 	return nil
 }
 
+// --- Memory Search ---
+
+// SearchMemory runs a hybrid memory search via the daemon.
+func (c *RemoteClient) SearchMemory(ctx context.Context, req models.MemorySearchRequest) ([]models.MemorySearchResult, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal memory search request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/memory/search", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search memory: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Stale daemon without memory endpoints — fall back to local (which errors helpfully).
+		return c.fallback.SearchMemory(ctx, req)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var results []models.MemorySearchResult
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		return nil, fmt.Errorf("failed to decode memory search results: %w", err)
+	}
+	return results, nil
+}
+
+// GetMemoryCoverage requests a coverage report from the daemon's memory store.
+func (c *RemoteClient) GetMemoryCoverage(ctx context.Context, req models.MemoryCoverageRequest) (*models.MemoryCoverageReport, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal coverage request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/memory/coverage", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get coverage: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.GetMemoryCoverage(ctx, req)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var report models.MemoryCoverageReport
+	if err := json.NewDecoder(resp.Body).Decode(&report); err != nil {
+		return nil, fmt.Errorf("failed to decode coverage report: %w", err)
+	}
+	return &report, nil
+}
+
+// GetMemoryStatus returns stats about the daemon's memory store.
+func (c *RemoteClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatusResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/memory/status", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get memory status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.GetMemoryStatus(ctx)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var status models.MemoryStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, fmt.Errorf("failed to decode memory status: %w", err)
+	}
+	return &status, nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)
