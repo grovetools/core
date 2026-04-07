@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,7 +23,18 @@ type RemoteClient struct {
 	httpClient    *http.Client
 	envHttpClient *http.Client // longer timeout for env up/down operations
 	socketPath    string
+	// fallback is used when the daemon responds with 404 on endpoints it doesn't
+	// know about — typically because the running groved binary is older than the
+	// client and predates a newly-added endpoint. Rather than silently returning
+	// empty data (the original footgun), methods for endpoints that have a viable
+	// in-process equivalent delegate to this LocalClient.
+	fallback *LocalClient
 }
+
+// errEndpointNotFound is returned internally when the daemon responds with 404
+// on a known endpoint. It signals "stale daemon binary" so callers can either
+// fall back to LocalClient or surface an informative error.
+var errEndpointNotFound = errors.New("daemon endpoint not found (stale groved binary?)")
 
 // NewRemoteClient creates a new RemoteClient connected to the daemon socket.
 func NewRemoteClient(socketPath string) (*RemoteClient, error) {
@@ -51,6 +63,7 @@ func NewRemoteClient(socketPath string) (*RemoteClient, error) {
 		httpClient:    client,
 		envHttpClient: envClient,
 		socketPath:    socketPath,
+		fallback:      NewLocalClient(),
 	}, nil
 }
 
@@ -948,6 +961,12 @@ func (c *RemoteClient) SendSessionInput(ctx context.Context, sessionID string, i
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// LocalClient can't send input to a tmux pane without the daemon's
+		// session store, so surface a clear error pointing at the stale binary
+		// rather than silently delegating to a LocalClient stub.
+		return fmt.Errorf("send input to session %s: %w — rebuild/restart groved", sessionID, errEndpointNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
@@ -967,6 +986,9 @@ func (c *RemoteClient) SendSessionInterrupt(ctx context.Context, sessionID strin
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("interrupt session %s: %w — rebuild/restart groved", sessionID, errEndpointNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
@@ -974,6 +996,8 @@ func (c *RemoteClient) SendSessionInterrupt(ctx context.Context, sessionID strin
 }
 
 // GetNavBindings returns the current nav binding state from the daemon.
+// If the daemon is stale and returns 404, transparently falls back to LocalClient,
+// which reads sessions.yml directly.
 func (c *RemoteClient) GetNavBindings(ctx context.Context) (*models.NavSessionsFile, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/nav/bindings", nil)
 	if err != nil {
@@ -986,6 +1010,9 @@ func (c *RemoteClient) GetNavBindings(ctx context.Context) (*models.NavSessionsF
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.GetNavBindings(ctx)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
@@ -998,6 +1025,7 @@ func (c *RemoteClient) GetNavBindings(ctx context.Context) (*models.NavSessionsF
 }
 
 // UpdateNavGroup updates the session state for a single group via the daemon.
+// Falls back to LocalClient on 404 (stale daemon binary).
 func (c *RemoteClient) UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error {
 	body, err := json.Marshal(state)
 	if err != nil {
@@ -1016,6 +1044,9 @@ func (c *RemoteClient) UpdateNavGroup(ctx context.Context, group string, state m
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.UpdateNavGroup(ctx, group, state)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
@@ -1023,6 +1054,7 @@ func (c *RemoteClient) UpdateNavGroup(ctx context.Context, group string, state m
 }
 
 // UpdateNavLockedKeys updates the global locked keys list via the daemon.
+// Falls back to LocalClient on 404 (stale daemon binary).
 func (c *RemoteClient) UpdateNavLockedKeys(ctx context.Context, keys []string) error {
 	body, err := json.Marshal(keys)
 	if err != nil {
@@ -1041,6 +1073,9 @@ func (c *RemoteClient) UpdateNavLockedKeys(ctx context.Context, keys []string) e
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.UpdateNavLockedKeys(ctx, keys)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
@@ -1048,6 +1083,7 @@ func (c *RemoteClient) UpdateNavLockedKeys(ctx context.Context, keys []string) e
 }
 
 // SetNavLastAccessedGroup updates the last-accessed group via the daemon.
+// Falls back to LocalClient on 404 (stale daemon binary).
 func (c *RemoteClient) SetNavLastAccessedGroup(ctx context.Context, group string) error {
 	body, err := json.Marshal(map[string]string{"group": group})
 	if err != nil {
@@ -1066,6 +1102,9 @@ func (c *RemoteClient) SetNavLastAccessedGroup(ctx context.Context, group string
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return c.fallback.SetNavLastAccessedGroup(ctx, group)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
