@@ -267,6 +267,16 @@ func (c *LocalClient) GetChannelStatus(ctx context.Context) (*models.ChannelStat
 	return nil, errors.New("channel status requires the grove daemon")
 }
 
+// SendSessionInput returns an error since agent input requires the daemon for tmux target resolution.
+func (c *LocalClient) SendSessionInput(ctx context.Context, sessionID string, input string) error {
+	return errors.New("sending input to agent sessions requires the grove daemon")
+}
+
+// SendSessionInterrupt returns an error since agent interrupt requires the daemon for tmux target resolution.
+func (c *LocalClient) SendSessionInterrupt(ctx context.Context, sessionID string) error {
+	return errors.New("interrupting agent sessions requires the grove daemon")
+}
+
 // GetNavBindings reads the nav binding state directly from the sessions.yml file.
 func (c *LocalClient) GetNavBindings(ctx context.Context) (*models.NavSessionsFile, error) {
 	sessionsPath := filepath.Join(paths.StateDir(), "nav", "sessions.yml")

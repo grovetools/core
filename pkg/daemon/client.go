@@ -171,6 +171,17 @@ type Client interface {
 	// ListJobs returns jobs matching the given filter.
 	ListJobs(ctx context.Context, filter models.JobFilter) ([]*models.JobInfo, error)
 
+	// --- Agent Input/Interrupt ---
+	// These methods allow sending input to and interrupting interactive agent sessions
+	// running in tmux panes. The daemon resolves the tmux target from its session store.
+
+	// SendSessionInput sends input text to an interactive agent session.
+	// The daemon handles vim-mode detection and tmux key sending.
+	SendSessionInput(ctx context.Context, sessionID string, input string) error
+
+	// SendSessionInterrupt sends Ctrl+C to interrupt an interactive agent session.
+	SendSessionInterrupt(ctx context.Context, sessionID string) error
+
 	// --- Nav Bindings Management ---
 	// These methods enable reading and writing nav key bindings via the daemon.
 	// The daemon is the source of truth; LocalClient falls back to direct file I/O.
