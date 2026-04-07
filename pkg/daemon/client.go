@@ -195,6 +195,9 @@ type Client interface {
 	// UpdateNavLockedKeys updates the global locked keys list.
 	UpdateNavLockedKeys(ctx context.Context, keys []string) error
 
+	// SetNavLastAccessedGroup updates the last-accessed group field in the nav binding state.
+	SetNavLastAccessedGroup(ctx context.Context, group string) error
+
 	// --- Log Streaming ---
 	// These methods enable streaming and fetching job logs via the daemon's LogStreamer.
 

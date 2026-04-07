@@ -330,6 +330,17 @@ func (c *LocalClient) UpdateNavLockedKeys(ctx context.Context, keys []string) er
 	return c.writeNavBindings(file)
 }
 
+// SetNavLastAccessedGroup updates the last-accessed group in the sessions.yml file directly.
+func (c *LocalClient) SetNavLastAccessedGroup(ctx context.Context, group string) error {
+	file, err := c.GetNavBindings(ctx)
+	if err != nil {
+		return err
+	}
+
+	file.LastAccessedGroup = group
+	return c.writeNavBindings(file)
+}
+
 func (c *LocalClient) writeNavBindings(file *models.NavSessionsFile) error {
 	sessionsPath := filepath.Join(paths.StateDir(), "nav", "sessions.yml")
 	data, err := yaml.Marshal(file)

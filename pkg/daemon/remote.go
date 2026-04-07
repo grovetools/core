@@ -1047,5 +1047,30 @@ func (c *RemoteClient) UpdateNavLockedKeys(ctx context.Context, keys []string) e
 	return nil
 }
 
+// SetNavLastAccessedGroup updates the last-accessed group via the daemon.
+func (c *RemoteClient) SetNavLastAccessedGroup(ctx context.Context, group string) error {
+	body, err := json.Marshal(map[string]string{"group": group})
+	if err != nil {
+		return fmt.Errorf("failed to marshal last-accessed group: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", baseURL+"/api/nav/last-accessed", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update nav last-accessed group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)
