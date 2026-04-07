@@ -72,12 +72,26 @@ func mergeKeybindingSection(base, override KeybindingSectionConfig) KeybindingSe
 
 // deepMergeMaps recursively merges two maps, with src values overriding dst values.
 // When both dst and src have the same key pointing to maps, they are merged recursively.
+//
+// Delete sentinel: if a src value is a map containing `_delete = true`, the
+// corresponding key is removed from the merged result instead of merged. This
+// lets a profile drop an inherited entry it doesn't want — e.g. a hybrid env
+// dropping the default `services.clickhouse` block. Without this, deepMergeMaps
+// has no way to express deletion and profiles have to resort to empty-command
+// short-circuit hacks or `$VAR` indirection.
 func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 	out := make(map[string]interface{})
 	for k, v := range dst {
 		out[k] = v
 	}
 	for k, vSrc := range src {
+		// Delete sentinel: `_delete = true` in src drops the key entirely.
+		if mapSrc, ok := vSrc.(map[string]interface{}); ok {
+			if del, _ := mapSrc["_delete"].(bool); del {
+				delete(out, k)
+				continue
+			}
+		}
 		if vDst, ok := out[k]; ok {
 			if mapDst, okDst := vDst.(map[string]interface{}); okDst {
 				if mapSrc, okSrc := vSrc.(map[string]interface{}); okSrc {

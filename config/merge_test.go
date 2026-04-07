@@ -697,3 +697,65 @@ func TestMergeEnvironmentDefault(t *testing.T) {
 		t.Errorf("expected seed added, got %q", merged.Environment.Commands["seed"])
 	}
 }
+
+// TestDeepMergeMaps_DeleteSentinel verifies that a `_delete = true` map in src
+// drops the corresponding key from the merged result. This lets a profile
+// opt out of inherited entries (e.g. a hybrid env dropping the default
+// services.clickhouse block) without resorting to empty-command hacks.
+func TestDeepMergeMaps_DeleteSentinel(t *testing.T) {
+	dst := map[string]interface{}{
+		"services": map[string]interface{}{
+			"clickhouse": map[string]interface{}{"command": "clickhouse server"},
+			"api":        map[string]interface{}{"command": "cargo run"},
+		},
+	}
+	src := map[string]interface{}{
+		"services": map[string]interface{}{
+			"clickhouse": map[string]interface{}{"_delete": true},
+			"web":        map[string]interface{}{"command": "npm run dev"},
+		},
+	}
+
+	merged := deepMergeMaps(dst, src)
+	services, ok := merged["services"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected services to be a map, got %T", merged["services"])
+	}
+
+	if _, present := services["clickhouse"]; present {
+		t.Errorf("expected services.clickhouse to be deleted, still present: %v", services["clickhouse"])
+	}
+	if _, present := services["api"]; !present {
+		t.Errorf("expected services.api to survive (untouched by src)")
+	}
+	if _, present := services["web"]; !present {
+		t.Errorf("expected services.web to be added from src")
+	}
+}
+
+// TestDeepMergeMaps_DeleteFieldFromInheritedBlock verifies the sentinel works
+// for nested fields too — e.g. clearing services.api.env so a tunnel-set value
+// can win at process spawn time.
+func TestDeepMergeMaps_DeleteFieldFromInheritedBlock(t *testing.T) {
+	dst := map[string]interface{}{
+		"api": map[string]interface{}{
+			"command": "cargo run",
+			"env":     map[string]interface{}{"CLICKHOUSE_URL": "http://localhost:9000"},
+		},
+	}
+	src := map[string]interface{}{
+		"api": map[string]interface{}{
+			"env": map[string]interface{}{"_delete": true},
+		},
+	}
+
+	merged := deepMergeMaps(dst, src)
+	api := merged["api"].(map[string]interface{})
+
+	if api["command"] != "cargo run" {
+		t.Errorf("expected api.command preserved, got %v", api["command"])
+	}
+	if _, present := api["env"]; present {
+		t.Errorf("expected api.env to be deleted, still present: %v", api["env"])
+	}
+}
