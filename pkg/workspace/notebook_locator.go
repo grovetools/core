@@ -748,6 +748,40 @@ func (l *NotebookLocator) GetSkillsDir(node *WorkspaceNode) (string, error) {
 	return filepath.Join(rootDir, renderedPath), nil
 }
 
+// GetPlaybooksDir returns the absolute path to the playbooks directory for a given workspace node.
+// Playbooks are versioned bundles of skills, prompts, recipes, and references, stored alongside
+// skills in the notebook structure.
+func (l *NotebookLocator) GetPlaybooksDir(node *WorkspaceNode) (string, error) {
+	// For non-global nodes, check mode based on resolved notebook
+	if !l.isCentralized(node) {
+		// Local Mode: Playbooks are inside the project's root .notebook directory.
+		return filepath.Join(node.GetGroupingKey(), ".notebook", "playbooks"), nil
+	}
+
+	// Centralized Mode
+	notebook := l.getNotebookForNode(node)
+	rootDir, err := pathutil.Expand(notebook.RootDir)
+	if err != nil {
+		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
+	}
+
+	tplStr := "workspaces/{{ .Workspace.Name }}/playbooks"
+
+	contextNode := getContextNodeForPath(node)
+	data := struct {
+		Workspace *WorkspaceNode
+	}{
+		Workspace: contextNode,
+	}
+
+	renderedPath, err := renderPath(tplStr, data)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rootDir, renderedPath), nil
+}
+
 // GetContextDir returns the absolute path to the context directory for a given workspace node.
 // The context directory holds rules, presets, generated context, and caches.
 func (l *NotebookLocator) GetContextDir(node *WorkspaceNode) (string, error) {
