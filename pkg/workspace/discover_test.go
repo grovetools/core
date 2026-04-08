@@ -135,3 +135,90 @@ func TestDiscoveryService(t *testing.T) {
 		}
 	})
 }
+
+// TestDiscover_PromoteFromEcosystemWorkspaces verifies that a child git repo
+// without its own grove.toml is still discovered as a project when the
+// enclosing ecosystem's `workspaces` field explicitly enumerates it. This is
+// what enables zero-footprint child repos (kitchen-app, kitchen-core) under
+// an ecosystem like kitchen-env.
+func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
+	rootDir := t.TempDir()
+
+	// Global config: register the work dir as a grove
+	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
+	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
+	emptyStr := ""
+	globalCfg := config.Config{
+		SearchPaths: map[string]config.SearchPathConfig{
+			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		},
+		Context: &config.ContextConfig{ReposDir: &emptyStr},
+	}
+	globalBytes, _ := yaml.Marshal(globalCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0644))
+
+	// Ecosystem with explicit workspaces enumeration — children are submodules
+	// without their own grove.toml markers.
+	ecoDir := filepath.Join(rootDir, "work", "kitchen-env")
+	require.NoError(t, os.MkdirAll(ecoDir, 0755))
+	ecoCfg := config.Config{
+		Name:       "kitchen-env",
+		Workspaces: []string{"kitchen-app", "kitchen-core"},
+	}
+	ecoBytes, _ := yaml.Marshal(ecoCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0644))
+
+	// kitchen-app: bare git repo, NO grove.toml — should still be promoted
+	// because the parent ecosystem lists it in `workspaces`.
+	kappDir := filepath.Join(ecoDir, "kitchen-app")
+	require.NoError(t, os.MkdirAll(kappDir, 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(kappDir, ".git"), 0755))
+
+	// kitchen-core: same — bare git repo, listed in parent's workspaces.
+	kcoreDir := filepath.Join(ecoDir, "kitchen-core")
+	require.NoError(t, os.MkdirAll(kcoreDir, 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(kcoreDir, ".git"), 0755))
+
+	// scratch: bare git repo NOT listed in parent's workspaces — should NOT
+	// be promoted, must end up in NonGroveDirectories.
+	scratchDir := filepath.Join(ecoDir, "scratch")
+	require.NoError(t, os.MkdirAll(scratchDir, 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(scratchDir, ".git"), 0755))
+
+	// Run discovery against the mock home
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))
+	t.Setenv("HOME", filepath.Join(rootDir, "home"))
+
+	logger := logrus.New()
+	logger.SetLevel(logrus.WarnLevel)
+	svc := NewDiscoveryService(logger)
+	result, err := svc.DiscoverAll()
+	require.NoError(t, err)
+
+	projects := make(map[string]Project)
+	for _, p := range result.Projects {
+		projects[p.Name] = p
+	}
+
+	assert.Contains(t, projects, "kitchen-app", "kitchen-app should be promoted via parent ecosystem's workspaces field")
+	assert.Contains(t, projects, "kitchen-core", "kitchen-core should be promoted via parent ecosystem's workspaces field")
+	assert.NotContains(t, projects, "scratch", "scratch should NOT be promoted (not in ecosystem.workspaces)")
+
+	// scratch should be in NonGroveDirectories instead.
+	foundScratch := false
+	for _, ngd := range result.NonGroveDirectories {
+		if filepath.Base(ngd) == "scratch" {
+			foundScratch = true
+			break
+		}
+	}
+	assert.True(t, foundScratch, "scratch should appear in NonGroveDirectories")
+
+	// Verify the promoted children are linked to the right ecosystem.
+	if kapp, ok := projects["kitchen-app"]; ok {
+		assert.Equal(t, ecoDir, kapp.ParentEcosystemPath)
+	}
+	if kcore, ok := projects["kitchen-core"]; ok {
+		assert.Equal(t, ecoDir, kcore.ParentEcosystemPath)
+	}
+}

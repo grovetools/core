@@ -385,7 +385,12 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					return nil
 				}
 
-				// Promote non-grove repos to projects based on Depth or IncludeRepos
+				// Promote non-grove repos to projects based on:
+				//   1. Depth / IncludeRepos in the grove source config (global registration)
+				//   2. Explicit enumeration in the immediately enclosing ecosystem's
+				//      `workspaces` field (enables zero-footprint child repos —
+				//      kitchen-env-style ecosystems where children are submodules without
+				//      their own grove.toml markers)
 				if entityType == typeNonGroveRepo {
 					shouldPromote := false
 
@@ -394,11 +399,31 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 						shouldPromote = true
 					}
 
-					// Promote if explicitly included
+					// Promote if explicitly included by the grove source config
 					for _, inc := range currentGroveCfg.IncludeRepos {
 						if relPath == inc || filepath.Base(path) == inc {
 							shouldPromote = true
 							break
+						}
+					}
+
+					// Promote if the immediately enclosing directory is an ecosystem
+					// that explicitly enumerates this repo in its `workspaces` field.
+					// This is the path that lets child submodules (kitchen-app,
+					// kitchen-core) be discovered without needing their own grove.toml.
+					if !shouldPromote {
+						parentDir := filepath.Dir(path)
+						if _, parentCfg, perr := findGroveConfig(parentDir); perr == nil && parentCfg != nil && len(parentCfg.Workspaces) > 0 {
+							childName := filepath.Base(path)
+							for _, ws := range parentCfg.Workspaces {
+								// Accept either an exact basename match or a path
+								// whose basename matches (so entries like "pkgs/foo"
+								// also work for a child at <eco>/pkgs/foo).
+								if ws == childName || filepath.Base(ws) == childName {
+									shouldPromote = true
+									break
+								}
+							}
 						}
 					}
 
