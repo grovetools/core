@@ -36,6 +36,13 @@ type RemoteClient struct {
 // fall back to LocalClient or surface an informative error.
 var errEndpointNotFound = errors.New("daemon endpoint not found (stale groved binary?)")
 
+// errMemoryEndpointMissing is surfaced by the memory RemoteClient methods
+// when the daemon socket is reachable but the /api/memory/* routes 404.
+// That means groved is running but predates the memory HTTP API — the
+// user-facing fix is rebuild + restart, NOT "start groved" (which the
+// LocalClient fallback message used to imply).
+var errMemoryEndpointMissing = errors.New("groved is running but lacks memory endpoints; rebuild and restart groved")
+
 // NewRemoteClient creates a new RemoteClient connected to the daemon socket.
 func NewRemoteClient(socketPath string) (*RemoteClient, error) {
 	// Create HTTP client that dials Unix socket
@@ -1162,8 +1169,7 @@ func (c *RemoteClient) SearchMemory(ctx context.Context, req models.MemorySearch
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		// Stale daemon without memory endpoints — fall back to local (which errors helpfully).
-		return c.fallback.SearchMemory(ctx, req)
+		return nil, errMemoryEndpointMissing
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
@@ -1196,7 +1202,7 @@ func (c *RemoteClient) GetMemoryCoverage(ctx context.Context, req models.MemoryC
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return c.fallback.GetMemoryCoverage(ctx, req)
+		return nil, errMemoryEndpointMissing
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
@@ -1223,7 +1229,7 @@ func (c *RemoteClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatu
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return c.fallback.GetMemoryStatus(ctx)
+		return nil, errMemoryEndpointMissing
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
