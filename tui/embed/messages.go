@@ -54,6 +54,20 @@ type PreviewRequestMsg struct {
 	Path string
 }
 
+// OpenAgentSessionMsg is emitted by a sub-TUI when it wants the host to
+// open or focus an interactive agent session as a new panel. SessionID
+// uniquely identifies the daemon-tracked session; the host resolves it
+// against its session cache to find the working directory and tmux
+// target, then either focuses the existing agent panel or spawns a new
+// one via the AgentPanelFactory.
+//
+// This is the host-routed alternative to the standalone TUI's
+// "tea.Quit + tmux switch-client" behavior. Hosts that don't know about
+// agent sessions should treat the message as a no-op.
+type OpenAgentSessionMsg struct {
+	SessionID string
+}
+
 // CloseRequestMsg is emitted by a sub-TUI to request closure from the host.
 // Hosts may intercept this to confirm with the user before closing.
 type CloseRequestMsg struct{}
