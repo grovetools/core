@@ -463,6 +463,37 @@ func (c *RemoteClient) EndSession(ctx context.Context, jobID string, outcome str
 	return nil
 }
 
+// KillSession terminates a tracked agent session via the daemon. The daemon
+// looks up the session by ID, sends SIGTERM to the tracked PID, and removes
+// the filesystem registry entry. A 404 response from an older daemon that
+// does not implement the kill endpoint is surfaced as a sentinel error so
+// callers can fall back to the in-process syscall path.
+func (c *RemoteClient) KillSession(ctx context.Context, sessionID string) error {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", baseURL+"/api/sessions/"+sessionID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to kill session: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// 404 may mean either "session not found" (modern daemon) or
+		// "endpoint not implemented" (older daemon). Either way, the
+		// caller should treat this as "daemon couldn't kill it" and
+		// decide whether to fall back. Returning a wrapped error keeps
+		// the failure observable in the TUI status line.
+		return fmt.Errorf("daemon returned 404 for kill session %s", sessionID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // SubmitJob submits a job to the daemon for execution.
 func (c *RemoteClient) SubmitJob(ctx context.Context, req models.JobSubmitRequest) (*models.JobInfo, error) {
 	body, err := json.Marshal(req)

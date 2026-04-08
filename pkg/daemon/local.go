@@ -191,6 +191,14 @@ func (c *LocalClient) EndSession(ctx context.Context, jobID string, outcome stri
 	return nil
 }
 
+// KillSession returns an error in local mode — terminating a tracked agent
+// session requires the daemon so it can clean up its in-memory store and
+// background workers atomically. Callers may fall back to an in-process
+// syscall path when the daemon is unreachable.
+func (c *LocalClient) KillSession(ctx context.Context, sessionID string) error {
+	return errors.New("kill requires the grove daemon")
+}
+
 // SubmitJob returns an error since job execution requires the daemon.
 func (c *LocalClient) SubmitJob(ctx context.Context, req models.JobSubmitRequest) (*models.JobInfo, error) {
 	return nil, errors.New("job execution requires the grove daemon; use daemon.NewWithAutoStart()")

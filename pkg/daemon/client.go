@@ -127,6 +127,16 @@ type Client interface {
 	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
 	EndSession(ctx context.Context, jobID string, outcome string) error
 
+	// KillSession terminates a tracked agent session by sending SIGTERM to its
+	// PID and removing the filesystem registry entry. The daemon owns the kill
+	// path so it can clean up its in-memory store and any background workers
+	// (autonomous pinger, channel manager, etc.) atomically.
+	//
+	// LocalClient returns an error since killing requires the daemon — callers
+	// (e.g., the hooks browse TUI) may fall back to an in-process syscall path
+	// when the daemon is unreachable.
+	KillSession(ctx context.Context, sessionID string) error
+
 	// --- Channel & Autonomous Management ---
 
 	// UpdateSessionChannels updates the active channels for a session.
