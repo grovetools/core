@@ -73,6 +73,12 @@ type Client interface {
 	// For LocalClient, this returns an error since streaming is only available via daemon.
 	StreamState(ctx context.Context) (<-chan StateUpdate, error)
 
+	// StreamWorkspaceHUD subscribes to per-workspace HUD updates for the
+	// given path. The daemon aggregates git/plan/cx/hooks/notebook state
+	// and emits a debounced snapshot whenever something relevant changes.
+	// For LocalClient, this returns a friendly error (requires daemon).
+	StreamWorkspaceHUD(ctx context.Context, path string) (<-chan models.WorkspaceHUD, error)
+
 	// GetConfig returns the running configuration of the daemon.
 	// For LocalClient, this returns an error since config is only available via daemon.
 	GetConfig(ctx context.Context) (*RunningConfig, error)

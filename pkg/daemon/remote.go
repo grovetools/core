@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -323,6 +324,80 @@ func (c *RemoteClient) StreamState(ctx context.Context) (<-chan StateUpdate, err
 				case <-ctx.Done():
 					return
 				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
+// StreamWorkspaceHUD subscribes to per-workspace HUD updates via SSE.
+// Returns a channel that receives HUD snapshots. The channel is closed when
+// the context is cancelled or the connection is lost.
+func (c *RemoteClient) StreamWorkspaceHUD(ctx context.Context, path string) (<-chan models.WorkspaceHUD, error) {
+	if path == "" {
+		return nil, fmt.Errorf("workspace path is required")
+	}
+
+	streamURL := baseURL + "/api/workspace/hud/stream?path=" + url.QueryEscape(path)
+	req, err := http.NewRequestWithContext(ctx, "GET", streamURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HUD stream request: %w", err)
+	}
+
+	// Use a separate client with no timeout for streaming.
+	streamTransport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(dialCtx, "unix", c.socketPath)
+		},
+	}
+	streamClient := &http.Client{
+		Transport: streamTransport,
+		Timeout:   0,
+	}
+
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to HUD stream: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		resp.Body.Close()
+		return nil, fmt.Errorf("workspace HUD stream not available; rebuild and restart groved")
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("HUD stream returned status %d", resp.StatusCode)
+	}
+
+	ch := make(chan models.WorkspaceHUD, 4)
+
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		defer streamTransport.CloseIdleConnections()
+
+		scanner := bufio.NewScanner(resp.Body)
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 1*1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, ":") || line == "" {
+				continue
+			}
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			jsonStr := strings.TrimPrefix(line, "data: ")
+			var hud models.WorkspaceHUD
+			if err := json.Unmarshal([]byte(jsonStr), &hud); err != nil {
+				continue
+			}
+			select {
+			case ch <- hud:
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()

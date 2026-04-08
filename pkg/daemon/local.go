@@ -80,6 +80,12 @@ func (c *LocalClient) StreamState(ctx context.Context) (<-chan StateUpdate, erro
 	return nil, errors.New("streaming not available in local mode; start the daemon for real-time updates")
 }
 
+// StreamWorkspaceHUD returns an error for LocalClient since HUD streaming
+// requires the daemon's aggregation + debouncing infrastructure.
+func (c *LocalClient) StreamWorkspaceHUD(ctx context.Context, path string) (<-chan models.WorkspaceHUD, error) {
+	return nil, errors.New("workspace HUD streaming requires the grove daemon; start groved for live HUD updates")
+}
+
 // GetConfig returns an error for LocalClient since config is only available via daemon.
 func (c *LocalClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
 	return nil, errors.New("config not available in local mode; start the daemon to view running config")
