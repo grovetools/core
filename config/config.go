@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/grovetools/core/errors"
 	"github.com/grovetools/core/pkg/paths"
@@ -15,6 +17,29 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
+
+// loadCacheEntry caches a resolved Config keyed by the absolute startDir passed
+// to LoadFromWithLogger. The TTL is short enough to stay correct for users
+// editing grove.toml interactively, and long enough to absorb thundering-herd
+// callers (60fps TUI renders, 500ms fsnotify batches, long-lived watchers).
+type loadCacheEntry struct {
+	cfg    *Config
+	stored time.Time
+}
+
+const loadCacheTTL = 2 * time.Second
+
+var loadCache sync.Map // map[string]loadCacheEntry, keyed by absolute startDir
+
+// ResetLoadCache clears the LoadFromWithLogger cache. Tests that mutate config
+// files across sub-cases within the TTL window should call this between them;
+// production code has no reason to touch it.
+func ResetLoadCache() {
+	loadCache.Range(func(key, _ any) bool {
+		loadCache.Delete(key)
+		return true
+	})
+}
 
 var envVarRegex = regexp.MustCompile(`\$\{([^}]+)\}`)
 
@@ -233,6 +258,22 @@ func LoadFrom(startDir string) (*Config, error) {
 
 // LoadFromWithLogger loads configuration with hierarchical merging and logging
 func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error) {
+	// Short-lived cache keyed by absolute startDir. The full load path stats
+	// and parses ~10 different hierarchical files plus compiles the JSONSchema
+	// validator (~15ms), which shows up as a dominant hot path in long-lived
+	// processes — cx TUI rendering, groved fsnotify handlers, nav ticker
+	// loops, etc. 2s is long enough to absorb bursts from those callers and
+	// short enough that interactive edits to grove.toml feel instant.
+	cacheKey, _ := filepath.Abs(startDir)
+	if cacheKey == "" {
+		cacheKey = startDir
+	}
+	if raw, ok := loadCache.Load(cacheKey); ok {
+		if entry, ok := raw.(loadCacheEntry); ok && time.Since(entry.stored) < loadCacheTTL {
+			return entry.cfg, nil
+		}
+	}
+
 	// Find project config file first
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
@@ -558,7 +599,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	finalConfig.SetDefaults()
 
 	logger.Debug("Configuration loaded and validated successfully")
-	
+
 	// Log the merged config at debug level
 	if logger.IsLevelEnabled(logrus.DebugLevel) {
 		configData, err := yaml.Marshal(finalConfig)
@@ -566,7 +607,12 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 			logger.Debugf("Merged configuration:\n%s", string(configData))
 		}
 	}
-	
+
+	// Populate the short-lived cache for subsequent callers. Callers are
+	// expected to treat the returned *Config as read-only; mutating it would
+	// leak into other callers within the TTL window.
+	loadCache.Store(cacheKey, loadCacheEntry{cfg: finalConfig, stored: time.Now()})
+
 	return finalConfig, nil
 }
 

@@ -252,6 +252,7 @@ monitoring:
 	})
 
 	t.Run("local config overrides notebook config", func(t *testing.T) {
+		ResetLoadCache()
 		nbConfig := `
 name: from-notebook
 monitoring:
