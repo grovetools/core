@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/grovetools/core/cli"
 	"github.com/grovetools/core/config"
@@ -20,12 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
-
-// TailedLine represents a line of log output from a specific workspace.
-type TailedLine struct {
-	Workspace string
-	Line      string
-}
 
 // NewLogsCmd creates the `logs` command.
 func NewLogsCmd() *cobra.Command {
@@ -183,10 +174,21 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	}
 
 	// 3. Find log files and start tailing
-	lineChan := make(chan TailedLine, 100)
+	lineChan := make(chan logutil.TailedLine, 100)
 	var wg sync.WaitGroup
 
 	tail, _ := cmd.Flags().GetInt("tail")
+	// When following without an explicit `--tail` value, default to 0
+	// (stream only new lines) instead of the historical -1 (full
+	// replay). Dumping an entire day's log — or, with stale rotated
+	// files left over in `.grove/logs/`, an entire multi-month backlog
+	// — on every `-f` invocation is jarring and sometimes gigabytes of
+	// output. Users who want the old behavior can pass `--tail=-1`
+	// explicitly; users who want a bounded replay can pass a positive
+	// count.
+	if follow && !cmd.Flags().Changed("tail") {
+		tail = 0
+	}
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	format, _ := cmd.Flags().GetString("format")
 	compact, _ := cmd.Flags().GetBool("compact")
@@ -208,7 +210,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 				}).Debug("Waiting for log files in directory")
 
 				wg.Add(1)
-				go tailDirectory(ws.Name, logsDir, lineChan, &wg, follow, tail)
+				go logutil.TailDirectory(ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
 				continue
 			}
 			logger.WithField("workspace", ws.Name).Debugf("Skipping: %v", err)
@@ -221,11 +223,11 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}).Debug("Tailing log file")
 
 		wg.Add(1)
-		// Use tailDirectory to handle file rotation/switching
+		// Use TailDirectory to handle file rotation/switching
 		if follow {
-			go tailDirectory(ws.Name, logsDir, lineChan, &wg, follow, tail)
+			go logutil.TailDirectory(ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
 		} else {
-			go tailFile(ws.Name, logFile, lineChan, &wg, follow, tail)
+			go logutil.TailFile(ws.Name, ws.Path, logFile, lineChan, &wg, follow, tail)
 		}
 	}
 
@@ -234,10 +236,10 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(systemLogsDir); err == nil {
 		wg.Add(1)
 		if follow || systemOnly {
-			go tailDirectory("system", systemLogsDir, lineChan, &wg, follow || systemOnly, tail)
+			go logutil.TailDirectory("system", "", systemLogsDir, lineChan, &wg, follow || systemOnly, tail)
 		} else {
 			if sysLogFile, err := logutil.FindLatestLogFile(systemLogsDir); err == nil {
-				go tailFile("system", sysLogFile, lineChan, &wg, follow, tail)
+				go logutil.TailFile("system", "", sysLogFile, lineChan, &wg, follow, tail)
 			} else {
 				wg.Done()
 			}
@@ -321,164 +323,3 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
-
-// tailFile reads a file and sends new lines to a channel.
-func tailFile(wsName, path string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
-	defer wg.Done()
-
-	f, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	reader := bufio.NewReader(f)
-
-	if tailLines >= 0 {
-		// This is an inefficient way to tail, but simple for this implementation.
-		// A more robust solution would read from the end of the file.
-		allLines, _ := io.ReadAll(reader)
-		lines := strings.Split(string(allLines), "\n")
-		start := len(lines) - tailLines - 1
-		if tailLines == 0 { // tail 0 means from start
-			start = 0
-		}
-		if start < 0 {
-			start = 0
-		}
-		for _, line := range lines[start:] {
-			if line != "" {
-				lineChan <- TailedLine{Workspace: wsName, Line: line}
-			}
-		}
-		// If not following, we are done.
-		if !follow {
-			return
-		}
-		// To follow, we need to seek to the end. Re-open is easiest.
-		f.Close()
-		f, _ = os.Open(path)
-		f.Seek(0, io.SeekEnd)
-		reader = bufio.NewReader(f)
-	}
-
-	for {
-		line, err := reader.ReadString('\n')
-		if len(line) > 0 {
-			lineChan <- TailedLine{Workspace: wsName, Line: strings.TrimSpace(line)}
-		}
-
-		if err == io.EOF {
-			if !follow {
-				break
-			}
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-		if err != nil {
-			break
-		}
-	}
-}
-
-// tailDirectory watches a log directory for files and tails them.
-// It handles the case where the directory or files don't exist yet.
-func tailDirectory(wsName, logsDir string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
-	defer wg.Done()
-
-	var currentFile string
-	var f *os.File
-	var reader *bufio.Reader
-	var fileOffset int64
-
-	// Wait for directory and files to appear
-	for {
-		logFile, err := logutil.FindLatestLogFile(logsDir)
-		if err == nil {
-			currentFile = logFile
-			break
-		}
-		if !follow {
-			return
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	// Open the initial file
-	f, err := os.Open(currentFile)
-	if err != nil {
-		return
-	}
-
-	reader = bufio.NewReader(f)
-
-	// Handle initial tail lines
-	if tailLines >= 0 {
-		allLines, _ := io.ReadAll(reader)
-		lines := strings.Split(string(allLines), "\n")
-		start := len(lines) - tailLines - 1
-		if tailLines == 0 {
-			start = 0
-		}
-		if start < 0 {
-			start = 0
-		}
-		for _, line := range lines[start:] {
-			if line != "" {
-				lineChan <- TailedLine{Workspace: wsName, Line: line}
-			}
-		}
-		if !follow {
-			f.Close()
-			return
-		}
-		// Seek to end for following
-		f.Close()
-		f, _ = os.Open(currentFile)
-		fileOffset, _ = f.Seek(0, io.SeekEnd)
-		reader = bufio.NewReader(f)
-	}
-
-	checkInterval := time.NewTicker(500 * time.Millisecond)
-	defer checkInterval.Stop()
-
-	for {
-		// Read any available lines
-		for {
-			line, err := reader.ReadString('\n')
-			if len(line) > 0 {
-				lineChan <- TailedLine{Workspace: wsName, Line: strings.TrimSpace(line)}
-				fileOffset += int64(len(line))
-			}
-			if err != nil {
-				break
-			}
-		}
-
-		if !follow {
-			break
-		}
-
-		<-checkInterval.C
-
-		// Check for newer log file
-		latestFile, err := logutil.FindLatestLogFile(logsDir)
-		if err == nil && latestFile != currentFile {
-			// Switch to the newer file
-			f.Close()
-			currentFile = latestFile
-			f, err = os.Open(currentFile)
-			if err != nil {
-				continue
-			}
-			reader = bufio.NewReader(f)
-			fileOffset = 0
-		}
-	}
-
-	if f != nil {
-		f.Close()
-	}
-}
-

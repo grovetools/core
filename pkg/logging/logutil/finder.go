@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
@@ -46,48 +48,57 @@ func FindLogFileForWorkspace(ws *workspace.WorkspaceNode) (logFile string, logsD
 	return logFile, logsDir, err
 }
 
-// FindLatestLogFile finds the most recently modified non-empty file in a directory.
-// Prefers files with content over empty files.
+// FindLatestLogFile finds the latest log file in a directory by
+// sorting filenames lexically (descending). Grove logs are named
+// `<prefix>-YYYY-MM-DD.log`, so ISO-8601 date ordering matches lexical
+// order — this is strictly correct and immune to spurious `ModTime`
+// updates caused by IDE indexers, backup tools, or accidental
+// `touch`. Prefers files with content over empty files (so an empty
+// file freshly opened for today doesn't mask yesterday's populated
+// log while today's process is still warming up). Entries that don't
+// end in `.log` are skipped.
 func FindLatestLogFile(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "", fmt.Errorf("could not read log directory %s: %w", dir, err)
 	}
 
-	var latestFile os.FileInfo
-	var latestPath string
-	var latestNonEmptyFile os.FileInfo
-	var latestNonEmptyPath string
-
+	// Collect candidate log filenames.
+	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			// Track latest file overall
-			if latestFile == nil || info.ModTime().After(latestFile.ModTime()) {
-				latestFile = info
-				latestPath = filepath.Join(dir, entry.Name())
-			}
-			// Track latest non-empty file
-			if info.Size() > 0 {
-				if latestNonEmptyFile == nil || info.ModTime().After(latestNonEmptyFile.ModTime()) {
-					latestNonEmptyFile = info
-					latestNonEmptyPath = filepath.Join(dir, entry.Name())
-				}
-			}
+		if entry.IsDir() {
+			continue
 		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".log") {
+			continue
+		}
+		names = append(names, name)
 	}
 
-	// Prefer non-empty files
-	if latestNonEmptyFile != nil {
-		return latestNonEmptyPath, nil
-	}
-
-	if latestFile == nil {
+	if len(names) == 0 {
 		return "", fmt.Errorf("no log files found in %s", dir)
 	}
 
-	return latestPath, nil
+	// Sort descending: newest ISO date first.
+	sort.Sort(sort.Reverse(sort.StringSlice(names)))
+
+	// Walk the sorted list, preferring the first non-empty file. If
+	// every file is empty (rare but possible right after rotation),
+	// fall back to the lexically newest entry.
+	var firstPath string
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		if firstPath == "" {
+			firstPath = path
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.Size() > 0 {
+			return path, nil
+		}
+	}
+	return firstPath, nil
 }
