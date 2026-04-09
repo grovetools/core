@@ -68,6 +68,22 @@ type OpenAgentSessionMsg struct {
 	SessionID string
 }
 
+// SwitchTabMsg is emitted by an inner page of a tabbed meta-panel
+// to request that the host pager cycle to a different tab. Any tab
+// can emit this (not just wizards completing) — e.g. the flow
+// browser emits it on plan-select to auto-advance to the status tab,
+// and the add wizard emits it on submit to jump to status.
+//
+// The pager component in core/tui/components/pager intercepts this
+// message in its Update loop; hosts that don't use that component
+// should treat it as a no-op.
+type SwitchTabMsg struct {
+	// TabIndex is the 0-based index of the tab the source page wants
+	// to activate. Out-of-range indices are silently ignored by the
+	// pager so emitters don't need to know the current tab count.
+	TabIndex int
+}
+
 // CloseRequestMsg is emitted by a sub-TUI to request closure from the host.
 // Hosts may intercept this to confirm with the user before closing.
 type CloseRequestMsg struct{}

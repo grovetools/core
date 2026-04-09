@@ -50,6 +50,19 @@ type Base struct {
 	FocusPrev     key.Binding
 	TogglePreview key.Binding
 
+	// Numeric tab jumps — used by the shared pager component to let
+	// users jump directly to a tabbed meta-panel's sub-pane by number.
+	// Bound to "1".."9" by default across all presets.
+	Tab1 key.Binding
+	Tab2 key.Binding
+	Tab3 key.Binding
+	Tab4 key.Binding
+	Tab5 key.Binding
+	Tab6 key.Binding
+	Tab7 key.Binding
+	Tab8 key.Binding
+	Tab9 key.Binding
+
 	// Selection
 	Select     key.Binding
 	SelectAll  key.Binding
@@ -206,6 +219,17 @@ func DefaultVim() Base {
 			key.WithKeys("v"),
 			key.WithHelp("v", "preview"),
 		),
+
+		// Numeric tab jumps
+		Tab1: key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "tab 1")),
+		Tab2: key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "tab 2")),
+		Tab3: key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "tab 3")),
+		Tab4: key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "tab 4")),
+		Tab5: key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "tab 5")),
+		Tab6: key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "tab 6")),
+		Tab7: key.NewBinding(key.WithKeys("7"), key.WithHelp("7", "tab 7")),
+		Tab8: key.NewBinding(key.WithKeys("8"), key.WithHelp("8", "tab 8")),
+		Tab9: key.NewBinding(key.WithKeys("9"), key.WithHelp("9", "tab 9")),
 
 		// Selection
 		Select: key.NewBinding(
@@ -750,7 +774,7 @@ func (k Base) SelectionSection() Section {
 func (k Base) ViewSection() Section {
 	return Section{
 		Name:     "View",
-		Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.TogglePreview},
+		Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3, k.Tab4, k.Tab5, k.Tab6, k.Tab7, k.Tab8, k.Tab9, k.TogglePreview},
 	}
 }
 
