@@ -68,7 +68,7 @@ func activePlanFromBranch(workDir string) string {
 		return ""
 	}
 
-	plansDir := resolvePlansDir(workDir)
+	plansDir := ResolvePlansDir(workDir)
 	if plansDir == "" {
 		return ""
 	}
@@ -83,7 +83,7 @@ func activePlanFromBranch(workDir string) string {
 // ResolvePlanDir returns the absolute path to a plan's directory,
 // or empty string if it cannot be resolved.
 func ResolvePlanDir(workDir, planName string) string {
-	plansDir := resolvePlansDir(workDir)
+	plansDir := ResolvePlansDir(workDir)
 	if plansDir == "" {
 		return ""
 	}
@@ -93,7 +93,7 @@ func ResolvePlanDir(workDir, planName string) string {
 // DefaultRulesPath returns the path to plans/<plan>/rules/default.rules
 // for the given plan, or empty string if paths cannot be resolved.
 func DefaultRulesPath(workDir, planName string) string {
-	plansDir := resolvePlansDir(workDir)
+	plansDir := ResolvePlansDir(workDir)
 	if plansDir == "" {
 		return ""
 	}
@@ -130,8 +130,12 @@ func CachedContextFilesListPath(workDir, planName string) string {
 	return filepath.Join(planDir, "context", "cache", "cached-context-files")
 }
 
-// resolvePlansDir returns the plans directory for the workspace containing workDir.
-func resolvePlansDir(workDir string) string {
+// ResolvePlansDir returns the plans directory for the workspace containing
+// workDir, honoring the centralized notebook layout via NotebookLocator.
+// Returns "" if the workspace can't be resolved or has no plans dir configured.
+// Callers (e.g. the terminal plan panel) should fall back to a reasonable
+// default when this returns empty.
+func ResolvePlansDir(workDir string) string {
 	node, err := workspace.GetProjectByPath(workDir)
 	if err != nil {
 		return ""
