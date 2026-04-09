@@ -7,20 +7,11 @@ import (
 	"github.com/grovetools/core/tui/keymap"
 )
 
-// tabBarHeight is the number of vertical rows the pager reserves for
-// its tab bar when it deducts from tea.WindowSizeMsg before forwarding
-// to pages. One row for the tab labels plus one blank row beneath is
-// the same layout nav uses, so all ecosystem TUIs look uniform.
+// tabBarHeight is the row count the pager reserves above the active
+// page (1 bar row + 1 blank).
 const tabBarHeight = 2
 
-// KeyMap defines the bindings the pager itself consumes. Tab jumps
-// 1-9 are the primary navigation; "[" and "]" remain the fallback
-// cycle bindings so muscle memory from the previous per-TUI pagers
-// keeps working.
-//
-// The embedding TUI constructs its own keymap on top of keymap.Base
-// and passes the relevant subset here; the pager does not try to be
-// clever about where the bindings come from.
+// KeyMap is the bindings the pager consumes: 1-9 jumps + [/] cycle.
 type KeyMap struct {
 	Tab1    key.Binding
 	Tab2    key.Binding
@@ -35,9 +26,7 @@ type KeyMap struct {
 	PrevTab key.Binding
 }
 
-// DefaultKeyMap returns a standalone keymap wired to the standard
-// "1"-"9" jump keys and "[" / "]" cycle keys. Hosts that load a
-// configured keymap.Base should prefer KeyMapFromBase.
+// DefaultKeyMap returns the standard "1".."9" + "[" / "]" bindings.
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		Tab1:    key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "tab 1")),
@@ -54,10 +43,8 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// KeyMapFromBase builds a pager KeyMap from a keymap.Base so host
-// TUIs can share a single source of truth for user keybinding
-// overrides (grove.toml → keymap.Base → pager.KeyMap) instead of
-// hard-coding strings.
+// KeyMapFromBase pulls a pager KeyMap out of a configured keymap.Base
+// so user grove.toml overrides flow through.
 func KeyMapFromBase(b keymap.Base) KeyMap {
 	return KeyMap{
 		Tab1:    b.Tab1,
@@ -74,11 +61,9 @@ func KeyMapFromBase(b keymap.Base) KeyMap {
 	}
 }
 
-// Model is a Bubble Tea model that owns a slice of Page sub-models
-// and routes lifecycle + rendering calls to the active one. It is
-// intended to be embedded inside a host TUI's model, which keeps
-// its own Update loop and delegates to Model.Update for anything
-// it doesn't want to intercept first.
+// Model owns a slice of Pages and routes lifecycle / rendering to
+// the active one. Embed inside a host model and delegate via
+// Model.Update for any messages the host doesn't intercept first.
 type Model struct {
 	pages      []Page
 	activePage int
@@ -87,22 +72,13 @@ type Model struct {
 	height     int
 }
 
-// New constructs a pager Model around the supplied pages. At least
-// one page is required; callers that need a conditionally-populated
-// tab list should filter before calling. The first page is active on
-// construction.
+// New constructs a pager with the first page active.
 func New(pages []Page, keys KeyMap) Model {
-	return Model{
-		pages:      pages,
-		activePage: 0,
-		keys:       keys,
-	}
+	return Model{pages: pages, keys: keys}
 }
 
-// NewAt is like New but lets the caller pick the initial active page.
-// Out-of-range indices are silently clamped to the valid range; no
-// Focus/Blur lifecycle is run (the host is expected to return the
-// initial page's Init/Focus command separately during its own Init).
+// NewAt constructs a pager with a specific initial active page.
+// Out-of-range indices are clamped.
 func NewAt(pages []Page, keys KeyMap, active int) Model {
 	if active < 0 {
 		active = 0
@@ -110,17 +86,10 @@ func NewAt(pages []Page, keys KeyMap, active int) Model {
 	if len(pages) > 0 && active >= len(pages) {
 		active = len(pages) - 1
 	}
-	return Model{
-		pages:      pages,
-		activePage: active,
-		keys:       keys,
-	}
+	return Model{pages: pages, activePage: active, keys: keys}
 }
 
-// Init runs the active page's Init command. Other pages are not
-// initialized eagerly — they are built by the host and assumed to be
-// inert until focused. Hosts that want eager multi-page init can
-// batch commands themselves before handing ownership to the pager.
+// Init runs the active page's Init.
 func (m Model) Init() tea.Cmd {
 	if len(m.pages) == 0 {
 		return nil
@@ -128,9 +97,7 @@ func (m Model) Init() tea.Cmd {
 	return m.pages[m.activePage].Init()
 }
 
-// Active returns the currently active Page. Useful for hosts that
-// need to run page-specific logic outside the message dispatcher
-// (e.g. inspecting the active tab name to decide help text).
+// Active returns the active Page (or nil).
 func (m Model) Active() Page {
 	if len(m.pages) == 0 {
 		return nil
@@ -138,14 +105,11 @@ func (m Model) Active() Page {
 	return m.pages[m.activePage]
 }
 
-// ActiveIndex returns the index of the active tab.
+// ActiveIndex returns the active tab index.
 func (m Model) ActiveIndex() int { return m.activePage }
 
-// Pages returns the backing page slice so hosts can inspect it. The
-// returned slice aliases the pager's internal storage — do not mutate.
+// Pages returns the backing slice (do not mutate).
 func (m Model) Pages() []Page { return m.pages }
 
-// Size returns the last width/height the pager saw via WindowSizeMsg.
-// Hosts that build sub-models lazily can consult this to size a
-// fresh page before forwarding the first WindowSizeMsg.
+// Size returns the last (width, height) the pager saw.
 func (m Model) Size() (int, int) { return m.width, m.height }

@@ -7,19 +7,10 @@ import (
 	"github.com/grovetools/core/tui/embed"
 )
 
-// Update is the pager's message dispatcher. Hosts typically call it
-// after first intercepting any cross-tab concerns of their own
-// (workspace switches, help overlays, SSE lifecycle messages).
-//
-// The pager itself owns:
-//   - WindowSizeMsg: cache width/height, deduct the tab bar height,
-//     forward the adjusted size to every page so lazily-activated
-//     tabs are already correctly sized when focused.
-//   - KeyMsg: intercept Tab1..Tab9 jumps and NextTab/PrevTab cycling.
-//   - embed.SwitchTabMsg: intercept auto-switch requests from sub-pages.
-//   - embed.FocusMsg / embed.BlurMsg: fan out to the active page only.
-//
-// Any other message is forwarded to the active page unchanged.
+// Update handles WindowSizeMsg (with tab-bar height deduction),
+// numeric tab jumps, [/] cycling, embed.SwitchTabMsg auto-switch,
+// and Focus/Blur fan-out. Anything else is forwarded to the active
+// page.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if len(m.pages) == 0 {
 		return m, nil
@@ -75,10 +66,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// matchTabJump returns the tab index (0-based) that corresponds to
-// the pressed key, or false if the key is not a Tab1..Tab9 binding.
-// Only tab indices with a backing page are reported so hosts don't
-// switch into an empty slot.
+// matchTabJump returns the tab index (0-based) for a Tab1..Tab9
+// keypress, or false. Indices past the page count are not matched.
 func (m Model) matchTabJump(msg tea.KeyMsg) (int, bool) {
 	bindings := []key.Binding{
 		m.keys.Tab1, m.keys.Tab2, m.keys.Tab3,
@@ -96,8 +85,7 @@ func (m Model) matchTabJump(msg tea.KeyMsg) (int, bool) {
 	return 0, false
 }
 
-// switchTo is a value-receiver implementation of SetActive suitable
-// for returning an updated Model from Update.
+// switchTo activates the page at idx (Blur old, Focus new).
 func (m Model) switchTo(idx int) (Model, tea.Cmd) {
 	if idx < 0 || idx >= len(m.pages) || idx == m.activePage {
 		return m, nil
@@ -107,8 +95,7 @@ func (m Model) switchTo(idx int) (Model, tea.Cmd) {
 	return m, m.pages[m.activePage].Focus()
 }
 
-// cycle advances the active page by delta positions, wrapping both
-// directions.
+// cycle advances the active page by delta, wrapping.
 func (m Model) cycle(delta int) (Model, tea.Cmd) {
 	n := len(m.pages)
 	if n == 0 {
