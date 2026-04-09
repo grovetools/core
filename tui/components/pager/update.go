@@ -7,10 +7,12 @@ import (
 	"github.com/grovetools/core/tui/embed"
 )
 
-// Update handles WindowSizeMsg (with tab-bar height deduction),
+// Update handles WindowSizeMsg (with chrome deduction via SubSize),
 // numeric tab jumps, [/] cycling, embed.SwitchTabMsg auto-switch,
 // and Focus/Blur fan-out. Anything else is forwarded to the active
-// page.
+// page. Disabled pages are skipped by jumps and cycling; when the
+// active page reports IsTextEntryActive(), navigation keys fall
+// through to the page's own Update so text input is preserved.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if len(m.pages) == 0 {
 		return m, nil
@@ -20,19 +22,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		pageHeight := msg.Height - tabBarHeight
-		if pageHeight < 1 {
-			pageHeight = 1
-		}
+		adjusted := m.SubSize(msg.Width, msg.Height)
 		for _, p := range m.pages {
-			p.SetSize(msg.Width, pageHeight)
+			p.SetSize(adjusted.Width, adjusted.Height)
 		}
-		adjusted := tea.WindowSizeMsg{Width: msg.Width, Height: pageHeight}
 		updated, cmd := m.pages[m.activePage].Update(adjusted)
 		m.pages[m.activePage] = updated
 		return m, cmd
 
 	case embed.SwitchTabMsg:
+		if !m.isTabEnabled(msg.TabIndex) {
+			return m, nil
+		}
 		return m.switchTo(msg.TabIndex)
 
 	case embed.FocusMsg:
@@ -50,7 +51,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
+		// If the active page is currently accepting text input, let
+		// keystrokes fall straight through to its own Update so
+		// characters land in the input field instead of firing pager
+		// navigation.
+		if ti, ok := m.pages[m.activePage].(PageWithTextInput); ok && ti.IsTextEntryActive() {
+			break
+		}
 		if idx, ok := m.matchTabJump(msg); ok {
+			if !m.isTabEnabled(idx) {
+				return m, nil
+			}
 			return m.switchTo(idx)
 		}
 		switch {
@@ -64,6 +75,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	updated, cmd := m.pages[m.activePage].Update(msg)
 	m.pages[m.activePage] = updated
 	return m, cmd
+}
+
+// isTabEnabled reports whether the page at idx is switchable. Pages
+// that don't implement PageWithEnabled are treated as enabled.
+func (m Model) isTabEnabled(idx int) bool {
+	if idx < 0 || idx >= len(m.pages) {
+		return false
+	}
+	if en, ok := m.pages[idx].(PageWithEnabled); ok {
+		return en.Enabled()
+	}
+	return true
 }
 
 // matchTabJump returns the tab index (0-based) for a Tab1..Tab9
@@ -95,12 +118,27 @@ func (m Model) switchTo(idx int) (Model, tea.Cmd) {
 	return m, m.pages[m.activePage].Focus()
 }
 
-// cycle advances the active page by delta, wrapping.
+// cycle advances the active page by delta, wrapping, and skipping
+// any disabled pages along the way. If no enabled page can be
+// reached the active index is left unchanged.
 func (m Model) cycle(delta int) (Model, tea.Cmd) {
 	n := len(m.pages)
 	if n == 0 {
 		return m, nil
 	}
-	next := (m.activePage + delta + n) % n
-	return m.switchTo(next)
+	step := 1
+	if delta < 0 {
+		step = -1
+	}
+	next := m.activePage
+	for i := 0; i < n; i++ {
+		next = (next + step + n) % n
+		if next == m.activePage {
+			continue
+		}
+		if m.isTabEnabled(next) {
+			return m.switchTo(next)
+		}
+	}
+	return m, nil
 }

@@ -8,8 +8,34 @@ import (
 )
 
 // tabBarHeight is the row count the pager reserves above the active
-// page (1 bar row + 1 blank).
+// page: 1 row for the tabs themselves + 1 blank spacer row. Kept as
+// a package-local const so ChromeRows() can add it to optional chrome
+// without every host re-deriving the magic number.
 const tabBarHeight = 2
+
+// Config controls the optional layout chrome the pager accounts for
+// when sizing pages and rendering the final view. Zero values
+// reproduce the legacy behavior (no padding, no title row, no footer
+// reservation) so existing New()/NewAt() call sites keep working.
+type Config struct {
+	// OuterPadding is top/right/bottom/left padding applied to the
+	// entire pager view. Expressed as 4 ints (not a lipgloss.Style)
+	// so hosts can't accidentally leak border/foreground styles in.
+	OuterPadding [4]int
+	// ShowTitleRow reserves one row below the tab bar for an
+	// optional page title. When true, the row is always present
+	// even if the active page doesn't implement PageWithTitle — a
+	// blank spacer is rendered so vertical geometry stays constant
+	// across tab switches.
+	ShowTitleRow bool
+	// FooterHeight reserves N rows at the bottom of the pager area
+	// for host-rendered content (help text, status lines, etc.).
+	// The pager renders nothing in the footer slot itself — the
+	// host composes its own footer below pager.View() — but the
+	// reserved rows are subtracted from SubSize so sub-models size
+	// their bodies correctly.
+	FooterHeight int
+}
 
 // KeyMap is the bindings the pager consumes: 1-9 jumps + [/] cycle.
 type KeyMap struct {
@@ -68,13 +94,22 @@ type Model struct {
 	pages      []Page
 	activePage int
 	keys       KeyMap
+	cfg        Config
 	width      int
 	height     int
 }
 
-// New constructs a pager with the first page active.
+// New constructs a pager with the first page active and zero-value
+// Config (legacy no-chrome behavior).
 func New(pages []Page, keys KeyMap) Model {
-	return Model{pages: pages, keys: keys}
+	return NewWith(pages, keys, Config{})
+}
+
+// NewWith constructs a pager with an explicit Config. Use this when
+// the host wants outer padding, a reserved title row, or a footer
+// slot accounted for in page sizing.
+func NewWith(pages []Page, keys KeyMap, cfg Config) Model {
+	return Model{pages: pages, keys: keys, cfg: cfg}
 }
 
 // NewAt constructs a pager with a specific initial active page.
@@ -87,6 +122,51 @@ func NewAt(pages []Page, keys KeyMap, active int) Model {
 		active = len(pages) - 1
 	}
 	return Model{pages: pages, activePage: active, keys: keys}
+}
+
+// SetConfig replaces the pager's layout config at runtime. Useful
+// when the host's footer height is dynamic (e.g. help text that
+// wraps at narrow widths). Uses a pointer receiver so the caller can
+// mutate a field Model directly.
+func (m *Model) SetConfig(cfg Config) {
+	m.cfg = cfg
+}
+
+// Config returns the current layout config.
+func (m Model) Config() Config { return m.cfg }
+
+// ChromeRows returns the total vertical space the pager reserves for
+// chrome: tab bar + optional title row + footer slot + top/bottom
+// outer padding. Hosts should subtract this from their available
+// height when forwarding a WindowSizeMsg.
+func (m Model) ChromeRows() int {
+	rows := tabBarHeight
+	if m.cfg.ShowTitleRow {
+		rows++
+	}
+	rows += m.cfg.FooterHeight
+	rows += m.cfg.OuterPadding[0] + m.cfg.OuterPadding[2]
+	return rows
+}
+
+// ChromeCols returns the horizontal space consumed by outer padding.
+func (m Model) ChromeCols() int {
+	return m.cfg.OuterPadding[1] + m.cfg.OuterPadding[3]
+}
+
+// SubSize computes the WindowSizeMsg that should be passed down to
+// sub-models so their bodies fit inside the pager's body region
+// after all chrome is subtracted. Bounds are clamped to >= 1.
+func (m Model) SubSize(termW, termH int) tea.WindowSizeMsg {
+	w := termW - m.ChromeCols()
+	h := termH - m.ChromeRows()
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return tea.WindowSizeMsg{Width: w, Height: h}
 }
 
 // Init runs the active page's Init.
