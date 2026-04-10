@@ -277,11 +277,47 @@ type TUIConfig struct {
 	Keybindings *KeybindingsConfig `yaml:"keybindings,omitempty" toml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides" jsonschema_extras:"x-layer=global,x-priority=54"`
 	NvimEmbed   *NvimEmbedConfig   `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-status=alpha,x-layer=global,x-priority=55"`
 
+	// LeaderKey is the bubbletea key string that activates the leader
+	// chord (e.g. "f12", "ctrl+g"). Default: "f12".
+	LeaderKey string `yaml:"leader_key,omitempty" toml:"leader_key,omitempty" jsonschema:"description=Key chord that activates the leader/workspace switcher (bubbletea key string),default=f12" jsonschema_extras:"x-layer=global,x-priority=53"`
+
+	// SidebarExpanded controls whether the icon rail starts expanded
+	// (showing labels) or collapsed (icons only). Default: false.
+	SidebarExpanded bool `yaml:"sidebar_expanded,omitempty" toml:"sidebar_expanded,omitempty" jsonschema:"description=Start terminal sidebar expanded (icon + label) instead of icon-only,default=false" jsonschema_extras:"x-layer=global,x-priority=57"`
+
 	// Shortcuts maps key chords to deep-link navigation targets.
 	// Each value uses the syntax "navigate:<panel>[.<tab>]", e.g.
 	// "navigate:context.stats" or "navigate:flow". Parsed by the
 	// terminal host to emit embed.NavigateMsg on keypress.
 	Shortcuts map[string]string `yaml:"shortcuts,omitempty" toml:"shortcuts,omitempty" jsonschema:"description=Global shortcut key → navigate:panel.tab mappings for deep-link navigation" jsonschema_extras:"x-layer=global,x-priority=56"`
+
+	// Panels defines user-configurable ephemeral panel keybindings.
+	// Each binding spawns a command in a PTY panel on keypress.
+	Panels *PanelConfig `yaml:"panels,omitempty" toml:"panels,omitempty" jsonschema:"description=User-defined ephemeral panel keybindings" jsonschema_extras:"x-layer=global,x-priority=58"`
+}
+
+// PanelConfig holds configuration for user-defined ephemeral panel
+// keybindings. Command is the default binary; Bindings is a named
+// map of keybindings that each spawn a panel.
+type PanelConfig struct {
+	// Command is the default binary to run. Defaults to $EDITOR or "vi".
+	Command  string                        `yaml:"command,omitempty" toml:"command,omitempty" jsonschema:"description=Default command binary (falls back to $EDITOR or vi)"`
+	Bindings map[string]PanelBindingConfig `yaml:"bindings,omitempty" toml:"bindings,omitempty" jsonschema:"description=Named panel keybindings"`
+}
+
+// PanelBindingConfig defines a single ephemeral panel keybinding.
+type PanelBindingConfig struct {
+	// Key is the keychord string (e.g. "ctrl+e", "alt+x").
+	Key string `yaml:"key,omitempty" toml:"key,omitempty" jsonschema:"description=Key chord that triggers this panel"`
+	// Label is the display text in the panel header and icon rail.
+	Label string `yaml:"label,omitempty" toml:"label,omitempty" jsonschema:"description=Display label for header and sidebar"`
+	// Command overrides the top-level default binary for this binding.
+	Command string `yaml:"command,omitempty" toml:"command,omitempty" jsonschema:"description=Command binary override for this binding"`
+	// Args are static arguments passed to the command.
+	Args []string `yaml:"args,omitempty" toml:"args,omitempty" jsonschema:"description=Static arguments passed to the command"`
+	// ArgsCommand is a shell command whose stdout is trimmed and appended
+	// as a single argument. Runs asynchronously before spawning the panel.
+	ArgsCommand string `yaml:"args_command,omitempty" toml:"args_command,omitempty" jsonschema:"description=Shell command whose stdout becomes an extra argument"`
 }
 
 // ContextConfig holds configuration for the grove-context (cx) tool.

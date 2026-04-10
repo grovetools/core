@@ -56,11 +56,13 @@ func GenerateSchema() ([]byte, error) {
 
 	// TUISchemaConfig mirrors TUIConfig for schema generation
 	type TUISchemaConfig struct {
-		Icons       string                   `yaml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-important=true"`
-		Theme       string                   `yaml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-important=true"`
-		Preset      string                   `yaml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default) emacs or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-important=true"`
-		Keybindings *KeybindingsSchemaConfig `yaml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides"`
-		NvimEmbed   *NvimEmbedConfig         `yaml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
+		Icons           string                   `yaml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-important=true"`
+		Theme           string                   `yaml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-important=true"`
+		Preset          string                   `yaml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default) emacs or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-important=true"`
+		SidebarExpanded bool                     `yaml:"sidebar_expanded,omitempty" jsonschema:"description=Start terminal sidebar expanded (icon + label) instead of icon-only,default=false"`
+		Keybindings     *KeybindingsSchemaConfig `yaml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides"`
+		NvimEmbed       *NvimEmbedConfig         `yaml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
+		Panels          *PanelConfig             `yaml:"panels,omitempty" jsonschema:"description=User-defined ephemeral panel keybindings"`
 	}
 
 	type BaseConfig struct {
