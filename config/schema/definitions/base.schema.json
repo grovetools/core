@@ -435,6 +435,52 @@
       },
       "type": "object"
     },
+    "PanelBindingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "description": "Static arguments passed to the command",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "args_command": {
+          "description": "Shell command whose stdout becomes an extra argument",
+          "type": "string"
+        },
+        "command": {
+          "description": "Command binary override for this binding",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key chord that triggers this panel",
+          "type": "string"
+        },
+        "label": {
+          "description": "Display label for header and sidebar",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "PanelConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PanelBindingConfig"
+          },
+          "description": "Named panel keybindings",
+          "type": "object"
+        },
+        "command": {
+          "description": "Default command binary (falls back to $EDITOR or vi)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "SearchPathConfig": {
       "additionalProperties": false,
       "properties": {
@@ -496,6 +542,10 @@
           "$ref": "#/$defs/NvimEmbedConfig",
           "description": "Embedded Neovim configuration"
         },
+        "panels": {
+          "$ref": "#/$defs/PanelConfig",
+          "description": "User-defined ephemeral panel keybindings"
+        },
         "preset": {
           "default": "vim",
           "description": "Keybinding preset: vim (default) emacs or arrows",
@@ -506,6 +556,11 @@
           ],
           "type": "string",
           "x-important": true
+        },
+        "sidebar_expanded": {
+          "default": false,
+          "description": "Start terminal sidebar expanded (icon + label) instead of icon-only",
+          "type": "boolean"
         },
         "theme": {
           "description": "Color theme for terminal interfaces",
