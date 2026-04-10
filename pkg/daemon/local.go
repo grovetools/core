@@ -423,5 +423,25 @@ func (c *LocalClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatus
 	return nil, errors.New("memory operations require the grove daemon; start groved first")
 }
 
+// SpawnAgentPane returns an error since native agent panes require the daemon relay.
+func (c *LocalClient) SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error {
+	return errors.New("native agent panes require the grove daemon")
+}
+
+// SendAgentInput returns an error since native agent input requires the daemon relay.
+func (c *LocalClient) SendAgentInput(ctx context.Context, jobID string, input string) error {
+	return errors.New("native agent input requires the grove daemon")
+}
+
+// CaptureAgentPane returns an error since native agent capture requires the daemon relay.
+func (c *LocalClient) CaptureAgentPane(ctx context.Context, jobID string) (string, error) {
+	return "", errors.New("native agent capture requires the grove daemon")
+}
+
+// SubmitAgentCaptureResponse returns an error since capture response requires the daemon relay.
+func (c *LocalClient) SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error {
+	return errors.New("native agent capture response requires the grove daemon")
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

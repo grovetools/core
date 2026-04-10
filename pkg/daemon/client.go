@@ -242,6 +242,33 @@ type Client interface {
 
 	// GetMemoryStatus returns database stats (size, document/chunk counts, doctype distribution).
 	GetMemoryStatus(ctx context.Context) (*models.MemoryStatusResponse, error)
+
+	// --- Native Agent Pane Relay ---
+
+	// SpawnAgentPane requests groveterm to spawn a native agent pane via the daemon relay.
+	SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error
+
+	// SendAgentInput relays input text to a native agent pane in groveterm.
+	SendAgentInput(ctx context.Context, jobID string, input string) error
+
+	// CaptureAgentPane requests a screen capture from a native agent pane.
+	// Blocks until groveterm responds or the request times out.
+	CaptureAgentPane(ctx context.Context, jobID string) (string, error)
+
+	// SubmitAgentCaptureResponse sends the captured screen text back to
+	// the daemon to unblock a pending CaptureAgentPane request.
+	SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error
+}
+
+// SpawnAgentRequest contains the parameters for spawning a native agent pane.
+type SpawnAgentRequest struct {
+	JobID     string   `json:"job_id"`
+	PlanName  string   `json:"plan_name"`
+	JobTitle  string   `json:"job_title"`
+	Command   string   `json:"command"`
+	Args      []string `json:"args"`
+	WorkDir   string   `json:"work_dir"`
+	AutoSplit bool     `json:"auto_split"`
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.

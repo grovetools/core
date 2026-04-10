@@ -1348,5 +1348,101 @@ func (c *RemoteClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatu
 	return &status, nil
 }
 
+// SpawnAgentPane requests groveterm to spawn a native agent pane via the daemon relay.
+func (c *RemoteClient) SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal spawn request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/agents/spawn", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("spawn agent pane: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// SendAgentInput relays input text to a native agent pane in groveterm.
+func (c *RemoteClient) SendAgentInput(ctx context.Context, jobID string, input string) error {
+	body, err := json.Marshal(map[string]string{"input": input})
+	if err != nil {
+		return fmt.Errorf("marshal input: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/agents/"+jobID+"/input", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("send agent input: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// CaptureAgentPane requests a screen capture from a native agent pane.
+func (c *RemoteClient) CaptureAgentPane(ctx context.Context, jobID string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/agents/"+jobID+"/capture", nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("capture agent pane: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusGatewayTimeout {
+		return "", fmt.Errorf("capture timeout: groveterm did not respond")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		return "", fmt.Errorf("read capture response: %w", err)
+	}
+	return buf.String(), nil
+}
+
+// SubmitAgentCaptureResponse sends the captured screen text back to the daemon.
+func (c *RemoteClient) SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/agents/"+jobID+"/capture_response", strings.NewReader(text))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("submit capture response: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)
