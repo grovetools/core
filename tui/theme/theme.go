@@ -202,6 +202,11 @@ type Theme struct {
 	WorkspaceStandard  lipgloss.Style // Default - for standard workspaces
 	WorkspaceWorktree  lipgloss.Style // Faint - for worktree branches
 
+	// Terminal chrome styles
+	SidebarActive   lipgloss.Style // Active icon rail item
+	SidebarInactive lipgloss.Style // Inactive icon rail item
+	Separator       lipgloss.Style // Panel/drawer boundary separator
+
 	// Dynamic color palette for components
 	AccentColors []lipgloss.TerminalColor
 }
@@ -410,6 +415,18 @@ func newThemeFromColors(colors Colors, themeName string) *Theme {
 
 		WorkspaceWorktree: lipgloss.NewStyle().
 			Faint(true),
+
+		SidebarActive: lipgloss.NewStyle().
+			Background(colors.SubtleBackground).
+			Foreground(colors.Orange).
+			Bold(true),
+
+		SidebarInactive: lipgloss.NewStyle().
+			Background(colors.SubtleBackground).
+			Foreground(colors.MutedText),
+
+		Separator: lipgloss.NewStyle().
+			Foreground(colors.MutedText),
 
 		AccentColors: []lipgloss.TerminalColor{
 			colors.Cyan,
