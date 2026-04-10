@@ -276,6 +276,12 @@ type TUIConfig struct {
 	Preset      string             `yaml:"preset,omitempty" toml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default), emacs, or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-layer=global,x-priority=50,x-important=true"`
 	Keybindings *KeybindingsConfig `yaml:"keybindings,omitempty" toml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides" jsonschema_extras:"x-layer=global,x-priority=54"`
 	NvimEmbed   *NvimEmbedConfig   `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-status=alpha,x-layer=global,x-priority=55"`
+
+	// Shortcuts maps key chords to deep-link navigation targets.
+	// Each value uses the syntax "navigate:<panel>[.<tab>]", e.g.
+	// "navigate:context.stats" or "navigate:flow". Parsed by the
+	// terminal host to emit embed.NavigateMsg on keypress.
+	Shortcuts map[string]string `yaml:"shortcuts,omitempty" toml:"shortcuts,omitempty" jsonschema:"description=Global shortcut key → navigate:panel.tab mappings for deep-link navigation" jsonschema_extras:"x-layer=global,x-priority=56"`
 }
 
 // ContextConfig holds configuration for the grove-context (cx) tool.

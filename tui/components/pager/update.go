@@ -31,10 +31,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 
 	case embed.SwitchTabMsg:
-		if !m.isTabEnabled(msg.TabIndex) {
+		idx := msg.TabIndex
+		if msg.TabID != "" {
+			if resolved, ok := m.resolveTabID(msg.TabID); ok {
+				idx = resolved
+			} else {
+				return m, nil // unknown tab ID
+			}
+		}
+		if !m.isTabEnabled(idx) {
 			return m, nil
 		}
-		return m.switchTo(msg.TabIndex)
+		return m.switchTo(idx)
 
 	case embed.FocusMsg:
 		updated, cmd := m.pages[m.activePage].Update(msg)
@@ -75,6 +83,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	updated, cmd := m.pages[m.activePage].Update(msg)
 	m.pages[m.activePage] = updated
 	return m, cmd
+}
+
+// resolveTabID returns the index of the first page whose TabID()
+// matches the given id. Returns (0, false) if no page implements
+// PageWithID or none matches.
+func (m Model) resolveTabID(id string) (int, bool) {
+	for i, p := range m.pages {
+		if pid, ok := p.(PageWithID); ok && pid.TabID() == id {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // isTabEnabled reports whether the page at idx is switchable. Pages

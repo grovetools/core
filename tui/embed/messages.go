@@ -70,9 +70,22 @@ type OpenAgentSessionMsg struct {
 
 // SwitchTabMsg requests that the host pager activate a different tab.
 // Intercepted by core/tui/components/pager; no-op for hosts that don't
-// use it. Out-of-range indices are silently ignored.
+// use it. When TabID is non-empty the pager resolves the target by
+// matching against PageWithID implementations; otherwise TabIndex is
+// used as a positional fallback. Out-of-range indices are silently
+// ignored.
 type SwitchTabMsg struct {
-	TabIndex int
+	TabID    string // human-readable tab ID (e.g. "stats", "jobs")
+	TabIndex int    // positional fallback, used when TabID is empty
+}
+
+// NavigateMsg requests the host navigate to a specific panel and
+// optionally a specific tab within that panel. The terminal host
+// intercepts this, switches panels, and forwards SwitchTabMsg to the
+// newly focused panel when TabID is non-empty.
+type NavigateMsg struct {
+	PanelID string // panel ID (e.g. "context", "flow", "skills")
+	TabID   string // tab within the panel; empty = default tab
 }
 
 // CloseRequestMsg is emitted by a sub-TUI to request closure from the host.

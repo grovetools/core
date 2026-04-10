@@ -43,6 +43,16 @@ type PageWithReady interface {
 	Ready() (ready bool, loadingMsg string)
 }
 
+// PageWithID is an optional extension a Page can implement to expose a
+// stable, human-readable identifier (e.g. "stats", "jobs", "browser").
+// The pager uses this to resolve embed.SwitchTabMsg.TabID lookups so
+// deep-link navigation can target tabs by name instead of brittle
+// positional indices.
+type PageWithID interface {
+	Page
+	TabID() string
+}
+
 // PageWithTextInput is an optional extension a Page can implement to
 // signal when a focused text input should absorb keys that would
 // otherwise drive pager navigation. When IsTextEntryActive() returns
