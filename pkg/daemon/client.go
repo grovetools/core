@@ -245,6 +245,11 @@ type Client interface {
 
 	// --- Native Agent Pane Relay ---
 
+	// IsTerminalConnected returns true if a groveterm instance is connected to the
+	// daemon via SSE. Used by flow executors to decide between the groveterm provider
+	// (native panes) and the legacy tmux provider.
+	IsTerminalConnected(ctx context.Context) (bool, error)
+
 	// SpawnAgentPane requests groveterm to spawn a native agent pane via the daemon relay.
 	SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error
 
@@ -262,13 +267,14 @@ type Client interface {
 
 // SpawnAgentRequest contains the parameters for spawning a native agent pane.
 type SpawnAgentRequest struct {
-	JobID     string   `json:"job_id"`
-	PlanName  string   `json:"plan_name"`
-	JobTitle  string   `json:"job_title"`
-	Command   string   `json:"command"`
-	Args      []string `json:"args"`
-	WorkDir   string   `json:"work_dir"`
-	AutoSplit bool     `json:"auto_split"`
+	JobID     string            `json:"job_id"`
+	PlanName  string            `json:"plan_name"`
+	JobTitle  string            `json:"job_title"`
+	Command   string            `json:"command"`
+	Args      []string          `json:"args"`
+	WorkDir   string            `json:"work_dir"`
+	Env       map[string]string `json:"env,omitempty"`
+	AutoSplit bool              `json:"auto_split"`
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.

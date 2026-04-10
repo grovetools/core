@@ -1348,6 +1348,36 @@ func (c *RemoteClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatu
 	return &status, nil
 }
 
+// IsTerminalConnected checks if a groveterm instance is connected to the daemon via SSE.
+func (c *RemoteClient) IsTerminalConnected(ctx context.Context) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/system/terminal-status", nil)
+	if err != nil {
+		return false, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("terminal status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Stale daemon binary that doesn't have this endpoint yet
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Connected bool `json:"connected"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, fmt.Errorf("decode response: %w", err)
+	}
+	return result.Connected, nil
+}
+
 // SpawnAgentPane requests groveterm to spawn a native agent pane via the daemon relay.
 func (c *RemoteClient) SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error {
 	body, err := json.Marshal(req)

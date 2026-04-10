@@ -423,6 +423,11 @@ func (c *LocalClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatus
 	return nil, errors.New("memory operations require the grove daemon; start groved first")
 }
 
+// IsTerminalConnected returns false since the local client has no daemon connection.
+func (c *LocalClient) IsTerminalConnected(ctx context.Context) (bool, error) {
+	return false, nil
+}
+
 // SpawnAgentPane returns an error since native agent panes require the daemon relay.
 func (c *LocalClient) SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error {
 	return errors.New("native agent panes require the grove daemon")
