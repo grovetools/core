@@ -18,6 +18,12 @@ type WorkspaceHUD struct {
 	WorkspaceName string `json:"workspace_name"`
 	ShortPath     string `json:"short_path"`
 
+	// Hierarchy fields for rich workspace display. Populated by the
+	// daemon from the WorkspaceNode's parent paths. When set, the HUD
+	// renders "ecosystem > project > worktree" instead of just the name.
+	EcosystemName string `json:"ecosystem_name,omitempty"` // e.g. "grovetools"
+	WorktreeName  string `json:"worktree_name,omitempty"`  // e.g. "groveterm-pt3" (branch name if in a worktree)
+
 	GitBranch string `json:"git_branch"`
 	GitDirty  bool   `json:"git_dirty"`
 	GitAhead  int    `json:"git_ahead"`
