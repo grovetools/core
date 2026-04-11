@@ -294,6 +294,13 @@ type TUIConfig struct {
 	// Panels defines user-configurable ephemeral panel keybindings.
 	// Each binding spawns a command in a PTY panel on keypress.
 	Panels *PanelConfig `yaml:"panels,omitempty" toml:"panels,omitempty" jsonschema:"description=User-defined ephemeral panel keybindings" jsonschema_extras:"x-layer=global,x-priority=58"`
+
+	// VimControlHjklPaneNav enables vim-tmux-navigator-style pane
+	// navigation via Ctrl+h/j/k/l. When enabled, these keys navigate
+	// between panes unless the active PTY's foreground process is an
+	// editor (nvim, vim, hx) or a TUI (fzf, lazygit, less), in which
+	// case the key is passed through to the PTY. Default: false.
+	VimControlHjklPaneNav bool `yaml:"vim_control_hjkl_pane_nav,omitempty" toml:"vim_control_hjkl_pane_nav,omitempty" jsonschema:"description=Enable Ctrl+hjkl pane navigation (vim-tmux-navigator style),default=false" jsonschema_extras:"x-layer=global,x-priority=59"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel
