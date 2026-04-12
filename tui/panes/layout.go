@@ -2,11 +2,11 @@ package panes
 
 import tea "github.com/charmbracelet/bubbletea"
 
-// calculateDimensions distributes space among visible panes.
+// CalculateDimensions distributes space among visible panes.
 // Fixed panes consume their exact size first; the remainder is distributed
 // among flex panes by ratio, clamping to MinSize.
 // Returns a WindowSizeMsg per pane (hidden panes get zero size).
-func (m Manager) calculateDimensions() []tea.WindowSizeMsg {
+func (m Manager) CalculateDimensions() []tea.WindowSizeMsg {
 	n := len(m.Panes)
 	if n == 0 {
 		return nil
@@ -14,7 +14,7 @@ func (m Manager) calculateDimensions() []tea.WindowSizeMsg {
 
 	// Pinned mode: fullscreened pane gets flex, Fixed panes get MinSize, other Flex panes get 0
 	if m.FullscreenIdx >= 0 && m.PinnedMode {
-		return m.calculatePinnedDimensions()
+		return m.CalculatePinnedDimensions()
 	}
 
 	// Determine axis dimension and cross dimension
@@ -123,10 +123,10 @@ func (m Manager) calculateDimensions() []tea.WindowSizeMsg {
 	return msgs
 }
 
-// calculatePinnedDimensions handles layout when PinnedMode is active.
+// CalculatePinnedDimensions handles layout when PinnedMode is active.
 // The fullscreened pane gets all remaining space; Fixed panes render at MinSize;
 // other Flex panes are hidden (0 size).
-func (m Manager) calculatePinnedDimensions() []tea.WindowSizeMsg {
+func (m Manager) CalculatePinnedDimensions() []tea.WindowSizeMsg {
 	n := len(m.Panes)
 	msgs := make([]tea.WindowSizeMsg, n)
 

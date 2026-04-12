@@ -20,7 +20,7 @@ func (m Manager) View() string {
 		return m.renderPaneContent(m.FullscreenIdx, m.Width, m.Height)
 	}
 
-	dims := m.calculateDimensions()
+	dims := m.CalculateDimensions()
 	var views []string
 
 	for i, pane := range m.Panes {
@@ -91,8 +91,6 @@ func (m Manager) renderPaneContent(index, w, h int) string {
 		content = lipgloss.NewStyle().
 			Width(w).
 			Height(contentH).
-			MaxWidth(w).
-			MaxHeight(contentH).
 			Render(content)
 	}
 
