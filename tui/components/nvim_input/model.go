@@ -37,6 +37,7 @@ type Model struct {
 	width    int
 	height   int
 	focused  bool
+	escaped  bool   // true after Escape in normal mode — allows Tab to cycle out
 	ready    bool   // true once Init has run
 	err      error
 	submitCh chan string // receives content from the RPC handler
@@ -144,6 +145,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nvim = updated.(nvim.Model)
 		return m, cmd
 
+	case tea.KeyMsg:
+		if msg.Type == tea.KeyEscape && m.nvim.Mode() == "normal" {
+			// In normal mode, Escape sets the escaped flag so that
+			// IsTextEntryActive returns false, allowing Tab to cycle
+			// focus out of this pane.
+			m.escaped = true
+			return m, nil
+		}
+		// Any non-Escape key clears the escaped flag — the user is
+		// actively typing/navigating inside neovim again.
+		m.escaped = false
+		// Forward to inner nvim
+		updated, cmd := m.nvim.Update(msg)
+		m.nvim = updated.(nvim.Model)
+		return m, cmd
+
 	case SubmitMsg:
 		// Re-emit to parent, then keep listening
 		return m, tea.Batch(
@@ -194,6 +211,7 @@ func (m *Model) View() string {
 // Focus implements panes.Focusable.
 func (m *Model) Focus() tea.Cmd {
 	m.focused = true
+	m.escaped = false
 	m.nvim.SetFocused(true)
 	return nil
 }
@@ -205,9 +223,10 @@ func (m *Model) Blur() {
 }
 
 // IsTextEntryActive implements panes.TextInputActive.
-// Always returns true when focused — neovim always consumes keys.
+// Returns true when focused UNLESS the user pressed Escape in normal mode,
+// which signals intent to cycle focus out via Tab.
 func (m *Model) IsTextEntryActive() bool {
-	return m.focused
+	return m.focused && !m.escaped
 }
 
 // Close cleans up the neovim process and temp file.

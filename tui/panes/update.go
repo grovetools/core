@@ -57,7 +57,7 @@ func (m Manager) Update(msg tea.Msg) (Manager, tea.Cmd) {
 
 // distributeSize calculates dimensions and sends WindowSizeMsg to all panes.
 func (m Manager) distributeSize() (Manager, tea.Cmd) {
-	dims := m.calculateDimensions()
+	dims := m.CalculateDimensions()
 	var cmds []tea.Cmd
 	for i := range m.Panes {
 		if i < len(dims) {
@@ -219,7 +219,7 @@ func (m Manager) resizeActivePane(delta int) (Manager, tea.Cmd) {
 	}
 
 	// Get current absolute sizes
-	dims := m.calculateDimensions()
+	dims := m.CalculateDimensions()
 	activeSize := 0
 	sibSize := 0
 	if idx < len(dims) {
