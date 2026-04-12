@@ -13,9 +13,16 @@ import (
 type redrawMsg [][]interface{}
 
 // waitForRedraw is a tea.Cmd that waits for the next redraw event from Neovim.
+// When the channel is closed (neovim process exited) it emits NvimExitMsg.
 func (m Model) waitForRedraw() tea.Cmd {
+	ch := m.redraws
+	filePath := m.filePath
 	return func() tea.Msg {
-		return redrawMsg(<-m.redraws)
+		data, ok := <-ch
+		if !ok {
+			return NvimExitMsg{FilePath: filePath}
+		}
+		return redrawMsg(data)
 	}
 }
 

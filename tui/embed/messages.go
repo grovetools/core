@@ -104,6 +104,22 @@ const (
 	AgentSplitClose
 )
 
+// SplitEditorRequestMsg is emitted by a sub-TUI (or pane) to request that
+// the host open a file in a new sibling editor pane. In standalone mode the
+// host wrapper dynamically injects an embedded neovim pane; in hosted mode
+// (groveterm) the host may create a native Ghostty PTY split instead.
+type SplitEditorRequestMsg struct {
+	Path string // file to open
+	Line int    // optional line number to jump to (0 = don't jump)
+}
+
+// SplitEditorClosedMsg is sent when the editor pane created by a
+// SplitEditorRequestMsg is closed (e.g. user typed :q). The host removes
+// the editor pane and may notify the originator.
+type SplitEditorClosedMsg struct {
+	Path string
+}
+
 // SplitAgentRequestMsg is emitted by a sub-TUI to request that the host
 // split the current pane and display the native PTY agent panel for the
 // given JobID alongside the emitting panel. AgentSplitClose reverses the

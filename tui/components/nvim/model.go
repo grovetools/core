@@ -51,6 +51,13 @@ type Options struct {
 	UseConfig  bool   // If true, loads the user's default Neovim config
 }
 
+// NvimExitMsg is emitted when the embedded Neovim process exits.
+// Consumers should remove or replace the component upon receiving this.
+type NvimExitMsg struct {
+	// FilePath is the file the exiting instance had open (if known).
+	FilePath string
+}
+
 // Model is the Bubble Tea model for the Neovim component.
 // This is a reusable component that can be embedded in any TUI application.
 type Model struct {
@@ -70,6 +77,8 @@ type Model struct {
 	uiAttached             bool
 	useConfig              bool
 	focused                bool // true if this component currently has focus
+	exited                 bool // true after the neovim process has exited
+	filePath               string // file opened (for NvimExitMsg)
 }
 
 // New creates and initializes a new Neovim component.
@@ -177,12 +186,21 @@ func New(opts Options) (Model, error) {
 		uiAttached:        true,
 		useConfig:         opts.UseConfig,
 		focused:           false,
+		filePath:          opts.FileToOpen,
 	}
 
 	// Open the file if specified
 	if opts.FileToOpen != "" {
 		go v.Command(fmt.Sprintf("edit %s", opts.FileToOpen))
 	}
+
+	// Monitor neovim process: when Serve returns (process exited), close the
+	// redraw channel so waitForRedraw detects the exit and emits NvimExitMsg.
+	go func() {
+		// Serve blocks until the neovim connection is closed.
+		_ = v.Serve()
+		close(redrawCh)
+	}()
 
 	return m, nil
 }
@@ -194,12 +212,20 @@ func (m Model) Init() tea.Cmd {
 
 // Update implements tea.Model. It handles key messages and redraw events.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.exited {
+		return m, nil
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Forward all keys to Neovim - parent model should handle focus/quit
 		go m.v.Input(keyToNvim(msg))
+
+	case NvimExitMsg:
+		m.exited = true
+		return m, func() tea.Msg { return msg }
 
 	case redrawMsg:
 		// Handle the redraw events from Neovim.
@@ -300,4 +326,30 @@ func (m Model) Mode() string {
 // CursorPosition returns the current cursor row and column.
 func (m Model) CursorPosition() (int, int) {
 	return m.cursorRow, m.cursorCol
+}
+
+// FilePath returns the file this instance was opened with.
+func (m Model) FilePath() string {
+	return m.filePath
+}
+
+// Exited returns true if the neovim process has exited.
+func (m Model) Exited() bool {
+	return m.exited
+}
+
+// RegisterHandler registers a custom RPC handler on the embedded neovim instance.
+// This is used by NvimInputPane to register the "grove_submit" handler.
+func (m *Model) RegisterHandler(method string, fn interface{}) error {
+	return m.v.RegisterHandler(method, fn)
+}
+
+// ExecLua executes a Lua string in the embedded neovim instance.
+func (m *Model) ExecLua(code string, result interface{}, args ...interface{}) error {
+	return m.v.ExecLua(code, result, args...)
+}
+
+// NvimCommand executes an ex command in the embedded neovim instance.
+func (m *Model) NvimCommand(cmd string) error {
+	return m.v.Command(cmd)
 }
