@@ -33,12 +33,19 @@ type TextInputActive interface {
 	IsTextEntryActive() bool
 }
 
+// StatusProvider is an optional interface inner models can implement
+// to display a 1-line status bar below the pane content.
+type StatusProvider interface {
+	StatusLine() string
+}
+
 // Manager orchestrates layout, focus, and rendering for multiple Panes.
 type Manager struct {
 	Panes         []Pane
 	Direction     Direction
 	ActivePaneIdx int
-	FullscreenIdx int // -1 means no pane is fullscreen
+	FullscreenIdx int  // -1 means no pane is fullscreen
+	PinnedMode    bool // true = pinned zoom (Fixed panes stay visible at MinSize)
 	Width         int
 	Height        int
 	KeyMap        KeyMap

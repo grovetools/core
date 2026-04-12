@@ -151,6 +151,17 @@ func (p *logPane) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, p.viewport.View())
 }
 
+// StatusLine implements panes.StatusProvider.
+func (p *logPane) StatusLine() string {
+	follow := "ON"
+	if p.viewport.AtBottom() {
+		follow = "ON"
+	} else {
+		follow = "OFF"
+	}
+	return fmt.Sprintf(" Logs • %d lines • Follow: %s ", len(p.lines), follow)
+}
+
 func (p *logPane) Focus() tea.Cmd {
 	p.focused = true
 	return nil

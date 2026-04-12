@@ -7,17 +7,17 @@ import (
 	"github.com/grovetools/core/tui/theme"
 )
 
-// View renders the pane layout. If a pane is fullscreened, it renders only
-// that pane. Otherwise it renders all visible panes joined with highlighted
-// separators, skipping hidden panes entirely.
+// View renders the pane layout. If a pane is fullscreened (non-pinned), it
+// renders only that pane. In pinned mode or normal mode it renders all visible
+// panes joined with highlighted separators, skipping hidden panes entirely.
 func (m Manager) View() string {
 	if len(m.Panes) == 0 {
 		return ""
 	}
 
-	// Fullscreen mode: render only the fullscreened pane
-	if m.FullscreenIdx >= 0 && m.FullscreenIdx < len(m.Panes) {
-		return m.Panes[m.FullscreenIdx].Model.View()
+	// Standard fullscreen mode (not pinned): render only the fullscreened pane
+	if m.FullscreenIdx >= 0 && !m.PinnedMode && m.FullscreenIdx < len(m.Panes) {
+		return m.renderPaneContent(m.FullscreenIdx, m.Width, m.Height)
 	}
 
 	dims := m.calculateDimensions()
@@ -28,6 +28,21 @@ func (m Manager) View() string {
 			continue
 		}
 
+		// In pinned mode, skip Flex panes that got 0 size (not the zoomed one)
+		if m.PinnedMode && m.FullscreenIdx >= 0 {
+			var axisSize int
+			if i < len(dims) {
+				if m.Direction == DirectionHorizontal {
+					axisSize = dims[i].Width
+				} else {
+					axisSize = dims[i].Height
+				}
+			}
+			if axisSize == 0 && i != m.FullscreenIdx {
+				continue
+			}
+		}
+
 		// Add separator before this pane (if not the first visible pane)
 		if len(views) > 0 {
 			sep := m.renderSeparator(i)
@@ -35,20 +50,13 @@ func (m Manager) View() string {
 		}
 
 		// Render pane content, constrained to its allocated size
-		content := pane.Model.View()
 		var w, h int
 		if i < len(dims) {
 			w = dims[i].Width
 			h = dims[i].Height
 		}
-		if w > 0 && h > 0 {
-			content = lipgloss.NewStyle().
-				Width(w).
-				Height(h).
-				MaxWidth(w).
-				MaxHeight(h).
-				Render(content)
-		}
+
+		content := m.renderPaneContent(i, w, h)
 		views = append(views, content)
 	}
 
@@ -56,6 +64,50 @@ func (m Manager) View() string {
 		return lipgloss.JoinHorizontal(lipgloss.Top, views...)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, views...)
+}
+
+// renderPaneContent renders a single pane's content, including its status line
+// if the model implements StatusProvider.
+func (m Manager) renderPaneContent(index, w, h int) string {
+	pane := m.Panes[index]
+	content := pane.Model.View()
+
+	hasStatus := false
+	var statusText string
+	if sp, ok := pane.Model.(StatusProvider); ok {
+		statusText = sp.StatusLine()
+		if statusText != "" {
+			hasStatus = true
+		}
+	}
+
+	// Total height = content height + status line height
+	contentH := h
+	if hasStatus {
+		contentH = h // already subtracted in calculateDimensions
+	}
+
+	if w > 0 && contentH > 0 {
+		content = lipgloss.NewStyle().
+			Width(w).
+			Height(contentH).
+			MaxWidth(w).
+			MaxHeight(contentH).
+			Render(content)
+	}
+
+	if hasStatus {
+		t := theme.DefaultTheme
+		statusStyle := lipgloss.NewStyle().
+			Foreground(t.Colors.DarkText).
+			Background(t.Colors.SubtleBackground).
+			MaxWidth(w).
+			Width(w)
+		rendered := statusStyle.Render(statusText)
+		content = lipgloss.JoinVertical(lipgloss.Left, content, rendered)
+	}
+
+	return content
 }
 
 // renderSeparator draws the separator adjacent to pane[index].
@@ -78,7 +130,9 @@ func (m Manager) renderSeparator(index int) string {
 	sepStyle := lipgloss.NewStyle().Foreground(color)
 
 	if m.Direction == DirectionHorizontal {
-		line := strings.Repeat("│\n", m.Height)
+		// In pinned mode we need actual height based on rendered content
+		sepH := m.Height
+		line := strings.Repeat("│\n", sepH)
 		if len(line) > 0 {
 			line = line[:len(line)-1] // trim trailing newline
 		}

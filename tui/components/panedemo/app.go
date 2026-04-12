@@ -46,7 +46,10 @@ func (km appKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		km.CycleNext,
 		km.ToggleFullscreen,
+		km.TogglePinned,
 		km.ToggleDirection,
+		km.ResizeGrow,
+		km.ResizeShrink,
 		km.TogglePreview,
 		km.Quit,
 	}
@@ -55,8 +58,8 @@ func (km appKeyMap) ShortHelp() []key.Binding {
 // FullHelp returns bindings for the full help overlay.
 func (km appKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{km.CycleNext, km.CyclePrev, km.ToggleFullscreen, km.ToggleDirection},
-		{km.TogglePreview, km.Quit, km.Help},
+		{km.CycleNext, km.CyclePrev, km.ToggleFullscreen, km.TogglePinned, km.ToggleDirection},
+		{km.ResizeGrow, km.ResizeShrink, km.TogglePreview, km.Quit, km.Help},
 	}
 }
 
@@ -354,7 +357,11 @@ func (a Model) View() string {
 
 	zoomLabel := ""
 	if a.manager.FullscreenIdx >= 0 {
-		zoomLabel = t.Warning.Render(" [ZOOM]")
+		if a.manager.PinnedMode {
+			zoomLabel = t.Warning.Render(" [PINNED]")
+		} else {
+			zoomLabel = t.Warning.Render(" [ZOOM]")
+		}
 	}
 
 	editorLabel := ""

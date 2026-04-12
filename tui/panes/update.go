@@ -36,8 +36,14 @@ func (m Manager) Update(msg tea.Msg) (Manager, tea.Cmd) {
 			return m.cycleFocus(-1)
 		case key.Matches(msg, m.KeyMap.ToggleFullscreen):
 			return m.toggleFullscreen()
+		case key.Matches(msg, m.KeyMap.TogglePinned):
+			return m.togglePinned()
 		case key.Matches(msg, m.KeyMap.ToggleDirection):
 			return m.toggleDirection()
+		case key.Matches(msg, m.KeyMap.ResizeGrow):
+			return m.resizeActivePane(2)
+		case key.Matches(msg, m.KeyMap.ResizeShrink):
+			return m.resizeActivePane(-2)
 		}
 
 		// Route unhandled keys to active pane only
@@ -125,6 +131,7 @@ func (m Manager) cycleFocus(delta int) (Manager, tea.Cmd) {
 	// Exit fullscreen on focus change
 	if m.FullscreenIdx >= 0 {
 		m.FullscreenIdx = -1
+		m.PinnedMode = false
 		var cmd tea.Cmd
 		m, cmd = m.distributeSize()
 		if cmd != nil {
@@ -143,7 +150,9 @@ func (m Manager) cycleFocus(delta int) (Manager, tea.Cmd) {
 }
 
 // toggleFullscreen switches between fullscreen and normal mode.
+// Always clears PinnedMode.
 func (m Manager) toggleFullscreen() (Manager, tea.Cmd) {
+	m.PinnedMode = false
 	if m.FullscreenIdx >= 0 {
 		m.FullscreenIdx = -1
 		return m.distributeSize()
@@ -155,6 +164,20 @@ func (m Manager) toggleFullscreen() (Manager, tea.Cmd) {
 	return m, cmd
 }
 
+// togglePinned enters pinned zoom: the active pane is fullscreened but
+// Fixed panes remain visible at their MinSize.
+func (m Manager) togglePinned() (Manager, tea.Cmd) {
+	if m.PinnedMode {
+		// Exit pinned mode
+		m.FullscreenIdx = -1
+		m.PinnedMode = false
+		return m.distributeSize()
+	}
+	m.FullscreenIdx = m.ActivePaneIdx
+	m.PinnedMode = true
+	return m.distributeSize()
+}
+
 // toggleDirection swaps between horizontal and vertical splits.
 func (m Manager) toggleDirection() (Manager, tea.Cmd) {
 	if m.Direction == DirectionHorizontal {
@@ -162,5 +185,88 @@ func (m Manager) toggleDirection() (Manager, tea.Cmd) {
 	} else {
 		m.Direction = DirectionHorizontal
 	}
+	return m.distributeSize()
+}
+
+// resizeActivePane adjusts the active pane's size by delta cells.
+// On first resize, Flex panes are converted to Fixed using current dimensions.
+func (m Manager) resizeActivePane(delta int) (Manager, tea.Cmd) {
+	idx := m.ActivePaneIdx
+	if idx < 0 || idx >= len(m.Panes) || m.Panes[idx].Hidden {
+		return m, nil
+	}
+
+	// Find adjacent visible sibling to steal/give space
+	sibIdx := -1
+	// Try next visible pane first
+	for i := idx + 1; i < len(m.Panes); i++ {
+		if !m.Panes[i].Hidden {
+			sibIdx = i
+			break
+		}
+	}
+	// Fall back to previous visible pane
+	if sibIdx < 0 {
+		for i := idx - 1; i >= 0; i-- {
+			if !m.Panes[i].Hidden {
+				sibIdx = i
+				break
+			}
+		}
+	}
+	if sibIdx < 0 {
+		return m, nil // no sibling to resize against
+	}
+
+	// Get current absolute sizes
+	dims := m.calculateDimensions()
+	activeSize := 0
+	sibSize := 0
+	if idx < len(dims) {
+		if m.Direction == DirectionHorizontal {
+			activeSize = dims[idx].Width
+		} else {
+			activeSize = dims[idx].Height
+		}
+	}
+	if sibIdx < len(dims) {
+		if m.Direction == DirectionHorizontal {
+			sibSize = dims[sibIdx].Width
+		} else {
+			sibSize = dims[sibIdx].Height
+		}
+	}
+
+	// Convert both to Fixed on first resize
+	if m.Panes[idx].Fixed == 0 {
+		m.Panes[idx].Fixed = activeSize
+		m.Panes[idx].Flex = 0
+	}
+	if m.Panes[sibIdx].Fixed == 0 {
+		m.Panes[sibIdx].Fixed = sibSize
+		m.Panes[sibIdx].Flex = 0
+	}
+
+	// Apply delta with clamping
+	activeMin := max(m.Panes[idx].MinSize, 1)
+	sibMin := max(m.Panes[sibIdx].MinSize, 1)
+
+	newActive := m.Panes[idx].Fixed + delta
+	newSib := m.Panes[sibIdx].Fixed - delta
+
+	if newActive < activeMin {
+		delta = m.Panes[idx].Fixed - activeMin
+		newActive = activeMin
+		newSib = m.Panes[sibIdx].Fixed - delta
+	}
+	if newSib < sibMin {
+		delta = m.Panes[sibIdx].Fixed - sibMin
+		newSib = sibMin
+		newActive = m.Panes[idx].Fixed + delta
+	}
+
+	m.Panes[idx].Fixed = newActive
+	m.Panes[sibIdx].Fixed = newSib
+
 	return m.distributeSize()
 }
