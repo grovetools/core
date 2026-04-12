@@ -95,3 +95,21 @@ type CloseRequestMsg struct{}
 // CloseConfirmMsg is sent by the host to confirm closure (or emitted by a sub-TUI
 // to force closure without confirmation).
 type CloseConfirmMsg struct{}
+
+// AgentSplitAction enumerates the open/close actions for SplitAgentRequestMsg.
+type AgentSplitAction int
+
+const (
+	AgentSplitOpen  AgentSplitAction = iota
+	AgentSplitClose
+)
+
+// SplitAgentRequestMsg is emitted by a sub-TUI to request that the host
+// split the current pane and display the native PTY agent panel for the
+// given JobID alongside the emitting panel. AgentSplitClose reverses the
+// split, removing the agent pane from the BSP tree (but keeping it alive
+// in the rail).
+type SplitAgentRequestMsg struct {
+	JobID  string
+	Action AgentSplitAction
+}
