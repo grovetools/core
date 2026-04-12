@@ -120,6 +120,13 @@ type SplitEditorClosedMsg struct {
 	Path string
 }
 
+// SplitEditorCloseRequestMsg is emitted by a sub-TUI to request that the
+// host close an ephemeral editor split that was previously opened via
+// SplitEditorRequestMsg. This allows the sub-TUI to tear down the editor
+// split programmatically (e.g. when the user switches to a different detail
+// pane) without waiting for the editor process to exit on its own.
+type SplitEditorCloseRequestMsg struct{}
+
 // SplitAgentRequestMsg is emitted by a sub-TUI to request that the host
 // split the current pane and display the native PTY agent panel for the
 // given JobID alongside the emitting panel. AgentSplitClose reverses the

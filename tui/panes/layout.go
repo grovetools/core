@@ -30,7 +30,7 @@ func (m Manager) CalculateDimensions() []tea.WindowSizeMsg {
 	// Count visible panes for separator math
 	visibleCount := 0
 	for _, p := range m.Panes {
-		if !p.Hidden {
+		if !p.Hidden && !p.Promoted {
 			visibleCount++
 		}
 	}
@@ -44,7 +44,7 @@ func (m Manager) CalculateDimensions() []tea.WindowSizeMsg {
 
 	// First: subtract Fixed pane sizes from available space
 	for i, p := range m.Panes {
-		if p.Hidden {
+		if p.Hidden || p.Promoted {
 			continue
 		}
 		if p.Fixed > 0 {
@@ -57,7 +57,7 @@ func (m Manager) CalculateDimensions() []tea.WindowSizeMsg {
 	// Second: distribute remaining space among flex panes (Fixed == 0, !Hidden)
 	flexible := make([]bool, n)
 	for i, p := range m.Panes {
-		if !p.Hidden && p.Fixed == 0 {
+		if !p.Hidden && !p.Promoted && p.Fixed == 0 {
 			flexible[i] = true
 		}
 	}
@@ -142,7 +142,7 @@ func (m Manager) CalculatePinnedDimensions() []tea.WindowSizeMsg {
 	// Count visible panes that will render (Fixed + the zoomed pane)
 	visibleCount := 0
 	for i, p := range m.Panes {
-		if p.Hidden {
+		if p.Hidden || p.Promoted {
 			continue
 		}
 		if i == m.FullscreenIdx {

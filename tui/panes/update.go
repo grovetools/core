@@ -123,7 +123,7 @@ func (m Manager) cycleFocus(delta int) (Manager, tea.Cmd) {
 	n := len(m.Panes)
 	for range n {
 		m.ActivePaneIdx = (m.ActivePaneIdx + delta + n) % n
-		if !m.Panes[m.ActivePaneIdx].Hidden {
+		if !m.Panes[m.ActivePaneIdx].Hidden && !m.Panes[m.ActivePaneIdx].Promoted {
 			break
 		}
 	}
@@ -192,7 +192,7 @@ func (m Manager) toggleDirection() (Manager, tea.Cmd) {
 // On first resize, Flex panes are converted to Fixed using current dimensions.
 func (m Manager) resizeActivePane(delta int) (Manager, tea.Cmd) {
 	idx := m.ActivePaneIdx
-	if idx < 0 || idx >= len(m.Panes) || m.Panes[idx].Hidden {
+	if idx < 0 || idx >= len(m.Panes) || m.Panes[idx].Hidden || m.Panes[idx].Promoted {
 		return m, nil
 	}
 
@@ -200,7 +200,7 @@ func (m Manager) resizeActivePane(delta int) (Manager, tea.Cmd) {
 	sibIdx := -1
 	// Try next visible pane first
 	for i := idx + 1; i < len(m.Panes); i++ {
-		if !m.Panes[i].Hidden {
+		if !m.Panes[i].Hidden && !m.Panes[i].Promoted {
 			sibIdx = i
 			break
 		}
@@ -208,7 +208,7 @@ func (m Manager) resizeActivePane(delta int) (Manager, tea.Cmd) {
 	// Fall back to previous visible pane
 	if sibIdx < 0 {
 		for i := idx - 1; i >= 0; i-- {
-			if !m.Panes[i].Hidden {
+			if !m.Panes[i].Hidden && !m.Panes[i].Promoted {
 				sibIdx = i
 				break
 			}

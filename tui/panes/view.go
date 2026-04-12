@@ -24,7 +24,7 @@ func (m Manager) View() string {
 	var views []string
 
 	for i, pane := range m.Panes {
-		if pane.Hidden {
+		if pane.Hidden || pane.Promoted {
 			continue
 		}
 
@@ -168,7 +168,7 @@ func padContent(content string, w, h int) string {
 func (m Manager) isAdjacentToActive(index int) bool {
 	// Walk backwards from index to find the previous visible pane
 	for j := index - 1; j >= 0; j-- {
-		if !m.Panes[j].Hidden {
+		if !m.Panes[j].Hidden && !m.Panes[j].Promoted {
 			return j == m.ActivePaneIdx
 		}
 	}

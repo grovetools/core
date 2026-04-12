@@ -12,12 +12,14 @@ const (
 
 // Pane wraps an underlying tea.Model with layout preferences.
 type Pane struct {
-	ID      string
-	Model   tea.Model
-	Flex    int  // Flex ratio (e.g., 1 for 33%, 2 for 66%). Ignored when Fixed > 0.
-	Fixed   int  // If > 0, pane gets exactly this many cells on the axis. Overrides Flex.
-	MinSize int  // MinWidth for Horizontal, MinHeight for Vertical
-	Hidden  bool // Hidden panes are excluded from layout, rendering, and focus cycling.
+	ID       string
+	Model    tea.Model
+	Flex     int  // Flex ratio (e.g., 1 for 33%, 2 for 66%). Ignored when Fixed > 0.
+	Fixed    int  // If > 0, pane gets exactly this many cells on the axis. Overrides Flex.
+	MinSize  int  // MinWidth for Horizontal, MinHeight for Vertical
+	Hidden   bool // Hidden panes are excluded from layout, rendering, and focus cycling.
+	Promoted bool // Promoted panes are managed by the host BSP tree; excluded like Hidden.
+	closeCmd tea.Cmd
 }
 
 // Focusable is an optional interface inner models can implement
@@ -130,14 +132,103 @@ func (m Manager) IsHidden(id string) bool {
 }
 
 // advanceToVisible moves ActivePaneIdx in the given direction until a
-// non-hidden pane is found. If all panes are hidden, keeps current index.
+// visible (non-hidden, non-promoted) pane is found. If all panes are
+// excluded, keeps current index.
 func (m Manager) advanceToVisible(delta int) Manager {
 	n := len(m.Panes)
 	for range n {
 		m.ActivePaneIdx = (m.ActivePaneIdx + delta + n) % n
-		if !m.Panes[m.ActivePaneIdx].Hidden {
+		if !m.Panes[m.ActivePaneIdx].Hidden && !m.Panes[m.ActivePaneIdx].Promoted {
 			return m
 		}
 	}
 	return m
+}
+
+// Promote marks a pane as host-managed (BSP-promoted). The pane is excluded
+// from internal layout, rendering, and focus cycling — the host's BSP tree
+// owns the real estate. If the pane was already promoted, the old closeCmd
+// is emitted first to tear down the previous host split.
+//
+// openCmd is emitted to tell the host to create the BSP split.
+// closeCmd is stored and emitted later when Demote is called.
+func (m Manager) Promote(id string, openCmd, closeCmd tea.Cmd) (Manager, tea.Cmd) {
+	for i := range m.Panes {
+		if m.Panes[i].ID != id {
+			continue
+		}
+
+		var cmds []tea.Cmd
+
+		// If already promoted, tear down the old split first.
+		if m.Panes[i].Promoted && m.Panes[i].closeCmd != nil {
+			cmds = append(cmds, m.Panes[i].closeCmd)
+		}
+
+		m.Panes[i].Promoted = true
+		m.Panes[i].closeCmd = closeCmd
+
+		// If this pane was fullscreened, exit fullscreen.
+		if m.FullscreenIdx == i {
+			m.FullscreenIdx = -1
+		}
+		// If this pane was focused, cycle to the next visible pane.
+		if m.ActivePaneIdx == i {
+			m = m.advanceToVisible(1)
+		}
+
+		cmds = append(cmds, openCmd)
+
+		var sizeCmd tea.Cmd
+		m, sizeCmd = m.distributeSize()
+		if sizeCmd != nil {
+			cmds = append(cmds, sizeCmd)
+		}
+
+		return m, tea.Batch(cmds...)
+	}
+	return m, nil
+}
+
+// Demote returns a promoted pane to internal rendering. The stored closeCmd
+// is emitted to tell the host to tear down the BSP split. If the pane is
+// not promoted, this is a no-op.
+func (m Manager) Demote(id string) (Manager, tea.Cmd) {
+	for i := range m.Panes {
+		if m.Panes[i].ID != id {
+			continue
+		}
+		if !m.Panes[i].Promoted {
+			return m, nil
+		}
+
+		storedClose := m.Panes[i].closeCmd
+		m.Panes[i].Promoted = false
+		m.Panes[i].closeCmd = nil
+
+		var cmds []tea.Cmd
+		if storedClose != nil {
+			cmds = append(cmds, storedClose)
+		}
+
+		var sizeCmd tea.Cmd
+		m, sizeCmd = m.distributeSize()
+		if sizeCmd != nil {
+			cmds = append(cmds, sizeCmd)
+		}
+
+		return m, tea.Batch(cmds...)
+	}
+	return m, nil
+}
+
+// IsPromoted returns true if the pane with the given ID is currently
+// promoted to host-managed BSP rendering.
+func (m Manager) IsPromoted(id string) bool {
+	for _, p := range m.Panes {
+		if p.ID == id {
+			return p.Promoted
+		}
+	}
+	return false
 }
