@@ -88,10 +88,7 @@ func (m Manager) renderPaneContent(index, w, h int) string {
 	}
 
 	if w > 0 && contentH > 0 {
-		content = lipgloss.NewStyle().
-			Width(w).
-			Height(contentH).
-			Render(content)
+		content = padContent(content, w, contentH)
 	}
 
 	if hasStatus {
@@ -138,6 +135,32 @@ func (m Manager) renderSeparator(index int) string {
 	}
 
 	return sepStyle.Render(strings.Repeat("─", m.Width))
+}
+
+// padContent pads content to exactly w×h without word-wrapping.
+// Unlike lipgloss.Width(w) which triggers muesli/reflow and can break
+// pre-formatted ANSI strings (e.g., scrollbar overlays), this simply
+// pads short lines with spaces and truncates/pads the line count to h.
+func padContent(content string, w, h int) string {
+	lines := strings.Split(content, "\n")
+
+	// Pad or truncate to exactly h lines
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
+	if len(lines) > h {
+		lines = lines[:h]
+	}
+
+	// Pad each line to width w without wrapping
+	for i, line := range lines {
+		lineW := lipgloss.Width(line)
+		if lineW < w {
+			lines[i] = line + strings.Repeat(" ", w-lineW)
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // isAdjacentToActive checks whether the pane at index is the visible pane
