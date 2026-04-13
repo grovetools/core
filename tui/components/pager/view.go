@@ -75,6 +75,12 @@ func (m Model) View() string {
 
 	active := m.pages[m.activePage]
 
+	// If the active page supplies a footer, use it. This lets pages
+	// pin help text at the bottom without embedding it in their body.
+	if fp, ok := active.(PageWithFooter); ok {
+		m.footer = fp.Footer()
+	}
+
 	// Body: loading placeholder if the page is async-not-ready,
 	// otherwise the page's own View().
 	var body string
@@ -114,9 +120,14 @@ func (m Model) View() string {
 		if bodyHeight < 1 {
 			bodyHeight = 1
 		}
+		bodyWidth := m.width - pad[1] - pad[3]
+		if bodyWidth < 1 {
+			bodyWidth = 1
+		}
 		body = lipgloss.NewStyle().
 			Height(bodyHeight).
 			MaxHeight(bodyHeight).
+			MaxWidth(bodyWidth).
 			Render(body)
 	}
 

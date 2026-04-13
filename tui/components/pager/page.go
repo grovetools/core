@@ -63,3 +63,14 @@ type PageWithTextInput interface {
 	Page
 	IsTextEntryActive() bool
 }
+
+// PageWithFooter is an optional extension a Page can implement to
+// supply a footer string that the pager pins below the body. When the
+// active page implements this interface, the pager calls Footer() in
+// View() and renders the result in the footer slot, overriding any
+// previously set footer via SetFooter(). Pages that don't implement
+// this interface leave the footer unchanged.
+type PageWithFooter interface {
+	Page
+	Footer() string
+}
