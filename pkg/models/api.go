@@ -159,11 +159,12 @@ type SessionPatchRequest struct {
 
 // JobSubmitRequest represents a request to submit a job to the daemon.
 type JobSubmitRequest struct {
-	PlanDir  string            `json:"plan_dir"`
-	JobFile  string            `json:"job_file"`
-	Priority int               `json:"priority,omitempty"`
-	Timeout  string            `json:"timeout,omitempty"` // e.g., "30m"
-	Env      map[string]string `json:"env,omitempty"`
+	PlanDir     string            `json:"plan_dir"`
+	JobFile     string            `json:"job_file"`
+	Priority    int               `json:"priority,omitempty"`
+	Timeout     string            `json:"timeout,omitempty"` // e.g., "30m"
+	Env         map[string]string `json:"env,omitempty"`
+	AgentTarget string            `json:"agent_target,omitempty"` // "native" or "tmux" — resolved by caller
 }
 
 // JobFilter represents query parameters for listing jobs.
@@ -190,6 +191,7 @@ type JobInfo struct {
 	Priority    int               `json:"priority,omitempty"`
 	TimeoutStr  string            `json:"timeout,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
+	AgentTarget string            `json:"agent_target,omitempty"` // "native" or "tmux"
 	SubmittedAt time.Time         `json:"submitted_at"`
 	StartedAt   *time.Time        `json:"started_at,omitempty"`
 	CompletedAt *time.Time        `json:"completed_at,omitempty"`
