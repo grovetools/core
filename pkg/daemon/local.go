@@ -448,5 +448,23 @@ func (c *LocalClient) SubmitAgentCaptureResponse(ctx context.Context, jobID stri
 	return errors.New("native agent capture response requires the grove daemon")
 }
 
+// --- Daemon PTY Management (not available in local mode) ---
+
+func (c *LocalClient) CreatePTY(ctx context.Context, req PTYCreateRequest) (*PTYSessionInfo, error) {
+	return nil, errors.New("daemon PTY requires the grove daemon (groved)")
+}
+
+func (c *LocalClient) ListPTYs(ctx context.Context) ([]PTYSessionInfo, error) {
+	return nil, errors.New("daemon PTY requires the grove daemon (groved)")
+}
+
+func (c *LocalClient) KillPTY(ctx context.Context, id string) error {
+	return errors.New("daemon PTY requires the grove daemon (groved)")
+}
+
+func (c *LocalClient) GetPTYAttachURL(id string) string {
+	return ""
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

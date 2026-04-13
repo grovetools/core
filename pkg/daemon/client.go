@@ -263,6 +263,20 @@ type Client interface {
 	// SubmitAgentCaptureResponse sends the captured screen text back to
 	// the daemon to unblock a pending CaptureAgentPane request.
 	SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error
+
+	// --- Daemon PTY Management ---
+
+	// CreatePTY requests the daemon to spawn a new PTY session.
+	CreatePTY(ctx context.Context, req PTYCreateRequest) (*PTYSessionInfo, error)
+
+	// ListPTYs returns metadata for all active daemon PTY sessions.
+	ListPTYs(ctx context.Context) ([]PTYSessionInfo, error)
+
+	// KillPTY terminates a daemon PTY session by ID.
+	KillPTY(ctx context.Context, id string) error
+
+	// GetPTYAttachURL returns the WebSocket URL for attaching to a daemon PTY.
+	GetPTYAttachURL(id string) string
 }
 
 // SpawnAgentRequest contains the parameters for spawning a native agent pane.
@@ -275,6 +289,27 @@ type SpawnAgentRequest struct {
 	WorkDir   string            `json:"work_dir"`
 	Env       map[string]string `json:"env,omitempty"`
 	AutoSplit bool              `json:"auto_split"`
+}
+
+// PTYCreateRequest holds the parameters for creating a daemon PTY session.
+type PTYCreateRequest struct {
+	CWD    string            `json:"cwd"`
+	Env    []string          `json:"env,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
+	Rows   uint16            `json:"rows,omitempty"`
+	Cols   uint16            `json:"cols,omitempty"`
+}
+
+// PTYSessionInfo is the client-side representation of a daemon PTY session.
+type PTYSessionInfo struct {
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	CWD             string            `json:"cwd"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	PID             int               `json:"pid"`
+	StartedAt       string            `json:"started_at"`
+	AttachedClients int               `json:"attached_clients"`
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.

@@ -367,6 +367,36 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 				}
 			}
 		}
+
+		// Also glob ~/.config/grove/plugins/*.toml for per-user plugin manifests
+		pluginPattern := filepath.Join(globalDir, "plugins", "*.toml")
+		if pluginFiles, err := filepath.Glob(pluginPattern); err == nil {
+			for _, file := range pluginFiles {
+				baseName := filepath.Base(file)
+				logger.WithField("path", file).Debug("Loading plugin config fragment")
+
+				fragmentData, err := os.ReadFile(file)
+				if err != nil {
+					logger.WithError(err).Warnf("Failed to read plugin config %s, skipping", baseName)
+					continue
+				}
+
+				expanded := expandEnvVars(string(fragmentData))
+				fragmentConfig, parseErr := unmarshalConfig(file, []byte(expanded))
+				if parseErr != nil {
+					logger.WithError(parseErr).Warnf("Failed to parse plugin config %s, skipping", baseName)
+					continue
+				}
+
+				stripGroveMeta(fragmentConfig)
+
+				if finalConfig == nil {
+					finalConfig = fragmentConfig
+				} else {
+					finalConfig = mergeConfigs(finalConfig, fragmentConfig)
+				}
+			}
+		}
 	}
 
 	// Load global override if it exists

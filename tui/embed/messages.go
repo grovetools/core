@@ -109,8 +109,9 @@ const (
 // host wrapper dynamically injects an embedded neovim pane; in hosted mode
 // (groveterm) the host may create a native Ghostty PTY split instead.
 type SplitEditorRequestMsg struct {
-	Path string // file to open
-	Line int    // optional line number to jump to (0 = don't jump)
+	Path  string  // file to open
+	Line  int     // optional line number to jump to (0 = don't jump)
+	Ratio float64 // split ratio for the origin pane (0 = default 0.5)
 }
 
 // SplitEditorClosedMsg is sent when the editor pane created by a
@@ -127,6 +128,43 @@ type SplitEditorClosedMsg struct {
 // pane) without waiting for the editor process to exit on its own.
 type SplitEditorCloseRequestMsg struct{}
 
+// SplitViewportRequestMsg is emitted by a sub-TUI to request that the host
+// split the current pane and open a generic scrollable text viewport alongside
+// it. The viewport renders pre-styled content and supports auto-scroll (tail
+// follow) for streaming use cases like live logs.
+type SplitViewportRequestMsg struct {
+	PanelID    string  // logical ID for the viewport (e.g. "logs")
+	Title      string  // header line displayed above the viewport content
+	Content    string  // initial content to render
+	AutoScroll bool    // true = start in follow-tail mode
+	Ratio      float64 // split ratio for the origin pane (0 = default 0.5)
+}
+
+// SplitViewportCloseRequestMsg is emitted by a sub-TUI to request that the
+// host close a viewport BSP split that was previously opened via
+// SplitViewportRequestMsg. Used when the originator switches detail modes.
+type SplitViewportCloseRequestMsg struct{}
+
+// SplitViewportClosedMsg is sent by the host back to the sub-TUI when the
+// viewport panel is closed (user pressed q, or Leader x, or host closed it
+// programmatically). The originator should demote its internal state.
+type SplitViewportClosedMsg struct{}
+
+// UpdateViewportContentMsg is emitted by a sub-TUI to push new content to
+// an active viewport panel. When Append is true the content is appended to
+// existing lines; when false the viewport content is fully replaced.
+type UpdateViewportContentMsg struct {
+	Content string
+	Append  bool
+}
+
+// UpdateViewportTitleMsg is emitted by a sub-TUI to dynamically change the
+// title displayed in the viewport panel header. Used when switching detail
+// types (e.g. logs → frontmatter) without recreating the BSP split.
+type UpdateViewportTitleMsg struct {
+	Title string
+}
+
 // SplitAgentRequestMsg is emitted by a sub-TUI to request that the host
 // split the current pane and display the native PTY agent panel for the
 // given JobID alongside the emitting panel. AgentSplitClose reverses the
@@ -135,4 +173,5 @@ type SplitEditorCloseRequestMsg struct{}
 type SplitAgentRequestMsg struct {
 	JobID  string
 	Action AgentSplitAction
+	Ratio  float64 // split ratio for the origin pane (0 = default 0.5)
 }

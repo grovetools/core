@@ -1474,5 +1474,98 @@ func (c *RemoteClient) SubmitAgentCaptureResponse(ctx context.Context, jobID str
 	return nil
 }
 
+// --- Daemon PTY Management ---
+
+func (c *RemoteClient) CreatePTY(ctx context.Context, req PTYCreateRequest) (*PTYSessionInfo, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal pty create request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/pty/create", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("create pty: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var info PTYSessionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode pty session: %w", err)
+	}
+	return &info, nil
+}
+
+func (c *RemoteClient) ListPTYs(ctx context.Context) ([]PTYSessionInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/pty/list", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list ptys: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var list []PTYSessionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil, fmt.Errorf("decode pty list: %w", err)
+	}
+	return list, nil
+}
+
+func (c *RemoteClient) KillPTY(ctx context.Context, id string) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/pty/kill/"+id, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("kill pty: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("pty session %s not found", id)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *RemoteClient) GetPTYAttachURL(id string) string {
+	// The WebSocket dialer will connect over the Unix socket; the host is
+	// irrelevant. We use "ws://unix" to match the baseURL convention.
+	return "ws://unix/api/pty/attach/" + id
+}
+
+// SocketPath returns the Unix socket path used by this client.
+// Used by the terminal to configure WebSocket dialers for PTY attach.
+func (c *RemoteClient) SocketPath() string {
+	return c.socketPath
+}
+
 // Ensure RemoteClient implements Client interface.
 var _ Client = (*RemoteClient)(nil)

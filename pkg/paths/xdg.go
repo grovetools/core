@@ -147,6 +147,11 @@ func PidFilePath() string {
 	return filepath.Join(StateDir(), "groved.pid")
 }
 
+// SSHHostKeyPath returns the default path for the SSH host key.
+func SSHHostKeyPath() string {
+	return filepath.Join(StateDir(), "ssh_host_key")
+}
+
 // EnsureDirs creates all Grove directories if they don't exist.
 func EnsureDirs() error {
 	dirs := []string{

@@ -306,6 +306,28 @@ type TUIConfig struct {
 	// editor (nvim, vim, hx) or a TUI (fzf, lazygit, less), in which
 	// case the key is passed through to the PTY. Default: false.
 	VimControlHjklPaneNav bool `yaml:"vim_control_hjkl_pane_nav,omitempty" toml:"vim_control_hjkl_pane_nav,omitempty" jsonschema:"description=Enable Ctrl+hjkl pane navigation (vim-tmux-navigator style),default=false" jsonschema_extras:"x-layer=global,x-priority=59"`
+
+	// Plugins defines process-based plugin panels that run standalone
+	// executables in PTY panels with their own rail icons.
+	Plugins map[string]*PluginConfig `yaml:"plugins,omitempty" toml:"plugins,omitempty" jsonschema:"description=Process-based plugin panels" jsonschema_extras:"x-layer=global,x-priority=60"`
+}
+
+// PluginConfig defines a process-based plugin that runs in its own PTY panel.
+type PluginConfig struct {
+	// Command is the executable to run.
+	Command string `yaml:"command" toml:"command" jsonschema:"description=Executable command to run"`
+	// Args are optional arguments passed to the command.
+	Args []string `yaml:"args,omitempty" toml:"args,omitempty" jsonschema:"description=Arguments passed to the command"`
+	// Icon is the nerd font icon displayed in the rail.
+	Icon string `yaml:"icon,omitempty" toml:"icon,omitempty" jsonschema:"description=Nerd font icon for the rail"`
+	// Position controls where the plugin appears: rail (persistent) or ephemeral (on-demand).
+	Position string `yaml:"position,omitempty" toml:"position,omitempty" jsonschema:"description=Panel position: rail (persistent) or ephemeral (on-demand),enum=rail,enum=ephemeral,default=rail"`
+	// Cwd is the working directory for the command.
+	Cwd string `yaml:"cwd,omitempty" toml:"cwd,omitempty" jsonschema:"description=Working directory for the command"`
+	// Env are extra environment variables (KEY=VALUE format).
+	Env []string `yaml:"env,omitempty" toml:"env,omitempty" jsonschema:"description=Extra environment variables (KEY=VALUE)"`
+	// Restart controls whether the plugin auto-restarts on exit.
+	Restart bool `yaml:"restart,omitempty" toml:"restart,omitempty" jsonschema:"description=Auto-restart plugin on exit,default=false"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel
@@ -376,6 +398,14 @@ type DaemonConfig struct {
 	SkillSyncDebounceMs int               `yaml:"skill_sync_debounce_ms,omitempty" toml:"skill_sync_debounce_ms,omitempty" jsonschema:"description=Debounce window for skill syncs in milliseconds (default: 1000)"`
 	Hooks               *DaemonHooks      `yaml:"hooks,omitempty" toml:"hooks,omitempty" jsonschema:"description=Daemon-specific hooks configuration"`
 	Jobs                *DaemonJobsConfig `yaml:"jobs,omitempty" toml:"jobs,omitempty" jsonschema:"description=Job runner configuration"`
+	SSH                 *DaemonSSHConfig  `yaml:"ssh,omitempty" toml:"ssh,omitempty" jsonschema:"description=Embedded SSH server configuration"`
+}
+
+// DaemonSSHConfig holds configuration for the embedded SSH server.
+type DaemonSSHConfig struct {
+	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Enable the embedded SSH server (default: false)"`
+	Port        int    `yaml:"port,omitempty" toml:"port,omitempty" jsonschema:"description=Port to listen on (default: 2222)"`
+	HostKeyPath string `yaml:"host_key_path,omitempty" toml:"host_key_path,omitempty" jsonschema:"description=Path to the SSH host key (default: ~/.local/state/grove/ssh_host_key)"`
 }
 
 // DaemonHooks defines hooks that are triggered by daemon events.
