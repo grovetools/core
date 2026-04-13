@@ -278,8 +278,13 @@ type TUIConfig struct {
 	NvimEmbed   *NvimEmbedConfig   `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-status=alpha,x-layer=global,x-priority=55"`
 
 	// LeaderKey is the bubbletea key string that activates the leader
-	// chord (e.g. "f12", "ctrl+g"). Default: "f12".
-	LeaderKey string `yaml:"leader_key,omitempty" toml:"leader_key,omitempty" jsonschema:"description=Key chord that activates the leader/workspace switcher (bubbletea key string),default=f12" jsonschema_extras:"x-layer=global,x-priority=53"`
+	// chord (e.g. "ctrl+b", "f12"). Default: "ctrl+b".
+	LeaderKey string `yaml:"leader_key,omitempty" toml:"leader_key,omitempty" jsonschema:"description=Key chord that activates the leader/workspace switcher (bubbletea key string),default=ctrl+b" jsonschema_extras:"x-layer=global,x-priority=53"`
+
+	// ActionKey is the bubbletea key string that activates the action
+	// chord for grove-specific terminal actions (sidebar, rail, agent,
+	// help, etc.). Default: "ctrl+g".
+	ActionKey string `yaml:"action_key,omitempty" toml:"action_key,omitempty" jsonschema:"description=Key chord that activates grove terminal actions (bubbletea key string),default=ctrl+g" jsonschema_extras:"x-layer=global,x-priority=53"`
 
 	// SidebarExpanded controls whether the icon rail starts expanded
 	// (showing labels) or collapsed (icons only). Default: false.

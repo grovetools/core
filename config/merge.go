@@ -148,6 +148,9 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.LeaderKey != "" {
 			result.TUI.LeaderKey = override.TUI.LeaderKey
 		}
+		if override.TUI.ActionKey != "" {
+			result.TUI.ActionKey = override.TUI.ActionKey
+		}
 		if override.TUI.NvimEmbed != nil {
 			result.TUI.NvimEmbed = override.TUI.NvimEmbed
 		}
