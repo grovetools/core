@@ -97,6 +97,7 @@ type Model struct {
 	cfg        Config
 	width      int
 	height     int
+	footer     string // pre-rendered footer pinned below the body
 }
 
 // New constructs a pager with the first page active and zero-value
@@ -190,6 +191,15 @@ func (m Model) ActiveIndex() int { return m.activePage }
 
 // Pages returns the backing slice (do not mutate).
 func (m Model) Pages() []Page { return m.pages }
+
+// SetFooter replaces the pager's pinned footer string. The pager
+// renders this below the body in View() and force-expands the body to
+// fill the remaining vertical space, pinning the footer to the bottom.
+// Pass "" to clear.
+func (m *Model) SetFooter(s string) { m.footer = s }
+
+// Footer returns the current footer string.
+func (m Model) Footer() string { return m.footer }
 
 // Size returns the last (width, height) the pager saw.
 func (m Model) Size() (int, int) { return m.width, m.height }

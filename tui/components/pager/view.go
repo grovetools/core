@@ -59,10 +59,12 @@ func (m Model) RenderTabBar() string {
 }
 
 // View renders outer padding → tab bar → blank → optional title
-// row → body. Total chrome matches ChromeRows() so sub-models sized
-// via SubSize fit exactly. When the active page implements
-// PageWithReady and reports not ready, a centered loading message
-// replaces the body.
+// row → body → optional footer. When dimensions are known the body
+// is force-expanded to fill remaining vertical space, pinning the
+// footer to the bottom of the pane. Total chrome matches
+// ChromeRows() so sub-models sized via SubSize fit exactly. When
+// the active page implements PageWithReady and reports not ready, a
+// centered loading message replaces the body.
 func (m Model) View() string {
 	if len(m.pages) == 0 {
 		return ""
@@ -92,11 +94,34 @@ func (m Model) View() string {
 		body = active.View()
 	}
 
-	// Title row (optional). When enabled, the row is always present
-	// to keep vertical geometry constant across tab switches — a
-	// page without a title renders a single space so lipgloss
-	// doesn't collapse the row.
-	var content string
+	// Force body to fill remaining vertical space when dimensions
+	// are known, so any footer pins to the bottom of the pane.
+	if m.height > 0 {
+		pad := m.cfg.OuterPadding
+		headerRows := tabBarHeight
+		if m.cfg.ShowTitleRow {
+			headerRows++
+		}
+		// Use rendered footer height when present, otherwise fall
+		// back to the static Config.FooterHeight so hosts that
+		// render their own footer externally still get correct
+		// body sizing.
+		footerRows := m.cfg.FooterHeight
+		if m.footer != "" {
+			footerRows = lipgloss.Height(m.footer)
+		}
+		bodyHeight := m.height - headerRows - footerRows - pad[0] - pad[2]
+		if bodyHeight < 1 {
+			bodyHeight = 1
+		}
+		body = lipgloss.NewStyle().
+			Height(bodyHeight).
+			MaxHeight(bodyHeight).
+			Render(body)
+	}
+
+	// Compose: tab bar → blank spacer → [title] → body → [footer].
+	parts := []string{bar, ""}
 	if m.cfg.ShowTitleRow {
 		title := " "
 		if t, ok := active.(PageWithTitle); ok {
@@ -105,10 +130,13 @@ func (m Model) View() string {
 					Foreground(th.Colors.LightText).Render(s)
 			}
 		}
-		content = lipgloss.JoinVertical(lipgloss.Left, bar, "", title, body)
-	} else {
-		content = lipgloss.JoinVertical(lipgloss.Left, bar, "", body)
+		parts = append(parts, title)
 	}
+	parts = append(parts, body)
+	if m.footer != "" {
+		parts = append(parts, m.footer)
+	}
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	// Outer padding (top, right, bottom, left). Zero values render
 	// without any extra style, preserving legacy behavior.
