@@ -102,6 +102,36 @@
       ],
       "type": "object"
     },
+    "FocusConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "active_color": {
+          "default": "cyan",
+          "description": "Color for focused pane indicator",
+          "type": "string"
+        },
+        "dim_inactive": {
+          "description": "Dim unfocused panes (requires compositor support)",
+          "type": "boolean"
+        },
+        "inactive_color": {
+          "default": "gray",
+          "description": "Color for unfocused pane indicator",
+          "type": "string"
+        },
+        "style": {
+          "default": "border",
+          "description": "Focus indicator style",
+          "enum": [
+            "border",
+            "gutter",
+            "title"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "GlobalNotebookConfig": {
       "additionalProperties": false,
       "properties": {
@@ -525,6 +555,10 @@
     "TUISchemaConfig": {
       "additionalProperties": false,
       "properties": {
+        "focus": {
+          "$ref": "#/$defs/FocusConfig",
+          "description": "BSP pane focus indicator configuration"
+        },
         "icons": {
           "description": "Icon set to use: nerd or ascii",
           "enum": [

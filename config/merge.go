@@ -158,6 +158,25 @@ func mergeConfigs(base, override *Config) *Config {
 			result.TUI.Panels = override.TUI.Panels
 		}
 
+		// Merge Focus config
+		if override.TUI.Focus != nil {
+			if result.TUI.Focus == nil {
+				result.TUI.Focus = &FocusConfig{}
+			}
+			if override.TUI.Focus.Style != "" {
+				result.TUI.Focus.Style = override.TUI.Focus.Style
+			}
+			if override.TUI.Focus.ActiveColor != "" {
+				result.TUI.Focus.ActiveColor = override.TUI.Focus.ActiveColor
+			}
+			if override.TUI.Focus.InactiveColor != "" {
+				result.TUI.Focus.InactiveColor = override.TUI.Focus.InactiveColor
+			}
+			if override.TUI.Focus.DimInactive {
+				result.TUI.Focus.DimInactive = true
+			}
+		}
+
 		// Merge Keybindings
 		if override.TUI.Keybindings != nil {
 			if result.TUI.Keybindings == nil {

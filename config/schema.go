@@ -63,6 +63,7 @@ func GenerateSchema() ([]byte, error) {
 		Keybindings     *KeybindingsSchemaConfig `yaml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides"`
 		NvimEmbed       *NvimEmbedConfig         `yaml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
 		Panels          *PanelConfig             `yaml:"panels,omitempty" jsonschema:"description=User-defined ephemeral panel keybindings"`
+		Focus           *FocusConfig             `yaml:"focus,omitempty" jsonschema:"description=BSP pane focus indicator configuration"`
 	}
 
 	type BaseConfig struct {

@@ -310,6 +310,23 @@ type TUIConfig struct {
 	// Plugins defines process-based plugin panels that run standalone
 	// executables in PTY panels with their own rail icons.
 	Plugins map[string]*PluginConfig `yaml:"plugins,omitempty" toml:"plugins,omitempty" jsonschema:"description=Process-based plugin panels" jsonschema_extras:"x-layer=global,x-priority=60"`
+
+	// Focus configures the BSP pane focus indicator system.
+	Focus *FocusConfig `yaml:"focus,omitempty" toml:"focus,omitempty" jsonschema:"description=BSP pane focus indicator configuration" jsonschema_extras:"x-layer=global,x-priority=61"`
+}
+
+// FocusConfig controls how the focused BSP pane is visually distinguished.
+type FocusConfig struct {
+	// Style selects the focus indicator strategy: border (highlight
+	// separator cells adjacent to focused pane), gutter (1-col colored
+	// bar on left edge), or title (1-row colored header).
+	Style string `yaml:"style,omitempty" toml:"style,omitempty" jsonschema:"description=Focus indicator style,enum=border,enum=gutter,enum=title,default=border"`
+	// ActiveColor is the color used for the focused pane's indicator.
+	ActiveColor string `yaml:"active_color,omitempty" toml:"active_color,omitempty" jsonschema:"description=Color for focused pane indicator,default=cyan"`
+	// InactiveColor is the color used for unfocused pane indicators.
+	InactiveColor string `yaml:"inactive_color,omitempty" toml:"inactive_color,omitempty" jsonschema:"description=Color for unfocused pane indicator,default=gray"`
+	// DimInactive dims unfocused panes (requires compositor support).
+	DimInactive bool `yaml:"dim_inactive,omitempty" toml:"dim_inactive,omitempty" jsonschema:"description=Dim unfocused panes (requires compositor support)"`
 }
 
 // PluginConfig defines a process-based plugin that runs in its own PTY panel.
