@@ -189,6 +189,30 @@ type UpdateContextScopeMsg struct {
 	RulesFile string
 }
 
+// SplitMemoryRequestMsg is emitted by a sub-TUI to request that the host
+// split the current pane and open the memory search panel alongside it.
+// Query seeds the search input; if empty the panel opens with a blank search.
+type SplitMemoryRequestMsg struct {
+	Query string  // initial search query to seed
+	Ratio float64 // split ratio for the origin pane (0 = default 0.5)
+	Focus bool    // true = steal focus; false = keep focus on originator
+}
+
+// SplitMemoryCloseRequestMsg is emitted by a sub-TUI to request that the
+// host close a memory panel BSP split.
+type SplitMemoryCloseRequestMsg struct{}
+
+// SplitMemoryClosedMsg is sent by the host back to the sub-TUI when the
+// memory panel is closed.
+type SplitMemoryClosedMsg struct{}
+
+// AppendContextRuleMsg is emitted by a sub-TUI (e.g. the memory panel)
+// when the user wants to add a file to the originating panel's context
+// rules. The host routes it to the BSP sibling of the emitting panel.
+type AppendContextRuleMsg struct {
+	Path string // absolute file path to add as a context rule
+}
+
 // SplitAgentRequestMsg is emitted by a sub-TUI to request that the host
 // split the current pane and display the native PTY agent panel for the
 // given JobID alongside the emitting panel. AgentSplitClose reverses the
