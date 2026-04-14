@@ -293,23 +293,34 @@ type SpawnAgentRequest struct {
 
 // PTYCreateRequest holds the parameters for creating a daemon PTY session.
 type PTYCreateRequest struct {
-	CWD    string            `json:"cwd"`
-	Env    []string          `json:"env,omitempty"`
-	Name   string            `json:"name,omitempty"`
-	Labels map[string]string `json:"labels,omitempty"`
-	Rows   uint16            `json:"rows,omitempty"`
-	Cols   uint16            `json:"cols,omitempty"`
+	CWD       string            `json:"cwd"`
+	Env       []string          `json:"env,omitempty"`
+	Workspace string            `json:"workspace,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
+	Rows      uint16            `json:"rows,omitempty"`
+	Cols      uint16            `json:"cols,omitempty"`
+	Origin    string            `json:"origin,omitempty"`
+	PanelID   string            `json:"panel_id,omitempty"`
+	Label     string            `json:"label,omitempty"`
+	SessionID string            `json:"session_id,omitempty"`
+	CreatedBy string            `json:"created_by,omitempty"`
 }
 
 // PTYSessionInfo is the client-side representation of a daemon PTY session.
 type PTYSessionInfo struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	CWD             string            `json:"cwd"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	PID             int               `json:"pid"`
-	StartedAt       string            `json:"started_at"`
-	AttachedClients int               `json:"attached_clients"`
+	ID                string            `json:"id"`
+	Workspace         string            `json:"workspace"`
+	CWD               string            `json:"cwd"`
+	Labels            map[string]string `json:"labels,omitempty"`
+	PID               int               `json:"pid"`
+	StartedAt         string            `json:"started_at"`
+	AttachedClients   int               `json:"attached_clients"`
+	Origin            string            `json:"origin,omitempty"`
+	PanelID           string            `json:"panel_id,omitempty"`
+	Label             string            `json:"label,omitempty"`
+	SessionID         string            `json:"session_id,omitempty"`
+	CreatedBy         string            `json:"created_by,omitempty"`
+	ForegroundProcess string            `json:"foreground_process,omitempty"`
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.
