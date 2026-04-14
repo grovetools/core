@@ -325,6 +325,9 @@ type FocusConfig struct {
 	ActiveColor string `yaml:"active_color,omitempty" toml:"active_color,omitempty" jsonschema:"description=Color for focused pane indicator,default=cyan"`
 	// InactiveColor is the color used for unfocused pane indicators.
 	InactiveColor string `yaml:"inactive_color,omitempty" toml:"inactive_color,omitempty" jsonschema:"description=Color for unfocused pane indicator,default=gray"`
+	// Thickness controls the width (for gutter) or height (for title) of the
+	// focus indicator in cells. Defaults to 1. For border style this is ignored.
+	Thickness int `yaml:"thickness,omitempty" toml:"thickness,omitempty" jsonschema:"description=Indicator thickness in cells,default=1,minimum=1,maximum=4"`
 	// DimInactive dims unfocused panes (requires compositor support).
 	DimInactive bool `yaml:"dim_inactive,omitempty" toml:"dim_inactive,omitempty" jsonschema:"description=Dim unfocused panes (requires compositor support)"`
 }

@@ -122,6 +122,53 @@ type Colors struct {
 	VerySubtleBackground lipgloss.TerminalColor
 }
 
+// ResolveColor maps a color name (e.g. "blue", "border", "muted_text") to the
+// corresponding theme color. If the name starts with "#", it's treated as a
+// hex color literal. Returns the fallback if the name is empty or unrecognized.
+func (c Colors) ResolveColor(name string, fallback lipgloss.TerminalColor) lipgloss.TerminalColor {
+	if name == "" {
+		return fallback
+	}
+	if strings.ToLower(name) == "none" {
+		return lipgloss.NoColor{}
+	}
+	if name[0] == '#' {
+		return lipgloss.Color(name)
+	}
+	switch strings.ToLower(name) {
+	case "green":
+		return c.Green
+	case "yellow":
+		return c.Yellow
+	case "red":
+		return c.Red
+	case "orange":
+		return c.Orange
+	case "cyan":
+		return c.Cyan
+	case "blue":
+		return c.Blue
+	case "violet":
+		return c.Violet
+	case "pink":
+		return c.Pink
+	case "light_text", "lighttext":
+		return c.LightText
+	case "muted_text", "mutedtext", "muted":
+		return c.MutedText
+	case "dark_text", "darktext":
+		return c.DarkText
+	case "border":
+		return c.Border
+	case "selected_background", "selectedbackground":
+		return c.SelectedBackground
+	case "subtle_background", "subtlebackground":
+		return c.SubtleBackground
+	default:
+		return fallback
+	}
+}
+
 // Exported color shortcuts for legacy usages. These are populated from DefaultTheme.
 var (
 	Green                lipgloss.TerminalColor

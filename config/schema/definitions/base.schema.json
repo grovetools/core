@@ -128,6 +128,13 @@
             "title"
           ],
           "type": "string"
+        },
+        "thickness": {
+          "default": 1,
+          "description": "Indicator thickness in cells",
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "type": "object"
