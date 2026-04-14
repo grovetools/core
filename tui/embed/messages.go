@@ -166,6 +166,29 @@ type UpdateViewportTitleMsg struct {
 	Title string
 }
 
+// SplitContextRequestMsg is emitted by a sub-TUI to request that the host
+// split the current pane and open the cx context panel alongside it.
+type SplitContextRequestMsg struct {
+	WorkDir   string
+	RulesFile string
+	Ratio     float64 // split ratio (0 = default 0.5)
+	Focus     bool    // true = steal focus; false = keep focus on originator
+}
+
+// SplitContextCloseRequestMsg is emitted by a sub-TUI to request that the
+// host close a context panel BSP split.
+type SplitContextCloseRequestMsg struct{}
+
+// SplitContextClosedMsg is sent by the host back to the sub-TUI when the
+// context panel is closed.
+type SplitContextClosedMsg struct{}
+
+// UpdateContextScopeMsg is emitted by a sub-TUI to dynamically change the
+// rules file scoped in its active context panel sibling.
+type UpdateContextScopeMsg struct {
+	RulesFile string
+}
+
 // SplitAgentRequestMsg is emitted by a sub-TUI to request that the host
 // split the current pane and display the native PTY agent panel for the
 // given JobID alongside the emitting panel. AgentSplitClose reverses the
