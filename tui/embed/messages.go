@@ -138,6 +138,7 @@ type SplitViewportRequestMsg struct {
 	Content    string  // initial content to render
 	AutoScroll bool    // true = start in follow-tail mode
 	Ratio      float64 // split ratio for the origin pane (0 = default 0.5)
+	Focus      bool    // true = steal focus to the viewport; false = keep focus on originator
 }
 
 // SplitViewportCloseRequestMsg is emitted by a sub-TUI to request that the
