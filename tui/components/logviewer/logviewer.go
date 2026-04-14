@@ -40,7 +40,11 @@ type Model struct {
 
 // New creates a new log viewer model.
 func New(width, height int) Model {
-	vp := viewport.New(width, height-1) // Leave space for a status bar
+	vpHeight := height - 1 // Leave space for a status bar
+	if vpHeight < 0 {
+		vpHeight = 0
+	}
+	vp := viewport.New(width, vpHeight)
 	return Model{
 		viewport:   vp,
 		mu:         &sync.Mutex{},
@@ -192,6 +196,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - 1
+		if m.viewport.Height < 0 {
+			m.viewport.Height = 0
+		}
 		m.ready = true
 		m.setWrappedContent()
 	case LogLineMsg:
