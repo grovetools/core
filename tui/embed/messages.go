@@ -112,6 +112,7 @@ type SplitEditorRequestMsg struct {
 	Path  string  // file to open
 	Line  int     // optional line number to jump to (0 = don't jump)
 	Ratio float64 // split ratio for the origin pane (0 = default 0.5)
+	Focus bool    // if true, focus the editor; if false, keep focus on origin
 }
 
 // SplitEditorClosedMsg is sent when the editor pane created by a
