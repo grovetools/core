@@ -304,6 +304,8 @@ type PTYCreateRequest struct {
 	Label     string            `json:"label,omitempty"`
 	SessionID string            `json:"session_id,omitempty"`
 	CreatedBy string            `json:"created_by,omitempty"`
+	Command   string            `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
 }
 
 // PTYSessionInfo is the client-side representation of a daemon PTY session.

@@ -34,6 +34,9 @@ type Session struct {
 	ClaudeSessionID string `json:"claude_session_id,omitempty" db:"claude_session_id"`
 	Provider        string `json:"provider,omitempty" db:"provider"`
 
+	// Daemon PTY session ID for agent processes owned by groved.
+	PtyID string `json:"pty_id,omitempty" db:"pty_id"`
+
 	// Channel & Autonomous support
 	Channels       []string          `json:"channels,omitempty" db:"-"`
 	Autonomous     *AutonomousConfig `json:"autonomous,omitempty" db:"-"`
