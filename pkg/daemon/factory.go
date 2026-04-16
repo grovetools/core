@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/grovetools/core/pkg/paths"
@@ -109,10 +110,14 @@ func autoStartDaemon() bool {
 		}
 	}
 
-	// Start daemon in background
+	// Start daemon in background, detached into its own session so it survives
+	// the parent terminal's exit. Without Setsid, groved shares the terminal's
+	// process group and receives SIGHUP when the terminal closes, which triggers
+	// ptyManager.Shutdown() and kills every agent PTY the daemon owns.
 	cmd := exec.Command(grovedPath)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	if err := cmd.Start(); err != nil {
 		return false
