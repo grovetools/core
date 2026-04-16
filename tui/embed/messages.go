@@ -40,6 +40,14 @@ type EditRequestMsg struct {
 	Path string
 }
 
+// InlineEditRequestMsg is emitted by a sub-TUI when it wants the host to
+// open a file in an editor *in place* — replacing the emitting panel's BSP
+// node with an ephemeral EditorPanel. When the editor exits, the host swaps
+// the original panel back. This avoids opening a new window/tab in the rail.
+type InlineEditRequestMsg struct {
+	Path string
+}
+
 // EditFinishedMsg is sent by the host back to the sub-TUI once the editor closes,
 // signaling that the file may have changed and the sub-TUI should refresh.
 type EditFinishedMsg struct {
