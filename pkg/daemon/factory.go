@@ -128,16 +128,10 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 // autoStartDaemon attempts to start the daemon in the background for the
 // given scope. Returns true if the daemon was successfully started.
 //
-// NOTE (P1): the --scope/--socket/--pidfile/--auto-shutdown flags are added
-// to `groved start` in P2. Until P2 lands, we spawn the daemon WITHOUT those
-// flags and accept that the auto-started daemon will bind the global
-// (unscoped) socket. The scope/socket/pidPath args are recorded here so
-// P2's agent can flip a single line and get the scoped dispatch path.
+// Spawns groved with explicit --scope/--socket/--pidfile/--auto-shutdown
+// so the auto-started daemon binds the scope-keyed paths and exits on
+// idle. Empty scope falls through to groved's own unscoped defaults.
 func autoStartDaemon(scope, socketPath, pidPath string) bool {
-	_ = scope
-	_ = socketPath
-	_ = pidPath
-
 	// Look for groved binary
 	grovedPath, err := exec.LookPath("groved")
 	if err != nil {
@@ -162,7 +156,17 @@ func autoStartDaemon(scope, socketPath, pidPath string) bool {
 	// the parent terminal's exit. Without Setsid, groved shares the terminal's
 	// process group and receives SIGHUP when the terminal closes, which triggers
 	// ptyManager.Shutdown() and kills every agent PTY the daemon owns.
-	cmd := exec.Command(grovedPath)
+	args := []string{"start", "--auto-shutdown"}
+	if scope != "" {
+		args = append(args, "--scope", scope)
+	}
+	if socketPath != "" {
+		args = append(args, "--socket", socketPath)
+	}
+	if pidPath != "" {
+		args = append(args, "--pidfile", pidPath)
+	}
+	cmd := exec.Command(grovedPath, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
