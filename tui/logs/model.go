@@ -91,6 +91,33 @@ const (
 	viewportPane
 )
 
+// LogScope selects which log sources the viewer tails and displays.
+// Project shows only the active workspace's logs; Ecosystem shows every
+// workspace plus system logs; System shows only the central daemon log
+// stream. The scope is mutable at runtime via the ToggleScope keybinding.
+type LogScope int
+
+const (
+	ScopeProject LogScope = iota
+	ScopeEcosystem
+	ScopeSystem
+)
+
+// String returns the human-readable label used in the status bar and
+// status messages.
+func (s LogScope) String() string {
+	switch s {
+	case ScopeProject:
+		return "Project"
+	case ScopeEcosystem:
+		return "Ecosystem"
+	case ScopeSystem:
+		return "System"
+	default:
+		return "Unknown"
+	}
+}
+
 // logKeyMapT is an internal alias for the shared logs keymap type.
 type logKeyMapT = logskeymap.LogKeyMap
 
@@ -381,9 +408,8 @@ type Model struct {
 	// Filter config
 	logConfig     *logging.Config
 	overrideOpts  *logging.OverrideOptions
-	systemOnly    bool
+	activeScope   LogScope
 	includeSystem bool
-	ecosystem     bool
 
 	// wsCtx is a sub-context of ctx that bounds the lifetime of the
 	// per-workspace tailing goroutines. When SetWorkspaceMsg rotates
@@ -457,11 +483,17 @@ func New(ctx context.Context, cfg Config) *Model {
 		logChan:           make(chan logutil.TailedLine, 100),
 		logConfig:         logCfg,
 		overrideOpts:      cfg.OverrideOpts,
-		systemOnly:        cfg.SystemOnly,
 		includeSystem:     cfg.IncludeSystem,
-		ecosystem:         cfg.Ecosystem,
 		tailedFiles:       make(map[string]bool),
 		workspaceColorMap: make(map[string]lipgloss.Style),
+	}
+	switch {
+	case cfg.SystemOnly:
+		m.activeScope = ScopeSystem
+	case cfg.Ecosystem:
+		m.activeScope = ScopeEcosystem
+	default:
+		m.activeScope = ScopeProject
 	}
 	// Initialize the per-workspace sub-context that tailing goroutines
 	// bind to. Rotated on every workspace switch via SetWorkspaceMsg.
@@ -617,16 +649,21 @@ func (m *Model) discoverAndTailFiles() {
 	}
 	var dirs []dirEntry
 
-	if !m.systemOnly {
-		if !m.cfg.Ecosystem && m.activeWorkspacePath != "" {
-			// Mode 2: single-workspace embed.
+	switch m.activeScope {
+	case ScopeSystem:
+		// Skip workspace discovery — system logs tailed below.
+	case ScopeProject:
+		if m.activeWorkspacePath != "" {
+			// Single-workspace embed mode.
 			dirs = append(dirs, dirEntry{
 				dir:    filepath.Join(m.activeWorkspacePath, ".grove", "logs"),
 				wsName: m.resolveWorkspaceName(m.activeWorkspacePath),
 				wsPath: m.activeWorkspacePath,
 			})
 		} else {
-			// Mode 1 & 3: tail everything from GetWorkspaces.
+			// CLI fallback: no active workspace path — tail everything
+			// from GetWorkspaces so `core logs --tui` preserves its
+			// pre-extraction multi-workspace behavior.
 			var workspaces []*workspace.WorkspaceNode
 			if m.cfg.GetWorkspaces != nil {
 				workspaces = m.cfg.GetWorkspaces()
@@ -642,6 +679,21 @@ func (m *Model) discoverAndTailFiles() {
 				})
 			}
 		}
+	case ScopeEcosystem:
+		var workspaces []*workspace.WorkspaceNode
+		if m.cfg.GetWorkspaces != nil {
+			workspaces = m.cfg.GetWorkspaces()
+		}
+		for _, ws := range workspaces {
+			if ws == nil {
+				continue
+			}
+			dirs = append(dirs, dirEntry{
+				dir:    filepath.Join(ws.Path, ".grove", "logs"),
+				wsName: ws.Name,
+				wsPath: ws.Path,
+			})
+		}
 	}
 
 	for _, d := range dirs {
@@ -652,10 +704,9 @@ func (m *Model) discoverAndTailFiles() {
 		m.startTailing(wsCtx, latest, d.wsName, d.wsPath)
 	}
 
-	// System logs: only tail when the caller explicitly opted in, so
-	// the default embed panel isn't paying for a tailer it will filter
-	// away anyway.
-	if m.cfg.Ecosystem || m.systemOnly || m.includeSystem {
+	// System logs: tail whenever the scope requires them, or the caller
+	// explicitly opted in via IncludeSystem.
+	if m.activeScope == ScopeSystem || m.activeScope == ScopeEcosystem || m.includeSystem {
 		systemLogsDir := logutil.GetSystemLogsDir()
 		if latest, err := logutil.FindLatestLogFile(systemLogsDir); err == nil {
 			m.startTailing(wsCtx, latest, "system", "")
@@ -768,23 +819,23 @@ func (m *Model) workspaceStyleFor(ws string) lipgloss.Style {
 }
 
 // matchesActiveFilter returns true when the given item should be
-// visible under the current workspace filter. Ecosystem mode shows
-// everything; otherwise we include items whose workspace path matches
-// the current active path, plus system entries that lack a path (they
-// are either fully-system or the user explicitly opted in).
+// visible under the current active scope.
 func (m *Model) matchesActiveFilter(it logItem) bool {
-	if m.cfg.Ecosystem {
+	switch m.activeScope {
+	case ScopeEcosystem:
 		return true
+	case ScopeSystem:
+		return it.workspacePath == ""
+	case ScopeProject:
+		if it.workspacePath == "" {
+			return m.includeSystem || m.activeWorkspacePath == ""
+		}
+		if m.activeWorkspacePath == "" {
+			return true
+		}
+		return it.workspacePath == m.activeWorkspacePath
 	}
-	if it.workspacePath == "" {
-		// System entries: show only when ecosystem or explicit
-		// includeSystem, or when there's no active filter at all.
-		return m.includeSystem || m.activeWorkspacePath == ""
-	}
-	if m.activeWorkspacePath == "" {
-		return true
-	}
-	return it.workspacePath == m.activeWorkspacePath
+	return false
 }
 
 // rebuildVisible recomputes m.visible from m.items under the current
@@ -1185,6 +1236,34 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, m.clearStatusMessageAfter(2 * time.Second)
 
+			case key.Matches(msg, m.keys.ToggleScope):
+				// Cycle: Project -> Ecosystem -> System -> Project.
+				switch m.activeScope {
+				case ScopeProject:
+					m.activeScope = ScopeEcosystem
+				case ScopeEcosystem:
+					m.activeScope = ScopeSystem
+				case ScopeSystem:
+					m.activeScope = ScopeProject
+				}
+				m.statusMessage = fmt.Sprintf("Scope: %s", m.activeScope)
+
+				// Cancel current tailers, reset the ledger, and drop
+				// accumulated items so the new scope starts fresh rather
+				// than leaving stale entries in the view.
+				m.rotateWorkspaceCtx()
+				m.tailedFilesMu.Lock()
+				m.tailedFiles = make(map[string]bool)
+				m.tailedFilesMu.Unlock()
+				m.items = nil
+				m.visible = m.visible[:0]
+				m.list.SetItems(m.visible)
+
+				// Discover synchronously so the panel doesn't sit empty
+				// for a full discovery tick after the keypress.
+				m.discoverAndTailFiles()
+				return m, m.clearStatusMessageAfter(2 * time.Second)
+
 			case key.Matches(msg, m.keys.ViewJSON):
 				if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 					if li, ok := selectedItem.(logItem); ok {
@@ -1269,20 +1348,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		component, _ := msg.data["component"].(string)
 		timeStr, _ := msg.data["time"].(string)
 
-		// Filter system log entries (mirrors the CLI path)
+		// Drop entries that the active scope would never display. We
+		// keep them out of m.items (not just m.visible) to avoid piling
+		// up unbounded memory under long sessions. matchesActiveFilter
+		// handles the final visibility decision further down.
 		if msg.workspace == "system" {
 			wsContext, _ := msg.data["workspace"].(string)
-			if !m.systemOnly {
-				if wsContext != "" {
-					// With dynamic workspace sets the filter is best-effort
-					// — we accept any workspace name here since the
-					// workspacePath tag already narrows the scope.
-					_ = wsContext
-				} else if !m.includeSystem && !m.ecosystem {
-					return m, m.waitForLogs()
-				}
+			if wsContext == "" && m.activeScope == ScopeProject && !m.includeSystem {
+				return m, m.waitForLogs()
 			}
-		} else if m.systemOnly {
+		} else if m.activeScope == ScopeSystem {
 			return m, m.waitForLogs()
 		}
 
@@ -1449,6 +1524,8 @@ func (m *Model) View() string {
 		}
 	}
 
+	scopeIndicator := fmt.Sprintf(" [Scope: %s]", m.activeScope)
+
 	modeIndicator := ""
 	if m.jsonView {
 		modeIndicator = " [JSON VIEW - esc to exit]"
@@ -1460,8 +1537,8 @@ func (m *Model) View() string {
 		modeIndicator = fmt.Sprintf(" [%s]", m.statusMessage)
 	}
 
-	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s | ? for help | q to quit",
-		position, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
+	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s | ? for help | q to quit",
+		position, scopeIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
 
 	// Drawer-geometry fix: at very small heights we show only the list
 	// pane plus the status bar. This keeps rendering sensible even in a
