@@ -7,6 +7,9 @@
 package paths
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -138,13 +141,33 @@ func RuntimeDir() string {
 }
 
 // SocketPath returns the path to the grove daemon unix socket.
-func SocketPath() string {
-	return filepath.Join(RuntimeDir(), "groved.sock")
+//
+// With no scope (or an empty scope), returns the legacy unscoped path
+// (RuntimeDir()/groved.sock). With a non-empty scope, returns a scoped
+// path of the form RuntimeDir()/groved-<basename>-<8charSHA256>.sock,
+// so each ecosystem/project can bind its own daemon without colliding.
+func SocketPath(scope ...string) string {
+	return scopedPath(RuntimeDir(), "groved", ".sock", scope)
 }
 
 // PidFilePath returns the path to the grove daemon PID file.
-func PidFilePath() string {
-	return filepath.Join(StateDir(), "groved.pid")
+//
+// Variadic scope argument mirrors SocketPath — no scope yields the
+// legacy unscoped path; a non-empty scope produces a per-scope filename
+// under StateDir().
+func PidFilePath(scope ...string) string {
+	return scopedPath(StateDir(), "groved", ".pid", scope)
+}
+
+// scopedPath builds either the legacy unscoped path ("<base><ext>") or a
+// scope-keyed path ("<base>-<name>-<hash><ext>") under dir.
+func scopedPath(dir, base, ext string, scope []string) string {
+	if len(scope) == 0 || scope[0] == "" {
+		return filepath.Join(dir, base+ext)
+	}
+	sum := sha256.Sum256([]byte(scope[0]))
+	return filepath.Join(dir, fmt.Sprintf("%s-%s-%s%s",
+		base, filepath.Base(scope[0]), hex.EncodeToString(sum[:])[:8], ext))
 }
 
 // SSHHostKeyPath returns the default path for the SSH host key.

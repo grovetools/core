@@ -8,39 +8,77 @@ import (
 	"time"
 
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/sirupsen/logrus"
 )
+
+// groveScopeEnv is the env-var override for scope resolution, used when
+// the caller can't pass an explicit dir (e.g. subprocess of treemux).
+const groveScopeEnv = "GROVE_SCOPE"
+
+// resolveDir picks the input directory for scope resolution.
+// Order: explicit arg > GROVE_SCOPE env > os.Getwd().
+func resolveDir(dirs []string) string {
+	if len(dirs) > 0 && dirs[0] != "" {
+		return dirs[0]
+	}
+	if scope := os.Getenv(groveScopeEnv); scope != "" {
+		return scope
+	}
+	cwd, _ := os.Getwd()
+	return cwd
+}
+
+// resolveScopedTargets returns the scope, socket path, and pidfile path for
+// the given caller directory, logging the decision at INFO so mis-routing
+// is visible in logs.
+func resolveScopedTargets(dir string) (scope, socketPath, pidPath string) {
+	scope = workspace.ResolveScope(dir)
+	socketPath = paths.SocketPath(scope)
+	pidPath = paths.PidFilePath(scope)
+	logrus.Debugf("daemon client: scope=%s socket=%s", scope, socketPath)
+	return scope, socketPath, pidPath
+}
 
 // New returns a Client that will use the daemon if available,
 // otherwise falls back to LocalClient.
 //
+// With no argument, the scope is resolved from GROVE_SCOPE env var or the
+// current working directory. Pass an explicit dir when the caller cannot
+// rely on cwd (e.g. operating on a specific plan directory).
+//
 // This implements the "transparent daemon" pattern: callers don't need
 // to know whether the daemon is running or not. The same API works
 // in both modes.
-func New() Client {
-	socketPath := paths.SocketPath()
+func New(dir ...string) Client {
+	resolvedDir := resolveDir(dir)
+	_, socketPath, _ := resolveScopedTargets(resolvedDir)
 
-	// Try to connect to existing daemon
+	// Try to connect to existing scoped daemon
 	if client := tryConnect(socketPath); client != nil {
 		return client
 	}
 
-	// Fallback: daemon not running, use local client
+	// Fallback: daemon not running, use local client.
+	// Intentionally no global-socket fallback: one scope → one socket,
+	// keeping the "which daemon am I talking to?" question unambiguous.
 	return NewLocalClient()
 }
 
 // NewWithAutoStart returns a Client, attempting to auto-start the daemon if not running.
 // This is the recommended factory for tools that benefit from daemon features (flow, hooks).
 // If auto-start fails, it falls back to LocalClient gracefully.
-func NewWithAutoStart() Client {
-	socketPath := paths.SocketPath()
+func NewWithAutoStart(dir ...string) Client {
+	resolvedDir := resolveDir(dir)
+	scope, socketPath, pidPath := resolveScopedTargets(resolvedDir)
 
 	// Try to connect to existing daemon
 	if client := tryConnect(socketPath); client != nil {
 		return client
 	}
 
-	// Daemon not running, try to auto-start it
-	if autoStartDaemon() {
+	// Daemon not running, try to auto-start it for this scope
+	if autoStartDaemon(scope, socketPath, pidPath) {
 		// Retry connection after auto-start
 		if client := tryConnectWithRetry(socketPath, 5, 100*time.Millisecond); client != nil {
 			return client
@@ -87,9 +125,19 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 	return nil
 }
 
-// autoStartDaemon attempts to start the daemon in the background.
-// Returns true if the daemon was successfully started.
-func autoStartDaemon() bool {
+// autoStartDaemon attempts to start the daemon in the background for the
+// given scope. Returns true if the daemon was successfully started.
+//
+// NOTE (P1): the --scope/--socket/--pidfile/--auto-shutdown flags are added
+// to `groved start` in P2. Until P2 lands, we spawn the daemon WITHOUT those
+// flags and accept that the auto-started daemon will bind the global
+// (unscoped) socket. The scope/socket/pidPath args are recorded here so
+// P2's agent can flip a single line and get the scoped dispatch path.
+func autoStartDaemon(scope, socketPath, pidPath string) bool {
+	_ = scope
+	_ = socketPath
+	_ = pidPath
+
 	// Look for groved binary
 	grovedPath, err := exec.LookPath("groved")
 	if err != nil {
@@ -133,8 +181,8 @@ func autoStartDaemon() bool {
 
 // MustConnect returns a DaemonClient or panics if the daemon is not available.
 // Use this in contexts where the daemon is required (e.g., daemon-only tools).
-func MustConnect() Client {
-	client := New()
+func MustConnect(dir ...string) Client {
+	client := New(dir...)
 	if !client.IsRunning() {
 		panic("grove daemon is not running; start it with 'grove daemon start'")
 	}
@@ -150,9 +198,9 @@ type WithFallback struct {
 
 // NewWithFallback creates a client that tries the daemon first,
 // then falls back to local execution.
-func NewWithFallback() *WithFallback {
+func NewWithFallback(dir ...string) *WithFallback {
 	return &WithFallback{
-		Primary:  New(),
+		Primary:  New(dir...),
 		Fallback: NewLocalClient(),
 	}
 }
