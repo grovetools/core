@@ -45,7 +45,7 @@ func ResolveScope(dir string) string {
 
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return dir
+		return ""
 	}
 
 	if node, err := GetProjectByPath(absDir); err == nil && node != nil {
@@ -69,5 +69,9 @@ func ResolveScope(dir string) string {
 		return root
 	}
 
-	return absDir
+	// No ecosystem and no git context — return empty so callers know to
+	// fall back to the global (unscoped) daemon rather than treating the
+	// raw absolute path as a "scope". Avoids spawning ad-hoc per-dir
+	// daemons when the user runs tools from unrelated directories.
+	return ""
 }

@@ -19,25 +19,36 @@ import (
 const groveScopeEnv = "GROVE_SCOPE"
 
 // resolveDir picks the input directory for scope resolution.
-// Order: explicit arg > GROVE_SCOPE env > os.Getwd().
+//
+// Order: explicit arg > GROVE_SCOPE env > empty.
+//
+// We intentionally do NOT fall through to os.Getwd(). Clients that run
+// in arbitrary directories (ad-hoc CLI invocations from random shells,
+// hook subprocesses, etc) should default to the global/unscoped daemon
+// rather than spawning per-cwd daemons keyed to wherever they happened
+// to launch. To opt in to a scoped daemon, callers must either pass a
+// dir explicitly or export GROVE_SCOPE — and the only places that do
+// so are the explicit scope-aware boundaries (treemux startup, flow
+// agent launchers).
 func resolveDir(dirs []string) string {
 	if len(dirs) > 0 && dirs[0] != "" {
 		return dirs[0]
 	}
-	if scope := os.Getenv(groveScopeEnv); scope != "" {
-		return scope
-	}
-	cwd, _ := os.Getwd()
-	return cwd
+	return os.Getenv(groveScopeEnv)
 }
 
 // ResolveClientScope returns the effective scope a daemon client would
-// use right now — applying the same precedence as New(): GROVE_SCOPE
-// env var falls through to os.Getwd(). Exposed for direct-socket
+// use right now — applying the same precedence as New(): explicit arg
+// > GROVE_SCOPE env > empty (global). Exposed for direct-socket
 // callers (treemux's WebSocket connect, inspector panel) that bypass
-// the Client abstraction but still need the scoped socket path.
+// the Client abstraction but still need the scoped socket path. Empty
+// return means "use the global/unscoped socket."
 func ResolveClientScope() string {
-	return workspace.ResolveScope(resolveDir(nil))
+	dir := resolveDir(nil)
+	if dir == "" {
+		return ""
+	}
+	return workspace.ResolveScope(dir)
 }
 
 // resolveScopedTargets returns the scope, socket path, and pidfile path for
