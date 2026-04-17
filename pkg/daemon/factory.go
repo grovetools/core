@@ -52,6 +52,7 @@ func resolveScopedTargets(dir string) (scope, socketPath, pidPath string) {
 		Field("scope", scope).
 		Field("socket", socketPath).
 		Field("input_dir", dir).
+		StructuredOnly().
 		Log(context.Background())
 	return scope, socketPath, pidPath
 }
@@ -159,6 +160,7 @@ func autoStartDaemon(scope, socketPath, pidPath string) bool {
 		Field("socket", socketPath).
 		Field("pidfile", pidPath).
 		Field("stack", string(debug.Stack())).
+		StructuredOnly().
 		Log(context.Background())
 
 	// Look for groved binary
