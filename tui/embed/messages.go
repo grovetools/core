@@ -29,6 +29,17 @@ type FocusMsg struct{}
 type BlurMsg struct{}
 
 // SetWorkspaceMsg informs a workspace-scoped sub-TUI to repoint at a new workspace.
+//
+// Convention for embedded TUIs: never call os.Getwd() to resolve "the
+// user's current workspace." Inside long-lived hosts like treemux, the
+// process cwd is pinned to the host's launch directory and does not
+// follow in-process workspace switches. Instead, store msg.Node.Path on
+// the Model when this message arrives and use that tracked field for any
+// workspace-relative path resolution. Seed the field at construction
+// time from a config option (e.g. ActiveWorkspacePath) so the first
+// render is correct even before the host broadcasts its first switch.
+// Fall back to os.Getwd() only for standalone CLI invocations where no
+// host will ever send SetWorkspaceMsg.
 type SetWorkspaceMsg struct {
 	Node *workspace.WorkspaceNode
 }
