@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -149,6 +150,39 @@ func (c *RemoteClient) GetNoteCounts(ctx context.Context) (map[string]*models.No
 		}
 	}
 	return counts, nil
+}
+
+// GetPlansRaw fetches the cached plan list for the given plansDir from
+// the daemon and returns the raw JSON body. The caller decodes into its
+// own plan type (typically flow's orchestration.Plan) — see the Client
+// interface comment for why the payload type doesn't live here.
+func (c *RemoteClient) GetPlansRaw(ctx context.Context, planDir string) ([]byte, error) {
+	reqURL := baseURL + "/api/plans?dir=" + url.QueryEscape(planDir)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plans from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Stale groved binary without the /api/plans endpoint. Signal
+		// "no daemon data" so callers fall back to a local scan.
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read plans response: %w", err)
+	}
+	return body, nil
 }
 
 // GetSessions returns active sessions from the daemon.

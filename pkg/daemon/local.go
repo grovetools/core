@@ -63,6 +63,13 @@ func (c *LocalClient) GetNoteCounts(ctx context.Context) (map[string]*models.Not
 	return make(map[string]*models.NoteCounts), nil
 }
 
+// GetPlansRaw returns nil, nil when the daemon is unavailable. Callers
+// are expected to fall back to a direct filesystem scan using their
+// own plan-loading code (flow's orchestration.LoadPlan).
+func (c *LocalClient) GetPlansRaw(ctx context.Context, planDir string) ([]byte, error) {
+	return nil, nil
+}
+
 // GetSessions returns active sessions from all sources.
 // This uses the comprehensive DiscoverAll function which aggregates:
 // - Interactive sessions (from ~/.grove/hooks/sessions)

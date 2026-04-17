@@ -59,6 +59,16 @@ type Client interface {
 	// GetPlanStats returns aggregated plan statistics indexed by workspace path.
 	GetPlanStats(ctx context.Context) (map[string]*models.PlanStats, error)
 
+	// GetPlansRaw returns the daemon's cached plan list for a given
+	// plansDir as raw JSON bytes. The caller decodes into its own
+	// plan type to avoid pulling the heavy orchestration package into
+	// core's dependency graph (flow already imports core, so core
+	// cannot import flow/pkg/orchestration in the Client surface
+	// without creating an import cycle). Returns nil, nil when the
+	// daemon is unavailable so callers can fall back to an in-process
+	// scan.
+	GetPlansRaw(ctx context.Context, planDir string) ([]byte, error)
+
 	// GetNoteCounts returns aggregated note counts indexed by workspace name.
 	GetNoteCounts(ctx context.Context) (map[string]*models.NoteCounts, error)
 
