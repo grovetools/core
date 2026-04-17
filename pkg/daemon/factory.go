@@ -52,11 +52,17 @@ func ResolveClientScope() string {
 }
 
 // resolveScopedTargets returns the scope, socket path, and pidfile path for
-// the given caller directory, logging the decision so mis-routing is
-// visible via `core logs --component daemon.factory`.
+// the given caller directory.
+//
+// Empty dir means "no scope intended" — resolves to the global/unscoped
+// socket. We do NOT call workspace.ResolveScope("") here, because that
+// function falls back to os.Getwd() when given empty input, which would
+// reintroduce the very cwd inference we removed from resolveDir.
 func resolveScopedTargets(dir string) (scope, socketPath, pidPath string) {
 	ulog := logging.NewUnifiedLogger("daemon.factory")
-	scope = workspace.ResolveScope(dir)
+	if dir != "" {
+		scope = workspace.ResolveScope(dir)
+	}
 	socketPath = paths.SocketPath(scope)
 	pidPath = paths.PidFilePath(scope)
 	ulog.Debug("resolved daemon scope").
