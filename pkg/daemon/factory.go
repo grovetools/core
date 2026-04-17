@@ -1,15 +1,17 @@
 package daemon
 
 import (
+	"context"
 	"net"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"syscall"
 	"time"
 
+	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/sirupsen/logrus"
 )
 
 // groveScopeEnv is the env-var override for scope resolution, used when
@@ -29,14 +31,28 @@ func resolveDir(dirs []string) string {
 	return cwd
 }
 
+// ResolveClientScope returns the effective scope a daemon client would
+// use right now — applying the same precedence as New(): GROVE_SCOPE
+// env var falls through to os.Getwd(). Exposed for direct-socket
+// callers (treemux's WebSocket connect, inspector panel) that bypass
+// the Client abstraction but still need the scoped socket path.
+func ResolveClientScope() string {
+	return workspace.ResolveScope(resolveDir(nil))
+}
+
 // resolveScopedTargets returns the scope, socket path, and pidfile path for
-// the given caller directory, logging the decision at INFO so mis-routing
-// is visible in logs.
+// the given caller directory, logging the decision so mis-routing is
+// visible via `core logs --component daemon.factory`.
 func resolveScopedTargets(dir string) (scope, socketPath, pidPath string) {
+	ulog := logging.NewUnifiedLogger("daemon.factory")
 	scope = workspace.ResolveScope(dir)
 	socketPath = paths.SocketPath(scope)
 	pidPath = paths.PidFilePath(scope)
-	logrus.Debugf("daemon client: scope=%s socket=%s", scope, socketPath)
+	ulog.Debug("resolved daemon scope").
+		Field("scope", scope).
+		Field("socket", socketPath).
+		Field("input_dir", dir).
+		Log(context.Background())
 	return scope, socketPath, pidPath
 }
 
@@ -132,6 +148,19 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 // so the auto-started daemon binds the scope-keyed paths and exits on
 // idle. Empty scope falls through to groved's own unscoped defaults.
 func autoStartDaemon(scope, socketPath, pidPath string) bool {
+	// Diagnostic: log the caller stack so we can trace which tool is
+	// triggering a scoped-daemon auto-spawn. View with:
+	//   core logs --component daemon.factory -f
+	// Temporary — remove once the "unexpected scoped daemon on treemux
+	// start" investigation concludes.
+	ulog := logging.NewUnifiedLogger("daemon.factory")
+	ulog.Info("daemon auto-start").
+		Field("scope", scope).
+		Field("socket", socketPath).
+		Field("pidfile", pidPath).
+		Field("stack", string(debug.Stack())).
+		Log(context.Background())
+
 	// Look for groved binary
 	grovedPath, err := exec.LookPath("groved")
 	if err != nil {
