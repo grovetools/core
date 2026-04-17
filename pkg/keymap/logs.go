@@ -25,6 +25,7 @@ type LogKeyMap struct {
 	VisualModeStart key.Binding
 	Yank            key.Binding
 	SwitchFocus     key.Binding
+	ToggleScope     key.Binding
 }
 
 // NewLogKeyMap creates a new LogKeyMap with user configuration applied.
@@ -91,6 +92,10 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch focus"),
 		),
+		ToggleScope: key.NewBinding(
+			key.WithKeys("s", "S"),
+			key.WithHelp("s", "toggle scope"),
+		),
 	}
 
 	// Apply TUI-specific overrides from config
@@ -101,7 +106,7 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 
 // ShortHelp returns keybindings to be shown in the mini help view.
 func (k LogKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleFollow, k.ToggleFilters, k.Search}
+	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleFollow, k.ToggleFilters, k.ToggleScope, k.Search}
 }
 
 // FullHelp returns keybindings for the expanded help view.
@@ -121,6 +126,7 @@ func (k LogKeyMap) FullHelp() [][]key.Binding {
 			k.SwitchFocus,
 			k.ToggleFollow,
 			k.ToggleFilters,
+			k.ToggleScope,
 			k.Search,
 			k.ViewJSON,
 			k.VisualModeStart,
