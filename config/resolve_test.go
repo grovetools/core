@@ -140,6 +140,226 @@ func TestResolveEnvironment_NilDefault(t *testing.T) {
 	}
 }
 
+// TestResolveEnvironmentWithProvenance_NotebookOverridesEcosystem verifies a
+// project-notebook layer overrides ecosystem defaults and that provenance
+// reflects the correct origin for each key.
+func TestResolveEnvironmentWithProvenance_NotebookOverridesEcosystem(t *testing.T) {
+	layered := &LayeredConfig{
+		Ecosystem: &Config{
+			Environment: &EnvironmentConfig{
+				Provider: "native",
+				Config: map[string]interface{}{
+					"services": map[string]interface{}{
+						"api": map[string]interface{}{
+							"command": "cargo run",
+							"port":    8080,
+						},
+					},
+				},
+				Commands: map[string]string{"build": "make build"},
+			},
+		},
+		ProjectNotebook: &Config{
+			Environment: &EnvironmentConfig{
+				Config: map[string]interface{}{
+					"services": map[string]interface{}{
+						"api": map[string]interface{}{
+							"port": 9090,
+						},
+					},
+				},
+				Commands: map[string]string{"logs": "tail -f /tmp/logs"},
+			},
+		},
+	}
+
+	resolved, prov, deleted, err := ResolveEnvironmentWithProvenance(layered, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.Provider != "native" {
+		t.Errorf("expected provider native, got %q", resolved.Provider)
+	}
+	api := resolved.Config["services"].(map[string]interface{})["api"].(map[string]interface{})
+	if api["command"] != "cargo run" {
+		t.Errorf("expected ecosystem command inherited, got %v", api["command"])
+	}
+	if api["port"] != 9090 {
+		t.Errorf("expected notebook port override, got %v", api["port"])
+	}
+
+	if got := prov["provider"]; got != "ecosystem (environment)" {
+		t.Errorf("expected provider prov = ecosystem, got %q", got)
+	}
+	if got := prov["config.services.api.command"]; got != "ecosystem (environment)" {
+		t.Errorf("expected api.command ecosystem, got %q", got)
+	}
+	if got := prov["config.services.api.port"]; got != "project-notebook (environment)" {
+		t.Errorf("expected api.port project-notebook, got %q", got)
+	}
+	if got := prov["commands.build"]; got != "ecosystem (environment)" {
+		t.Errorf("expected commands.build ecosystem, got %q", got)
+	}
+	if got := prov["commands.logs"]; got != "project-notebook (environment)" {
+		t.Errorf("expected commands.logs project-notebook, got %q", got)
+	}
+	if len(deleted) != 0 {
+		t.Errorf("expected no deletions, got %v", deleted)
+	}
+}
+
+// TestResolveEnvironmentWithProvenance_NamedProfileDelete verifies that a
+// named profile can drop inherited blocks with _delete = true and that the
+// deleted map records the dropping layer.
+func TestResolveEnvironmentWithProvenance_NamedProfileDelete(t *testing.T) {
+	layered := &LayeredConfig{
+		Project: &Config{
+			Environment: &EnvironmentConfig{
+				Provider: "native",
+				Config: map[string]interface{}{
+					"services": map[string]interface{}{
+						"clickhouse": map[string]interface{}{"command": "clickhouse server"},
+						"api":        map[string]interface{}{"command": "cargo run"},
+					},
+				},
+			},
+			Environments: map[string]*EnvironmentConfig{
+				"hybrid-api": {
+					Provider: "terraform",
+					Config: map[string]interface{}{
+						"services": map[string]interface{}{
+							"clickhouse": map[string]interface{}{"_delete": true},
+							"web":        map[string]interface{}{"command": "npm run dev"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	resolved, prov, deleted, err := ResolveEnvironmentWithProvenance(layered, "hybrid-api")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.Provider != "terraform" {
+		t.Errorf("expected provider terraform from profile overlay, got %q", resolved.Provider)
+	}
+	services := resolved.Config["services"].(map[string]interface{})
+	if _, present := services["clickhouse"]; present {
+		t.Errorf("expected services.clickhouse dropped")
+	}
+	if _, present := services["api"]; !present {
+		t.Errorf("expected services.api inherited from default env")
+	}
+	if _, present := services["web"]; !present {
+		t.Errorf("expected services.web added from hybrid-api profile")
+	}
+
+	if got := prov["provider"]; got != "project (environments.hybrid-api)" {
+		t.Errorf("expected provider prov = hybrid-api, got %q", got)
+	}
+	if got := prov["config.services.api.command"]; got != "project (environment)" {
+		t.Errorf("expected api.command default env prov, got %q", got)
+	}
+	if got := prov["config.services.web.command"]; got != "project (environments.hybrid-api)" {
+		t.Errorf("expected web.command profile prov, got %q", got)
+	}
+	if _, present := prov["config.services.clickhouse.command"]; present {
+		t.Errorf("expected clickhouse.command provenance pruned after delete")
+	}
+	if got := deleted["config.services.clickhouse"]; got != "project (environments.hybrid-api)" {
+		t.Errorf("expected delete recorded against profile layer, got %q", got)
+	}
+}
+
+// TestResolveEnvironmentWithProvenance_MultiLayerStack verifies a realistic
+// stack (ecosystem default + notebook overlay + project profile) produces
+// the correct per-key provenance across all three layers.
+func TestResolveEnvironmentWithProvenance_MultiLayerStack(t *testing.T) {
+	layered := &LayeredConfig{
+		Ecosystem: &Config{
+			Environment: &EnvironmentConfig{
+				Provider: "native",
+				Config: map[string]interface{}{
+					"domain": "grove.local",
+					"port":   8080,
+				},
+				Commands: map[string]string{"build": "make build"},
+			},
+		},
+		ProjectNotebook: &Config{
+			Environment: &EnvironmentConfig{
+				Config: map[string]interface{}{
+					"port": 9000,
+				},
+			},
+		},
+		Project: &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"cloud": {
+					Provider: "terraform",
+					Config: map[string]interface{}{
+						"port":   9090,
+						"region": "us-central1",
+					},
+					Commands: map[string]string{"deploy": "terraform apply"},
+				},
+			},
+		},
+	}
+
+	resolved, prov, _, err := ResolveEnvironmentWithProvenance(layered, "cloud")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.Provider != "terraform" {
+		t.Errorf("expected provider terraform, got %q", resolved.Provider)
+	}
+	if resolved.Config["domain"] != "grove.local" {
+		t.Errorf("expected domain inherited from ecosystem, got %v", resolved.Config["domain"])
+	}
+	if resolved.Config["port"] != 9090 {
+		t.Errorf("expected port overridden by profile, got %v", resolved.Config["port"])
+	}
+	if resolved.Config["region"] != "us-central1" {
+		t.Errorf("expected region from profile, got %v", resolved.Config["region"])
+	}
+
+	if got := prov["provider"]; got != "project (environments.cloud)" {
+		t.Errorf("expected provider prov = project profile, got %q", got)
+	}
+	if got := prov["config.domain"]; got != "ecosystem (environment)" {
+		t.Errorf("expected domain prov = ecosystem, got %q", got)
+	}
+	if got := prov["config.port"]; got != "project (environments.cloud)" {
+		t.Errorf("expected port prov = project profile, got %q", got)
+	}
+	if got := prov["config.region"]; got != "project (environments.cloud)" {
+		t.Errorf("expected region prov = project profile, got %q", got)
+	}
+	if got := prov["commands.build"]; got != "ecosystem (environment)" {
+		t.Errorf("expected build prov = ecosystem, got %q", got)
+	}
+	if got := prov["commands.deploy"]; got != "project (environments.cloud)" {
+		t.Errorf("expected deploy prov = project profile, got %q", got)
+	}
+}
+
+// TestResolveEnvironmentWithProvenance_MissingProfile errors when a profile
+// name is given but no layer defines it.
+func TestResolveEnvironmentWithProvenance_MissingProfile(t *testing.T) {
+	layered := &LayeredConfig{
+		Project: &Config{Environment: &EnvironmentConfig{Provider: "native"}},
+	}
+	_, _, _, err := ResolveEnvironmentWithProvenance(layered, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for missing profile")
+	}
+}
+
 func TestResolveEnvironment_DeepMergeConfig(t *testing.T) {
 	// Test that nested config maps are deep-merged, not replaced
 	cfg := &Config{

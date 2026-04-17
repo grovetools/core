@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // LoadWithOverrides loads configuration with override files
@@ -103,6 +104,94 @@ func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 		out[k] = vSrc
 	}
 	return out
+}
+
+// deepMergeMapsWithProvenance mirrors deepMergeMaps but also records which
+// layer contributed each leaf value. `sourceLabel` identifies the current src
+// layer (e.g. "project (environments.hybrid-api)"). `prefix` is the dotted
+// path prefix of the map being merged (e.g. "config" for an env Config map).
+// `prov` accumulates leaf path → sourceLabel; `deleted` accumulates paths
+// removed via the `_delete = true` sentinel, mapped to the layer that removed
+// them.
+//
+// This is additive: existing callers of deepMergeMaps remain unchanged.
+func deepMergeMapsWithProvenance(dst, src map[string]interface{}, sourceLabel, prefix string, prov, deleted map[string]string) map[string]interface{} {
+	out := make(map[string]interface{})
+	for k, v := range dst {
+		out[k] = v
+	}
+	for k, vSrc := range src {
+		currentPath := k
+		if prefix != "" {
+			currentPath = prefix + "." + k
+		}
+
+		// Delete sentinel: `_delete = true` drops the key and its subtree.
+		if mapSrc, ok := vSrc.(map[string]interface{}); ok {
+			if del, _ := mapSrc["_delete"].(bool); del {
+				delete(out, k)
+				prunePathAndDescendants(prov, deleted, currentPath)
+				deleted[currentPath] = sourceLabel
+				continue
+			}
+		}
+
+		if vDst, okDst := out[k]; okDst {
+			if mapDst, dstIsMap := vDst.(map[string]interface{}); dstIsMap {
+				if mapSrc, srcIsMap := vSrc.(map[string]interface{}); srcIsMap {
+					out[k] = deepMergeMapsWithProvenance(mapDst, mapSrc, sourceLabel, currentPath, prov, deleted)
+					continue
+				}
+			}
+		}
+
+		// Scalar, array, or map replacing a non-map (or unset). Prune any
+		// stale provenance under currentPath — we just replaced the subtree.
+		prunePathAndDescendants(prov, deleted, currentPath)
+		out[k] = vSrc
+
+		if mapSrc, ok := vSrc.(map[string]interface{}); ok {
+			recordMapProvenance(mapSrc, sourceLabel, currentPath, prov)
+		} else {
+			prov[currentPath] = sourceLabel
+		}
+	}
+	return out
+}
+
+// prunePathAndDescendants removes entries at `path` and any child of `path`
+// (i.e. keys beginning with `path + "."`) from both provenance maps.
+func prunePathAndDescendants(prov, deleted map[string]string, path string) {
+	delete(prov, path)
+	delete(deleted, path)
+	childPrefix := path + "."
+	for k := range prov {
+		if strings.HasPrefix(k, childPrefix) {
+			delete(prov, k)
+		}
+	}
+	for k := range deleted {
+		if strings.HasPrefix(k, childPrefix) {
+			delete(deleted, k)
+		}
+	}
+}
+
+// recordMapProvenance walks a fresh map and records leaf provenance for every
+// scalar or array value it contains at `sourceLabel`. Used when a whole
+// subtree is freshly introduced by a merge layer.
+func recordMapProvenance(m map[string]interface{}, sourceLabel, prefix string, prov map[string]string) {
+	for k, v := range m {
+		path := k
+		if prefix != "" {
+			path = prefix + "." + k
+		}
+		if inner, ok := v.(map[string]interface{}); ok {
+			recordMapProvenance(inner, sourceLabel, path, prov)
+			continue
+		}
+		prov[path] = sourceLabel
+	}
 }
 
 // mergeConfigs merges override configuration into base

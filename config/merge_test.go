@@ -698,6 +698,155 @@ func TestMergeEnvironmentDefault(t *testing.T) {
 	}
 }
 
+// TestDeepMergeMapsWithProvenance_OverlayWins verifies that a later layer's
+// scalar overrides an earlier layer's and that provenance tracks the last
+// writer.
+func TestDeepMergeMapsWithProvenance_OverlayWins(t *testing.T) {
+	dst := map[string]interface{}{
+		"services": map[string]interface{}{
+			"api": map[string]interface{}{
+				"command": "cargo run",
+				"port":    8080,
+			},
+		},
+	}
+	prov := map[string]string{
+		"config.services.api.command": "ecosystem (environment)",
+		"config.services.api.port":    "ecosystem (environment)",
+	}
+	deleted := map[string]string{}
+
+	src := map[string]interface{}{
+		"services": map[string]interface{}{
+			"api": map[string]interface{}{
+				"port": 9090,
+			},
+		},
+	}
+
+	merged := deepMergeMapsWithProvenance(dst, src, "project (environments.dev)", "config", prov, deleted)
+
+	services := merged["services"].(map[string]interface{})
+	api := services["api"].(map[string]interface{})
+	if api["command"] != "cargo run" {
+		t.Errorf("expected command inherited, got %v", api["command"])
+	}
+	if api["port"] != 9090 {
+		t.Errorf("expected port overridden, got %v", api["port"])
+	}
+	if got := prov["config.services.api.command"]; got != "ecosystem (environment)" {
+		t.Errorf("expected command prov to stay ecosystem, got %q", got)
+	}
+	if got := prov["config.services.api.port"]; got != "project (environments.dev)" {
+		t.Errorf("expected port prov = project overlay, got %q", got)
+	}
+}
+
+// TestDeepMergeMapsWithProvenance_DeleteSentinel verifies `_delete = true`
+// drops the key, records the layer that removed it, and prunes stale
+// provenance entries from earlier layers.
+func TestDeepMergeMapsWithProvenance_DeleteSentinel(t *testing.T) {
+	dst := map[string]interface{}{
+		"services": map[string]interface{}{
+			"clickhouse": map[string]interface{}{"command": "clickhouse server"},
+			"api":        map[string]interface{}{"command": "cargo run"},
+		},
+	}
+	prov := map[string]string{
+		"config.services.clickhouse.command": "ecosystem (environment)",
+		"config.services.api.command":        "ecosystem (environment)",
+	}
+	deleted := map[string]string{}
+	src := map[string]interface{}{
+		"services": map[string]interface{}{
+			"clickhouse": map[string]interface{}{"_delete": true},
+		},
+	}
+
+	merged := deepMergeMapsWithProvenance(dst, src, "project (environments.hybrid-api)", "config", prov, deleted)
+
+	services := merged["services"].(map[string]interface{})
+	if _, present := services["clickhouse"]; present {
+		t.Errorf("expected services.clickhouse dropped, still present: %v", services["clickhouse"])
+	}
+	if _, present := prov["config.services.clickhouse.command"]; present {
+		t.Errorf("expected clickhouse provenance pruned on delete")
+	}
+	if got := deleted["config.services.clickhouse"]; got != "project (environments.hybrid-api)" {
+		t.Errorf("expected delete recorded against overlay layer, got %q", got)
+	}
+	if got := prov["config.services.api.command"]; got != "ecosystem (environment)" {
+		t.Errorf("expected unrelated provenance preserved, got %q", got)
+	}
+}
+
+// TestDeepMergeMapsWithProvenance_ReplaceSubtreeClearsChildren verifies that
+// when a later layer replaces a whole subtree (e.g. a map with a scalar, or
+// reassigns a fresh map), stale children in prov/deleted are cleaned out.
+func TestDeepMergeMapsWithProvenance_ReplaceSubtreeClearsChildren(t *testing.T) {
+	dst := map[string]interface{}{
+		"api": map[string]interface{}{
+			"command": "cargo run",
+			"env":     map[string]interface{}{"URL": "http://old"},
+		},
+	}
+	prov := map[string]string{
+		"config.api.command": "ecosystem (environment)",
+		"config.api.env.URL": "ecosystem (environment)",
+	}
+	deleted := map[string]string{"config.api.stale": "project (environment)"}
+
+	src := map[string]interface{}{
+		"api": "disabled",
+	}
+
+	merged := deepMergeMapsWithProvenance(dst, src, "override", "config", prov, deleted)
+
+	if merged["api"] != "disabled" {
+		t.Errorf("expected api replaced with scalar, got %v", merged["api"])
+	}
+	if _, present := prov["config.api.command"]; present {
+		t.Errorf("expected child command provenance pruned")
+	}
+	if _, present := prov["config.api.env.URL"]; present {
+		t.Errorf("expected child env.URL provenance pruned")
+	}
+	if _, present := deleted["config.api.stale"]; present {
+		t.Errorf("expected stale delete under replaced subtree pruned")
+	}
+	if got := prov["config.api"]; got != "override" {
+		t.Errorf("expected api prov = override, got %q", got)
+	}
+}
+
+// TestDeepMergeMapsWithProvenance_FreshSubtreeRecordsLeaves verifies that a
+// whole new subtree introduced by a layer has every leaf recorded in prov.
+func TestDeepMergeMapsWithProvenance_FreshSubtreeRecordsLeaves(t *testing.T) {
+	dst := map[string]interface{}{}
+	prov := map[string]string{}
+	deleted := map[string]string{}
+
+	src := map[string]interface{}{
+		"services": map[string]interface{}{
+			"web": map[string]interface{}{
+				"command": "npm run dev",
+				"port":    3000,
+			},
+		},
+	}
+	_ = deepMergeMapsWithProvenance(dst, src, "project-notebook (environment)", "config", prov, deleted)
+
+	if got := prov["config.services.web.command"]; got != "project-notebook (environment)" {
+		t.Errorf("expected fresh leaf command prov, got %q", got)
+	}
+	if got := prov["config.services.web.port"]; got != "project-notebook (environment)" {
+		t.Errorf("expected fresh leaf port prov, got %q", got)
+	}
+	if _, present := prov["config.services.web"]; present {
+		t.Errorf("intermediate map key should not be recorded as a leaf")
+	}
+}
+
 // TestDeepMergeMaps_DeleteSentinel verifies that a `_delete = true` map in src
 // drops the corresponding key from the merged result. This lets a profile
 // opt out of inherited entries (e.g. a hybrid env dropping the default
