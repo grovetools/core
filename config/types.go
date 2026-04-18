@@ -404,6 +404,7 @@ type EnvironmentConfig struct {
 	Config           map[string]interface{} `yaml:"config,omitempty" toml:"config,omitempty" json:"config,omitempty" jsonschema:"description=Provider-specific configuration"`
 	Commands         map[string]string      `yaml:"commands,omitempty" toml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Named commands that run in the context of this environment"`
 	DisplayEndpoints []string               `yaml:"display_endpoints,omitempty" toml:"display_endpoints,omitempty" json:"display_endpoints,omitempty" jsonschema:"description=Env var names whose values should surface as endpoints in the TUI. If unset\\, any http(s) value is treated as an endpoint."`
+	DisplayResources []string               `yaml:"display_resources,omitempty" toml:"display_resources,omitempty" json:"display_resources,omitempty" jsonschema:"description=Human-readable resource labels shown on the Shared Infra page (e.g. 'Cloud SQL (myproject:us-central1:db)'). Purely cosmetic; no schema constraint."`
 	Shared           *bool                  `yaml:"shared,omitempty" toml:"shared,omitempty" json:"shared,omitempty" jsonschema:"description=Whether this profile represents shared ecosystem infrastructure consumed by other profiles via shared_env."`
 }
 

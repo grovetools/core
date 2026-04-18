@@ -189,6 +189,19 @@ func (m Model) Active() Page {
 // ActiveIndex returns the active tab index.
 func (m Model) ActiveIndex() int { return m.activePage }
 
+// SetActive programmatically switches to the page at idx, respecting the
+// usual Blur/Focus hooks so the target page can initialise itself. Returns
+// any tea.Cmd emitted by the new page's Focus(). Out-of-range and unchanged
+// indices are no-ops.
+func (m *Model) SetActive(idx int) tea.Cmd {
+	if idx < 0 || idx >= len(m.pages) || idx == m.activePage {
+		return nil
+	}
+	m.pages[m.activePage].Blur()
+	m.activePage = idx
+	return m.pages[m.activePage].Focus()
+}
+
 // Pages returns the backing slice (do not mutate).
 func (m Model) Pages() []Page { return m.pages }
 

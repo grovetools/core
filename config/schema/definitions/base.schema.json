@@ -76,6 +76,13 @@
           },
           "type": "array"
         },
+        "display_resources": {
+          "description": "Human-readable resource labels shown on the Shared Infra page (e.g. 'Cloud SQL (myproject:us-central1:db)'). Purely cosmetic; no schema constraint.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "provider": {
           "description": "Provider type (native, docker, cloud, or custom exec plugin name)",
           "type": "string"
