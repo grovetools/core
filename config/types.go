@@ -399,10 +399,12 @@ type DaemonJobsConfig struct {
 
 // EnvironmentConfig holds configuration for the dev environment provider.
 type EnvironmentConfig struct {
-	Provider string                 `yaml:"provider,omitempty" toml:"provider,omitempty" json:"provider,omitempty" jsonschema:"description=Provider type (native\\, docker\\, cloud\\, or custom exec plugin name)"`
-	Command  string                 `yaml:"command,omitempty" toml:"command,omitempty" json:"command,omitempty" jsonschema:"description=Path to provider binary (exec plugins only). If empty\\, searches PATH for grove-env-<provider>."`
-	Config   map[string]interface{} `yaml:"config,omitempty" toml:"config,omitempty" json:"config,omitempty" jsonschema:"description=Provider-specific configuration"`
-	Commands map[string]string      `yaml:"commands,omitempty" toml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Named commands that run in the context of this environment"`
+	Provider         string                 `yaml:"provider,omitempty" toml:"provider,omitempty" json:"provider,omitempty" jsonschema:"description=Provider type (native\\, docker\\, cloud\\, or custom exec plugin name)"`
+	Command          string                 `yaml:"command,omitempty" toml:"command,omitempty" json:"command,omitempty" jsonschema:"description=Path to provider binary (exec plugins only). If empty\\, searches PATH for grove-env-<provider>."`
+	Config           map[string]interface{} `yaml:"config,omitempty" toml:"config,omitempty" json:"config,omitempty" jsonschema:"description=Provider-specific configuration"`
+	Commands         map[string]string      `yaml:"commands,omitempty" toml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Named commands that run in the context of this environment"`
+	DisplayEndpoints []string               `yaml:"display_endpoints,omitempty" toml:"display_endpoints,omitempty" json:"display_endpoints,omitempty" jsonschema:"description=Env var names whose values should surface as endpoints in the TUI. If unset\\, any http(s) value is treated as an endpoint."`
+	Shared           *bool                  `yaml:"shared,omitempty" toml:"shared,omitempty" json:"shared,omitempty" jsonschema:"description=Whether this profile represents shared ecosystem infrastructure consumed by other profiles via shared_env."`
 }
 
 // DaemonConfig holds configuration for the grove daemon (groved).

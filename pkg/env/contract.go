@@ -8,6 +8,7 @@ import (
 type EnvRequest struct {
 	Action    string                   `json:"action"`              // "up", "down", "status", "restart"
 	Provider  string                   `json:"provider"`            // Provider name (e.g., native, docker, cloud)
+	Profile   string                   `json:"profile,omitempty"`   // Named environment profile (empty = default)
 	Workspace *workspace.WorkspaceNode `json:"workspace,omitempty"` // Full node context
 	PlanDir   string                   `json:"plan_dir"`            // Notebook plan dir for ephemeral state (legacy, prefer StateDir)
 	StateDir  string                   `json:"state_dir"`           // Directory for persistent env state (.grove/env/)
@@ -52,6 +53,7 @@ type EnvStateFile struct {
 	Services        []ServiceState    `json:"services,omitempty"`         // Per-service runtime state
 	ServiceCommands map[string]string `json:"service_commands,omitempty"` // Service name -> shell command (for native restart)
 	EnvVars         map[string]string `json:"env_vars,omitempty"`         // Env vars produced by the provider
+	Endpoints       []string          `json:"endpoints,omitempty"`        // URLs the provider surfaced to users
 	CleanupPaths    []string          `json:"cleanup_paths,omitempty"`    // Deprecated: use Volumes instead
 	Volumes         []VolumeState     `json:"volumes,omitempty"`          // Volume state for teardown
 	State           map[string]string `json:"state"`                      // Opaque provider state

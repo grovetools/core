@@ -69,9 +69,20 @@
           "description": "Provider-specific configuration",
           "type": "object"
         },
+        "display_endpoints": {
+          "description": "Env var names whose values should surface as endpoints in the TUI. If unset, any http(s) value is treated as an endpoint.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "provider": {
           "description": "Provider type (native, docker, cloud, or custom exec plugin name)",
           "type": "string"
+        },
+        "shared": {
+          "description": "Whether this profile represents shared ecosystem infrastructure consumed by other profiles via shared_env.",
+          "type": "boolean"
         }
       },
       "type": "object"
