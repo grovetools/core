@@ -423,3 +423,62 @@ func TestResolveEnvironment_DeepMergeConfig(t *testing.T) {
 		t.Errorf("expected api command inherited, got %v", api["command"])
 	}
 }
+
+func TestIsSharedProfile(t *testing.T) {
+	tru := true
+	fals := false
+
+	cfg := &Config{
+		Environments: map[string]*EnvironmentConfig{
+			"terraform-infra": {Provider: "terraform", Shared: &tru},
+			"legacy-shared": {
+				Provider: "terraform",
+				Config: map[string]interface{}{
+					"state_bucket": "kitchen-env-state",
+				},
+			},
+			"hybrid-api": {
+				Provider: "terraform",
+				Config: map[string]interface{}{
+					"shared_env": "legacy-shared",
+				},
+			},
+			"terraform": {
+				Provider: "terraform",
+				Config: map[string]interface{}{
+					"shared_env": "terraform-infra",
+				},
+			},
+			"docker-local":  {Provider: "docker"},
+			"explicit-leaf": {Provider: "terraform", Shared: &fals},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		profile string
+		want    bool
+	}{
+		{"explicit shared=true wins", "terraform-infra", true},
+		{"implicit via shared_env pointing here", "legacy-shared", true},
+		{"per-worktree profile is not shared", "hybrid-api", false},
+		{"per-worktree terraform profile is not shared", "terraform", false},
+		{"docker profile is not shared", "docker-local", false},
+		{"explicit shared=false stays not shared even if referenced", "explicit-leaf", false},
+		{"unknown profile is not shared", "ghost", false},
+		{"empty profile is not shared", "", false},
+		{"literal 'default' is not shared", "default", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsSharedProfile(cfg, tc.profile); got != tc.want {
+				t.Errorf("IsSharedProfile(%q) = %v, want %v", tc.profile, got, tc.want)
+			}
+		})
+	}
+
+	if IsSharedProfile(nil, "terraform-infra") {
+		t.Error("IsSharedProfile(nil, …) should return false")
+	}
+}
