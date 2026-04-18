@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 // ResolveEnvironment merges a named environment profile over the default environment.
@@ -148,14 +149,18 @@ func ResolveEnvironmentWithProvenance(layered *LayeredConfig, profileName string
 }
 
 // IsSharedProfile reports whether profileName represents shared ecosystem
-// infrastructure consumed by other profiles. It prefers the explicit
-// `shared = true` marker on the profile, but falls back to the implicit
-// heuristic: a profile is shared if at least one other profile in the
-// same Config points at it via `shared_env = "<profileName>"`.
+// infrastructure consumed by other profiles. Checks, in order:
 //
-// The fallback exists because ecosystems predating the `shared` metadata
-// rely on the shared_env reference as the only signal, and we don't want
-// the ecosystem TUI to render a blank Shared Infra tab for them.
+//  1. Explicit `shared = true` marker on the profile.
+//  2. Naming convention: profile name ends in `-infra` or starts with `shared-`.
+//  3. Another profile's `shared_env` matches this profile's name, OR matches
+//     the `path` key in this profile's Config (e.g. `shared_env = "kitchen-infra"`
+//     on a profile whose `path = "kitchen-infra"` even though the profile is
+//     named "terraform-infra").
+//
+// The heuristics exist because ecosystems predating the `shared` metadata
+// rely on implicit signals — the naming convention and path reference
+// patterns — rather than always setting `shared = true` explicitly.
 //
 // Returns false for unknown profileName, nil cfg, or the empty default
 // profile name ("" / "default") — the default is never "shared".
@@ -163,15 +168,18 @@ func IsSharedProfile(cfg *Config, profileName string) bool {
 	if cfg == nil || profileName == "" || profileName == "default" {
 		return false
 	}
-	if ec, ok := cfg.Environments[profileName]; ok && ec != nil {
-		if ec.Shared != nil && *ec.Shared {
-			return true
-		}
-	} else {
-		// Fallback only activates once we know the profile exists — an
-		// unknown name isn't shared, it's just missing.
+	ec, ok := cfg.Environments[profileName]
+	if !ok || ec == nil {
+		// Unknown profile isn't shared, it's just missing.
 		return false
 	}
+	if ec.Shared != nil && *ec.Shared {
+		return true
+	}
+	if strings.HasSuffix(profileName, "-infra") || strings.HasPrefix(profileName, "shared-") {
+		return true
+	}
+	ownPath, _ := ec.Config["path"].(string)
 	for name, other := range cfg.Environments {
 		if name == profileName || other == nil {
 			continue
@@ -179,7 +187,14 @@ func IsSharedProfile(cfg *Config, profileName string) bool {
 		if other.Config == nil {
 			continue
 		}
-		if ref, ok := other.Config["shared_env"].(string); ok && ref == profileName {
+		ref, ok := other.Config["shared_env"].(string)
+		if !ok || ref == "" {
+			continue
+		}
+		if ref == profileName {
+			return true
+		}
+		if ownPath != "" && ref == ownPath {
 			return true
 		}
 	}
