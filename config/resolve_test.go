@@ -41,6 +41,59 @@ func TestResolveEnvironment_Default(t *testing.T) {
 	}
 }
 
+func TestResolveEnvironment_DefaultAlias(t *testing.T) {
+	// "default" should alias to the unnamed base [environment] block,
+	// matching the behavior of passing "".
+	cfg := &Config{
+		Environment: &EnvironmentConfig{
+			Provider: "native",
+			Config: map[string]interface{}{
+				"port": 8080,
+			},
+			Commands: map[string]string{"build": "make build"},
+		},
+		Environments: map[string]*EnvironmentConfig{
+			"docker": {Provider: "docker"},
+		},
+	}
+
+	resolved, err := ResolveEnvironment(cfg, "default")
+	if err != nil {
+		t.Fatalf("expected \"default\" to resolve without error, got %v", err)
+	}
+	if resolved.Provider != "native" {
+		t.Errorf("expected provider 'native' from base env, got %q", resolved.Provider)
+	}
+	if resolved.Config["port"] != 8080 {
+		t.Errorf("expected port 8080 from base env, got %v", resolved.Config["port"])
+	}
+	if resolved.Commands["build"] != "make build" {
+		t.Errorf("expected build command inherited, got %q", resolved.Commands["build"])
+	}
+}
+
+func TestResolveEnvironmentWithProvenance_DefaultAlias(t *testing.T) {
+	layered := &LayeredConfig{
+		Project: &Config{
+			Environment: &EnvironmentConfig{
+				Provider: "native",
+				Config:   map[string]interface{}{"port": 8080},
+			},
+		},
+	}
+
+	resolved, _, _, err := ResolveEnvironmentWithProvenance(layered, "default")
+	if err != nil {
+		t.Fatalf("expected \"default\" to resolve without error, got %v", err)
+	}
+	if resolved.Provider != "native" {
+		t.Errorf("expected provider native, got %q", resolved.Provider)
+	}
+	if resolved.Config["port"] != 8080 {
+		t.Errorf("expected port 8080, got %v", resolved.Config["port"])
+	}
+}
+
 func TestResolveEnvironment_NamedProfile(t *testing.T) {
 	cfg := &Config{
 		Environment: &EnvironmentConfig{

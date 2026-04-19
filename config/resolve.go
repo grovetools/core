@@ -7,9 +7,14 @@ import (
 )
 
 // ResolveEnvironment merges a named environment profile over the default environment.
-// If profileName is empty, it returns the default environment.
-// If profileName is set but not found in Environments, it returns an error.
+// If profileName is empty (or the alias "default"), it returns the default
+// environment. If profileName is set but not found in Environments, it returns
+// an error.
 func ResolveEnvironment(cfg *Config, profileName string) (*EnvironmentConfig, error) {
+	// "default" is an alias for the unnamed base [environment] block.
+	if profileName == "default" {
+		profileName = ""
+	}
 	// Start with a clone of the default environment
 	resolved := &EnvironmentConfig{
 		Config:   make(map[string]interface{}),
@@ -75,6 +80,10 @@ func ResolveEnvironment(cfg *Config, profileName string) (*EnvironmentConfig, er
 //
 // Existing callers of ResolveEnvironment are untouched; this is additive.
 func ResolveEnvironmentWithProvenance(layered *LayeredConfig, profileName string) (*EnvironmentConfig, map[string]string, map[string]string, error) {
+	// "default" is an alias for the unnamed base [environment] block.
+	if profileName == "default" {
+		profileName = ""
+	}
 	prov := make(map[string]string)
 	deleted := make(map[string]string)
 	resolved := &EnvironmentConfig{
