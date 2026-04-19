@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// Mux values identify which multiplexer owns an agent session's PTY.
+const (
+	MuxTreemux = "treemux"
+	MuxTmux    = "tmux"
+	MuxNone    = "none"
+)
+
 // Session represents a complete Claude session or a grove-flow job
 type Session struct {
 	// Core fields
@@ -41,6 +48,7 @@ type Session struct {
 	Channels       []string          `json:"channels,omitempty" db:"-"`
 	Autonomous     *AutonomousConfig `json:"autonomous,omitempty" db:"-"`
 	TmuxTarget     string            `json:"tmux_target,omitempty" db:"-"`
+	Mux            string            `json:"mux,omitempty" db:"-"`
 	LastIdlePingAt *time.Time        `json:"last_idle_ping_at,omitempty" db:"-"`
 	LastSender     string            `json:"last_sender,omitempty" db:"-"`
 

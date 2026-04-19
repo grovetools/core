@@ -26,6 +26,11 @@ type SessionIntent struct {
 	Channels   []string                 `json:"channels,omitempty"`
 	Autonomous *models.AutonomousConfig `json:"autonomous,omitempty"`
 	TmuxTarget string                   `json:"tmux_target,omitempty"`
+
+	// Mux identifies which multiplexer backs the session ("treemux", "tmux",
+	// "none"). Populated by the provider at launch time so the daemon can
+	// dispatch input/interrupt routing without blind inference.
+	Mux string `json:"mux,omitempty"`
 }
 
 // SessionConfirmation contains the data needed to confirm a session after agent startup.
