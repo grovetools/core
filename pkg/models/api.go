@@ -196,6 +196,7 @@ type JobInfo struct {
 	StartedAt   *time.Time        `json:"started_at,omitempty"`
 	CompletedAt *time.Time        `json:"completed_at,omitempty"`
 	Error       string            `json:"error,omitempty"`
+	LogFilePath string            `json:"log_file_path,omitempty"`
 }
 
 // PlanRunOptions represents options for running an entire plan.
