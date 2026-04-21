@@ -186,6 +186,19 @@ type Client interface {
 	// EnvStatus returns the current status of an environment for a worktree.
 	EnvStatus(ctx context.Context, worktree string) (*env.EnvResponse, error)
 
+	// RegisterProxyRoute asks the global daemon to add a single host-based
+	// route for (worktree, route) -> 127.0.0.1:<port>. Scoped daemons call
+	// this for every route allocated during env up so *.grove.local
+	// requests land on the single proxy bound to :8443 by the global
+	// daemon. On the global daemon's own Client (LocalClient, or a
+	// RemoteClient pointed at the global socket), the call reaches the
+	// same proxy table used for in-process registrations.
+	RegisterProxyRoute(ctx context.Context, worktree, route string, port int) error
+
+	// UnregisterProxyRoutes asks the global daemon to drop every route
+	// keyed by the given worktree. Called on env down.
+	UnregisterProxyRoutes(ctx context.Context, worktree string) error
+
 	// --- Job Management ---
 	// These methods enable submitting and managing jobs via the daemon's JobRunner.
 

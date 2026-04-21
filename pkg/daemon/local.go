@@ -267,6 +267,18 @@ func (c *LocalClient) EnvStatus(ctx context.Context, worktree string) (*env.EnvR
 	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")
 }
 
+// RegisterProxyRoute is a no-op without the daemon — the proxy lives in the
+// global daemon process. Callers (scoped daemons) degrade gracefully to
+// direct-port access when the global daemon is unreachable.
+func (c *LocalClient) RegisterProxyRoute(ctx context.Context, worktree, route string, port int) error {
+	return errors.New("proxy route registration requires the global grove daemon")
+}
+
+// UnregisterProxyRoutes is a no-op without the daemon.
+func (c *LocalClient) UnregisterProxyRoutes(ctx context.Context, worktree string) error {
+	return errors.New("proxy route registration requires the global grove daemon")
+}
+
 // --- Channel & Autonomous stubs (require daemon) ---
 
 func (c *LocalClient) UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error {

@@ -108,6 +108,16 @@ func NewWithAutoStart(dir ...string) Client {
 	return newAutoStart(resolvedDir, 0)
 }
 
+// NewGlobalClient returns a Client targeted at the global/unscoped daemon,
+// auto-starting it if not running. The global daemon hosts the shared
+// proxy (port 8443) and serves proxy RegisterProxyRoute / UnregisterProxyRoutes
+// RPCs from every scoped daemon on the host. Unlike NewWithAutoStart(""),
+// the daemon started here never self-terminates via --auto-shutdown because
+// autoStartDaemon omits that flag when scope is empty (see autoStartDaemon).
+func NewGlobalClient() Client {
+	return newAutoStart("", 0)
+}
+
 // NewPaired works like NewWithAutoStart but instructs the spawned daemon to
 // shut down when pairPID exits. See DaemonConfig.PairWithTreemux.
 //
@@ -259,8 +269,14 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 	// the parent terminal's exit. Without Setsid, groved shares the terminal's
 	// process group and receives SIGHUP when the terminal closes, which triggers
 	// ptyManager.Shutdown() and kills every agent PTY the daemon owns.
-	args := []string{"start", "--auto-shutdown"}
+	//
+	// Auto-shutdown is only enabled for scoped daemons. The global (unscoped)
+	// daemon hosts the shared *.grove.local proxy on :8443 and the host-wide
+	// route table; if it self-terminates on idle, every scoped daemon's routing
+	// silently breaks. Scoped daemons stay self-reaping as before.
+	args := []string{"start"}
 	if scope != "" {
+		args = append(args, "--auto-shutdown")
 		args = append(args, "--scope", scope)
 	}
 	if socketPath != "" {

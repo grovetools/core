@@ -956,6 +956,53 @@ func (c *RemoteClient) EnvStatus(ctx context.Context, worktree string) (*env.Env
 	return &result, nil
 }
 
+// RegisterProxyRoute asks the daemon (expected to be the global/unscoped
+// one) to add a host-based route for the given worktree/route -> port.
+func (c *RemoteClient) RegisterProxyRoute(ctx context.Context, worktree, route string, port int) error {
+	body, err := json.Marshal(env.ProxyRouteRequest{Worktree: worktree, Route: route, Port: port})
+	if err != nil {
+		return fmt.Errorf("marshal proxy register request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/proxy/register", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("call daemon proxy register: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("daemon returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+// UnregisterProxyRoutes asks the daemon to drop every route keyed by worktree.
+func (c *RemoteClient) UnregisterProxyRoutes(ctx context.Context, worktree string) error {
+	body, err := json.Marshal(env.ProxyUnregisterRequest{Worktree: worktree})
+	if err != nil {
+		return fmt.Errorf("marshal proxy unregister request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/proxy/unregister", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("call daemon proxy unregister: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("daemon returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
 // --- Channel & Autonomous Management ---
 
 // UpdateSessionChannels updates the active channels for a session.

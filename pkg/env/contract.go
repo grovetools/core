@@ -33,6 +33,7 @@ type EnvResponse struct {
 	State        map[string]string `json:"state,omitempty"`         // Saved to state.json
 	CleanupPaths []string          `json:"cleanup_paths,omitempty"` // Deprecated: use Volumes instead
 	Volumes      []VolumeState     `json:"volumes,omitempty"`       // Volume state for teardown
+	ProxyRoutes  map[string]int    `json:"proxy_routes,omitempty"`  // Route name -> host port, for global-daemon proxy registration
 	Error        string            `json:"error,omitempty"`
 }
 
@@ -60,6 +61,7 @@ type EnvStateFile struct {
 	Endpoints        []string          `json:"endpoints,omitempty"`         // URLs the provider surfaced to users
 	CleanupPaths     []string          `json:"cleanup_paths,omitempty"`     // Deprecated: use Volumes instead
 	Volumes          []VolumeState     `json:"volumes,omitempty"`           // Volume state for teardown
+	ProxyRoutes      map[string]int    `json:"proxy_routes,omitempty"`      // Route name -> host port; global daemon rebuilds proxy table from this on restart
 	State            map[string]string `json:"state"`                       // Opaque provider state
 }
 
@@ -83,4 +85,18 @@ func (r *EnvRequest) EffectiveStateDir() string {
 		return r.StateDir
 	}
 	return r.PlanDir
+}
+
+// ProxyRouteRequest registers a single host-based route with the global
+// daemon's proxy. Sent by scoped daemons over RPC whenever an env brings
+// up a service that declared `route = ...` in grove.toml.
+type ProxyRouteRequest struct {
+	Worktree string `json:"worktree"`
+	Route    string `json:"route"`
+	Port     int    `json:"port"`
+}
+
+// ProxyUnregisterRequest drops every route keyed by Worktree.
+type ProxyUnregisterRequest struct {
+	Worktree string `json:"worktree"`
 }
