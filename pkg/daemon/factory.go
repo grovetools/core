@@ -127,16 +127,46 @@ func newAutoStart(resolvedDir string, pairPID int) Client {
 		return client
 	}
 
-	// Daemon not running, try to auto-start it for this scope
-	if autoStartDaemon(scope, socketPath, pidPath, pairPID) {
-		// Retry connection after auto-start
-		if client := tryConnectWithRetry(socketPath, 5, 100*time.Millisecond); client != nil {
-			return client
-		}
+	// Daemon not running, try to auto-start it for this scope. autoStartDaemon
+	// returns the read end of a pipe whose write end is inherited by groved
+	// (via --ready-fd); groved closes it after the socket is bound, giving us
+	// a deterministic EOF to wait on instead of polling with a guessed window.
+	// On pipe-setup failure readyPipe is nil and we fall back to plain polling.
+	readyPipe, ok := autoStartDaemon(scope, socketPath, pidPath, pairPID)
+	if !ok {
+		return NewLocalClient()
+	}
+	if client := waitForDaemonReady(readyPipe, socketPath, readyHandshakeTimeout); client != nil {
+		return client
 	}
 
-	// Auto-start failed or daemon still not responding, use local client
+	// Auto-start succeeded but daemon never signaled ready (or the short
+	// connect cushion that follows still didn't land us a RemoteClient).
+	// Fall back to LocalClient rather than blocking the caller indefinitely.
 	return NewLocalClient()
+}
+
+// readyHandshakeTimeout bounds how long newAutoStart will wait for a freshly
+// spawned daemon to finish binding its socket. Cold-scope boots can take
+// several seconds — fsnotify watcher registration dominates — so we allow a
+// generous ceiling before giving up.
+const readyHandshakeTimeout = 30 * time.Second
+
+// waitForDaemonReady blocks until the spawned daemon signals readiness by
+// closing its end of readyPipe (EOF on Read), or timeout elapses. In either
+// case, a short connect cushion runs afterward to absorb the microseconds
+// between OnReady firing and Serve actually accepting.
+//
+// readyPipe may be nil when the caller couldn't set up a pipe; in that case
+// the function falls through to the cushion directly.
+func waitForDaemonReady(readyPipe *os.File, socketPath string, timeout time.Duration) Client {
+	if readyPipe != nil {
+		defer readyPipe.Close()
+		_ = readyPipe.SetReadDeadline(time.Now().Add(timeout))
+		buf := make([]byte, 1)
+		_, _ = readyPipe.Read(buf)
+	}
+	return tryConnectWithRetry(socketPath, 5, 50*time.Millisecond)
 }
 
 // tryConnect attempts to connect to the daemon socket.
@@ -176,14 +206,21 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 }
 
 // autoStartDaemon attempts to start the daemon in the background for the
-// given scope. Returns true if the daemon was successfully started.
+// given scope. Returns the read end of a readiness pipe whose write end is
+// inherited by the child as fd 3, and a bool indicating whether the spawn
+// succeeded. The caller reads readyPipe to block until groved signals it has
+// bound the socket (groved closes fd 3 via its --ready-fd=3 flag).
+//
+// readyPipe is non-nil only when both os.Pipe() succeeded and cmd.Start()
+// succeeded; on any error path the pipe is torn down and readyPipe is nil
+// (caller falls back to plain retry-based polling).
 //
 // Spawns groved with explicit --scope/--socket/--pidfile/--auto-shutdown
 // so the auto-started daemon binds the scope-keyed paths and exits on
 // idle. Empty scope falls through to groved's own unscoped defaults. When
 // pairPID > 0, --pair-with-pid is added so the daemon exits when that
 // parent process dies.
-func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) bool {
+func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, bool) {
 	// Diagnostic: log the caller stack so we can trace which tool is
 	// triggering a scoped-daemon auto-spawn. View with:
 	//   core logs --component daemon.factory -f
@@ -214,7 +251,7 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) bool {
 			}
 		}
 		if grovedPath == "" {
-			return false
+			return nil, false
 		}
 	}
 
@@ -235,13 +272,38 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) bool {
 	if pairPID > 0 {
 		args = append(args, "--pair-with-pid", strconv.Itoa(pairPID))
 	}
+
+	// Readiness pipe: the write end is inherited by the child as fd 3
+	// (ExtraFiles[0]). groved closes fd 3 after binding its unix socket, which
+	// becomes EOF on our read end. Pipe setup failure is non-fatal — we drop
+	// back to the old retry-based polling path by returning a nil readyPipe.
+	readyR, readyW, pipeErr := os.Pipe()
+	if pipeErr == nil {
+		args = append(args, "--ready-fd", "3")
+	}
 	cmd := exec.Command(grovedPath, args...)
+	if pipeErr == nil {
+		cmd.ExtraFiles = []*os.File{readyW}
+	}
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	if err := cmd.Start(); err != nil {
-		return false
+		if readyR != nil {
+			readyR.Close()
+		}
+		if readyW != nil {
+			readyW.Close()
+		}
+		return nil, false
+	}
+
+	// Child now holds fd 3 (its dup of readyW); parent no longer needs its
+	// copy. If we don't close it here, our end of the pipe never sees EOF
+	// because our own write fd stays open.
+	if readyW != nil {
+		readyW.Close()
 	}
 
 	// Don't wait for the process - let it run in background
@@ -249,7 +311,7 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) bool {
 		cmd.Wait()
 	}()
 
-	return true
+	return readyR, true
 }
 
 // MustConnect returns a DaemonClient or panics if the daemon is not available.
