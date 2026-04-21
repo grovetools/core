@@ -45,18 +45,22 @@ type ServiceState struct {
 
 // EnvStateFile represents the persistent state written to .grove/env/state.json.
 type EnvStateFile struct {
-	Provider        string            `json:"provider"`
-	Command         string            `json:"command,omitempty"`          // Binary path for exec plugins (empty = search PATH)
-	Environment     string            `json:"environment,omitempty"`      // Named environment profile used for this plan
-	ManagedBy       string            `json:"managed_by,omitempty"`       // "plan:<slug>", "user", or empty
-	Ports           map[string]int    `json:"ports,omitempty"`            // Service name -> allocated port
-	Services        []ServiceState    `json:"services,omitempty"`         // Per-service runtime state
-	ServiceCommands map[string]string `json:"service_commands,omitempty"` // Service name -> shell command (for native restart)
-	EnvVars         map[string]string `json:"env_vars,omitempty"`         // Env vars produced by the provider
-	Endpoints       []string          `json:"endpoints,omitempty"`        // URLs the provider surfaced to users
-	CleanupPaths    []string          `json:"cleanup_paths,omitempty"`    // Deprecated: use Volumes instead
-	Volumes         []VolumeState     `json:"volumes,omitempty"`          // Volume state for teardown
-	State           map[string]string `json:"state"`                      // Opaque provider state
+	Provider         string            `json:"provider"`
+	Command          string            `json:"command,omitempty"`           // Binary path for exec plugins (empty = search PATH)
+	Environment      string            `json:"environment,omitempty"`       // Named environment profile used for this plan
+	ManagedBy        string            `json:"managed_by,omitempty"`        // "plan:<slug>", "user", or empty
+	WorkspaceName    string            `json:"workspace_name,omitempty"`    // workspace.WorkspaceNode.Name at Up time
+	WorkspacePath    string            `json:"workspace_path,omitempty"`    // workspace.WorkspaceNode.Path at Up time
+	Ports            map[string]int    `json:"ports,omitempty"`             // Service name -> allocated port
+	Services         []ServiceState    `json:"services,omitempty"`          // Per-service runtime state
+	ServiceCommands  map[string]string `json:"service_commands,omitempty"`  // Service name -> shell command (for native restart)
+	NativePGIDs      map[string]int    `json:"native_pgids,omitempty"`      // Service/tunnel name -> process group id (for cross-restart teardown)
+	DockerContainers map[string]string `json:"docker_containers,omitempty"` // Service name -> container name (for native-docker services)
+	EnvVars          map[string]string `json:"env_vars,omitempty"`          // Env vars produced by the provider
+	Endpoints        []string          `json:"endpoints,omitempty"`         // URLs the provider surfaced to users
+	CleanupPaths     []string          `json:"cleanup_paths,omitempty"`     // Deprecated: use Volumes instead
+	Volumes          []VolumeState     `json:"volumes,omitempty"`           // Volume state for teardown
+	State            map[string]string `json:"state"`                       // Opaque provider state
 }
 
 // EffectiveVolumes returns the volumes to consider for teardown, migrating
