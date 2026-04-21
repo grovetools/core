@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime/debug"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -104,6 +105,21 @@ func New(dir ...string) Client {
 // If auto-start fails, it falls back to LocalClient gracefully.
 func NewWithAutoStart(dir ...string) Client {
 	resolvedDir := resolveDir(dir)
+	return newAutoStart(resolvedDir, 0)
+}
+
+// NewPaired works like NewWithAutoStart but instructs the spawned daemon to
+// shut down when pairPID exits. See DaemonConfig.PairWithTreemux.
+//
+// If the daemon is already running for this scope (same socket), the existing
+// daemon is returned unchanged — pairing only takes effect on a fresh spawn.
+// Callers that need to guarantee pairing semantics must ensure no stale daemon
+// is running for the scope before invoking NewPaired.
+func NewPaired(dir string, pairPID int) Client {
+	return newAutoStart(dir, pairPID)
+}
+
+func newAutoStart(resolvedDir string, pairPID int) Client {
 	scope, socketPath, pidPath := resolveScopedTargets(resolvedDir)
 
 	// Try to connect to existing daemon
@@ -112,7 +128,7 @@ func NewWithAutoStart(dir ...string) Client {
 	}
 
 	// Daemon not running, try to auto-start it for this scope
-	if autoStartDaemon(scope, socketPath, pidPath) {
+	if autoStartDaemon(scope, socketPath, pidPath, pairPID) {
 		// Retry connection after auto-start
 		if client := tryConnectWithRetry(socketPath, 5, 100*time.Millisecond); client != nil {
 			return client
@@ -164,8 +180,10 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 //
 // Spawns groved with explicit --scope/--socket/--pidfile/--auto-shutdown
 // so the auto-started daemon binds the scope-keyed paths and exits on
-// idle. Empty scope falls through to groved's own unscoped defaults.
-func autoStartDaemon(scope, socketPath, pidPath string) bool {
+// idle. Empty scope falls through to groved's own unscoped defaults. When
+// pairPID > 0, --pair-with-pid is added so the daemon exits when that
+// parent process dies.
+func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) bool {
 	// Diagnostic: log the caller stack so we can trace which tool is
 	// triggering a scoped-daemon auto-spawn. View with:
 	//   core logs --component daemon.factory -f
@@ -213,6 +231,9 @@ func autoStartDaemon(scope, socketPath, pidPath string) bool {
 	}
 	if pidPath != "" {
 		args = append(args, "--pidfile", pidPath)
+	}
+	if pairPID > 0 {
+		args = append(args, "--pair-with-pid", strconv.Itoa(pairPID))
 	}
 	cmd := exec.Command(grovedPath, args...)
 	cmd.Stdout = nil
