@@ -422,6 +422,7 @@ type DaemonConfig struct {
 	Hooks               *DaemonHooks      `yaml:"hooks,omitempty" toml:"hooks,omitempty" jsonschema:"description=Daemon-specific hooks configuration"`
 	Jobs                *DaemonJobsConfig `yaml:"jobs,omitempty" toml:"jobs,omitempty" jsonschema:"description=Job runner configuration"`
 	SSH                 *DaemonSSHConfig  `yaml:"ssh,omitempty" toml:"ssh,omitempty" jsonschema:"description=Embedded SSH server configuration"`
+	PairWithTreemux     *bool             `yaml:"pair_with_treemux,omitempty" toml:"pair_with_treemux,omitempty" jsonschema:"description=Opt-in to kill daemon when the parent treemux exits"`
 }
 
 // DaemonSSHConfig holds configuration for the embedded SSH server.
