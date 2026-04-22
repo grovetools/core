@@ -12,6 +12,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/moby/patternmatcher v0.6.1
 	github.com/muesli/termenv v0.16.0
 	github.com/neovim/go-client v1.2.1
 	github.com/pelletier/go-toml/v2 v2.2.4

@@ -16,6 +16,18 @@ type EnvRequest struct {
 	ManagedBy string                   `json:"managed_by,omitempty"` // Who owns this env: "plan:<slug>", "user", or empty
 	Force     bool                     `json:"force,omitempty"`     // Force teardown even if not the owner
 	Clean     bool                     `json:"clean,omitempty"`     // Remove all volumes including persistent ones
+	Rebuild   []string                 `json:"rebuild,omitempty"`   // Image services to force-rebuild. "all" = every image; named entries match service keys.
+}
+
+// ForceRebuild reports whether the service with the given name should be
+// force-rebuilt based on r.Rebuild. nil/empty means no force.
+func (r *EnvRequest) ForceRebuild(svc string) bool {
+	for _, s := range r.Rebuild {
+		if s == "all" || s == svc {
+			return true
+		}
+	}
+	return false
 }
 
 // VolumeState tracks a volume's path and persistence setting for teardown.
