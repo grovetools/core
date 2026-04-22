@@ -63,9 +63,15 @@ func NewRemoteClient(socketPath string) (*RemoteClient, error) {
 		Timeout:   10 * time.Second,
 	}
 
+	// TODO(streaming-progress): the daemon currently holds the HTTP
+	// connection open for the full duration of an env up/down. Long
+	// terraform applies (~5-30 min) caused EOFs at the previous 10m
+	// cap. Real fix is streaming heartbeats from the daemon; until
+	// that lands we just bump the client-side deadline to 30m so
+	// realistic applies complete without tripping the timeout.
 	envClient := &http.Client{
 		Transport: transport,
-		Timeout:   10 * time.Minute,
+		Timeout:   30 * time.Minute,
 	}
 
 	return &RemoteClient{
