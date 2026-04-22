@@ -1013,7 +1013,7 @@ func (c *RemoteClient) UpdateSessionChannels(ctx context.Context, jobID string, 
 		return fmt.Errorf("marshal channels request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://daemon/api/sessions/%s/channels", jobID), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/sessions/%s/channels", baseURL, jobID), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -1038,7 +1038,7 @@ func (c *RemoteClient) UpdateSessionAutonomous(ctx context.Context, jobID string
 		return fmt.Errorf("marshal autonomous config: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://daemon/api/sessions/%s/autonomous", jobID), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/sessions/%s/autonomous", baseURL, jobID), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -1064,7 +1064,7 @@ func (c *RemoteClient) UpdateSessionTmuxTarget(ctx context.Context, jobID string
 		return fmt.Errorf("marshal patch request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("http://daemon/api/sessions/%s", jobID), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/api/sessions/%s", baseURL, jobID), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -1089,7 +1089,7 @@ func (c *RemoteClient) SendChannelMessage(ctx context.Context, req models.Channe
 		return nil, fmt.Errorf("marshal send request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", "http://daemon/api/channels/send", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/channels/send", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -1114,7 +1114,7 @@ func (c *RemoteClient) SendChannelMessage(ctx context.Context, req models.Channe
 
 // GetChannelStatus returns the status of the channel system.
 func (c *RemoteClient) GetChannelStatus(ctx context.Context) (*models.ChannelStatusResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://daemon/api/channels/status", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/channels/status", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
