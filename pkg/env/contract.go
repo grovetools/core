@@ -74,6 +74,7 @@ type EnvStateFile struct {
 	ServiceCommands  map[string]string `json:"service_commands,omitempty"`  // Service name -> shell command (for native restart)
 	NativePGIDs      map[string]int    `json:"native_pgids,omitempty"`      // Service/tunnel name -> process group id (for cross-restart teardown)
 	DockerContainers map[string]string `json:"docker_containers,omitempty"` // Service name -> container name (for native-docker services)
+	LastProfile      string            `json:"last_profile,omitempty"`      // Profile name from the most recent Up; preserved in a sidecar after Down so `grove env cmd <name>` can fall back to the last-used profile instead of silently resolving to `default`.
 	EnvVars          map[string]string `json:"env_vars,omitempty"`          // Env vars produced by the provider
 	Endpoints        []string          `json:"endpoints,omitempty"`         // URLs the provider surfaced to users
 	CleanupPaths     []string          `json:"cleanup_paths,omitempty"`     // Deprecated: use Volumes instead
