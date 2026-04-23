@@ -16,6 +16,11 @@ type EnvRequest struct {
 	ManagedBy string                   `json:"managed_by,omitempty"` // Who owns this env: "plan:<slug>", "user", or empty
 	Force     bool                     `json:"force,omitempty"`     // Force teardown even if not the owner
 	Clean     bool                     `json:"clean,omitempty"`     // Remove all volumes including persistent ones
+	// ForceDestroy instructs the terraform provider on Down to bypass the
+	// `skip_destroy` profile flag and actually run `terraform destroy`.
+	// Intended for plan-finish at worktree retirement, where preserving
+	// cloud resources across iteration no longer applies.
+	ForceDestroy bool                  `json:"force_destroy,omitempty"`
 	Rebuild   []string                 `json:"rebuild,omitempty"`   // Image services to force-rebuild. "all" = every image; named entries match service keys.
 }
 
