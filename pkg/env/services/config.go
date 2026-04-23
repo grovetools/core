@@ -25,6 +25,11 @@ type ServiceEntry struct {
 	Lifecycle   *LifecycleConfig
 	HealthCheck *HealthCheckConfig
 	Raw         map[string]interface{}
+
+	// Warnings surfaces non-fatal config issues detected during parse (e.g.
+	// `working_dir` + `volumes` conflict; see impl-93 bug 2). The daemon
+	// logs these via its own structured logger after ParseAndSort returns.
+	Warnings []string
 }
 
 // LifecycleConfig is the parsed form of svcConfig["lifecycle"].

@@ -45,6 +45,16 @@ func parseEntry(name string, svcConfig map[string]interface{}) ServiceEntry {
 	entry.Volumes, _ = svcConfig["volumes"].(map[string]interface{})
 	entry.Lifecycle = ParseLifecycle(svcConfig["lifecycle"])
 	entry.HealthCheck = ParseHealthCheck(svcConfig["health_check"])
+
+	// impl-93 bug 2: when both working_dir and volumes are set, working_dir
+	// wins (see local_services.go:115-152). Surface the ambiguity so users
+	// don't lose 30 minutes wondering why their first volume's host_path
+	// silently became cmd.Dir before the explicit fix.
+	if entry.WorkingDir != "" && len(entry.Volumes) > 0 {
+		entry.Warnings = append(entry.Warnings,
+			"declares both working_dir and volumes; working_dir takes precedence (see impl-93 bug 2)")
+	}
+
 	return entry
 }
 

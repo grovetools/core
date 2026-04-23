@@ -1,6 +1,9 @@
 package services
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseAndSort_OrderThenName(t *testing.T) {
 	config := map[string]interface{}{
@@ -61,6 +64,41 @@ func TestParseAndSort_PopulatesEntryFields(t *testing.T) {
 	}
 	if e.Raw == nil {
 		t.Errorf("Raw not populated")
+	}
+}
+
+func TestParseEntry_WarnsOnWorkingDirAndVolumes(t *testing.T) {
+	config := map[string]interface{}{
+		"services": map[string]interface{}{
+			"api": map[string]interface{}{
+				"command":     "run api",
+				"working_dir": "services/api",
+				"volumes": map[string]interface{}{
+					"data": map[string]interface{}{"host_path": "vol/data"},
+				},
+			},
+			"clean": map[string]interface{}{
+				"command":     "run clean",
+				"working_dir": "services/clean",
+			},
+		},
+	}
+	entries := ParseAndSort(config)
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries", len(entries))
+	}
+	for _, e := range entries {
+		if e.Name == "api" {
+			if len(e.Warnings) != 1 {
+				t.Fatalf("api: want 1 warning, got %d (%v)", len(e.Warnings), e.Warnings)
+			}
+			if !strings.Contains(e.Warnings[0], "working_dir") || !strings.Contains(e.Warnings[0], "volumes") {
+				t.Errorf("api warning missing keywords: %q", e.Warnings[0])
+			}
+		}
+		if e.Name == "clean" && len(e.Warnings) != 0 {
+			t.Errorf("clean: want 0 warnings, got %v", e.Warnings)
+		}
 	}
 }
 
