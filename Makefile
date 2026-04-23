@@ -54,7 +54,12 @@ clean:
 
 fmt:
 	@echo "Formatting code..."
-	@go fmt ./...
+	@if command -v gofumpt > /dev/null; then \
+		gofumpt -w .; \
+	else \
+		echo "gofumpt not installed. Install with: go install mvdan.cc/gofumpt@latest"; \
+		exit 1; \
+	fi
 
 vet:
 	@echo "Running go vet..."
