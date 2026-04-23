@@ -444,7 +444,7 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 		if override.Environment.Commands != nil {
 			if result.Environment.Commands == nil {
-				result.Environment.Commands = make(map[string]string)
+				result.Environment.Commands = make(map[string]interface{})
 			}
 			for k, v := range override.Environment.Commands {
 				result.Environment.Commands[k] = v
@@ -466,7 +466,7 @@ func mergeConfigs(base, override *Config) *Config {
 					envCopy.Config = deepMergeMaps(nil, envOverride.Config)
 				}
 				if envOverride.Commands != nil {
-					envCopy.Commands = make(map[string]string)
+					envCopy.Commands = make(map[string]interface{})
 					for k, v := range envOverride.Commands {
 						envCopy.Commands[k] = v
 					}
@@ -487,7 +487,7 @@ func mergeConfigs(base, override *Config) *Config {
 				}
 				if envOverride.Commands != nil {
 					if existing.Commands == nil {
-						existing.Commands = make(map[string]string)
+						existing.Commands = make(map[string]interface{})
 					}
 					for k, v := range envOverride.Commands {
 						existing.Commands[k] = v

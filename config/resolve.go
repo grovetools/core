@@ -18,7 +18,7 @@ func ResolveEnvironment(cfg *Config, profileName string) (*EnvironmentConfig, er
 	// Start with a clone of the default environment
 	resolved := &EnvironmentConfig{
 		Config:   make(map[string]interface{}),
-		Commands: make(map[string]string),
+		Commands: make(map[string]interface{}),
 	}
 
 	if cfg.Environment != nil {
@@ -88,7 +88,7 @@ func ResolveEnvironmentWithProvenance(layered *LayeredConfig, profileName string
 	deleted := make(map[string]string)
 	resolved := &EnvironmentConfig{
 		Config:   make(map[string]interface{}),
-		Commands: make(map[string]string),
+		Commands: make(map[string]interface{}),
 	}
 
 	if layered == nil {

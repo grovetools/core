@@ -12,7 +12,7 @@ func TestResolveEnvironment_Default(t *testing.T) {
 				"port": 8080,
 				"host": "localhost",
 			},
-			Commands: map[string]string{
+			Commands: map[string]interface{}{
 				"build": "make build",
 				"test":  "make test",
 			},
@@ -50,7 +50,7 @@ func TestResolveEnvironment_DefaultAlias(t *testing.T) {
 			Config: map[string]interface{}{
 				"port": 8080,
 			},
-			Commands: map[string]string{"build": "make build"},
+			Commands: map[string]interface{}{"build": "make build"},
 		},
 		Environments: map[string]*EnvironmentConfig{
 			"docker": {Provider: "docker"},
@@ -102,7 +102,7 @@ func TestResolveEnvironment_NamedProfile(t *testing.T) {
 				"port": 8080,
 				"host": "localhost",
 			},
-			Commands: map[string]string{
+			Commands: map[string]interface{}{
 				"build": "make build",
 				"test":  "make test",
 				"logs":  "tail -f /tmp/logs",
@@ -115,7 +115,7 @@ func TestResolveEnvironment_NamedProfile(t *testing.T) {
 					"port": 9090,
 					"tag":  "latest",
 				},
-				Commands: map[string]string{
+				Commands: map[string]interface{}{
 					"build": "docker compose build",
 					"logs":  "docker compose logs -f",
 				},
@@ -209,7 +209,7 @@ func TestResolveEnvironmentWithProvenance_NotebookOverridesEcosystem(t *testing.
 						},
 					},
 				},
-				Commands: map[string]string{"build": "make build"},
+				Commands: map[string]interface{}{"build": "make build"},
 			},
 		},
 		ProjectNotebook: &Config{
@@ -221,7 +221,7 @@ func TestResolveEnvironmentWithProvenance_NotebookOverridesEcosystem(t *testing.
 						},
 					},
 				},
-				Commands: map[string]string{"logs": "tail -f /tmp/logs"},
+				Commands: map[string]interface{}{"logs": "tail -f /tmp/logs"},
 			},
 		},
 	}
@@ -339,7 +339,7 @@ func TestResolveEnvironmentWithProvenance_MultiLayerStack(t *testing.T) {
 					"domain": "grove.local",
 					"port":   8080,
 				},
-				Commands: map[string]string{"build": "make build"},
+				Commands: map[string]interface{}{"build": "make build"},
 			},
 		},
 		ProjectNotebook: &Config{
@@ -357,7 +357,7 @@ func TestResolveEnvironmentWithProvenance_MultiLayerStack(t *testing.T) {
 						"port":   9090,
 						"region": "us-central1",
 					},
-					Commands: map[string]string{"deploy": "terraform apply"},
+					Commands: map[string]interface{}{"deploy": "terraform apply"},
 				},
 			},
 		},

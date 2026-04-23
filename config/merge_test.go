@@ -557,7 +557,7 @@ func TestMergeEnvironments(t *testing.T) {
 			Config: map[string]interface{}{
 				"domain": "grove.local",
 			},
-			Commands: map[string]string{
+			Commands: map[string]interface{}{
 				"build": "make build",
 				"test":  "make test",
 			},
@@ -570,7 +570,7 @@ func TestMergeEnvironments(t *testing.T) {
 						"web": "nginx",
 					},
 				},
-				Commands: map[string]string{
+				Commands: map[string]interface{}{
 					"build": "docker compose build",
 				},
 			},
@@ -585,7 +585,7 @@ func TestMergeEnvironments(t *testing.T) {
 						"api": "golang", // Adds a new service
 					},
 				},
-				Commands: map[string]string{
+				Commands: map[string]interface{}{
 					"logs": "docker compose logs -f", // Adds a new command
 				},
 			},
@@ -650,7 +650,7 @@ func TestMergeEnvironmentDefault(t *testing.T) {
 				"host": "localhost",
 				"port": 8080,
 			},
-			Commands: map[string]string{
+			Commands: map[string]interface{}{
 				"build": "make build",
 				"test":  "make test",
 			},
@@ -663,7 +663,7 @@ func TestMergeEnvironmentDefault(t *testing.T) {
 				"port":     9090, // Override
 				"database": "postgres://localhost:5432",
 			},
-			Commands: map[string]string{
+			Commands: map[string]interface{}{
 				"build": "npm run build", // Override
 				"seed":  "npm run seed",  // New
 			},

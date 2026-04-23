@@ -59,10 +59,7 @@
           "type": "string"
         },
         "commands": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Named commands that run in the context of this environment",
+          "description": "Named commands that run in the context of this environment. Each entry is either a shell-string (e.g. build = \"make build\") or a table with command/startup keys (startup=true auto-runs the command after env up)",
           "type": "object"
         },
         "config": {
