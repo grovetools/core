@@ -6,7 +6,6 @@ package git
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,14 +15,6 @@ import (
 	// TODO: Update when testutil is available in grove-core
 	// "testutil"
 )
-
-// Temporary helper functions until testutil is available
-func runGitCommand(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	require.NoError(t, cmd.Run())
-}
 
 func createCommit(t *testing.T, dir, filename, content string) {
 	t.Helper()

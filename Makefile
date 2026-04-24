@@ -23,7 +23,7 @@ LDFLAGS = -ldflags="\
 -X '$(VERSION_PKG).Branch=$(GIT_BRANCH)' \
 -X '$(VERSION_PKG).BuildDate=$(BUILD_DATE)'"
 
-.PHONY: all build test clean fmt vet lint run check dev build-all schema help setup
+.PHONY: all build test clean fmt fmt-check vet lint run check dev build-all schema help setup
 
 all: build
 
@@ -73,6 +73,18 @@ fmt:
 		exit 1; \
 	fi
 
+fmt-check:
+	@if ! command -v gofumpt > /dev/null; then \
+		echo "gofumpt not installed. Run 'make setup'."; \
+		exit 1; \
+	fi
+	@unformatted="$$(gofumpt -l . 2>/dev/null)"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "Unformatted files (run 'make fmt'):"; \
+		echo "$$unformatted" | sed 's/^/  /'; \
+		exit 1; \
+	fi
+
 vet:
 	@echo "Running go vet..."
 	@go vet ./...
@@ -90,7 +102,7 @@ run: build
 	@$(BIN_DIR)/$(BINARY_NAME) $(ARGS)
 
 # Run all checks
-check: fmt vet lint test
+check: fmt-check vet lint test
 
 # Development build with race detector
 dev:
