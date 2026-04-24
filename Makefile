@@ -23,9 +23,16 @@ LDFLAGS = -ldflags="\
 -X '$(VERSION_PKG).Branch=$(GIT_BRANCH)' \
 -X '$(VERSION_PKG).BuildDate=$(BUILD_DATE)'"
 
-.PHONY: all build test clean fmt vet lint run check dev build-all schema help
+.PHONY: all build test clean fmt vet lint run check dev build-all schema help setup
 
 all: build
+
+setup:
+	@echo "Configuring git blame to ignore formatting commits..."
+	@git config blame.ignoreRevsFile .git-blame-ignore-revs
+	@echo "Installing dev tools..."
+	@command -v gofumpt > /dev/null || go install mvdan.cc/gofumpt@latest
+	@echo "Done. Run 'make check' to verify."
 
 schema:
 	@echo "Generating base schema..."
@@ -112,6 +119,7 @@ test-e2e: build
 # Show available targets
 help:
 	@echo "Available targets:"
+	@echo "  make setup       - One-time contributor setup (git config, install gofumpt)"
 	@echo "  make build       - Build the binary"
 	@echo "  make schema      - Generate JSON schemas"
 	@echo "  make test        - Run tests"
