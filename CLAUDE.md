@@ -29,6 +29,20 @@ This file contains important instructions for Claude when working with this repo
 - The version information is injected during build time via LDFLAGS
 - For development builds with race detection, use `make dev`
 
+## Formatting
+
+This repo uses **gofumpt** with `extra-rules`. Key targets:
+
+- `make fmt` — format in place (mutates)
+- `make fmt-check` — verify only (used by `make check`, CI, pre-push)
+- `make setup` — one-time per-clone bootstrap (installs gofumpt, pre-commit hook, configures `blame.ignoreRevsFile`)
+
+A pre-commit hook rejects unformatted staged files. An on-stop hook (`grove.yml`) runs `gofumpt -w .` automatically after agent sessions when uncommitted changes are present.
+
+Never add `go fmt ./...` to scripts — use `gofumpt -w .` directly. `gofmt` produces output gofumpt considers invalid.
+
+See `CONTRIBUTING.md` for rationale.
+
 ## Looking Up Related Concepts
 
 Before starting work, search for existing concepts that may relate to your task:
