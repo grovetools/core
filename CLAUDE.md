@@ -37,7 +37,7 @@ This repo uses **gofumpt** with `extra-rules`. Key targets:
 - `make fmt-check` — verify only (used by `make check`, CI, pre-push)
 - `make setup` — one-time per-clone bootstrap (installs gofumpt, pre-commit hook, configures `blame.ignoreRevsFile`)
 
-A pre-commit hook rejects unformatted staged files. An on-stop hook (`grove.yml`) runs `gofumpt -w .` automatically after agent sessions when uncommitted changes are present.
+A pre-commit hook rejects unformatted staged files. An on-stop hook (`grove.toml` `[[hooks.on_stop]]`) runs `gofumpt -w .` automatically after agent sessions when uncommitted changes are present.
 
 Never add `go fmt ./...` to scripts — use `gofumpt -w .` directly. `gofmt` produces output gofumpt considers invalid.
 
