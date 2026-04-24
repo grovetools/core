@@ -445,9 +445,18 @@ type HookCommand struct {
 	CancelPrevious bool   `yaml:"cancel_previous,omitempty" toml:"cancel_previous,omitempty" jsonschema:"description=If true, SIGTERM any in-flight instance of the same hook when a new event fires"`
 }
 
+// PostToolUseHook defines a reminder hook that emits additional context to
+// the agent when a tool call matches a Claude Code permission-rule filter.
+type PostToolUseHook struct {
+	Name              string `yaml:"name" toml:"name" jsonschema:"description=Name of the reminder hook"`
+	If                string `yaml:"if" toml:"if" jsonschema:"description=Claude Code permission-rule filter (e.g. 'Bash(git commit *)' or 'Edit(*.go)')"`
+	AdditionalContext string `yaml:"additional_context" toml:"additional_context" jsonschema:"description=Reminder text emitted as hookSpecificOutput.additionalContext on match"`
+}
+
 // HooksConfig groups all hook-related settings.
 type HooksConfig struct {
-	OnStop []HookCommand `yaml:"on_stop,omitempty" toml:"on_stop,omitempty" jsonschema:"description=Commands to run when a session stops"`
+	OnStop      []HookCommand     `yaml:"on_stop,omitempty" toml:"on_stop,omitempty" jsonschema:"description=Commands to run when a session stops"`
+	PostToolUse []PostToolUseHook `yaml:"post_tool_use,omitempty" toml:"post_tool_use,omitempty" jsonschema:"description=Reminder hooks that emit additional context after tool calls"`
 }
 
 // SyncthingConfig holds settings for automated Syncthing folder setup.
