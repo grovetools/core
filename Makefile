@@ -32,6 +32,11 @@ setup:
 	@git config blame.ignoreRevsFile .git-blame-ignore-revs
 	@echo "Installing dev tools..."
 	@command -v gofumpt > /dev/null || go install mvdan.cc/gofumpt@latest
+	@echo "Installing git pre-commit hook..."
+	@hooks_dir="$$(git rev-parse --git-path hooks)"; \
+	mkdir -p "$$hooks_dir"; \
+	cp scripts/pre-commit "$$hooks_dir/pre-commit"; \
+	chmod +x "$$hooks_dir/pre-commit"
 	@echo "Done. Run 'make check' to verify."
 
 schema:

@@ -1,0 +1,22 @@
+#!/bin/sh
+# Reject commits containing Go files that aren't gofumpt-clean.
+# Installed by `make setup` as .git/hooks/pre-commit.
+
+set -e
+
+files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+[ -z "$files" ] && exit 0
+
+if ! command -v gofumpt >/dev/null 2>&1; then
+    echo "pre-commit: gofumpt not installed. Run 'make setup'." >&2
+    exit 1
+fi
+
+unformatted=$(echo "$files" | xargs gofumpt -l)
+if [ -n "$unformatted" ]; then
+    echo "pre-commit: the following files are not gofumpt-clean:" >&2
+    echo "$unformatted" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "Run 'make fmt' and re-stage." >&2
+    exit 1
+fi
