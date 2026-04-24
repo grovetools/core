@@ -5,6 +5,11 @@ E2E_BINARY_NAME=tend
 BIN_DIR=bin
 VERSION_PKG=github.com/grovetools/core/version
 
+# --- Tool versions ---
+# Kept in sync with .tool-versions (for asdf/mise). Override via env if needed.
+GOFUMPT_VERSION ?= v0.9.2
+GOLANGCI_VERSION ?= v1.64.8
+
 # --- Versioning ---
 # For dev builds, we construct a version string from git info.
 # For release builds, VERSION is passed in by the CI/CD pipeline (e.g., VERSION=v1.2.3)
@@ -31,7 +36,8 @@ setup:
 	@echo "Configuring git blame to ignore formatting commits..."
 	@git config blame.ignoreRevsFile .git-blame-ignore-revs
 	@echo "Installing dev tools..."
-	@command -v gofumpt > /dev/null || go install mvdan.cc/gofumpt@latest
+	@command -v gofumpt > /dev/null || go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	@command -v golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	@echo "Installing git pre-commit hook..."
 	@hooks_dir="$$(git rev-parse --git-path hooks)"; \
 	mkdir -p "$$hooks_dir"; \
