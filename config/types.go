@@ -438,9 +438,11 @@ type DaemonHooks struct {
 
 // HookCommand defines a command to be executed for a hook.
 type HookCommand struct {
-	Name    string `yaml:"name" toml:"name" jsonschema:"description=Name of the hook command"`
-	Command string `yaml:"command" toml:"command" jsonschema:"description=Shell command to execute"`
-	RunIf   string `yaml:"run_if,omitempty" toml:"run_if,omitempty" jsonschema:"enum=always,enum=changes,description=Condition to run the command (always or changes)"`
+	Name           string `yaml:"name" toml:"name" jsonschema:"description=Name of the hook command"`
+	Command        string `yaml:"command" toml:"command" jsonschema:"description=Shell command to execute"`
+	RunIf          string `yaml:"run_if,omitempty" toml:"run_if,omitempty" jsonschema:"enum=always,enum=changes,description=Condition to run the command (always or changes)"`
+	Timeout        int    `yaml:"timeout,omitempty" toml:"timeout,omitempty" jsonschema:"description=Maximum run time in seconds before the hook is killed (default 600)"`
+	CancelPrevious bool   `yaml:"cancel_previous,omitempty" toml:"cancel_previous,omitempty" jsonschema:"description=If true, SIGTERM any in-flight instance of the same hook when a new event fires"`
 }
 
 // HooksConfig groups all hook-related settings.
