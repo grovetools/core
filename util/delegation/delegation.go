@@ -14,13 +14,14 @@ import (
 // - Direct binary execution scenarios
 //
 // Usage:
-//   cmd := delegation.Command("flow", "plan", "status")
-//   // Executes: grove flow plan status (if grove exists)
-//   // Or: flow plan status (if grove doesn't exist)
 //
-//   cmd := delegation.Command("cx", "rules")
-//   // Executes: grove cx rules (if grove exists)
-//   // Or: cx rules (if grove doesn't exist)
+//	cmd := delegation.Command("flow", "plan", "status")
+//	// Executes: grove flow plan status (if grove exists)
+//	// Or: flow plan status (if grove doesn't exist)
+//
+//	cmd := delegation.Command("cx", "rules")
+//	// Executes: grove cx rules (if grove exists)
+//	// Or: cx rules (if grove doesn't exist)
 func Command(tool string, args ...string) *exec.Cmd {
 	// Check if grove is available in PATH
 	if _, err := exec.LookPath("grove"); err == nil {
@@ -38,9 +39,10 @@ func Command(tool string, args ...string) *exec.Cmd {
 // This is similar to Command but supports context cancellation.
 //
 // Usage:
-//   cmd := delegation.CommandContext(ctx, "cx", "generate")
-//   // Executes: grove cx generate (if grove exists)
-//   // Or: cx generate (if grove doesn't exist)
+//
+//	cmd := delegation.CommandContext(ctx, "cx", "generate")
+//	// Executes: grove cx generate (if grove exists)
+//	// Or: cx generate (if grove doesn't exist)
 func CommandContext(ctx context.Context, tool string, args ...string) *exec.Cmd {
 	// Check if grove is available in PATH
 	if _, err := exec.LookPath("grove"); err == nil {

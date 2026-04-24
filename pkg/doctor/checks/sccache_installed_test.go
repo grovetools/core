@@ -31,7 +31,12 @@ func newSccacheFixture(t *testing.T, tomlBody string, sccachePath string) (*scca
 		}
 	}
 	c := &sccacheInstalledCheck{
-		getenv:       func(k string) string { if k == "GROVE_SCOPE" { return scope }; return "" },
+		getenv: func(k string) string {
+			if k == "GROVE_SCOPE" {
+				return scope
+			}
+			return ""
+		},
 		getwd:        func() (string, error) { return scope, nil },
 		resolveScope: func(string) string { return scope },
 		lookPath: func(name string) (string, error) {

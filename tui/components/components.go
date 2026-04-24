@@ -124,7 +124,7 @@ func RenderBox(title, content string, width int) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Border).
-		Width(width - 2).
+		Width(width-2).
 		Padding(1, 2)
 
 	// Add title if provided

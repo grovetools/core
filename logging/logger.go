@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mattn/go-isatty"
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/version"
+	"github.com/mattn/go-isatty"
 	"github.com/sirupsen/logrus"
 )
 
@@ -81,8 +81,10 @@ func resolveFilterSet(items []string, groups map[string][]string) map[string]boo
 }
 
 // currentProjectName caches the current project name from grove.yml
-var currentProjectName string
-var currentProjectOnce sync.Once
+var (
+	currentProjectName string
+	currentProjectOnce sync.Once
+)
 
 // VisibilityReason provides a clear reason for a filtering decision.
 type VisibilityReason string
@@ -542,4 +544,3 @@ func Reset() {
 	activeScope = ScopeWorkspace
 	scopeMu.Unlock()
 }
-

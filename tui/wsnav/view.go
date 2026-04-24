@@ -37,8 +37,8 @@ func (m Model) View() string {
 	headerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.DefaultColors.Orange).
-		Width(width - 4).
-		Height(headerHeight - 2).
+		Width(width-4).
+		Height(headerHeight-2).
 		Align(lipgloss.Center, lipgloss.Center).
 		Bold(true)
 
@@ -52,8 +52,8 @@ func (m Model) View() string {
 	footerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.DefaultColors.Orange).
-		Width(width - 4).
-		Height(footerHeight - 2).
+		Width(width-4).
+		Height(footerHeight-2).
 		Align(lipgloss.Center, lipgloss.Center)
 
 	// Calculate available height for table content

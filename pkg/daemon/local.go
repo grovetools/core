@@ -169,11 +169,11 @@ func (c *LocalClient) ConfirmSession(ctx context.Context, confirmation SessionCo
 	if err != nil {
 		// If not found, create a new entry
 		metadata := sessions.SessionMetadata{
-			SessionID:        confirmation.JobID,
-			ClaudeSessionID:  confirmation.NativeID,
-			PID:              confirmation.PID,
-			TranscriptPath:   confirmation.TranscriptPath,
-			StartedAt:        time.Now(),
+			SessionID:       confirmation.JobID,
+			ClaudeSessionID: confirmation.NativeID,
+			PID:             confirmation.PID,
+			TranscriptPath:  confirmation.TranscriptPath,
+			StartedAt:       time.Now(),
 		}
 		return registry.Register(metadata)
 	}

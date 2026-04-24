@@ -6,15 +6,15 @@ import (
 
 // MockDaemonEnvClient implements DaemonEnvClient for testing.
 type MockDaemonEnvClient struct {
-	UpResponse  *EnvResponse
-	UpError     error
+	UpResponse   *EnvResponse
+	UpError      error
 	DownResponse *EnvResponse
 	DownError    error
 
 	// Recorded calls
-	UpCalled   bool
-	DownCalled bool
-	LastUpReq  EnvRequest
+	UpCalled    bool
+	DownCalled  bool
+	LastUpReq   EnvRequest
 	LastDownReq EnvRequest
 }
 

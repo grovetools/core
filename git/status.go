@@ -13,25 +13,25 @@ import (
 type StatusInfo struct {
 	// Branch is the current branch name
 	Branch string `json:"branch"`
-	
+
 	// AheadCount is the number of commits ahead of the upstream branch
 	AheadCount int `json:"ahead_count"`
-	
-	// BehindCount is the number of commits behind the upstream branch  
+
+	// BehindCount is the number of commits behind the upstream branch
 	BehindCount int `json:"behind_count"`
-	
+
 	// ModifiedCount is the number of modified files
 	ModifiedCount int `json:"modified_count"`
-	
+
 	// UntrackedCount is the number of untracked files
 	UntrackedCount int `json:"untracked_count"`
-	
+
 	// StagedCount is the number of staged files
 	StagedCount int `json:"staged_count"`
-	
+
 	// IsDirty indicates if there are any uncommitted changes
 	IsDirty bool `json:"is_dirty"`
-	
+
 	// HasUpstream indicates if the branch has an upstream tracking branch
 	HasUpstream bool `json:"has_upstream"`
 

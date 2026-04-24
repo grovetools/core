@@ -16,13 +16,13 @@ func main() {
 
 	// Define the output directory and ensure it exists.
 	outputDir := "schema/definitions"
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		log.Fatalf("Error creating schema directory: %v", err)
 	}
 
 	// Write the schema to the file.
 	outputPath := filepath.Join(outputDir, "base.schema.json")
-	if err := os.WriteFile(outputPath, schemaBytes, 0644); err != nil {
+	if err := os.WriteFile(outputPath, schemaBytes, 0o644); err != nil {
 		log.Fatalf("Error writing schema file: %v", err)
 	}
 

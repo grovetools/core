@@ -202,7 +202,7 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 	// Define standardized paths
 	worktreesBaseDir := filepath.Join(basePath, ".grove-worktrees")
 	worktreePath := filepath.Join(worktreesBaseDir, worktreeName)
-	
+
 	// If no branch name is provided, use the worktree name as the branch name
 	if branchName == "" {
 		branchName = worktreeName

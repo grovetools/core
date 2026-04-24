@@ -26,17 +26,17 @@ func TestNewLogger(t *testing.T) {
 func TestLoggerOutput(t *testing.T) {
 	// Create a buffer to capture output
 	var buf bytes.Buffer
-	
+
 	// Create a new logger and redirect output to buffer
 	logger := logrus.New()
 	logger.SetOutput(&buf)
 	logger.SetFormatter(&TextFormatter{Config: FormatConfig{}})
-	
+
 	entry := logger.WithField("component", "test")
 	entry.Info("Test message")
-	
+
 	output := buf.String()
-	
+
 	// Check that output contains expected elements
 	if !strings.Contains(output, "[INFO]") {
 		t.Errorf("Expected output to contain [INFO], got: %s", output)
@@ -51,10 +51,10 @@ func TestLoggerOutput(t *testing.T) {
 
 func TestTextFormatter(t *testing.T) {
 	tests := []struct {
-		name   string
-		config FormatConfig
-		entry  *logrus.Entry
-		want   []string // Parts that should be in the output
+		name    string
+		config  FormatConfig
+		entry   *logrus.Entry
+		want    []string // Parts that should be in the output
 		notWant []string // Parts that should NOT be in the output
 	}{
 		{
@@ -116,24 +116,24 @@ func TestTextFormatter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			formatter := &TextFormatter{Config: tt.config}
-			
+
 			// Set a fixed time for consistent testing
 			tt.entry.Time = tt.entry.Time.UTC()
-			
+
 			output, err := formatter.Format(tt.entry)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			
+
 			outputStr := string(output)
-			
+
 			// Check for expected parts
 			for _, want := range tt.want {
 				if !strings.Contains(outputStr, want) {
 					t.Errorf("Expected output to contain '%s', got: %s", want, outputStr)
 				}
 			}
-			
+
 			// Check for parts that should NOT be present
 			for _, notWant := range tt.notWant {
 				if strings.Contains(outputStr, notWant) {
@@ -150,19 +150,19 @@ func TestLogLevels(t *testing.T) {
 	logger := logrus.New()
 	logger.SetOutput(&buf)
 	logger.SetLevel(logrus.WarnLevel)
-	
+
 	entry := logger.WithField("component", "test")
-	
+
 	// These should not appear
 	entry.Debug("debug message")
 	entry.Info("info message")
-	
+
 	// These should appear
 	entry.Warn("warn message")
 	entry.Error("error message")
-	
+
 	output := buf.String()
-	
+
 	if strings.Contains(output, "debug message") {
 		t.Error("Debug message should not appear at Warn level")
 	}

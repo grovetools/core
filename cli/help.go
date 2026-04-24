@@ -23,8 +23,10 @@ var (
 	helpExtrasMu sync.RWMutex
 )
 
-const maxWidth = 60
-const minWidth = 40
+const (
+	maxWidth = 60
+	minWidth = 40
+)
 
 // getTerminalWidth returns the terminal width capped at maxWidth.
 func getTerminalWidth() int {

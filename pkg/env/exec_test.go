@@ -85,7 +85,7 @@ func newTestExecProviderWithArgs(t *testing.T, mode string) *ExecProvider {
 	scriptPath := tmpDir + "/grove-env-test"
 
 	script := fmt.Sprintf("#!/bin/sh\nexec %s -test.run=TestHelperProcess -- \"$@\"\n", os.Args[0])
-	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("failed to create helper script: %v", err)
 	}
 

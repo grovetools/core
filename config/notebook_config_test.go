@@ -18,10 +18,10 @@ func TestResolveNotebookContext(t *testing.T) {
 	nestedGroveDir := filepath.Join(tmpDir, "code", "nested")
 	notebookDir := filepath.Join(tmpDir, "notebooks", "nb")
 	customNbDir := filepath.Join(tmpDir, "notebooks", "custom")
-	require.NoError(t, os.MkdirAll(groveDir, 0755))
-	require.NoError(t, os.MkdirAll(nestedGroveDir, 0755))
-	require.NoError(t, os.MkdirAll(notebookDir, 0755))
-	require.NoError(t, os.MkdirAll(customNbDir, 0755))
+	require.NoError(t, os.MkdirAll(groveDir, 0o755))
+	require.NoError(t, os.MkdirAll(nestedGroveDir, 0o755))
+	require.NoError(t, os.MkdirAll(notebookDir, 0o755))
+	require.NoError(t, os.MkdirAll(customNbDir, 0o755))
 
 	enabled := true
 	disabled := false
@@ -123,7 +123,7 @@ func TestFindNotebookConfigPath(t *testing.T) {
 
 	groveDir := filepath.Join(tmpDir, "code")
 	notebookDir := filepath.Join(tmpDir, "notebooks", "nb")
-	require.NoError(t, os.MkdirAll(groveDir, 0755))
+	require.NoError(t, os.MkdirAll(groveDir, 0o755))
 
 	enabled := true
 	cfg := &Config{
@@ -138,9 +138,9 @@ func TestFindNotebookConfigPath(t *testing.T) {
 
 	t.Run("finds grove.toml", func(t *testing.T) {
 		wsDir := filepath.Join(notebookDir, "workspaces", "my-app")
-		require.NoError(t, os.MkdirAll(wsDir, 0755))
+		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		configPath := filepath.Join(wsDir, "grove.toml")
-		require.NoError(t, os.WriteFile(configPath, []byte("name = \"my-app\"\n"), 0644))
+		require.NoError(t, os.WriteFile(configPath, []byte("name = \"my-app\"\n"), 0o644))
 		defer os.RemoveAll(filepath.Join(notebookDir, "workspaces", "my-app"))
 
 		result := findNotebookConfigPath(filepath.Join(groveDir, "my-app"), cfg)
@@ -149,9 +149,9 @@ func TestFindNotebookConfigPath(t *testing.T) {
 
 	t.Run("finds grove.yml", func(t *testing.T) {
 		wsDir := filepath.Join(notebookDir, "workspaces", "yml-app")
-		require.NoError(t, os.MkdirAll(wsDir, 0755))
+		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		configPath := filepath.Join(wsDir, "grove.yml")
-		require.NoError(t, os.WriteFile(configPath, []byte("name: yml-app\n"), 0644))
+		require.NoError(t, os.WriteFile(configPath, []byte("name: yml-app\n"), 0o644))
 		defer os.RemoveAll(filepath.Join(notebookDir, "workspaces", "yml-app"))
 
 		result := findNotebookConfigPath(filepath.Join(groveDir, "yml-app"), cfg)
@@ -160,10 +160,10 @@ func TestFindNotebookConfigPath(t *testing.T) {
 
 	t.Run("prefers grove.toml over grove.yml", func(t *testing.T) {
 		wsDir := filepath.Join(notebookDir, "workspaces", "both-app")
-		require.NoError(t, os.MkdirAll(wsDir, 0755))
+		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		tomlPath := filepath.Join(wsDir, "grove.toml")
-		require.NoError(t, os.WriteFile(tomlPath, []byte("name = \"both-app\"\n"), 0644))
-		require.NoError(t, os.WriteFile(filepath.Join(wsDir, "grove.yml"), []byte("name: both-app\n"), 0644))
+		require.NoError(t, os.WriteFile(tomlPath, []byte("name = \"both-app\"\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(wsDir, "grove.yml"), []byte("name: both-app\n"), 0o644))
 		defer os.RemoveAll(filepath.Join(notebookDir, "workspaces", "both-app"))
 
 		result := findNotebookConfigPath(filepath.Join(groveDir, "both-app"), cfg)
@@ -190,9 +190,9 @@ func TestLoadFromWithLogger_NotebookConfig(t *testing.T) {
 	notebookDir := filepath.Join(tmpDir, "notebooks", "nb")
 	projectDir := filepath.Join(groveDir, "my-project")
 
-	require.NoError(t, os.MkdirAll(fakeConfigDir, 0755))
-	require.NoError(t, os.MkdirAll(projectDir, 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(notebookDir, "workspaces", "my-project"), 0755))
+	require.NoError(t, os.MkdirAll(fakeConfigDir, 0o755))
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(notebookDir, "workspaces", "my-project"), 0o755))
 
 	// Initialize git repo so getGitRoot works
 	initGitRepo(t, projectDir)
@@ -222,7 +222,7 @@ notebooks:
 monitoring:
   interval: 10
 `
-	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644))
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
@@ -235,7 +235,7 @@ monitoring:
 `
 		require.NoError(t, os.WriteFile(
 			filepath.Join(notebookDir, "workspaces", "my-project", "grove.yml"),
-			[]byte(nbConfig), 0644,
+			[]byte(nbConfig), 0o644,
 		))
 		defer os.Remove(filepath.Join(notebookDir, "workspaces", "my-project", "grove.yml"))
 
@@ -263,11 +263,11 @@ name: from-local
 `
 		require.NoError(t, os.WriteFile(
 			filepath.Join(notebookDir, "workspaces", "my-project", "grove.yml"),
-			[]byte(nbConfig), 0644,
+			[]byte(nbConfig), 0o644,
 		))
 		require.NoError(t, os.WriteFile(
 			filepath.Join(projectDir, "grove.yml"),
-			[]byte(localConfig), 0644,
+			[]byte(localConfig), 0o644,
 		))
 		defer os.Remove(filepath.Join(notebookDir, "workspaces", "my-project", "grove.yml"))
 		defer os.Remove(filepath.Join(projectDir, "grove.yml"))
@@ -294,9 +294,9 @@ func TestLoadLayered_NotebookConfig(t *testing.T) {
 	notebookDir := filepath.Join(tmpDir, "notebooks", "nb")
 	projectDir := filepath.Join(groveDir, "my-project")
 
-	require.NoError(t, os.MkdirAll(fakeConfigDir, 0755))
-	require.NoError(t, os.MkdirAll(projectDir, 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(notebookDir, "workspaces", "my-project"), 0755))
+	require.NoError(t, os.MkdirAll(fakeConfigDir, 0o755))
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(notebookDir, "workspaces", "my-project"), 0o755))
 
 	initGitRepo(t, projectDir)
 
@@ -322,13 +322,13 @@ notebooks:
     nb:
       root_dir: ` + notebookDir + `
 `
-	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644))
 
 	nbConfigPath := filepath.Join(notebookDir, "workspaces", "my-project", "grove.yml")
 	nbConfig := `
 name: from-notebook
 `
-	require.NoError(t, os.WriteFile(nbConfigPath, []byte(nbConfig), 0644))
+	require.NoError(t, os.WriteFile(nbConfigPath, []byte(nbConfig), 0o644))
 
 	layered, err := LoadLayered(projectDir)
 	require.NoError(t, err)
@@ -350,10 +350,10 @@ func TestLoadLayered_EcosystemNotebookLookup(t *testing.T) {
 	ecoDir := filepath.Join(groveDir, "my-eco")
 	projectDir := filepath.Join(ecoDir, "sub-project")
 
-	require.NoError(t, os.MkdirAll(fakeConfigDir, 0755))
-	require.NoError(t, os.MkdirAll(ecoDir, 0755))
-	require.NoError(t, os.MkdirAll(projectDir, 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(notebookDir, "workspaces", "my-eco"), 0755))
+	require.NoError(t, os.MkdirAll(fakeConfigDir, 0o755))
+	require.NoError(t, os.MkdirAll(ecoDir, 0o755))
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(notebookDir, "workspaces", "my-eco"), 0o755))
 
 	initGitRepo(t, projectDir)
 
@@ -374,7 +374,7 @@ groves:
     path: ` + groveDir + `
     enabled: true
 `
-	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644))
 
 	// Ecosystem config defines notebook
 	ecoConfig := `
@@ -388,13 +388,13 @@ notebooks:
     nb:
       root_dir: ` + notebookDir + `
 `
-	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), []byte(ecoConfig), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), []byte(ecoConfig), 0o644))
 
 	nbConfigPath := filepath.Join(notebookDir, "workspaces", "my-eco", "grove.yml")
 	nbConfig := `
 name: from-eco-notebook
 `
-	require.NoError(t, os.WriteFile(nbConfigPath, []byte(nbConfig), 0644))
+	require.NoError(t, os.WriteFile(nbConfigPath, []byte(nbConfig), 0o644))
 
 	layered, err := LoadLayered(ecoDir)
 	require.NoError(t, err)

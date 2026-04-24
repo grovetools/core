@@ -247,9 +247,9 @@ func parseTmuxKeys(output, source string, layer Layer, tableName string) ([]Bind
 func findCustomTables(output string) []string {
 	tables := make(map[string]bool)
 	standardTables := map[string]bool{
-		"root":        true,
-		"prefix":      true,
-		"copy-mode":   true,
+		"root":         true,
+		"prefix":       true,
+		"copy-mode":    true,
 		"copy-mode-vi": true,
 	}
 

@@ -26,6 +26,7 @@ func (f *fakeCheck) Run(_ context.Context, _ RunOptions) CheckResult {
 	}
 	return CheckResult{ID: f.id, Name: f.Name(), Status: status, Fixable: f.fixable}
 }
+
 func (f *fakeCheck) AutoFix(_ context.Context) error {
 	f.fixCount++
 	return f.fixErr

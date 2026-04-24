@@ -19,7 +19,7 @@ func LogsCLIFilteringScenario() *harness.Scenario {
 			harness.NewStep("Setup test logs and config", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-							// Create grove.yml with component filtering
+				// Create grove.yml with component filtering
 				groveYML := `name: log-filtering-test
 version: "1.0"
 logging:
@@ -66,7 +66,7 @@ logging:
 					return fmt.Errorf("logs command failed with exit code %d: %s", result.ExitCode, result.Stderr)
 				}
 
-					output := result.Stdout
+				output := result.Stdout
 
 				// Verify visible logs
 				if !strings.Contains(output, `"component":"api"`) {
@@ -90,7 +90,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Test --show-all flag", func(ctx *harness.Context) error {
-				cmd := ctx.Bin( "logs", "--show-all", "--json").Dir(ctx.RootDir)
+				cmd := ctx.Bin("logs", "--show-all", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -110,7 +110,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Test --component flag", func(ctx *harness.Context) error {
-				cmd := ctx.Bin( "logs", "--component", "db,frontend", "--json").Dir(ctx.RootDir)
+				cmd := ctx.Bin("logs", "--component", "db,frontend", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -136,7 +136,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Test --also-show flag", func(ctx *harness.Context) error {
-				cmd := ctx.Bin( "logs", "--also-show", "cache", "--json").Dir(ctx.RootDir)
+				cmd := ctx.Bin("logs", "--also-show", "cache", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -157,7 +157,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Test --also-show with group", func(ctx *harness.Context) error {
-				cmd := ctx.Bin( "logs", "--also-show", "grove-ecosystem", "--json").Dir(ctx.RootDir)
+				cmd := ctx.Bin("logs", "--also-show", "grove-ecosystem", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -176,7 +176,7 @@ logging:
 			harness.NewStep("Test 'only' config rule", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-					// Update grove.yml to use 'only' rule
+				// Update grove.yml to use 'only' rule
 				groveYML := `name: log-filtering-test
 version: "1.0"
 logging:
@@ -193,7 +193,7 @@ logging:
 					return fmt.Errorf("failed to write grove.yml: %w", err)
 				}
 
-				cmd := ctx.Bin( "logs", "--json").Dir(ctx.RootDir)
+				cmd := ctx.Bin("logs", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {
@@ -216,7 +216,7 @@ logging:
 				return nil
 			}),
 			harness.NewStep("Test --component overrides config 'only'", func(ctx *harness.Context) error {
-				cmd := ctx.Bin( "logs", "--component", "frontend", "--json").Dir(ctx.RootDir)
+				cmd := ctx.Bin("logs", "--component", "frontend", "--json").Dir(ctx.RootDir)
 				result := cmd.Run()
 
 				if result.ExitCode != 0 {

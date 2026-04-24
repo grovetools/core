@@ -35,10 +35,10 @@ func WithFormatter(formatter logrus.Formatter) LoggerOption {
 func NewLogger(opts ...LoggerOption) *logrus.Logger {
 	logger := logrus.New()
 	logger.SetOutput(os.Stdout)
-	
+
 	for _, opt := range opts {
 		opt(logger)
 	}
-	
+
 	return logger
 }

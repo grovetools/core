@@ -10,10 +10,10 @@ import (
 func TestDaemonProvider_Up_Success(t *testing.T) {
 	mock := &MockDaemonEnvClient{
 		UpResponse: &EnvResponse{
-			Status:  "running",
-			EnvVars: map[string]string{"DB_URL": "postgres://localhost"},
+			Status:    "running",
+			EnvVars:   map[string]string{"DB_URL": "postgres://localhost"},
 			Endpoints: []string{"http://localhost:8080"},
-			State:   map[string]string{"container_id": "abc123"},
+			State:     map[string]string{"container_id": "abc123"},
 		},
 	}
 	provider := NewDaemonProvider(mock)

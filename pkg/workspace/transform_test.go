@@ -15,27 +15,27 @@ func TestTransformToWorkspaceNodes_HierarchyAndClassification(t *testing.T) {
 
 	// Create the ecosystem root
 	ecoPath := filepath.Join(tempDir, "my-ecosystem")
-	require.NoError(t, os.MkdirAll(ecoPath, 0755))
+	require.NoError(t, os.MkdirAll(ecoPath, 0o755))
 
 	// Create .grove-worktrees directory
 	worktreesDir := filepath.Join(ecoPath, ".grove-worktrees")
-	require.NoError(t, os.MkdirAll(worktreesDir, 0755))
+	require.NoError(t, os.MkdirAll(worktreesDir, 0o755))
 
 	// Create ecosystem worktree
 	ecoWorktreePath := filepath.Join(worktreesDir, "eco-feature")
-	require.NoError(t, os.MkdirAll(ecoWorktreePath, 0755))
+	require.NoError(t, os.MkdirAll(ecoWorktreePath, 0o755))
 
 	// Create sub-project with .git file (worktree - linked development)
 	subProjectWtPath := filepath.Join(ecoWorktreePath, "sub-project-wt")
-	require.NoError(t, os.MkdirAll(subProjectWtPath, 0755))
+	require.NoError(t, os.MkdirAll(subProjectWtPath, 0o755))
 	gitFilePath := filepath.Join(subProjectWtPath, ".git")
-	require.NoError(t, os.WriteFile(gitFilePath, []byte("gitdir: /some/path"), 0644))
+	require.NoError(t, os.WriteFile(gitFilePath, []byte("gitdir: /some/path"), 0o644))
 
 	// Create sub-project with .git directory (full checkout)
 	subProjectCheckoutPath := filepath.Join(ecoWorktreePath, "sub-project-checkout")
-	require.NoError(t, os.MkdirAll(subProjectCheckoutPath, 0755))
+	require.NoError(t, os.MkdirAll(subProjectCheckoutPath, 0o755))
 	gitDirPath := filepath.Join(subProjectCheckoutPath, ".git")
-	require.NoError(t, os.MkdirAll(gitDirPath, 0755))
+	require.NoError(t, os.MkdirAll(gitDirPath, 0o755))
 
 	// Construct a DiscoveryResult reflecting this structure
 	result := &DiscoveryResult{
@@ -139,7 +139,7 @@ func TestTransformToWorkspaceNodes_StandaloneProject(t *testing.T) {
 	// Create a temporary filesystem structure
 	tempDir := t.TempDir()
 	projectPath := filepath.Join(tempDir, "standalone-project")
-	require.NoError(t, os.MkdirAll(projectPath, 0755))
+	require.NoError(t, os.MkdirAll(projectPath, 0o755))
 
 	result := &DiscoveryResult{
 		Projects: []Project{
@@ -173,11 +173,11 @@ func TestTransformToWorkspaceNodes_EcosystemSubProject(t *testing.T) {
 	tempDir := t.TempDir()
 	ecoPath := filepath.Join(tempDir, "my-ecosystem")
 	subProjectPath := filepath.Join(ecoPath, "sub-project")
-	require.NoError(t, os.MkdirAll(subProjectPath, 0755))
+	require.NoError(t, os.MkdirAll(subProjectPath, 0o755))
 
 	// Create .git directory (full checkout)
 	gitDirPath := filepath.Join(subProjectPath, ".git")
-	require.NoError(t, os.MkdirAll(gitDirPath, 0755))
+	require.NoError(t, os.MkdirAll(gitDirPath, 0o755))
 
 	result := &DiscoveryResult{
 		Ecosystems: []Ecosystem{

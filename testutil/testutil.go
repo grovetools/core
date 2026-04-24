@@ -53,7 +53,7 @@ func InitGitRepo(t *testing.T, dir string) {
 
 	// Create initial commit
 	testFile := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(testFile, []byte("# Test Project\n"), 0600); err != nil {
+	if err := os.WriteFile(testFile, []byte("# Test Project\n"), 0o600); err != nil {
 		t.Fatalf("Failed to create README: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func CreateCommit(t *testing.T, dir, filename, content string) {
 	t.Helper()
 
 	filePath := filepath.Join(dir, filename)
-	if err := os.WriteFile(filePath, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
 		t.Fatalf("Failed to create file %s: %v", filename, err)
 	}
 
@@ -198,7 +198,7 @@ func SetupAgentTest(t *testing.T) (string, string, func()) {
 	// Create grove.yml with agent
 	groveYAML := CreateTestAgentYAML(projectName)
 	groveFile := filepath.Join(tmpDir, "grove.yml")
-	require.NoError(t, os.WriteFile(groveFile, []byte(groveYAML), 0600))
+	require.NoError(t, os.WriteFile(groveFile, []byte(groveYAML), 0o600))
 
 	// Cleanup function
 	cleanup := func() {

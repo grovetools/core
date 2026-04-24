@@ -17,7 +17,7 @@ import (
 // nbCreateGitRepo creates a minimal .git directory marker at the given path.
 func nbCreateGitRepo(repoPath string) error {
 	gitDir := filepath.Join(repoPath, ".git")
-	if err := os.MkdirAll(gitDir, 0755); err != nil {
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create .git dir at %s: %w", repoPath, err)
 	}
 	return fs.WriteString(filepath.Join(gitDir, "HEAD"), "ref: refs/heads/main\n")
@@ -25,7 +25,7 @@ func nbCreateGitRepo(repoPath string) error {
 
 // nbCreateEcosystemDir creates a directory with a grove.toml ecosystem marker.
 func nbCreateEcosystemDir(path string, name string) error {
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
 	}
 	content := fmt.Sprintf("name = %q\nworkspaces = [\"*\"]\n", name)
@@ -43,7 +43,7 @@ func nbCreateGroveProject(path string, name string) error {
 // nbSetupGlobalConfig creates a global grove.toml with the given TOML content.
 func nbSetupGlobalConfig(ctx *harness.Context, configTOML string) error {
 	globalConfigDir := filepath.Join(ctx.ConfigDir(), "grove")
-	if err := os.MkdirAll(globalConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(globalConfigDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create global config dir: %w", err)
 	}
 	return fs.WriteString(filepath.Join(globalConfigDir, "grove.toml"), configTOML)
@@ -51,7 +51,7 @@ func nbSetupGlobalConfig(ctx *harness.Context, configTOML string) error {
 
 // nbResolveSymlinks resolves symlinks in a path to avoid macOS /var → /private/var mismatches.
 func nbResolveSymlinks(path string) string {
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return path
 	}
 	resolved, err := filepath.EvalSymlinks(path)
@@ -139,7 +139,7 @@ func NbTomlsRelaxedDiscoveryScenario() *harness.Scenario {
 					return err
 				}
 				// naked repo at depth 2
-				if err := os.MkdirAll(filepath.Join(root, "subdir"), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Join(root, "subdir"), 0o755); err != nil {
 					return err
 				}
 				if err := nbCreateGitRepo(filepath.Join(root, "subdir", "deep-project")); err != nil {
@@ -242,7 +242,7 @@ func NbTomlsNotebookConfigScenario() *harness.Scenario {
 					return err
 				}
 				nbLocal := filepath.Join(nbRoot, "workspaces", "proj-local")
-				if err := os.MkdirAll(nbLocal, 0755); err != nil {
+				if err := os.MkdirAll(nbLocal, 0o755); err != nil {
 					return err
 				}
 				if err := fs.WriteString(filepath.Join(nbLocal, "grove.toml"), `name = "proj-local-from-nb"
@@ -258,7 +258,7 @@ nb_setting = "from-notebook"
 					return err
 				}
 				nbOnly := filepath.Join(nbRoot, "workspaces", "proj-nb-only")
-				if err := os.MkdirAll(nbOnly, 0755); err != nil {
+				if err := os.MkdirAll(nbOnly, 0o755); err != nil {
 					return err
 				}
 				if err := fs.WriteString(filepath.Join(nbOnly, "grove.toml"), "name = \"proj-nb-only-from-nb\"\n"); err != nil {
@@ -270,7 +270,7 @@ nb_setting = "from-notebook"
 					return err
 				}
 				nbYml := filepath.Join(nbRoot, "workspaces", "proj-yml-nb")
-				if err := os.MkdirAll(nbYml, 0755); err != nil {
+				if err := os.MkdirAll(nbYml, 0o755); err != nil {
 					return err
 				}
 				if err := fs.WriteString(filepath.Join(nbYml, "grove.yml"), "name: proj-yml-nb-from-nb\n"); err != nil {
@@ -282,7 +282,7 @@ nb_setting = "from-notebook"
 					return err
 				}
 				nbYaml := filepath.Join(nbRoot, "workspaces", "proj-yaml-nb")
-				if err := os.MkdirAll(nbYaml, 0755); err != nil {
+				if err := os.MkdirAll(nbYaml, 0o755); err != nil {
 					return err
 				}
 				if err := fs.WriteString(filepath.Join(nbYaml, "grove.yaml"), "name: proj-yaml-nb-from-nb\n"); err != nil {
@@ -365,7 +365,7 @@ func NbTomlsFullFeatureFlowScenario() *harness.Scenario {
 					return err
 				}
 				nbSvc := filepath.Join(nbRoot, "workspaces", "my-service")
-				if err := os.MkdirAll(nbSvc, 0755); err != nil {
+				if err := os.MkdirAll(nbSvc, 0o755); err != nil {
 					return err
 				}
 				if err := fs.WriteString(filepath.Join(nbSvc, "grove.toml"), `name = "my-service-from-notebook"
@@ -383,7 +383,7 @@ service_port = "8080"
 				}
 
 				// Deep repo (depth 2, should not be found with depth=1)
-				if err := os.MkdirAll(filepath.Join(root, "libs"), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Join(root, "libs"), 0o755); err != nil {
 					return err
 				}
 				if err := nbCreateGitRepo(filepath.Join(root, "libs", "deep-lib")); err != nil {

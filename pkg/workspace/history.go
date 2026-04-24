@@ -62,7 +62,7 @@ func LoadAccessHistory(configDir string) (*AccessHistory, error) {
 // Save saves the access history to disk
 func (h *AccessHistory) Save(configDir string) error {
 	historyDir := filepath.Join(configDir, "gmux")
-	if err := os.MkdirAll(historyDir, 0755); err != nil {
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		return err
 	}
 
@@ -73,7 +73,7 @@ func (h *AccessHistory) Save(configDir string) error {
 		return err
 	}
 
-	return os.WriteFile(historyFile, data, 0644)
+	return os.WriteFile(historyFile, data, 0o644)
 }
 
 // RecordAccess records that a project was accessed
@@ -131,4 +131,3 @@ func LoadAccessHistoryAsMap(configDir string) (map[string]time.Time, error) {
 	}
 	return result, nil
 }
-

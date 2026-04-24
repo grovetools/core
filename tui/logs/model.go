@@ -474,18 +474,18 @@ func New(ctx context.Context, cfg Config) *Model {
 		cancel:              cancel,
 		cfg:                 cfg,
 		activeWorkspacePath: cfg.InitialWorkspacePath,
-		list:              l,
-		keys:              keys,
-		spinner:           sp,
-		help:              help.New(keys),
-		followMode:        cfg.Follow,
-		filtersEnabled:    false,
-		logChan:           make(chan logutil.TailedLine, 100),
-		logConfig:         logCfg,
-		overrideOpts:      cfg.OverrideOpts,
-		includeSystem:     cfg.IncludeSystem,
-		tailedFiles:       make(map[string]bool),
-		workspaceColorMap: make(map[string]lipgloss.Style),
+		list:                l,
+		keys:                keys,
+		spinner:             sp,
+		help:                help.New(keys),
+		followMode:          cfg.Follow,
+		filtersEnabled:      false,
+		logChan:             make(chan logutil.TailedLine, 100),
+		logConfig:           logCfg,
+		overrideOpts:        cfg.OverrideOpts,
+		includeSystem:       cfg.IncludeSystem,
+		tailedFiles:         make(map[string]bool),
+		workspaceColorMap:   make(map[string]lipgloss.Style),
 	}
 	switch {
 	case cfg.SystemOnly:
@@ -582,8 +582,10 @@ type newLogMsg struct {
 	workspacePath string
 	data          map[string]interface{}
 }
-type tickMsg time.Time
-type clearStatusMsg struct{}
+type (
+	tickMsg        time.Time
+	clearStatusMsg struct{}
+)
 
 // discoveryLoop runs every 500ms, calling cfg.GetWorkspaces() to
 // re-scan each known workspace's .grove/logs directory plus the

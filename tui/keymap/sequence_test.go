@@ -161,11 +161,11 @@ func TestIsPrefixOfAny(t *testing.T) {
 		buffer   string
 		expected bool
 	}{
-		{"g", true},  // Prefix of gg
-		{"z", true},  // Prefix of zo, zc
-		{"x", false}, // Not a prefix of any
-		{"gg", false},// Exact match, not prefix
-		{"zo", false},// Exact match, not prefix
+		{"g", true},   // Prefix of gg
+		{"z", true},   // Prefix of zo, zc
+		{"x", false},  // Not a prefix of any
+		{"gg", false}, // Exact match, not prefix
+		{"zo", false}, // Exact match, not prefix
 	}
 
 	for _, tt := range tests {

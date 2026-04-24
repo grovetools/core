@@ -67,20 +67,20 @@ func GenerateSchema() ([]byte, error) {
 	}
 
 	type BaseConfig struct {
-		Name             string                       `yaml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem" jsonschema_extras:"x-layer=ecosystem,x-priority=10"`
-		Version          string                       `yaml:"version,omitempty" jsonschema:"description=Configuration version (e.g. 1.0)" jsonschema_extras:"x-layer=global,x-priority=100"`
-		Workspaces       []string                     `yaml:"workspaces,omitempty" jsonschema:"description=Glob patterns for workspace directories in this ecosystem" jsonschema_extras:"x-layer=ecosystem,x-priority=11"`
-		BuildCmd         string                       `yaml:"build_cmd,omitempty" jsonschema:"description=Custom build command (default: make build)" jsonschema_extras:"x-layer=project,x-priority=20"`
-		BuildAfter       []string                     `yaml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one" jsonschema_extras:"x-layer=project,x-priority=21"`
-		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty" jsonschema:"description=Notebook configuration" jsonschema_extras:"x-layer=global,x-priority=2,x-important=true"`
-		Logging          *LoggingSchemaConfig         `yaml:"logging,omitempty" jsonschema:"description=Logging configuration" jsonschema_extras:"x-layer=global,x-priority=60"`
-		TUI              *TUISchemaConfig             `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
-		Context          *ContextConfig               `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
-		Environment  *EnvironmentConfig            `yaml:"environment,omitempty" jsonschema:"description=Default environment provider configuration" jsonschema_extras:"x-layer=project,x-priority=25"`
-		Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag" jsonschema_extras:"x-layer=project,x-priority=26"`
-		Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
-		SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1000,x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
-		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery" jsonschema_extras:"x-layer=global,x-priority=5"`
+		Name             string                        `yaml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem" jsonschema_extras:"x-layer=ecosystem,x-priority=10"`
+		Version          string                        `yaml:"version,omitempty" jsonschema:"description=Configuration version (e.g. 1.0)" jsonschema_extras:"x-layer=global,x-priority=100"`
+		Workspaces       []string                      `yaml:"workspaces,omitempty" jsonschema:"description=Glob patterns for workspace directories in this ecosystem" jsonschema_extras:"x-layer=ecosystem,x-priority=11"`
+		BuildCmd         string                        `yaml:"build_cmd,omitempty" jsonschema:"description=Custom build command (default: make build)" jsonschema_extras:"x-layer=project,x-priority=20"`
+		BuildAfter       []string                      `yaml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one" jsonschema_extras:"x-layer=project,x-priority=21"`
+		Notebooks        *NotebooksConfig              `yaml:"notebooks,omitempty" jsonschema:"description=Notebook configuration" jsonschema_extras:"x-layer=global,x-priority=2,x-important=true"`
+		Logging          *LoggingSchemaConfig          `yaml:"logging,omitempty" jsonschema:"description=Logging configuration" jsonschema_extras:"x-layer=global,x-priority=60"`
+		TUI              *TUISchemaConfig              `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
+		Context          *ContextConfig                `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
+		Environment      *EnvironmentConfig            `yaml:"environment,omitempty" jsonschema:"description=Default environment provider configuration" jsonschema_extras:"x-layer=project,x-priority=25"`
+		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag" jsonschema_extras:"x-layer=project,x-priority=26"`
+		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
+		SearchPaths      map[string]SearchPathConfig   `yaml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1000,x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
+		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery" jsonschema_extras:"x-layer=global,x-priority=5"`
 	}
 
 	schema := r.Reflect(&BaseConfig{})

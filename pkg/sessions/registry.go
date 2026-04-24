@@ -23,7 +23,7 @@ type FileSystemRegistry struct {
 
 func NewFileSystemRegistry() (*FileSystemRegistry, error) {
 	baseDir := filepath.Join(paths.StateDir(), "hooks", "sessions")
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create sessions directory: %w", err)
 	}
 	return &FileSystemRegistry{baseDir: baseDir}, nil
@@ -38,13 +38,13 @@ func (r *FileSystemRegistry) Register(metadata SessionMetadata) error {
 	}
 	sessionDir := filepath.Join(r.baseDir, sessionDirName)
 
-	if err := os.MkdirAll(sessionDir, 0755); err != nil {
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create session directory: %w", err)
 	}
 
 	// Write pid.lock
 	pidFile := filepath.Join(sessionDir, "pid.lock")
-	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", metadata.PID)), 0644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", metadata.PID)), 0o644); err != nil {
 		return fmt.Errorf("failed to write pid.lock: %w", err)
 	}
 
@@ -54,7 +54,7 @@ func (r *FileSystemRegistry) Register(metadata SessionMetadata) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	if err := os.WriteFile(metadataFile, metadataJSON, 0644); err != nil {
+	if err := os.WriteFile(metadataFile, metadataJSON, 0o644); err != nil {
 		return fmt.Errorf("failed to write metadata.json: %w", err)
 	}
 
@@ -118,7 +118,7 @@ func (r *FileSystemRegistry) UpdateStatus(sessionID string, status string) error
 		return nil
 	}
 
-	return os.WriteFile(metadataFile, updated, 0644)
+	return os.WriteFile(metadataFile, updated, 0o644)
 }
 
 // Unregister removes the crash-recovery tracking files for a session.

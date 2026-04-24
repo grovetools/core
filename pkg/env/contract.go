@@ -6,22 +6,22 @@ import (
 
 // EnvRequest is the payload sent to providers (via daemon API or exec plugin stdin).
 type EnvRequest struct {
-	Action    string                   `json:"action"`              // "up", "down", "status", "restart"
-	Provider  string                   `json:"provider"`            // Provider name (e.g., native, docker, cloud)
-	Profile   string                   `json:"profile,omitempty"`   // Named environment profile (empty = default)
-	Workspace *workspace.WorkspaceNode `json:"workspace,omitempty"` // Full node context
-	PlanDir   string                   `json:"plan_dir"`            // Notebook plan dir for ephemeral state (legacy, prefer StateDir)
-	StateDir  string                   `json:"state_dir"`           // Directory for persistent env state (.grove/env/)
-	Config    map[string]interface{}   `json:"config,omitempty"`    // Provider-specific config from grove.yml
+	Action    string                   `json:"action"`               // "up", "down", "status", "restart"
+	Provider  string                   `json:"provider"`             // Provider name (e.g., native, docker, cloud)
+	Profile   string                   `json:"profile,omitempty"`    // Named environment profile (empty = default)
+	Workspace *workspace.WorkspaceNode `json:"workspace,omitempty"`  // Full node context
+	PlanDir   string                   `json:"plan_dir"`             // Notebook plan dir for ephemeral state (legacy, prefer StateDir)
+	StateDir  string                   `json:"state_dir"`            // Directory for persistent env state (.grove/env/)
+	Config    map[string]interface{}   `json:"config,omitempty"`     // Provider-specific config from grove.yml
 	ManagedBy string                   `json:"managed_by,omitempty"` // Who owns this env: "plan:<slug>", "user", or empty
-	Force     bool                     `json:"force,omitempty"`     // Force teardown even if not the owner
-	Clean     bool                     `json:"clean,omitempty"`     // Remove all volumes including persistent ones
+	Force     bool                     `json:"force,omitempty"`      // Force teardown even if not the owner
+	Clean     bool                     `json:"clean,omitempty"`      // Remove all volumes including persistent ones
 	// ForceDestroy instructs the terraform provider on Down to bypass the
 	// `skip_destroy` profile flag and actually run `terraform destroy`.
 	// Intended for plan-finish at worktree retirement, where preserving
 	// cloud resources across iteration no longer applies.
-	ForceDestroy bool                  `json:"force_destroy,omitempty"`
-	Rebuild   []string                 `json:"rebuild,omitempty"`   // Image services to force-rebuild. "all" = every image; named entries match service keys.
+	ForceDestroy bool     `json:"force_destroy,omitempty"`
+	Rebuild      []string `json:"rebuild,omitempty"` // Image services to force-rebuild. "all" = every image; named entries match service keys.
 }
 
 // ForceRebuild reports whether the service with the given name should be

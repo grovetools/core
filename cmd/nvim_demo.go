@@ -102,7 +102,6 @@ func loadFileList(dir string) []list.Item {
 
 		return nil
 	})
-
 	if err != nil {
 		return []list.Item{fileItem{name: "Error loading files", path: ""}}
 	}
@@ -209,7 +208,7 @@ func (m nvimDemoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// File list takes 30% of width, nvim takes the rest
 		fileListWidth := m.width * 30 / 100
 		nvimWidth := m.width - fileListWidth - 2 // -2 for border
-		nvimHeight := m.height - 3                // -3 for status and help
+		nvimHeight := m.height - 3               // -3 for status and help
 
 		m.fileList.SetSize(fileListWidth, nvimHeight)
 		cmd = m.nvimModel.SetSize(nvimWidth, nvimHeight)

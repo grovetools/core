@@ -43,7 +43,7 @@ func TestGetStatus(t *testing.T) {
 	t.Run("clean repo", func(t *testing.T) {
 		tempDir := t.TempDir()
 		setupGitRepo(t, tempDir)
-		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte("content"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte("content"), 0o644))
 		runGitCommand(t, tempDir, "add", "file.txt")
 		runGitCommand(t, tempDir, "commit", "-m", "initial commit")
 
@@ -64,19 +64,19 @@ func TestGetStatus(t *testing.T) {
 		setupGitRepo(t, tempDir)
 
 		// Create initial commit first
-		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("initial"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("initial"), 0o644))
 		runGitCommand(t, tempDir, "add", "initial.txt")
 		runGitCommand(t, tempDir, "commit", "-m", "initial commit")
 
 		// Staged file (new file that's staged but not committed)
-		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "staged.txt"), []byte("staged"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "staged.txt"), []byte("staged"), 0o644))
 		runGitCommand(t, tempDir, "add", "staged.txt")
 
 		// Modified file (modify the initial file)
-		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("modified"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("modified"), 0o644))
 
 		// Untracked file
-		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "untracked.txt"), []byte("untracked"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "untracked.txt"), []byte("untracked"), 0o644))
 
 		status, err := GetStatus(tempDir)
 		require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestGetStatus(t *testing.T) {
 		localDir := filepath.Join(baseDir, "local")
 
 		// Init bare remote with main branch
-		require.NoError(t, os.Mkdir(remoteDir, 0755))
+		require.NoError(t, os.Mkdir(remoteDir, 0o755))
 		runGitCommand(t, remoteDir, "init", "--bare", "--initial-branch=main")
 
 		// Clone local
@@ -101,13 +101,13 @@ func TestGetStatus(t *testing.T) {
 		setupGitRepo(t, localDir) // to set user config
 
 		// Initial commit and push
-		require.NoError(t, os.WriteFile(filepath.Join(localDir, "file.txt"), []byte("1"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(localDir, "file.txt"), []byte("1"), 0o644))
 		runGitCommand(t, localDir, "add", ".")
 		runGitCommand(t, localDir, "commit", "-m", "c1")
 		runGitCommand(t, localDir, "push", "origin", "main")
 
 		// Test ahead
-		require.NoError(t, os.WriteFile(filepath.Join(localDir, "file2.txt"), []byte("2"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(localDir, "file2.txt"), []byte("2"), 0o644))
 		runGitCommand(t, localDir, "add", ".")
 		runGitCommand(t, localDir, "commit", "-m", "c2")
 
@@ -124,7 +124,7 @@ func TestGetStatus(t *testing.T) {
 		anotherLocalDir := filepath.Join(baseDir, "another")
 		runGitCommand(t, baseDir, "clone", "remote.git", "another")
 		setupGitRepo(t, anotherLocalDir)
-		require.NoError(t, os.WriteFile(filepath.Join(anotherLocalDir, "another-file.txt"), []byte("remote change"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(anotherLocalDir, "another-file.txt"), []byte("remote change"), 0o644))
 		runGitCommand(t, anotherLocalDir, "add", ".")
 		runGitCommand(t, anotherLocalDir, "commit", "-m", "remote-c3")
 		runGitCommand(t, anotherLocalDir, "push", "origin", "main")

@@ -16,11 +16,11 @@ type Stopper interface {
 
 // span represents a single timed operation in the hierarchy.
 type span struct {
-	name      string
-	start     time.Time
-	duration  time.Duration
-	children  []*span
-	mu        sync.Mutex
+	name     string
+	start    time.Time
+	duration time.Duration
+	children []*span
+	mu       sync.Mutex
 	profiler *Profiler
 }
 

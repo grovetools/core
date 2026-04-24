@@ -40,7 +40,7 @@ extensions:
 
 				// Create logs directory
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs directory: %w", err)
 				}
 
@@ -91,12 +91,12 @@ extensions:
 					return fmt.Errorf("filters indicator should show OFF: %w\nContent: %s", err, content)
 				}
 
-						// Verify all logs are visible (including cache which is in hide config)
+				// Verify all logs are visible (including cache which is in hide config)
 				// Check for partial component indicators since they may be truncated in narrow viewports
 				if err := session.AssertContains("[api]"); err != nil {
 					return fmt.Errorf("expected '[api]' component not found: %w", err)
 				}
-				if err := session.AssertContains("[cach"); err != nil {  // Partial match since it may be truncated
+				if err := session.AssertContains("[cach"); err != nil { // Partial match since it may be truncated
 					return fmt.Errorf("expected '[cach' (cache component) not found: %w", err)
 				}
 
@@ -127,7 +127,7 @@ extensions:
 					return fmt.Errorf("failed to capture screen: %w", err)
 				}
 
-					// API should still be visible
+				// API should still be visible
 				if err := session.AssertContains("[api]"); err != nil {
 					return fmt.Errorf("expected '[api]' component not found: %w", err)
 				}
@@ -161,8 +161,8 @@ extensions:
 					return fmt.Errorf("filter indicator should show OFF: %w\nContent: %s", err, content)
 				}
 
-						// Verify cache logs are visible again
-				if err := session.AssertContains("[cach"); err != nil {  // Partial match
+				// Verify cache logs are visible again
+				if err := session.AssertContains("[cach"); err != nil { // Partial match
 					return fmt.Errorf("expected '[cach' (cache component) to be visible with filters OFF: %w", err)
 				}
 

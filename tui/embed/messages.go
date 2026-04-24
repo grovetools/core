@@ -119,7 +119,7 @@ type CloseConfirmMsg struct{}
 type AgentSplitAction int
 
 const (
-	AgentSplitOpen  AgentSplitAction = iota
+	AgentSplitOpen AgentSplitAction = iota
 	AgentSplitClose
 )
 

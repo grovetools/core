@@ -156,8 +156,8 @@ func buildTree(key string, value interface{}, depth int) *node {
 
 // closingBracket is a pseudo-node for rendering closing brackets
 type closingBracket struct {
-	depth     int
-	bracket   string // "}" or "]"
+	depth   int
+	bracket string // "}" or "]"
 }
 
 // flattenTree creates a flattened list of visible nodes for rendering.

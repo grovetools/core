@@ -24,4 +24,3 @@ func NewSchemaValidator() (*SchemaValidator, error) {
 func (v *SchemaValidator) Validate(configData interface{}) error {
 	return v.validator.Validate(configData)
 }
-

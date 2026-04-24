@@ -13,7 +13,6 @@ import (
 //go:generate sh -c "cd .. && go run ./tools/schema-composer/"
 //go:generate sh -c "cd .. && go run ./tools/notebook-schema-generator/"
 
-
 // SearchPathConfig defines the configuration for a single search path.
 // DEPRECATED: Use GroveSourceConfig instead.
 type SearchPathConfig struct {
@@ -509,26 +508,26 @@ type Config struct {
 func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	// Create a temporary struct with all fields to capture the data, including legacy ones.
 	type rawConfig struct {
-		Name             string                       `yaml:"name,omitempty"`
-		Version          string                       `yaml:"version"`
-		Workspaces       []string                     `yaml:"workspaces,omitempty"`
-		BuildCmd         string                       `yaml:"build_cmd,omitempty"`
-		BuildAfter       []string                     `yaml:"build_after,omitempty"`
-		Notebooks        *NotebooksConfig             `yaml:"notebooks,omitempty"`
-		TUI              *TUIConfig                   `yaml:"tui,omitempty"`
-		Context          *ContextConfig               `yaml:"context,omitempty"`
-		Daemon           *DaemonConfig                `yaml:"daemon,omitempty"`
+		Name             string                        `yaml:"name,omitempty"`
+		Version          string                        `yaml:"version"`
+		Workspaces       []string                      `yaml:"workspaces,omitempty"`
+		BuildCmd         string                        `yaml:"build_cmd,omitempty"`
+		BuildAfter       []string                      `yaml:"build_after,omitempty"`
+		Notebooks        *NotebooksConfig              `yaml:"notebooks,omitempty"`
+		TUI              *TUIConfig                    `yaml:"tui,omitempty"`
+		Context          *ContextConfig                `yaml:"context,omitempty"`
+		Daemon           *DaemonConfig                 `yaml:"daemon,omitempty"`
 		Environment      *EnvironmentConfig            `yaml:"environment,omitempty"`
 		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty"`
-		ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty"`
-		Extensions       map[string]interface{}       `yaml:",inline"`
+		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty"`
+		Extensions       map[string]interface{}        `yaml:",inline"`
 
 		// --- Legacy Fields for Backward Compatibility ---
-		SearchPaths       map[string]SearchPathConfig `yaml:"search_paths,omitempty"`      // Old name for Groves
-		LegacyNotebooks   map[string]*Notebook        `yaml:"-"`                           // To catch top-level notebooks map
-		LegacyNotebook    *Notebook                   `yaml:"notebook,omitempty"`          // Very old single notebook
-		DefaultNotebook   string                      `yaml:"default_notebook,omitempty"`  // Old top-level default
+		SearchPaths       map[string]SearchPathConfig `yaml:"search_paths,omitempty"`        // Old name for Groves
+		LegacyNotebooks   map[string]*Notebook        `yaml:"-"`                             // To catch top-level notebooks map
+		LegacyNotebook    *Notebook                   `yaml:"notebook,omitempty"`            // Very old single notebook
+		DefaultNotebook   string                      `yaml:"default_notebook,omitempty"`    // Old top-level default
 		GlobalNotebookDir string                      `yaml:"global_notebook_dir,omitempty"` // Old top-level global dir
 	}
 

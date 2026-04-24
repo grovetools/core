@@ -20,7 +20,7 @@ func main() {
 	distDir := "schema/dist"
 
 	// Ensure dist directory exists
-	if err := os.MkdirAll(distDir, 0755); err != nil {
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
 		log.Fatalf("Failed to create dist directory: %v", err)
 	}
 
@@ -146,7 +146,7 @@ func writeJSONFile(path string, data map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, bytes, 0644)
+	return os.WriteFile(path, bytes, 0o644)
 }
 
 func deepCopyMap(m map[string]interface{}) map[string]interface{} {

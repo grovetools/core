@@ -60,7 +60,7 @@ const (
 	nerdIconPullRequestNewChanges = "" // cod-git_pull_request_new_changes (U+EC0C)
 	nerdIconGithubAction          = "" // cod-github_action (U+EAFF)
 	nerdIconGitCompare            = "" // dev-git_compare (U+E728)
-	nerdIconDiff                  = "" // cod-diff (U+EAE1)
+	nerdIconDiff                  = ""  // cod-diff (U+EAE1)
 	nerdIconGit                   = "󰊢" // md-git (U+F02A2)
 	nerdIconGitStaged             = "" // cod-pass (U+EBA4)
 	nerdIconGitModified           = "" // cod-diff_modified (U+EADE)
@@ -113,7 +113,7 @@ const (
 	nerdIconNotebook = "󰠮" // md-notebook (U+F082E)
 	nerdIconDocs     = "󰡯" // md-file_question (U+F086F)
 	nerdIconGear     = "󰒓" // md-cog (U+F0493)
-	nerdIconConfig   = "" // seti-config (U+E615)
+	nerdIconConfig   = ""  // seti-config (U+E615)
 	nerdIconKeyboard = "󰌌" // md-keyboard (U+F030C)
 	nerdIconLock     = "󰌾" // md-lock (U+F033E)
 

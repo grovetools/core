@@ -57,7 +57,7 @@ func TestCommand(t *testing.T) {
 				// Create a temporary directory and add a fake grove binary
 				tmpDir := t.TempDir()
 				grovePath := filepath.Join(tmpDir, "grove")
-				if err := os.WriteFile(grovePath, []byte("#!/bin/sh\n"), 0755); err != nil {
+				if err := os.WriteFile(grovePath, []byte("#!/bin/sh\n"), 0o755); err != nil {
 					t.Fatalf("failed to create fake grove binary: %v", err)
 				}
 

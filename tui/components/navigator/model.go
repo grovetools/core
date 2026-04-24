@@ -24,7 +24,7 @@ type Model struct {
 	pathDisplayMode int // 0=no paths, 1=compact (~), 2=full paths
 
 	// Focus mode state
-	ecosystemPickerMode bool                       // True when showing only ecosystems for selection
+	ecosystemPickerMode bool // True when showing only ecosystems for selection
 	focusedProject      *workspace.WorkspaceNode
 	worktreesFolded     bool // Whether worktrees are hidden/collapsed
 

@@ -286,7 +286,6 @@ func NewThemeWithName(name string) *Theme {
 	return newThemeFromName(name)
 }
 
-
 // RenderHeader renders a header with the default Grove styling.
 func RenderHeader(title string) string {
 	return DefaultTheme.Header.Render(title)

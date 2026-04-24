@@ -283,9 +283,9 @@ func TestProvider_FindByIdentifier(t *testing.T) {
 			expectPath: "/path/to/my-ecosystem/.grove-worktrees/feature-dev/cx",
 		},
 		{
-			name:      "Not found returns nil",
+			name:       "Not found returns nil",
 			identifier: "nonexistent",
-			expectNil: true,
+			expectNil:  true,
 		},
 	}
 

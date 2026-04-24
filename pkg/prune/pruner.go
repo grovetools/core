@@ -22,12 +22,12 @@ type Options struct {
 // git root for host detection, and the cloud config for gcloud shell-
 // outs. Zero-valued fields disable the relevant detectors.
 type Inputs struct {
-	GitRoot       string
-	Active        []string
-	Inactive      []string
-	Cloud         CloudConfig
-	DockerRunner  Runner
-	GcloudRunner  Runner
+	GitRoot      string
+	Active       []string
+	Inactive     []string
+	Cloud        CloudConfig
+	DockerRunner Runner
+	GcloudRunner Runner
 }
 
 // Detect runs every enabled detector and returns a flat orphan slice

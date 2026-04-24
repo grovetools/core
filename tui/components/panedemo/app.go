@@ -226,7 +226,7 @@ func (a Model) openEditorSplit(path string) (tea.Model, tea.Cmd) {
 
 	// Create a scratch file if it doesn't exist
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.WriteFile(path, []byte("# "+path+"\n"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("# "+path+"\n"), 0o644); err != nil {
 			return a, nil
 		}
 	}

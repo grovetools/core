@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	// TODO: Update when testutil is available in grove-core
 	// "testutil"
 )
@@ -29,7 +28,7 @@ func runGitCommand(t *testing.T, dir string, args ...string) {
 func createCommit(t *testing.T, dir, filename, content string) {
 	t.Helper()
 	filePath := filepath.Join(dir, filename)
-	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0o644))
 	runGitCommand(t, dir, "add", filename)
 	runGitCommand(t, dir, "commit", "-m", "Add "+filename)
 }

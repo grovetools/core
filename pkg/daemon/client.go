@@ -36,10 +36,10 @@ type SessionIntent struct {
 // SessionConfirmation contains the data needed to confirm a session after agent startup.
 // This links the pre-registered intent with the actual running process.
 type SessionConfirmation struct {
-	JobID          string `json:"job_id"`           // Matches the intent's JobID
-	NativeID       string `json:"native_id"`        // Agent's native session ID (e.g., Claude's UUID)
-	PID            int    `json:"pid"`              // Process ID of the running agent
-	TranscriptPath string `json:"transcript_path"`  // Path to the agent's transcript file
+	JobID          string `json:"job_id"`          // Matches the intent's JobID
+	NativeID       string `json:"native_id"`       // Agent's native session ID (e.g., Claude's UUID)
+	PID            int    `json:"pid"`             // Process ID of the running agent
+	TranscriptPath string `json:"transcript_path"` // Path to the agent's transcript file
 }
 
 // RunningConfig holds the active configuration intervals being used by the daemon.

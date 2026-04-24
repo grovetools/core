@@ -25,11 +25,11 @@ import (
 // Resolution order:
 //  1. workspace.GetProjectByPath(dir) classifies the directory.
 //     - If the node IS an ecosystem (EcosystemRoot or EcosystemWorktree),
-//       use its own Path — the worktree is the scope.
+//     use its own Path — the worktree is the scope.
 //     - Otherwise prefer ParentEcosystemPath (the immediate ecosystem or
-//       ecosystem-worktree containing this subproject).
+//     ecosystem-worktree containing this subproject).
 //     - Fall back to ParentProjectPath (standalone project worktrees share
-//       the main repo daemon).
+//     the main repo daemon).
 //     - Otherwise node.Path (standalone project / NonGroveRepo).
 //  2. git.GetGitRoot(dir) for plain repos not yet visible to workspace
 //     discovery.

@@ -39,7 +39,7 @@ logging:
 
 				// Create logs directory
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs dir: %w", err)
 				}
 
@@ -229,7 +229,7 @@ logging:
 				}
 
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
@@ -281,7 +281,7 @@ logging:
 				// Append a log entry that is OLDER than all existing ones
 				olderLog := `{"component":"test","level":"info","msg":"Message T+1s (older)","time":"2024-01-01T10:00:01Z"}
 `
-				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
 				if err != nil {
 					return err
 				}
@@ -321,7 +321,7 @@ logging:
 				// Append a log entry that should go in the MIDDLE
 				middleLog := `{"component":"test","level":"info","msg":"Message T+3s (middle)","time":"2024-01-01T10:00:03Z"}
 `
-				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
 				if err != nil {
 					return err
 				}
@@ -389,7 +389,7 @@ logging:
 				}
 
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
@@ -436,7 +436,7 @@ logging:
 				// Append a new LATEST message (T+10s)
 				latestLog := `{"component":"test","level":"info","msg":"Message T+10s (latest)","time":"2024-01-01T10:00:10Z"}
 `
-				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
 				if err != nil {
 					return err
 				}
@@ -468,7 +468,7 @@ logging:
 				// Append an OLDER message (T+5s) - this should NOT move the view
 				olderLog := `{"component":"test","level":"info","msg":"Message T+5s (older)","time":"2024-01-01T10:00:05Z"}
 `
-				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
 				if err != nil {
 					return err
 				}

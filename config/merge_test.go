@@ -17,7 +17,7 @@ func TestHierarchicalMerging(t *testing.T) {
 	// Create a fake home directory for global config
 	fakeHome := filepath.Join(tmpDir, "home")
 	fakeConfigDir := filepath.Join(fakeHome, ".config", "grove")
-	if err := os.MkdirAll(fakeConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(fakeConfigDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,13 +45,13 @@ monitoring:
   enabled: true
   interval: 60
 `
-	if err := os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create project directory
 	projectDir := filepath.Join(tmpDir, "project")
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,7 +76,7 @@ monitoring:
 flow:
   chat_directory: "/project/chats"
 `
-	if err := os.WriteFile(filepath.Join(projectDir, "grove.yml"), []byte(projectConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "grove.yml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,14 +95,14 @@ flow:
   chat_directory: "/override/chats"
   max_messages: 100
 `
-	if err := os.WriteFile(filepath.Join(projectDir, "grove.override.yml"), []byte(overrideConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "grove.override.yml"), []byte(overrideConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Load configuration with logging
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
-	
+
 	cfg, err := LoadFromWithLogger(projectDir, logger)
 	if err != nil {
 		t.Fatalf("Failed to load hierarchical config: %v", err)
@@ -212,7 +212,7 @@ settings:
   project_name: test-project
   auto_inference: false
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "grove.yml"), []byte(projectConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "grove.yml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -223,9 +223,9 @@ settings:
 	}
 
 	type SettingsConfig struct {
-		ProjectName  string `yaml:"project_name"`
-		NetworkName  string `yaml:"network_name"`
-		AutoInference *bool `yaml:"auto_inference"`
+		ProjectName   string `yaml:"project_name"`
+		NetworkName   string `yaml:"network_name"`
+		AutoInference *bool  `yaml:"auto_inference"`
 	}
 	var settings SettingsConfig
 	if err := cfg.UnmarshalExtension("settings", &settings); err != nil {
@@ -260,7 +260,7 @@ func TestEcosystemConfigFallback(t *testing.T) {
 
 	// Create ecosystem directory
 	ecosystemDir := filepath.Join(tmpDir, "ecosystem")
-	if err := os.MkdirAll(ecosystemDir, 0755); err != nil {
+	if err := os.MkdirAll(ecosystemDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -279,13 +279,13 @@ gemini:
   model: gemini-1.5-flash-latest
   max_tokens: 1000
 `
-	if err := os.WriteFile(filepath.Join(ecosystemDir, "grove.yml"), []byte(ecosystemConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(ecosystemDir, "grove.yml"), []byte(ecosystemConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create workspace directory
 	workspaceDir := filepath.Join(ecosystemDir, "workspace-app")
-	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -301,7 +301,7 @@ settings:
 gemini:
   model: gemini-1.5-pro-latest
 `
-	if err := os.WriteFile(filepath.Join(workspaceDir, "grove.yml"), []byte(workspaceConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspaceDir, "grove.yml"), []byte(workspaceConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -375,7 +375,7 @@ func TestTUIOverridesMerging(t *testing.T) {
 
 	// Create global config dir
 	globalDir := filepath.Join(tmpDir, ".config", "grove")
-	if err := os.MkdirAll(globalDir, 0755); err != nil {
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -391,13 +391,13 @@ up = ["k", "up"]
 [tui.keybindings.flow.plan-init]
 toggle_advanced = ["a"]
 `
-	if err := os.WriteFile(filepath.Join(globalDir, "grove.toml"), []byte(globalConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(globalDir, "grove.toml"), []byte(globalConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create project directory
 	projectDir := filepath.Join(tmpDir, "project")
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -411,7 +411,7 @@ submit = ["enter", "ctrl+s"]
 [tui.keybindings.nb.browser]
 create_note = ["n"]
 `
-	if err := os.WriteFile(filepath.Join(projectDir, "grove.toml"), []byte(projectConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "grove.toml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -515,7 +515,7 @@ settings:
   project_name: ecosystem-only
   mcp_port: 3000
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "grove.yml"), []byte(ecosystemConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "grove.yml"), []byte(ecosystemConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

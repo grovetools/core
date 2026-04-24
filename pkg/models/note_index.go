@@ -14,8 +14,8 @@ type NoteIndexEntry struct {
 	PlanRef    string    `json:"plan_ref,omitempty"`
 	Created    time.Time `json:"created,omitempty"`
 	ModTime    time.Time `json:"mod_time"`
-	Type       string    `json:"type"`        // "note", "plan", "artifact", "generic"
-	Group      string    `json:"group"`       // relative path category: "inbox", "plans/my-plan"
+	Type       string    `json:"type"`  // "note", "plan", "artifact", "generic"
+	Group      string    `json:"group"` // relative path category: "inbox", "plans/my-plan"
 	Workspace  string    `json:"workspace"`
 	ContentDir string    `json:"content_dir"` // "notes", "plans", "chats"
 }

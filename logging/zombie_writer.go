@@ -96,10 +96,10 @@ func (w *zombieAwareWriter) getWriter() (io.WriteCloser, error) {
 
 	// If writer is nil (first write, or after redirection), open the file.
 	if w.writer == nil {
-		if err := os.MkdirAll(filepath.Dir(currentPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(currentPath), 0o755); err != nil {
 			return nil, fmt.Errorf("creating log directory: %w", err)
 		}
-		file, err := os.OpenFile(currentPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		file, err := os.OpenFile(currentPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
 			return nil, fmt.Errorf("opening log file: %w", err)
 		}

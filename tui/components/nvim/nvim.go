@@ -363,9 +363,9 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if hasFg || hasBg {
 					debugLog(fmt.Sprintf("RGB highlight stored: id=%d fg=%v bg=%v total=%d", id, hasFg, hasBg, len(m.hlDefs)))
 					log.WithFields(logrus.Fields{
-						"hl_id": id,
-						"has_fg": hasFg,
-						"has_bg": hasBg,
+						"hl_id":      id,
+						"has_fg":     hasFg,
+						"has_bg":     hasBg,
 						"total_defs": len(m.hlDefs),
 					}).Info("hl_attr_define: Stored RGB highlight")
 				}

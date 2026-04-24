@@ -38,15 +38,15 @@ var DefaultHooks = []ConfigHook{
 
 // ConfigWatcher watches the config directory for changes and triggers hooks.
 type ConfigWatcher struct {
-	watcher       *fsnotify.Watcher
-	hooks         []ConfigHook
-	debounceMs    int
-	lastChange    time.Time
-	mu            sync.Mutex
-	logger        *logrus.Entry
-	onReload      func(file string)     // Callback to broadcast event
-	targetToLink  map[string]string     // Maps target file paths to their symlink names in config dir
-	configDir     string                // The main config directory
+	watcher      *fsnotify.Watcher
+	hooks        []ConfigHook
+	debounceMs   int
+	lastChange   time.Time
+	mu           sync.Mutex
+	logger       *logrus.Entry
+	onReload     func(file string) // Callback to broadcast event
+	targetToLink map[string]string // Maps target file paths to their symlink names in config dir
+	configDir    string            // The main config directory
 }
 
 // NewConfigWatcher creates a new ConfigWatcher that watches ~/.config/grove/.

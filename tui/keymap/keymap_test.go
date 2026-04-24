@@ -83,8 +83,8 @@ func TestLoad_PresetSelection(t *testing.T) {
 		{"vim", "k"},
 		{"emacs", "ctrl+p"},
 		{"arrows", "up"},
-		{"", "k"},          // Default
-		{"unknown", "k"},   // Unknown falls back to vim
+		{"", "k"},        // Default
+		{"unknown", "k"}, // Unknown falls back to vim
 	}
 
 	for _, tt := range tests {

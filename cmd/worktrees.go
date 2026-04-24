@@ -17,32 +17,32 @@ import (
 // Styles for worktree display
 var (
 	worktreeHeaderStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("99")).
-		MarginTop(1).
-		MarginBottom(0)
+				Bold(true).
+				Foreground(lipgloss.Color("99")).
+				MarginTop(1).
+				MarginBottom(0)
 
 	worktreePathStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241"))
+				Foreground(lipgloss.Color("241"))
 
 	worktreeBranchStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("33")).
-		Bold(true)
+				Foreground(lipgloss.Color("33")).
+				Bold(true)
 
 	worktreeCleanStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("34"))
+				Foreground(lipgloss.Color("34"))
 
 	worktreeDirtyStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("208"))
+				Foreground(lipgloss.Color("208"))
 
 	worktreeErrorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196"))
+				Foreground(lipgloss.Color("196"))
 
 	worktreeBoxStyle = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(0, 1).
-		MarginLeft(2)
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1).
+				MarginLeft(2)
 )
 
 // NewWorktreesCmd creates the `worktrees` command

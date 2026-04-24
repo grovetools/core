@@ -247,7 +247,7 @@ func LoadDefault() (*Config, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to get current directory")
 	}
-	
+
 	return LoadFrom(cwd)
 }
 

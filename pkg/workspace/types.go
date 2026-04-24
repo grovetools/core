@@ -203,11 +203,12 @@ type WorkspaceNode struct {
 // For filtering logic that needs to distinguish "leaf worktrees" from containers, use IsProjectWorktreeChild().
 //
 // Example hierarchy:
-//   grove-ecosystem/ (EcosystemRoot)
-//     ├─ grove-tmux/ (EcosystemSubProject) - IsWorktree()=false, IsEcosystemChild()=true
-//     └─ .grove-worktrees/
-//         └─ my-branch/ (EcosystemWorktree) - IsWorktree()=true, IsEcosystem()=true
-//             └─ grove-hooks/ (EcosystemWorktreeSubProject) - IsWorktree()=false, IsEcosystemChild()=true
+//
+//	grove-ecosystem/ (EcosystemRoot)
+//	  ├─ grove-tmux/ (EcosystemSubProject) - IsWorktree()=false, IsEcosystemChild()=true
+//	  └─ .grove-worktrees/
+//	      └─ my-branch/ (EcosystemWorktree) - IsWorktree()=true, IsEcosystem()=true
+//	          └─ grove-hooks/ (EcosystemWorktreeSubProject) - IsWorktree()=false, IsEcosystemChild()=true
 func (w *WorkspaceNode) IsWorktree() bool {
 	switch w.Kind {
 	case KindStandaloneProjectWorktree,
@@ -324,8 +325,9 @@ func (w *WorkspaceNode) GetDirectChildren(nodes []*WorkspaceNode) []*WorkspaceNo
 // while treating ecosystem children as independent entities.
 //
 // Example:
-//   grove-ecosystem/grove-tmux (EcosystemSubProject) -> returns "grove-tmux"
-//   my-project/.grove-worktrees/feature (StandaloneProjectWorktree) -> returns "my-project"
+//
+//	grove-ecosystem/grove-tmux (EcosystemSubProject) -> returns "grove-tmux"
+//	my-project/.grove-worktrees/feature (StandaloneProjectWorktree) -> returns "my-project"
 func (w *WorkspaceNode) GetGroupingKey() string {
 	// Only project worktrees (not ecosystem worktrees!) need to be grouped with their parent
 	if w.IsProjectWorktreeChild() {

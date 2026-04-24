@@ -15,10 +15,10 @@ func TestNotebookLocator_CustomTemplates(t *testing.T) {
 		Notebooks: &config.NotebooksConfig{
 			Definitions: map[string]*config.Notebook{
 				"nb": {
-					RootDir:            "~/Code/nb",
-					ChatsPathTemplate:  "repos/{{ .Workspace.Name }}/main/current",
-					NotesPathTemplate:  "repos/{{ .Workspace.Name }}/main/{{ .NoteType }}",
-					PlansPathTemplate:  "repos/{{ .Workspace.Name }}/main/plans",
+					RootDir:           "~/Code/nb",
+					ChatsPathTemplate: "repos/{{ .Workspace.Name }}/main/current",
+					NotesPathTemplate: "repos/{{ .Workspace.Name }}/main/{{ .NoteType }}",
+					PlansPathTemplate: "repos/{{ .Workspace.Name }}/main/plans",
 				},
 			},
 			Rules: &config.NotebookRules{

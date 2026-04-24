@@ -37,14 +37,14 @@ func (f *fakeRunner) Run(name string, args ...string) ([]byte, error) {
 func TestExtractSlug_PrefersLongestKnown(t *testing.T) {
 	idx := NewSlugIndex([]string{"env-continued"}, []string{"tier1-tf-rerun", "tier1"})
 	cases := map[string]string{
-		"grove-tier1-tf-rerun-api":    "tier1-tf-rerun",
-		"tier1-tf-rerun-web":          "tier1-tf-rerun",
-		"grove-tier1-api":             "tier1",
-		"grove-env-continued-web":     "env-continued",
-		"kitchen-env-vpc":             "",
-		"kitchen-env-cloudbuild":      "",
-		"kitchen-vpc-conn":            "",
-		"grove-unknown-slug-api":      "",
+		"grove-tier1-tf-rerun-api": "tier1-tf-rerun",
+		"tier1-tf-rerun-web":       "tier1-tf-rerun",
+		"grove-tier1-api":          "tier1",
+		"grove-env-continued-web":  "env-continued",
+		"kitchen-env-vpc":          "",
+		"kitchen-env-cloudbuild":   "",
+		"kitchen-vpc-conn":         "",
+		"grove-unknown-slug-api":   "",
 	}
 	for name, want := range cases {
 		got := ExtractSlug(name, idx)

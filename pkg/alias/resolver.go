@@ -95,36 +95,38 @@ func (r *AliasResolver) InitProviderFromNodes(nodes []*workspace.WorkspaceNode) 
 // Resolve translates an alias string into an absolute filesystem path. It supports
 // two primary types of aliases:
 //
-// 1. Project/Workspace Aliases (default): Used to resolve the root path of a project,
-//    ecosystem, or worktree. Can optionally use "project:" prefix for clarity.
-//    Examples:
-//      - "project-name"                           // Standalone project
-//      - "ecosystem:repo"                         // Ecosystem sub-project
-//      - "repo:worktree"                          // Worktree
-//      - "ecosystem:repo:worktree"                // Ecosystem repo worktree
-//      - "worktree:repo/pkg/alias/**"             // Path within worktree
-//      - "project:ecosystem:repo/cmd/**"          // Explicit (optional)
+//  1. Project/Workspace Aliases (default): Used to resolve the root path of a project,
+//     ecosystem, or worktree. Can optionally use "project:" prefix for clarity.
+//     Examples:
+//     - "project-name"                           // Standalone project
+//     - "ecosystem:repo"                         // Ecosystem sub-project
+//     - "repo:worktree"                          // Worktree
+//     - "ecosystem:repo:worktree"                // Ecosystem repo worktree
+//     - "worktree:repo/pkg/alias/**"             // Path within worktree
+//     - "project:ecosystem:repo/cmd/**"          // Explicit (optional)
 //
-// 2. Notebook Resource Aliases (requires "nb:" prefix): Used to resolve paths to
-//    specific files or directories within a workspace's notebook structure.
-//    The "nb:" prefix is REQUIRED to distinguish from project paths.
-//    Examples:
-//      - "nb:workspace-name:plans/my-plan"        // Plan directory
-//      - "nb:workspace-name:inbox/my-note.md"     // Note file
-//      - "nb:workspace-name:chats/conversation"   // Chat file
+//  2. Notebook Resource Aliases (requires "nb:" prefix): Used to resolve paths to
+//     specific files or directories within a workspace's notebook structure.
+//     The "nb:" prefix is REQUIRED to distinguish from project paths.
+//     Examples:
+//     - "nb:workspace-name:plans/my-plan"        // Plan directory
+//     - "nb:workspace-name:inbox/my-note.md"     // Note file
+//     - "nb:workspace-name:chats/conversation"   // Chat file
 //
 // Alias Syntax in Different Contexts:
 //
 // In .rules files, use the @a: or @alias: directive:
-//   @a:grove-core/pkg/**                         // Project paths (default)
-//   @a:concepts-eco:grove-core/cmd/**            // Worktree paths
-//   @a:nb:grove-core:inbox/note.md               // Notebook resources (nb: required)
+//
+//	@a:grove-core/pkg/**                         // Project paths (default)
+//	@a:concepts-eco:grove-core/cmd/**            // Worktree paths
+//	@a:nb:grove-core:inbox/note.md               // Notebook resources (nb: required)
 //
 // In YAML configuration files (like concept manifests):
-//   related_plans:
-//     - nb:grove-core:plans/architecture         // nb: prefix required
-//   related_notes:
-//     - nb:grove-ecosystem:inbox/brainstorm.md   // nb: prefix required
+//
+//	related_plans:
+//	  - nb:grove-core:plans/architecture         // nb: prefix required
+//	related_notes:
+//	  - nb:grove-ecosystem:inbox/brainstorm.md   // nb: prefix required
 //
 // The "nb:" prefix is essential because both project and notebook aliases can contain
 // colons and slashes (e.g., "worktree:repo/path" vs "nb:workspace:path"), making them

@@ -18,7 +18,7 @@ func setupMockFS(t *testing.T) (string, string) {
 
 	// 1. Global config with 'search_paths'
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
-	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	emptyStr := ""
 	globalCfg := config.Config{
 		SearchPaths: map[string]config.SearchPathConfig{
@@ -30,41 +30,41 @@ func setupMockFS(t *testing.T) (string, string) {
 		},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
 
 	// 2. A User Ecosystem with two Projects
 	ecoDir := filepath.Join(rootDir, "work", "my-ecosystem")
-	require.NoError(t, os.MkdirAll(ecoDir, 0755))
+	require.NoError(t, os.MkdirAll(ecoDir, 0o755))
 	ecoCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
 	ecoBytes, _ := yaml.Marshal(ecoCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0o644))
 
 	// Project A with a worktree
 	projADir := filepath.Join(ecoDir, "project-a")
-	require.NoError(t, os.MkdirAll(projADir, 0755))
+	require.NoError(t, os.MkdirAll(projADir, 0o755))
 	projACfg := config.Config{Name: "project-a"}
 	projABytes, _ := yaml.Marshal(projACfg)
-	require.NoError(t, os.WriteFile(filepath.Join(projADir, "grove.yml"), projABytes, 0644))
-	require.NoError(t, os.MkdirAll(filepath.Join(projADir, ".grove-worktrees", "feature-branch"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(projADir, "grove.yml"), projABytes, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projADir, ".grove-worktrees", "feature-branch"), 0o755))
 
 	// Project B
 	projBDir := filepath.Join(ecoDir, "project-b")
-	require.NoError(t, os.MkdirAll(projBDir, 0755))
+	require.NoError(t, os.MkdirAll(projBDir, 0o755))
 	projBCfg := config.Config{Name: "project-b"}
 	projBBytes, _ := yaml.Marshal(projBCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(projBDir, "grove.yml"), projBBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(projBDir, "grove.yml"), projBBytes, 0o644))
 
 	// 3. An Orphan Project using .grove.yml
 	orphanDir := filepath.Join(rootDir, "work", "orphan-project")
-	require.NoError(t, os.MkdirAll(orphanDir, 0755))
+	require.NoError(t, os.MkdirAll(orphanDir, 0o755))
 	orphanCfg := config.Config{Name: "orphan-project"}
 	orphanBytes, _ := yaml.Marshal(orphanCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, ".grove.yml"), orphanBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, ".grove.yml"), orphanBytes, 0o644))
 
 	// 4. A Non-Grove Directory
 	nonGroveDir := filepath.Join(rootDir, "work", "other-dir")
-	require.NoError(t, os.MkdirAll(nonGroveDir, 0755))
-	require.NoError(t, os.Mkdir(filepath.Join(nonGroveDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(nonGroveDir, 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(nonGroveDir, ".git"), 0o755))
 
 	return rootDir, filepath.Join(rootDir, "home")
 }
@@ -146,7 +146,7 @@ func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
 
 	// Global config: register the work dir as a grove
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
-	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	emptyStr := ""
 	globalCfg := config.Config{
 		SearchPaths: map[string]config.SearchPathConfig{
@@ -155,35 +155,35 @@ func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
 		Context: &config.ContextConfig{ReposDir: &emptyStr},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
 
 	// Ecosystem with explicit workspaces enumeration — children are submodules
 	// without their own grove.toml markers.
 	ecoDir := filepath.Join(rootDir, "work", "kitchen-env")
-	require.NoError(t, os.MkdirAll(ecoDir, 0755))
+	require.NoError(t, os.MkdirAll(ecoDir, 0o755))
 	ecoCfg := config.Config{
 		Name:       "kitchen-env",
 		Workspaces: []string{"kitchen-app", "kitchen-core"},
 	}
 	ecoBytes, _ := yaml.Marshal(ecoCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0o644))
 
 	// kitchen-app: bare git repo, NO grove.toml — should still be promoted
 	// because the parent ecosystem lists it in `workspaces`.
 	kappDir := filepath.Join(ecoDir, "kitchen-app")
-	require.NoError(t, os.MkdirAll(kappDir, 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(kappDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(kappDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(kappDir, ".git"), 0o755))
 
 	// kitchen-core: same — bare git repo, listed in parent's workspaces.
 	kcoreDir := filepath.Join(ecoDir, "kitchen-core")
-	require.NoError(t, os.MkdirAll(kcoreDir, 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(kcoreDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(kcoreDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(kcoreDir, ".git"), 0o755))
 
 	// scratch: bare git repo NOT listed in parent's workspaces — should NOT
 	// be promoted, must end up in NonGroveDirectories.
 	scratchDir := filepath.Join(ecoDir, "scratch")
-	require.NoError(t, os.MkdirAll(scratchDir, 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(scratchDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(scratchDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(scratchDir, ".git"), 0o755))
 
 	// Run discovery against the mock home
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))

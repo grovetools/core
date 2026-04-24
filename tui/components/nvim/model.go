@@ -13,8 +13,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log *logrus.Entry
-var debugFile *os.File
+var (
+	log       *logrus.Entry
+	debugFile *os.File
+)
 
 func init() {
 	log = logging.NewLogger("nvim-component")
@@ -76,8 +78,8 @@ type Model struct {
 	err                    error
 	uiAttached             bool
 	useConfig              bool
-	focused                bool // true if this component currently has focus
-	exited                 bool // true after the neovim process has exited
+	focused                bool   // true if this component currently has focus
+	exited                 bool   // true after the neovim process has exited
 	filePath               string // file opened (for NvimExitMsg)
 }
 

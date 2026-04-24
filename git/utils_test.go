@@ -62,7 +62,7 @@ func TestGetRepoInfo(t *testing.T) {
 
 	// Create initial commit
 	testFile := filepath.Join(tmpDir, "test.txt")
-	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o644))
 
 	cmd = exec.Command("git", "add", ".")
 	cmd.Dir = tmpDir

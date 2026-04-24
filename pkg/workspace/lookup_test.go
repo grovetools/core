@@ -17,58 +17,58 @@ func setupMockFSForLookup(t *testing.T) (string, string) {
 
 	// 1. Global config with 'search_paths'
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
-	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	globalCfg := config.Config{
 		SearchPaths: map[string]config.SearchPathConfig{
 			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
 		},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
 
 	// 2. A User Ecosystem
 	ecoDir := filepath.Join(rootDir, "work", "my-ecosystem")
-	require.NoError(t, os.MkdirAll(ecoDir, 0755))
+	require.NoError(t, os.MkdirAll(ecoDir, 0o755))
 	ecoCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
 	ecoBytes, _ := yaml.Marshal(ecoCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoDir, "grove.yml"), ecoBytes, 0o644))
 
 	// 3. Ecosystem subproject
 	projADir := filepath.Join(ecoDir, "project-a")
-	require.NoError(t, os.MkdirAll(projADir, 0755))
+	require.NoError(t, os.MkdirAll(projADir, 0o755))
 	projACfg := config.Config{Name: "project-a"}
 	projABytes, _ := yaml.Marshal(projACfg)
-	require.NoError(t, os.WriteFile(filepath.Join(projADir, "grove.yml"), projABytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(projADir, "grove.yml"), projABytes, 0o644))
 
 	// Create a subdirectory in project-a
-	require.NoError(t, os.MkdirAll(filepath.Join(projADir, "src", "components"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projADir, "src", "components"), 0o755))
 
 	// 4. Ecosystem worktree
 	ecoWorktreeDir := filepath.Join(ecoDir, ".grove-worktrees", "feature-work")
-	require.NoError(t, os.MkdirAll(ecoWorktreeDir, 0755))
+	require.NoError(t, os.MkdirAll(ecoWorktreeDir, 0o755))
 	// Create .git file to mark it as a worktree
-	require.NoError(t, os.WriteFile(filepath.Join(ecoWorktreeDir, ".git"), []byte("gitdir: ..."), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoWorktreeDir, ".git"), []byte("gitdir: ..."), 0o644))
 	ecoWtCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
 	ecoWtBytes, _ := yaml.Marshal(ecoWtCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(ecoWorktreeDir, "grove.yml"), ecoWtBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoWorktreeDir, "grove.yml"), ecoWtBytes, 0o644))
 
 	// 5. A Standalone Project with worktree, using .grove.yml
 	standaloneDir := filepath.Join(rootDir, "work", "standalone-project")
-	require.NoError(t, os.MkdirAll(standaloneDir, 0755))
+	require.NoError(t, os.MkdirAll(standaloneDir, 0o755))
 	standaloneCfg := config.Config{Name: "standalone-project"}
 	standaloneBytes, _ := yaml.Marshal(standaloneCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(standaloneDir, ".grove.yml"), standaloneBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(standaloneDir, ".grove.yml"), standaloneBytes, 0o644))
 
 	// Create worktree for standalone project
 	standaloneWorktreeDir := filepath.Join(standaloneDir, ".grove-worktrees", "fix-bug")
-	require.NoError(t, os.MkdirAll(standaloneWorktreeDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, ".git"), []byte("gitdir: ..."), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, ".grove.yml"), standaloneBytes, 0644))
+	require.NoError(t, os.MkdirAll(standaloneWorktreeDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, ".git"), []byte("gitdir: ..."), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(standaloneWorktreeDir, ".grove.yml"), standaloneBytes, 0o644))
 
 	// 6. A Non-Grove Directory
 	nonGroveDir := filepath.Join(rootDir, "work", "other-repo")
-	require.NoError(t, os.MkdirAll(nonGroveDir, 0755))
-	require.NoError(t, os.Mkdir(filepath.Join(nonGroveDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(nonGroveDir, 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(nonGroveDir, ".git"), 0o755))
 
 	return rootDir, filepath.Join(rootDir, "home")
 }
@@ -172,7 +172,7 @@ func TestGetProjectByPath(t *testing.T) {
 	t.Run("Path not in any workspace", func(t *testing.T) {
 		// Create a directory that won't be discovered
 		outsidePath := filepath.Join(rootDir, "outside")
-		require.NoError(t, os.MkdirAll(outsidePath, 0755))
+		require.NoError(t, os.MkdirAll(outsidePath, 0o755))
 
 		_, err := GetProjectByPath(outsidePath)
 		assert.Error(t, err)
@@ -201,47 +201,47 @@ func TestGetProjectByPath_WithEcosystemWorktrees(t *testing.T) {
 
 	// Create a root directory for an ecosystem (my-ecosystem) containing a .git directory
 	ecoRootDir := filepath.Join(rootDir, "my-ecosystem")
-	require.NoError(t, os.MkdirAll(ecoRootDir, 0755))
-	require.NoError(t, os.Mkdir(filepath.Join(ecoRootDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(ecoRootDir, 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(ecoRootDir, ".git"), 0o755))
 
 	// Create grove.yml with workspaces key for ecosystem
 	ecoCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
 	ecoBytes, _ := yaml.Marshal(ecoCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(ecoRootDir, "grove.yml"), ecoBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(ecoRootDir, "grove.yml"), ecoBytes, 0o644))
 
 	// Create an ecosystem worktree directory (my-ecosystem/.grove-worktrees/feature-branch)
 	// containing a .git file (to simulate a worktree) and a grove.yml
 	worktreeDir := filepath.Join(ecoRootDir, ".grove-worktrees", "feature-branch")
-	require.NoError(t, os.MkdirAll(worktreeDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte("gitdir: ../../.git/worktrees/feature-branch"), 0644))
+	require.NoError(t, os.MkdirAll(worktreeDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte("gitdir: ../../.git/worktrees/feature-branch"), 0o644))
 
 	wtCfg := config.Config{Name: "my-ecosystem", Workspaces: []string{"*"}}
 	wtBytes, _ := yaml.Marshal(wtCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "grove.yml"), wtBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "grove.yml"), wtBytes, 0o644))
 
 	// Create a sub-project within the worktree (.../feature-branch/sub-project)
 	// containing its own .git directory and a grove.yml without a workspaces key
 	subProjectDir := filepath.Join(worktreeDir, "sub-project")
-	require.NoError(t, os.MkdirAll(subProjectDir, 0755))
-	require.NoError(t, os.Mkdir(filepath.Join(subProjectDir, ".git"), 0755))
+	require.NoError(t, os.MkdirAll(subProjectDir, 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(subProjectDir, ".git"), 0o755))
 
 	subProjCfg := config.Config{Name: "sub-project"}
 	subProjBytes, _ := yaml.Marshal(subProjCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(subProjectDir, "grove.yml"), subProjBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(subProjectDir, "grove.yml"), subProjBytes, 0o644))
 
 	// Create another sub-project within the worktree that is also a worktree
 	// (.../feature-branch/sub-project-wt), containing a .git file
 	subProjectWtDir := filepath.Join(worktreeDir, "sub-project-wt")
-	require.NoError(t, os.MkdirAll(subProjectWtDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(subProjectWtDir, ".git"), []byte("gitdir: ../../.git/worktrees/sub-project-wt"), 0644))
+	require.NoError(t, os.MkdirAll(subProjectWtDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subProjectWtDir, ".git"), []byte("gitdir: ../../.git/worktrees/sub-project-wt"), 0o644))
 
 	subProjWtCfg := config.Config{Name: "sub-project-wt"}
 	subProjWtBytes, _ := yaml.Marshal(subProjWtCfg)
-	require.NoError(t, os.WriteFile(filepath.Join(subProjectWtDir, "grove.yml"), subProjWtBytes, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(subProjectWtDir, "grove.yml"), subProjWtBytes, 0o644))
 
 	// Create a deeply nested path inside sub-project
 	deepPath := filepath.Join(subProjectDir, "src", "app", "components")
-	require.NoError(t, os.MkdirAll(deepPath, 0755))
+	require.NoError(t, os.MkdirAll(deepPath, 0o755))
 
 	t.Run("Case 1: Ecosystem Worktree", func(t *testing.T) {
 		// Path: .../my-ecosystem/.grove-worktrees/feature-branch

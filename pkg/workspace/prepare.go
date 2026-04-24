@@ -56,7 +56,7 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 
 		// Create a generic workspace marker file
 		groveDir := filepath.Join(worktreePath, ".grove")
-		os.MkdirAll(groveDir, 0755)
+		os.MkdirAll(groveDir, 0o755)
 		markerPath := filepath.Join(groveDir, "workspace")
 
 		// Determine if this is an ecosystem worktree
@@ -73,7 +73,7 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 			}
 		}
 
-		os.WriteFile(markerPath, []byte(markerContent), 0644)
+		os.WriteFile(markerPath, []byte(markerContent), 0o644)
 	}
 
 	return worktreePath, nil

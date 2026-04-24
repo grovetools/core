@@ -44,10 +44,10 @@ func (m *Model) Init() tea.Cmd {
 //
 // ENRICHMENT EXAMPLE: This method demonstrates how to create async commands
 // that fetch enrichment data. Key principles:
-//   1. Return a tea.Cmd (a function that returns tea.Msg)
-//   2. Do expensive I/O operations inside the command function
-//   3. Return a custom message type with the results
-//   4. Handle errors gracefully by returning nil data
+//  1. Return a tea.Cmd (a function that returns tea.Msg)
+//  2. Do expensive I/O operations inside the command function
+//  3. Return a custom message type with the results
+//  4. Handle errors gracefully by returning nil data
 //
 // External callers should create similar methods for each enrichment source,
 // such as fetchSessionInfoCmd, fetchNoteCountsCmd, etc.

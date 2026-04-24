@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	// TODO: Update when testutil is available in grove-core
 	// "testutil"
 )
@@ -64,7 +63,7 @@ func initGitRepoForTest(t *testing.T, dir string) {
 
 	// Create initial commit
 	testFile := filepath.Join(dir, "README.md")
-	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n"), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n"), 0o644))
 
 	cmd = exec.Command("git", "add", ".")
 	cmd.Dir = dir

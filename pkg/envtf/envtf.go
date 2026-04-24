@@ -217,7 +217,7 @@ func WriteTfVars(stateDir string, payload map[string]interface{}) (string, error
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal tfvars: %w", err)
 	}
-	if err := os.WriteFile(varsPath, varsBytes, 0644); err != nil {
+	if err := os.WriteFile(varsPath, varsBytes, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write tfvars: %w", err)
 	}
 	return varsPath, nil
@@ -242,7 +242,7 @@ func WriteBackendOverride(moduleDir string, bc BackendConfig) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal backend override: %w", err)
 	}
-	if err := os.WriteFile(overridePath, data, 0644); err != nil {
+	if err := os.WriteFile(overridePath, data, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write backend override: %w", err)
 	}
 	return overridePath, nil
@@ -290,11 +290,12 @@ func FetchSharedOutputs(ctx context.Context, sharedCfg map[string]interface{}) (
 		return nil, fmt.Errorf("failed to marshal shared backend override: %w", err)
 	}
 	overridePath := filepath.Join(tmpDir, "_grove_backend_override.tf.json")
-	if err := os.WriteFile(overridePath, overrideBytes, 0644); err != nil {
+	if err := os.WriteFile(overridePath, overrideBytes, 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write shared backend override: %w", err)
 	}
 
-	initArgs := []string{"init", "-input=false", "-reconfigure",
+	initArgs := []string{
+		"init", "-input=false", "-reconfigure",
 		"-backend-config=bucket=" + bucket,
 		"-backend-config=prefix=" + prefix,
 	}

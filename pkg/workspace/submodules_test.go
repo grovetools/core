@@ -18,13 +18,13 @@ func initGitRepo(t *testing.T, dir string) {
 	cmd.Dir = dir
 	err := cmd.Run()
 	require.NoError(t, err, "Failed to initialize git repo")
-	
+
 	// Configure git user for commits
 	cmd = exec.Command("git", "config", "user.email", "test@example.com")
 	cmd.Dir = dir
 	err = cmd.Run()
 	require.NoError(t, err, "Failed to configure git user.email")
-	
+
 	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = dir
 	err = cmd.Run()
@@ -37,7 +37,7 @@ func commitFiles(t *testing.T, dir string, message string) {
 	cmd.Dir = dir
 	err := cmd.Run()
 	require.NoError(t, err, "Failed to add files")
-	
+
 	cmd = exec.Command("git", "commit", "-m", message)
 	cmd.Dir = dir
 	err = cmd.Run()
@@ -89,20 +89,20 @@ func TestSetupSubmodules(t *testing.T) {
 		tempDir := t.TempDir()
 		superprojectDir := filepath.Join(tempDir, "superproject")
 		localSubmoduleDir := filepath.Join(tempDir, "local-sub")
-		
+
 		// Initialize repositories
-		require.NoError(t, os.MkdirAll(superprojectDir, 0755))
+		require.NoError(t, os.MkdirAll(superprojectDir, 0o755))
 		initGitRepo(t, superprojectDir)
-		
-		require.NoError(t, os.MkdirAll(localSubmoduleDir, 0755))
+
+		require.NoError(t, os.MkdirAll(localSubmoduleDir, 0o755))
 		initGitRepo(t, localSubmoduleDir)
-		
+
 		// Create content in local submodule
 		readmePath := filepath.Join(localSubmoduleDir, "README.md")
-		err := os.WriteFile(readmePath, []byte("local submodule"), 0644)
+		err := os.WriteFile(readmePath, []byte("local submodule"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, localSubmoduleDir, "initial commit")
-		
+
 		// Create .gitmodules in superproject
 		gitmodulesContent := `[submodule "local-sub"]
 	path = local-sub
@@ -112,18 +112,18 @@ func TestSetupSubmodules(t *testing.T) {
 	url = https://github.com/example/remote-sub.git
 `
 		gitmodulesPath := filepath.Join(superprojectDir, ".gitmodules")
-		err = os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err = os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		// Create initial commit in superproject
-		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0644)
+		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, superprojectDir, "initial commit")
-		
+
 		// Create a worktree
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
-		
+
 		// Create a mock Provider with the local-sub as a discovered workspace
 		mockProvider := createMockProvider(map[string]string{
 			"local-sub": localSubmoduleDir,
@@ -132,13 +132,13 @@ func TestSetupSubmodules(t *testing.T) {
 		// Test SetupSubmodules with all repos
 		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
-		
+
 		// Verify local-sub exists as a directory (linked worktree)
 		localSubPath := filepath.Join(worktreePath, "local-sub")
 		info, err := os.Stat(localSubPath)
 		assert.NoError(t, err, "local-sub should exist")
 		assert.True(t, info.IsDir(), "local-sub should be a directory")
-		
+
 		// Verify remote-sub exists (it should be created as empty dir or cloned)
 		remoteSubPath := filepath.Join(worktreePath, "remote-sub")
 		info, err = os.Stat(remoteSubPath)
@@ -151,20 +151,20 @@ func TestSetupSubmodules(t *testing.T) {
 		tempDir := t.TempDir()
 		superprojectDir := filepath.Join(tempDir, "superproject")
 		localSubmoduleDir := filepath.Join(tempDir, "local-sub")
-		
+
 		// Initialize repositories
-		require.NoError(t, os.MkdirAll(superprojectDir, 0755))
+		require.NoError(t, os.MkdirAll(superprojectDir, 0o755))
 		initGitRepo(t, superprojectDir)
-		
-		require.NoError(t, os.MkdirAll(localSubmoduleDir, 0755))
+
+		require.NoError(t, os.MkdirAll(localSubmoduleDir, 0o755))
 		initGitRepo(t, localSubmoduleDir)
-		
+
 		// Create content in local submodule
 		readmePath := filepath.Join(localSubmoduleDir, "README.md")
-		err := os.WriteFile(readmePath, []byte("local submodule"), 0644)
+		err := os.WriteFile(readmePath, []byte("local submodule"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, localSubmoduleDir, "initial commit")
-		
+
 		// Create .gitmodules in superproject with multiple submodules
 		gitmodulesContent := `[submodule "local-sub"]
 	path = local-sub
@@ -174,18 +174,18 @@ func TestSetupSubmodules(t *testing.T) {
 	url = https://github.com/example/excluded-sub.git
 `
 		gitmodulesPath := filepath.Join(superprojectDir, ".gitmodules")
-		err = os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err = os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		// Create initial commit in superproject
-		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0644)
+		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, superprojectDir, "initial commit")
-		
+
 		// Create a worktree
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
-		
+
 		// Create a mock Provider
 		mockProvider := createMockProvider(map[string]string{
 			"local-sub": localSubmoduleDir,
@@ -194,13 +194,13 @@ func TestSetupSubmodules(t *testing.T) {
 		// Test SetupSubmodules with repos filter (only local-sub)
 		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{"local-sub"}, mockProvider)
 		require.NoError(t, err)
-		
+
 		// Verify local-sub exists
 		localSubPath := filepath.Join(worktreePath, "local-sub")
 		info, err := os.Stat(localSubPath)
 		assert.NoError(t, err, "local-sub should exist")
 		assert.True(t, info.IsDir(), "local-sub should be a directory")
-		
+
 		// Verify excluded-sub does NOT exist or is empty
 		excludedSubPath := filepath.Join(worktreePath, "excluded-sub")
 		_, err = os.Stat(excludedSubPath)
@@ -220,36 +220,36 @@ func TestSetupSubmodules(t *testing.T) {
 		// Create temporary directories
 		tempDir := t.TempDir()
 		superprojectDir := filepath.Join(tempDir, "superproject")
-		
+
 		// Initialize repository
-		require.NoError(t, os.MkdirAll(superprojectDir, 0755))
+		require.NoError(t, os.MkdirAll(superprojectDir, 0o755))
 		initGitRepo(t, superprojectDir)
-		
+
 		// Create .gitmodules with non-existent submodule
 		gitmodulesContent := `[submodule "missing-sub"]
 	path = missing-sub
 	url = ../missing-sub
 `
 		gitmodulesPath := filepath.Join(superprojectDir, ".gitmodules")
-		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		// Create initial commit in superproject
-		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0644)
+		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, superprojectDir, "initial commit")
-		
+
 		// Create a worktree
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
-		
+
 		// Create empty mock Provider (no workspaces found)
 		mockProvider := createMockProvider(map[string]string{})
 
 		// Test SetupSubmodules - should handle missing submodule gracefully
 		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
-		
+
 		// Verify missing-sub directory exists (created as placeholder)
 		missingSubPath := filepath.Join(worktreePath, "missing-sub")
 		info, err := os.Stat(missingSubPath)
@@ -261,11 +261,11 @@ func TestSetupSubmodules(t *testing.T) {
 		// Create temporary directories
 		tempDir := t.TempDir()
 		superprojectDir := filepath.Join(tempDir, "superproject")
-		
+
 		// Initialize repository
-		require.NoError(t, os.MkdirAll(superprojectDir, 0755))
+		require.NoError(t, os.MkdirAll(superprojectDir, 0o755))
 		initGitRepo(t, superprojectDir)
-		
+
 		// Create complex .gitmodules with various formats
 		gitmodulesContent := `# Comment line
 [submodule "sub1"]
@@ -289,25 +289,25 @@ func TestSetupSubmodules(t *testing.T) {
 	url = https://example.com/sub.git
 `
 		gitmodulesPath := filepath.Join(superprojectDir, ".gitmodules")
-		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		// Create initial commit in superproject
-		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0644)
+		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, superprojectDir, "initial commit")
-		
+
 		// Create a worktree
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
-		
+
 		// Create empty mock Provider
 		mockProvider := createMockProvider(map[string]string{})
 
 		// Test SetupSubmodules with complex gitmodules
 		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
-		
+
 		// Verify all submodule directories are created
 		expectedPaths := []string{
 			"path/to/sub1",
@@ -315,7 +315,7 @@ func TestSetupSubmodules(t *testing.T) {
 			"sub3",
 			"path with spaces/sub",
 		}
-		
+
 		for _, p := range expectedPaths {
 			subPath := filepath.Join(worktreePath, p)
 			info, err := os.Stat(subPath)
@@ -330,36 +330,36 @@ func TestSetupSubmodules(t *testing.T) {
 		// Create temporary directories
 		tempDir := t.TempDir()
 		superprojectDir := filepath.Join(tempDir, "superproject")
-		
+
 		// Initialize repository
-		require.NoError(t, os.MkdirAll(superprojectDir, 0755))
+		require.NoError(t, os.MkdirAll(superprojectDir, 0o755))
 		initGitRepo(t, superprojectDir)
-		
+
 		// Create .gitmodules
 		gitmodulesContent := `[submodule "sub1"]
 	path = sub1
 	url = https://github.com/example/sub1.git
 `
 		gitmodulesPath := filepath.Join(superprojectDir, ".gitmodules")
-		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		// Create initial commit in superproject
-		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0644)
+		err = os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0o644)
 		require.NoError(t, err)
 		commitFiles(t, superprojectDir, "initial commit")
-		
+
 		// Create a worktree
 		worktreePath := filepath.Join(tempDir, "test-wt")
 		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
-		
+
 		// Create empty mock Provider
 		mockProvider := createMockProvider(map[string]string{})
 
 		// Test with empty repos list (should setup all submodules)
 		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{}, mockProvider)
 		require.NoError(t, err)
-		
+
 		// Verify submodule directory is created
 		sub1Path := filepath.Join(worktreePath, "sub1")
 		info, err := os.Stat(sub1Path)
@@ -379,17 +379,17 @@ func TestParseGitmodules(t *testing.T) {
 `
 		tmpDir := t.TempDir()
 		gitmodulesPath := filepath.Join(tmpDir, ".gitmodules")
-		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		submodules, err := parseGitmodules(gitmodulesPath)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, 2, len(submodules))
 		assert.Equal(t, "grove-core", submodules["grove-core"])
 		assert.Equal(t, "grove-flow", submodules["grove-flow"])
 	})
-	
+
 	t.Run("parse gitmodules with different paths", func(t *testing.T) {
 		gitmodulesContent := `[submodule "mylib"]
 	path = libs/mylib
@@ -400,26 +400,26 @@ func TestParseGitmodules(t *testing.T) {
 `
 		tmpDir := t.TempDir()
 		gitmodulesPath := filepath.Join(tmpDir, ".gitmodules")
-		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		submodules, err := parseGitmodules(gitmodulesPath)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, 2, len(submodules))
 		assert.Equal(t, "libs/mylib", submodules["mylib"])
 		assert.Equal(t, "tools/mytool", submodules["tool"])
 	})
-	
+
 	t.Run("handle missing gitmodules file", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		gitmodulesPath := filepath.Join(tmpDir, ".gitmodules")
-		
+
 		submodules, err := parseGitmodules(gitmodulesPath)
 		assert.Error(t, err)
 		assert.Nil(t, submodules)
 	})
-	
+
 	t.Run("handle malformed gitmodules", func(t *testing.T) {
 		gitmodulesContent := `[submodule "incomplete"
 	url = https://github.com/example/incomplete.git
@@ -428,18 +428,17 @@ func TestParseGitmodules(t *testing.T) {
 `
 		tmpDir := t.TempDir()
 		gitmodulesPath := filepath.Join(tmpDir, ".gitmodules")
-		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0644)
+		err := os.WriteFile(gitmodulesPath, []byte(gitmodulesContent), 0o644)
 		require.NoError(t, err)
-		
+
 		submodules, err := parseGitmodules(gitmodulesPath)
 		require.NoError(t, err)
-		
+
 		// Only "nourl" should be parsed (has path but no url)
 		assert.Equal(t, 1, len(submodules))
 		assert.Equal(t, "nourl", submodules["nourl"])
 	})
 }
-
 
 // Variable to allow mocking in tests
 // var discoverLocalWorkspacesFunc = DiscoverLocalWorkspaces

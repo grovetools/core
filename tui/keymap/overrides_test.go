@@ -61,9 +61,9 @@ func TestApplyOverrides(t *testing.T) {
 	}
 
 	overrides := config.KeybindingSectionConfig{
-		"view_logs": []string{"L"},           // Change l to L
-		"run_job":   []string{"R", "enter"},  // Change r to R with alt
-		"not_a_binding": []string{"x"},       // Should be ignored (not a key.Binding)
+		"view_logs":     []string{"L"},          // Change l to L
+		"run_job":       []string{"R", "enter"}, // Change r to R with alt
+		"not_a_binding": []string{"x"},          // Should be ignored (not a key.Binding)
 	}
 
 	ApplyOverrides(&km, overrides)

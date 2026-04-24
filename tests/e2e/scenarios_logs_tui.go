@@ -39,7 +39,7 @@ logging:
 
 				// Create logs directory
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs directory: %w", err)
 				}
 
@@ -423,7 +423,7 @@ logging:
 				}
 
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
@@ -582,7 +582,7 @@ logging:
 				}
 
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
@@ -697,7 +697,7 @@ logging:
 				}
 
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
@@ -817,7 +817,7 @@ logging:
 				}
 
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
@@ -911,7 +911,7 @@ logging:
 
 				// Create empty logs directory (no log files yet)
 				logsDir := filepath.Join(projectDir, ".grove", "logs")
-				if err := os.MkdirAll(logsDir, 0755); err != nil {
+				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs directory: %w", err)
 				}
 
@@ -975,7 +975,7 @@ logging:
 
 				// Append additional logs to the file
 				logFile := filepath.Join(logsDir, "workspace-2024-01-01.log")
-				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
 				if err != nil {
 					return fmt.Errorf("failed to open log file for append: %w", err)
 				}

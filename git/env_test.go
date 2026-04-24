@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	// "github.com/stretchr/testify/require"
-
 	// TODO: Update when testutil is available in grove-core
 	// "testutil"
 )

@@ -95,11 +95,11 @@ func NewManager() (*Manager, error) {
 	basePath := filepath.Join(cxPath, "repos")
 	manifestPath := filepath.Join(cxPath, "manifest.json")
 
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	if err := os.MkdirAll(basePath, 0o755); err != nil {
 		return nil, fmt.Errorf("creating repos directory: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(manifestPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
 		return nil, fmt.Errorf("creating manifest directory: %w", err)
 	}
 
@@ -231,7 +231,7 @@ func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, r
 	worktreePath = filepath.Join(worktreeDir, resolvedCommit[:12])
 
 	// Create worktree directory if needed
-	if err := os.MkdirAll(worktreeDir, 0755); err != nil {
+	if err := os.MkdirAll(worktreeDir, 0o755); err != nil {
 		return "", "", fmt.Errorf("creating worktree directory: %w", err)
 	}
 
@@ -300,8 +300,8 @@ func (m *Manager) resolveVersion(barePath, version string) (string, error) {
 	// Try various common patterns
 	if !strings.Contains(version, "/") {
 		candidates := []string{
-			"refs/heads/" + version,    // bare repo branches
-			"origin/" + version,         // regular clone remote branches
+			"refs/heads/" + version,          // bare repo branches
+			"origin/" + version,              // regular clone remote branches
 			"refs/remotes/origin/" + version, // full remote ref
 		}
 
@@ -431,13 +431,13 @@ func (m *Manager) getLocalPath(repoURL string) string {
 	url := strings.TrimPrefix(repoURL, "https://")
 	url = strings.TrimPrefix(url, "http://")
 	url = strings.TrimSuffix(url, ".git")
-	
+
 	hash := sha256.Sum256([]byte(repoURL))
 	hashStr := hex.EncodeToString(hash[:])[:8]
-	
+
 	safePath := strings.ReplaceAll(url, "/", "_")
 	dirName := fmt.Sprintf("%s_%s", safePath, hashStr)
-	
+
 	return filepath.Join(m.basePath, dirName)
 }
 
@@ -458,7 +458,6 @@ func (m *Manager) fetchRepository(localPath string) error {
 	}
 	return nil
 }
-
 
 func (m *Manager) LoadManifest() (*Manifest, error) {
 	m.mu.Lock()
@@ -517,7 +516,7 @@ func (m *Manager) loadFromBackup(originalManifest *Manifest) (*Manifest, error) 
 	}
 
 	// Restore the main manifest from the backup
-	if err := os.WriteFile(m.manifestPath, backupData, 0644); err != nil {
+	if err := os.WriteFile(m.manifestPath, backupData, 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to restore manifest from backup: %v\n", err)
 	} else {
 		fmt.Fprintf(os.Stderr, "Successfully recovered manifest from backup %s.\n", backupPath)

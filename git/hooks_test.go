@@ -13,7 +13,7 @@ import (
 func TestHookManager_InstallHooks(t *testing.T) {
 	tmpDir := t.TempDir()
 	gitDir := filepath.Join(tmpDir, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(gitDir, 0755))
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 
 	manager := NewHookManager("grove")
 
@@ -30,7 +30,7 @@ func TestHookManager_InstallHooks(t *testing.T) {
 		// Check it's executable
 		info, err := os.Stat(hookPath)
 		require.NoError(t, err)
-		assert.True(t, info.Mode()&0100 != 0, "hook should be executable")
+		assert.True(t, info.Mode()&0o100 != 0, "hook should be executable")
 
 		// Check content
 		content, err := os.ReadFile(hookPath)
@@ -43,7 +43,7 @@ func TestHookManager_InstallHooks(t *testing.T) {
 func TestHookManager_UninstallHooks(t *testing.T) {
 	tmpDir := t.TempDir()
 	gitDir := filepath.Join(tmpDir, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(gitDir, 0755))
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 
 	manager := NewHookManager("grove")
 
@@ -62,12 +62,12 @@ func TestHookManager_UninstallHooks(t *testing.T) {
 func TestHookManager_PreserveExistingHooks(t *testing.T) {
 	tmpDir := t.TempDir()
 	gitDir := filepath.Join(tmpDir, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(gitDir, 0755))
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 
 	// Create existing hook
 	existingHook := filepath.Join(gitDir, "post-checkout")
 	existingContent := "bin/sh\necho 'existing hook'"
-	require.NoError(t, os.WriteFile(existingHook, []byte(existingContent), 0755))
+	require.NoError(t, os.WriteFile(existingHook, []byte(existingContent), 0o755))
 
 	manager := NewHookManager("grove")
 

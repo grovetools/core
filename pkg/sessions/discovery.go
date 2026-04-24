@@ -128,4 +128,3 @@ func DiscoverAll() ([]*models.Session, error) {
 
 	return sessions, nil
 }
-

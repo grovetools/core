@@ -1,131 +1,131 @@
 package cli
 
 import (
-    "context"
-    "os"
+	"context"
+	"os"
 
-    "github.com/grovetools/core/config"
-    "github.com/grovetools/core/logging"
-    "github.com/sirupsen/logrus"
-    "github.com/spf13/cobra"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/logging"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 // CommandOptions holds common options for Grove commands
 type CommandOptions struct {
-    ConfigFile string
-    Verbose    bool
-    JSONOutput bool
+	ConfigFile string
+	Verbose    bool
+	JSONOutput bool
 }
 
 // NewStandardCommand creates a new command with standard Grove flags.
 // After adding all subcommands, call Execute(cmd) to run with styled help.
 func NewStandardCommand(use, short string) *cobra.Command {
-    cmd := &cobra.Command{
-        Use:   use,
-        Short: short,
-    }
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+	}
 
-    // Standard flags for all Grove tools
-    cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
-    cmd.PersistentFlags().Bool("json", false, "Output in JSON format")
-    cmd.PersistentFlags().StringP("config", "c", "", "Path to grove.yml config file")
+	// Standard flags for all Grove tools
+	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
+	cmd.PersistentFlags().Bool("json", false, "Output in JSON format")
+	cmd.PersistentFlags().StringP("config", "c", "", "Path to grove.yml config file")
 
-    return cmd
+	return cmd
 }
 
 // Execute applies styled help to all subcommands and executes the command.
 // Use this instead of cmd.Execute() to get consistent Grove styling.
 func Execute(cmd *cobra.Command) error {
-    ApplyStyledHelpRecursive(cmd)
+	ApplyStyledHelpRecursive(cmd)
 
-    // Silence cobra's default error printing so we can style it
-    cmd.SilenceErrors = true
+	// Silence cobra's default error printing so we can style it
+	cmd.SilenceErrors = true
 
-    err := cmd.Execute()
-    if err != nil {
-        // Find the actual command that was targeted
-        targetCmd, _, _ := cmd.Find(os.Args[1:])
-        if targetCmd != nil {
-            PrintError(targetCmd, err)
-        } else {
-            PrintError(cmd, err)
-        }
-    }
-    return err
+	err := cmd.Execute()
+	if err != nil {
+		// Find the actual command that was targeted
+		targetCmd, _, _ := cmd.Find(os.Args[1:])
+		if targetCmd != nil {
+			PrintError(targetCmd, err)
+		} else {
+			PrintError(cmd, err)
+		}
+	}
+	return err
 }
 
 // ExecuteContext applies styled help and executes the command with context.
 // Use this instead of cmd.ExecuteContext() to get consistent Grove styling.
 func ExecuteContext(ctx context.Context, cmd *cobra.Command) error {
-    ApplyStyledHelpRecursive(cmd)
+	ApplyStyledHelpRecursive(cmd)
 
-    // Silence cobra's default error printing so we can style it
-    cmd.SilenceErrors = true
+	// Silence cobra's default error printing so we can style it
+	cmd.SilenceErrors = true
 
-    err := cmd.ExecuteContext(ctx)
-    if err != nil {
-        // Find the actual command that was targeted
-        targetCmd, _, _ := cmd.Find(os.Args[1:])
-        if targetCmd != nil {
-            PrintError(targetCmd, err)
-        } else {
-            PrintError(cmd, err)
-        }
-    }
-    return err
+	err := cmd.ExecuteContext(ctx)
+	if err != nil {
+		// Find the actual command that was targeted
+		targetCmd, _, _ := cmd.Find(os.Args[1:])
+		if targetCmd != nil {
+			PrintError(targetCmd, err)
+		} else {
+			PrintError(cmd, err)
+		}
+	}
+	return err
 }
 
 // GetLogger creates a logger based on command flags
 func GetLogger(cmd *cobra.Command) *logrus.Logger {
-    // Use grove-core logging which is already configured
-    // This returns a logrus.Entry, we need to get the underlying logger
-    entry := logging.NewLogger("grove-cli")
-    logger := entry.Logger
-    
-    verbose, _ := cmd.Flags().GetBool("verbose")
-    if verbose {
-        logger.SetLevel(logrus.DebugLevel)
-    }
-    
-    jsonOutput, _ := cmd.Flags().GetBool("json")
-    if jsonOutput {
-        logger.SetFormatter(&logrus.JSONFormatter{})
-    }
-    
-    return logger
+	// Use grove-core logging which is already configured
+	// This returns a logrus.Entry, we need to get the underlying logger
+	entry := logging.NewLogger("grove-cli")
+	logger := entry.Logger
+
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if verbose {
+		logger.SetLevel(logrus.DebugLevel)
+	}
+
+	jsonOutput, _ := cmd.Flags().GetBool("json")
+	if jsonOutput {
+		logger.SetFormatter(&logrus.JSONFormatter{})
+	}
+
+	return logger
 }
 
 // GetOptions extracts common options from a command
 func GetOptions(cmd *cobra.Command) CommandOptions {
-    configFile, _ := cmd.Flags().GetString("config")
-    verbose, _ := cmd.Flags().GetBool("verbose")
-    jsonOutput, _ := cmd.Flags().GetBool("json")
-    
-    return CommandOptions{
-        ConfigFile: configFile,
-        Verbose:    verbose,
-        JSONOutput: jsonOutput,
-    }
+	configFile, _ := cmd.Flags().GetString("config")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	jsonOutput, _ := cmd.Flags().GetBool("json")
+
+	return CommandOptions{
+		ConfigFile: configFile,
+		Verbose:    verbose,
+		JSONOutput: jsonOutput,
+	}
 }
 
 // InitConfig initializes the configuration file path
 func InitConfig(configFile string) (string, error) {
-    if configFile != "" {
-        // Use config file from flag
-        return configFile, nil
-    }
+	if configFile != "" {
+		// Use config file from flag
+		return configFile, nil
+	}
 
-    // Find config file
-    cwd, err := os.Getwd()
-    if err != nil {
-        return "", err
-    }
+	// Find config file
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
 
-    foundConfigFile, err := config.FindConfigFile(cwd)
-    if err != nil {
-        // No config file found, that's okay for some commands
-        return "", nil
-    }
+	foundConfigFile, err := config.FindConfigFile(cwd)
+	if err != nil {
+		// No config file found, that's okay for some commands
+		return "", nil
+	}
 
-    return foundConfigFile, nil
+	return foundConfigFile, nil
 }

@@ -84,7 +84,7 @@ func NewHookManager(groveBinary string) *HookManager {
 // InstallHooks installs Grove git hooks
 func (m *HookManager) InstallHooks(ctx context.Context, repoPath string) error {
 	hooksDir := filepath.Join(repoPath, ".git", "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		return fmt.Errorf("create hooks directory: %w", err)
 	}
 
@@ -160,7 +160,7 @@ func (m *HookManager) installHook(hooksDir, hookName, templateContent string) er
 
 	// Write hook file with executable permissions
 	// #nosec G306 - Git hooks need to be executable
-	if err := os.WriteFile(hookPath, buf.Bytes(), 0755); err != nil {
+	if err := os.WriteFile(hookPath, buf.Bytes(), 0o755); err != nil {
 		return fmt.Errorf("write hook file: %w", err)
 	}
 

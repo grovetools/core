@@ -51,10 +51,10 @@ func main() {
 	// Example of progressive enhancement with fields
 	log := appLog.WithField("request_id", "abc-123")
 	log.Info("Processing request")
-	
+
 	log = log.WithField("user_id", 456)
 	log.Info("User authenticated")
-	
+
 	log = log.WithField("action", "create_post")
 	log.Info("Performing action")
 

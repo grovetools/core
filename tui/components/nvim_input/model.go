@@ -37,8 +37,8 @@ type Model struct {
 	width    int
 	height   int
 	focused  bool
-	escaped  bool   // true after Escape in normal mode — allows Tab to cycle out
-	ready    bool   // true once Init has run
+	escaped  bool // true after Escape in normal mode — allows Tab to cycle out
+	ready    bool // true once Init has run
 	err      error
 	submitCh chan string // receives content from the RPC handler
 }
