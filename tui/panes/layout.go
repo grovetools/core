@@ -87,7 +87,11 @@ func (m Manager) CalculateDimensions() []tea.WindowSizeMsg {
 			if flexSum > 0 {
 				allocated = (flexAvailable * p.Flex) / flexSum
 			}
-			if p.MinSize > 0 && allocated < p.MinSize {
+			// Only clamp up to MinSize if MinSize fits in remaining space.
+			// Otherwise, when the available axis is smaller than the sum of
+			// MinSizes, MinSize-clamping would push total allocation past
+			// axisDim and overflow the parent layout.
+			if p.MinSize > 0 && allocated < p.MinSize && p.MinSize <= flexAvailable {
 				sizes[i] = p.MinSize
 				flexible[i] = false
 				changed = true
