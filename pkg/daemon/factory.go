@@ -237,7 +237,7 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 	// Temporary — remove once the "unexpected scoped daemon on treemux
 	// start" investigation concludes.
 	ulog := logging.NewUnifiedLogger("daemon.factory")
-	ulog.Info("daemon auto-start").
+	ulog.Debug("daemon auto-start").
 		Field("scope", scope).
 		Field("socket", socketPath).
 		Field("pidfile", pidPath).

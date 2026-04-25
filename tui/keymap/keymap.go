@@ -94,12 +94,12 @@ func DefaultVim() Base {
 			key.WithHelp("j/down", "down"),
 		),
 		Left: key.NewBinding(
-			key.WithKeys("left"),
-			key.WithHelp("left", "left"),
+			key.WithKeys("h", "left"),
+			key.WithHelp("h/←", "left"),
 		),
 		Right: key.NewBinding(
-			key.WithKeys("right"),
-			key.WithHelp("right", "right"),
+			key.WithKeys("l", "right"),
+			key.WithHelp("l/→", "right"),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("ctrl+u", "pgup"),
