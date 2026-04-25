@@ -187,21 +187,47 @@ func (c *LocalClient) ConfirmSession(ctx context.Context, confirmation SessionCo
 }
 
 // UpdateSessionStatus updates the status of an active session.
-// In local mode, this is a no-op since the filesystem registry doesn't store status.
-// The daemon's in-memory store tracks status; in local mode we rely on PID liveness.
+// In local mode, this persists the status to the filesystem registry's
+// metadata.json so subsequent reads (RecoverSessions) return the right
+// value instead of defaulting to "running".
 func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID string, status string) error {
-	// In local mode, status is derived from PID liveness, so this is a no-op.
-	// The filesystem registry doesn't have a status field.
-	return nil
+	registry, err := sessions.NewFileSystemRegistry()
+	if err != nil {
+		return err
+	}
+	// The session directory is keyed by the native (claude) session ID, not
+	// the job ID. Find the registry entry for this jobID and update its dir.
+	if meta, _ := registry.Find(jobID); meta != nil {
+		dirName := meta.ClaudeSessionID
+		if dirName == "" {
+			dirName = meta.SessionID
+		}
+		return registry.UpdateStatus(dirName, status)
+	}
+	// Fall back to using jobID as directory name.
+	return registry.UpdateStatus(jobID, status)
 }
 
 // EndSession marks a session as complete or interrupted.
-// In local mode, this removes the session from the filesystem registry.
+// In local mode, this persists the terminal status to metadata.json so
+// subsequent RecoverSessions scans report the correct outcome instead of
+// defaulting to "running" because the (parent) PID in pid.lock is alive.
+// The session directory and pid.lock are preserved for transcript
+// archival; cleanup is handled separately.
 func (c *LocalClient) EndSession(ctx context.Context, jobID string, outcome string) error {
-	// For local mode, we could clean up the session directory.
-	// However, this is handled by the daemon's session collector in normal operation.
-	// For now, this is a no-op in local mode.
-	return nil
+	registry, err := sessions.NewFileSystemRegistry()
+	if err != nil {
+		return err
+	}
+	dirName := jobID
+	if meta, _ := registry.Find(jobID); meta != nil {
+		if meta.ClaudeSessionID != "" {
+			dirName = meta.ClaudeSessionID
+		} else if meta.SessionID != "" {
+			dirName = meta.SessionID
+		}
+	}
+	return registry.UpdateStatus(dirName, outcome)
 }
 
 // KillSession returns an error in local mode — terminating a tracked agent

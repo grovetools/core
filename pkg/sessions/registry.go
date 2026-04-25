@@ -121,6 +121,22 @@ func (r *FileSystemRegistry) UpdateStatus(sessionID string, status string) error
 	return os.WriteFile(metadataFile, updated, 0o644)
 }
 
+// RemovePIDLock removes the pid.lock for a session directory while
+// preserving the rest of the dir (transcripts, metadata). After removal,
+// RecoverSessions will skip the session as no longer live, so a previously
+// persisted terminal status in metadata.json wins over the default
+// "running" assumption for alive PIDs.
+func (r *FileSystemRegistry) RemovePIDLock(sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	pidFile := filepath.Join(r.baseDir, sessionID, "pid.lock")
+	if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove pid.lock: %w", err)
+	}
+	return nil
+}
+
 // Unregister removes the crash-recovery tracking files for a session.
 // This is called by the daemon when a session cleanly ends or is detected as dead.
 func (r *FileSystemRegistry) Unregister(sessionID string) error {
