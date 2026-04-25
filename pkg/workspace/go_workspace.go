@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -23,13 +22,11 @@ func SetupGoWorkspaceForWorktree(worktreePath string, gitRoot string) error {
 	if err != nil || config == nil {
 		return nil // No go.work file found, nothing to do
 	}
-	
-	requiredModules, _ := parseGoModRequires(goModPath, config.ModulePaths)
-	
-	content := GenerateWorktreeGoWork(config, requiredModules)
-	
+
+	content := GenerateWorktreeGoWork(config)
+
 	worktreeGoWorkPath := filepath.Join(worktreePath, "go.work")
-	return os.WriteFile(worktreeGoWorkPath, []byte(content), 0644)
+	return os.WriteFile(worktreeGoWorkPath, []byte(content), 0o644)
 }
 
 // FindRootGoWorkspace searches for a go.work file by walking up the directory tree.
@@ -103,77 +100,14 @@ func parseGoWork(path string, config *GoWorkspaceConfig) error {
 	return scanner.Err()
 }
 
-func GenerateWorktreeGoWork(config *GoWorkspaceConfig, requiredModules []string) string {
+func GenerateWorktreeGoWork(config *GoWorkspaceConfig) string {
 	var sb strings.Builder
 	sb.WriteString(config.GoVersion + "\n\n")
 	sb.WriteString("use (\n")
 	sb.WriteString("\t.\n")
-	
-	if len(requiredModules) > 0 {
-		requiredMap := make(map[string]bool)
-		for _, mod := range requiredModules {
-			requiredMap[mod] = true
-		}
-		for _, modulePath := range config.ModulePaths {
-			moduleName := filepath.Base(modulePath)
-			if requiredMap[moduleName] {
-				sb.WriteString(fmt.Sprintf("\t%s\n", filepath.Join(config.WorkspaceRoot, modulePath)))
-			}
-		}
-	} else {
-		for _, modulePath := range config.ModulePaths {
-			sb.WriteString(fmt.Sprintf("\t%s\n", filepath.Join(config.WorkspaceRoot, modulePath)))
-		}
+	for _, modulePath := range config.ModulePaths {
+		sb.WriteString(fmt.Sprintf("\t%s\n", filepath.Join(config.WorkspaceRoot, modulePath)))
 	}
 	sb.WriteString(")\n")
 	return sb.String()
-}
-
-func parseGoModRequires(goModPath string, workspaceModules []string) ([]string, error) {
-	file, err := os.Open(goModPath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	moduleMap := make(map[string]string)
-	for _, modPath := range workspaceModules {
-		moduleName := filepath.Base(modPath)
-		moduleMap[moduleName] = moduleName
-	}
-
-	var requiredModules []string
-	scanner := bufio.NewScanner(file)
-	inRequireBlock := false
-	moduleRegex := regexp.MustCompile(`^\s*([^\s]+)\s+v[\d\.]+`)
-	
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "//") {
-			continue
-		}
-		if line == "require (" {
-			inRequireBlock = true
-			continue
-		}
-		if inRequireBlock && line == ")" {
-			inRequireBlock = false
-			continue
-		}
-		if inRequireBlock || strings.HasPrefix(line, "require ") {
-			moduleLine := line
-			if strings.HasPrefix(line, "require ") {
-				moduleLine = strings.TrimPrefix(line, "require ")
-			}
-			matches := moduleRegex.FindStringSubmatch(moduleLine)
-			if len(matches) > 1 {
-				moduleName := matches[1]
-				moduleBaseName := filepath.Base(moduleName)
-				if _, ok := moduleMap[moduleBaseName]; ok {
-					requiredModules = append(requiredModules, moduleBaseName)
-				}
-			}
-		}
-	}
-	return requiredModules, scanner.Err()
 }
