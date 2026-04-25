@@ -443,6 +443,8 @@ type HookCommand struct {
 	RunIf          string `yaml:"run_if,omitempty" toml:"run_if,omitempty" jsonschema:"enum=always,enum=changes,description=Condition to run the command (always or changes)"`
 	Timeout        int    `yaml:"timeout,omitempty" toml:"timeout,omitempty" jsonschema:"description=Maximum run time in seconds before the hook is killed (default 600)"`
 	CancelPrevious bool   `yaml:"cancel_previous,omitempty" toml:"cancel_previous,omitempty" jsonschema:"description=If true, SIGTERM any in-flight instance of the same hook when a new event fires"`
+	DisableEnv     string `yaml:"disable_env,omitempty" toml:"disable_env,omitempty" jsonschema:"description=Skip this hook when the named environment variable is non-empty"`
+	EnableEnv      string `yaml:"enable_env,omitempty" toml:"enable_env,omitempty" jsonschema:"description=Skip this hook unless the named environment variable is non-empty (opt-in gating)"`
 }
 
 // PostToolUseHook defines a reminder hook that emits additional context to
