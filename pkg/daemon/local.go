@@ -482,6 +482,52 @@ func (c *LocalClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatus
 	return nil, errors.New("memory operations require the grove daemon; start groved first")
 }
 
+// --- Memory Analysis (require daemon) ---
+
+func (c *LocalClient) GetMemoryAnalysisGC(ctx context.Context) (*models.GCAnalysisResponse, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) ExecuteMemoryGC(ctx context.Context) (*models.GCAnalysisResponse, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisWorkspaces(ctx context.Context) ([]*models.WorkspaceAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisEcosystems(ctx context.Context) ([]*models.EcosystemAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisCode(ctx context.Context) (*models.CodeAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisConcepts(ctx context.Context) (*models.ConceptAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisEmbeddings(ctx context.Context) (*models.EmbeddingAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisFreshness(ctx context.Context) (*models.FreshnessAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisDuplicates(ctx context.Context) (*models.DuplicateAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisNotebooks(ctx context.Context) ([]*models.NotebookAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
+func (c *LocalClient) GetMemoryAnalysisContext(ctx context.Context) (*models.ContextAnalysis, error) {
+	return nil, errors.New("memory analysis requires the grove daemon; start groved first")
+}
+
 // IsTerminalConnected returns false since the local client has no daemon connection.
 func (c *LocalClient) IsTerminalConnected(ctx context.Context) (bool, error) {
 	return false, nil

@@ -277,6 +277,31 @@ type Client interface {
 	// GetMemoryStatus returns database stats (size, document/chunk counts, doctype distribution).
 	GetMemoryStatus(ctx context.Context) (*models.MemoryStatusResponse, error)
 
+	// --- Memory Analysis ---
+
+	// GetMemoryAnalysisGC returns a dry-run GC report (zombie/missing/stale paths).
+	GetMemoryAnalysisGC(ctx context.Context) (*models.GCAnalysisResponse, error)
+	// ExecuteMemoryGC runs the GC sweep against the daemon's memory store.
+	ExecuteMemoryGC(ctx context.Context) (*models.GCAnalysisResponse, error)
+	// GetMemoryAnalysisWorkspaces returns per-workspace breakdowns.
+	GetMemoryAnalysisWorkspaces(ctx context.Context) ([]*models.WorkspaceAnalysis, error)
+	// GetMemoryAnalysisEcosystems returns ecosystem-level coverage gaps.
+	GetMemoryAnalysisEcosystems(ctx context.Context) ([]*models.EcosystemAnalysis, error)
+	// GetMemoryAnalysisCode returns code-indexer health.
+	GetMemoryAnalysisCode(ctx context.Context) (*models.CodeAnalysis, error)
+	// GetMemoryAnalysisConcepts returns concept coverage details.
+	GetMemoryAnalysisConcepts(ctx context.Context) (*models.ConceptAnalysis, error)
+	// GetMemoryAnalysisEmbeddings returns embedder health and dedup savings.
+	GetMemoryAnalysisEmbeddings(ctx context.Context) (*models.EmbeddingAnalysis, error)
+	// GetMemoryAnalysisFreshness returns time-bucket distribution and stale counts.
+	GetMemoryAnalysisFreshness(ctx context.Context) (*models.FreshnessAnalysis, error)
+	// GetMemoryAnalysisDuplicates returns the top reused chunks across documents.
+	GetMemoryAnalysisDuplicates(ctx context.Context) (*models.DuplicateAnalysis, error)
+	// GetMemoryAnalysisNotebooks returns per-workspace notebook lifecycle counts.
+	GetMemoryAnalysisNotebooks(ctx context.Context) ([]*models.NotebookAnalysis, error)
+	// GetMemoryAnalysisContext returns cx context preset health.
+	GetMemoryAnalysisContext(ctx context.Context) (*models.ContextAnalysis, error)
+
 	// --- Native Agent Pane Relay ---
 
 	// IsTerminalConnected returns true if a groveterm instance is connected to the

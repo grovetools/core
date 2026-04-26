@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // Memory transport types for daemon ↔ client communication.
 // These mirror the internal types in github.com/grovetools/memory/pkg/memory
 // but live in core so that the daemon and TUI clients can share a wire format
@@ -60,4 +62,123 @@ type MemoryStatusResponse struct {
 	Documents   int            `json:"documents"`
 	ChunksVec   int            `json:"chunks_vec"`
 	DocTypes    map[string]int `json:"doc_types,omitempty"`
+}
+
+// DocumentPathInfo carries path/workspace/timestamp tuples used by daemon
+// handlers that combine DB results with filesystem checks.
+type DocumentPathInfo struct {
+	ID        string    `json:"id"`
+	Path      string    `json:"path"`
+	Workspace string    `json:"workspace"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GCAnalysisResponse is the response for /api/memory/analysis/gc.
+type GCAnalysisResponse struct {
+	ZombieCount   int      `json:"zombie_count"`
+	MissingCount  int      `json:"missing_count"`
+	StaleCount    int      `json:"stale_count"`
+	PathsToRemove []string `json:"paths_to_remove,omitempty"`
+	PathsRemoved  []string `json:"paths_removed,omitempty"`
+}
+
+// WorkspaceAnalysis is a per-workspace breakdown of indexed documents.
+type WorkspaceAnalysis struct {
+	Workspace     string         `json:"workspace"`
+	TotalDocs     int            `json:"total_docs"`
+	CanonicalDocs int            `json:"canonical_docs"`
+	WorktreeDocs  int            `json:"worktree_docs"`
+	Types         map[string]int `json:"types"`
+	LastIndexed   time.Time      `json:"last_indexed"`
+	StaleCount    int            `json:"stale_count"`
+}
+
+// EcosystemAnalysis describes coverage gaps at the ecosystem level.
+type EcosystemAnalysis struct {
+	Name             string   `json:"name"`
+	Path             string   `json:"path"`
+	ConfiguredGroves int      `json:"configured_groves"`
+	IndexedGroves    int      `json:"indexed_groves"`
+	ZeroCoverage     []string `json:"zero_coverage_workspaces"`
+	LanguageGaps     []string `json:"language_gaps"`
+}
+
+// CodeAnalysis describes code-indexer health.
+type CodeAnalysis struct {
+	TotalCodeDocs     int            `json:"total_code_docs"`
+	MissingEmbeddings int            `json:"missing_embeddings"`
+	WorktreeOverrides int            `json:"worktree_overrides"`
+	TopFatFiles       []FatFile      `json:"top_fat_files"`
+	Languages         map[string]int `json:"languages"`
+}
+
+// FatFile is a code document with a chunk count.
+type FatFile struct {
+	Path       string `json:"path"`
+	ChunkCount int    `json:"chunk_count"`
+}
+
+// ConceptAnalysis is a concept-coverage summary.
+type ConceptAnalysis struct {
+	TotalConcepts int            `json:"total_concepts"`
+	ConceptCounts []ConceptChunk `json:"concept_counts"`
+}
+
+// ConceptChunk is a concept document path with its chunk count.
+type ConceptChunk struct {
+	Path       string `json:"path"`
+	ChunkCount int    `json:"chunk_count"`
+}
+
+// EmbeddingAnalysis describes embedder health and dedup savings.
+type EmbeddingAnalysis struct {
+	TotalChunks    int `json:"total_chunks"`
+	UniqueChunks   int `json:"unique_chunks"`
+	DedupSavings   int `json:"dedup_savings"`
+	MissingVectors int `json:"missing_vectors"`
+}
+
+// FreshnessAnalysis describes time-bucket distribution and stale source files.
+type FreshnessAnalysis struct {
+	LastHour   int `json:"last_hour"`
+	LastDay    int `json:"last_day"`
+	LastWeek   int `json:"last_week"`
+	Older      int `json:"older"`
+	StaleFiles int `json:"stale_files"`
+}
+
+// DuplicateAnalysis is the response for /api/memory/analysis/duplicates.
+type DuplicateAnalysis struct {
+	TopReusedChunks []ReusedChunk `json:"top_reused_chunks"`
+}
+
+// ReusedChunk is a content hash present across multiple documents.
+type ReusedChunk struct {
+	ContentHash string `json:"content_hash"`
+	DocCount    int    `json:"doc_count"`
+	Snippet     string `json:"snippet"`
+}
+
+// NotebookAnalysis is per-workspace notebook lifecycle counts.
+type NotebookAnalysis struct {
+	Workspace      string `json:"workspace"`
+	InboxCount     int    `json:"inbox_count"`
+	IssuesCount    int    `json:"issues_count"`
+	CompletedCount int    `json:"completed_count"`
+	ConceptsCount  int    `json:"concepts_count"`
+	SkillsCount    int    `json:"skills_count"`
+}
+
+// ContextAnalysis is the response for /api/memory/analysis/context.
+type ContextAnalysis struct {
+	TotalPresets int                 `json:"total_presets"`
+	Presets      []ContextPresetStat `json:"presets"`
+}
+
+// ContextPresetStat summarizes a single cx context preset rules file.
+type ContextPresetStat struct {
+	Workspace    string `json:"workspace"`
+	Path         string `json:"path"`
+	FileCount    int    `json:"file_count"`
+	MissingFiles int    `json:"missing_files"`
 }

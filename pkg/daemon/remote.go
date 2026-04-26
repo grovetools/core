@@ -1472,6 +1472,133 @@ func (c *RemoteClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatu
 	return &status, nil
 }
 
+// --- Memory Analysis ---
+
+func (c *RemoteClient) memoryAnalysisGetJSON(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed GET %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return errMemoryEndpointMissing
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("failed to decode response from %s: %w", path, err)
+	}
+	return nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisGC(ctx context.Context) (*models.GCAnalysisResponse, error) {
+	var out models.GCAnalysisResponse
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/gc", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) ExecuteMemoryGC(ctx context.Context) (*models.GCAnalysisResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/memory/analysis/gc", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute memory gc: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errMemoryEndpointMissing
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	var out models.GCAnalysisResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("failed to decode gc response: %w", err)
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisWorkspaces(ctx context.Context) ([]*models.WorkspaceAnalysis, error) {
+	var out []*models.WorkspaceAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/workspaces", &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisEcosystems(ctx context.Context) ([]*models.EcosystemAnalysis, error) {
+	var out []*models.EcosystemAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/ecosystems", &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisCode(ctx context.Context) (*models.CodeAnalysis, error) {
+	var out models.CodeAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/code", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisConcepts(ctx context.Context) (*models.ConceptAnalysis, error) {
+	var out models.ConceptAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/concepts", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisEmbeddings(ctx context.Context) (*models.EmbeddingAnalysis, error) {
+	var out models.EmbeddingAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/embeddings", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisFreshness(ctx context.Context) (*models.FreshnessAnalysis, error) {
+	var out models.FreshnessAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/freshness", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisDuplicates(ctx context.Context) (*models.DuplicateAnalysis, error) {
+	var out models.DuplicateAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/duplicates", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisNotebooks(ctx context.Context) ([]*models.NotebookAnalysis, error) {
+	var out []*models.NotebookAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/notebooks", &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *RemoteClient) GetMemoryAnalysisContext(ctx context.Context) (*models.ContextAnalysis, error) {
+	var out models.ContextAnalysis
+	if err := c.memoryAnalysisGetJSON(ctx, "/api/memory/analysis/context", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // IsTerminalConnected checks if a groveterm instance is connected to the daemon via SSE.
 func (c *RemoteClient) IsTerminalConnected(ctx context.Context) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/system/terminal-status", nil)
