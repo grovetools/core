@@ -74,6 +74,18 @@ type DocumentPathInfo struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// MemoryReindexRequest is the request body for POST /api/memory/reindex.
+type MemoryReindexRequest struct {
+	Mode   string `json:"mode"`             // "stale" (default), "all", "path"
+	Target string `json:"target,omitempty"` // File path (only for mode "path")
+}
+
+// MemoryReindexResponse is the response from POST /api/memory/reindex.
+type MemoryReindexResponse struct {
+	QueuedCount int    `json:"queued_count"`
+	Mode        string `json:"mode"`
+}
+
 // GCAnalysisResponse is the response for /api/memory/analysis/gc.
 type GCAnalysisResponse struct {
 	ZombieCount   int      `json:"zombie_count"`
