@@ -86,6 +86,17 @@ type MemoryReindexResponse struct {
 	Mode        string `json:"mode"`
 }
 
+// EmbeddingProgressResponse is the response for GET /api/memory/analysis/progress.
+type EmbeddingProgressResponse struct {
+	QueueDepth            int     `json:"queue_depth"`
+	InFlight              int     `json:"in_flight"`
+	FilesCompletedLastMin int     `json:"files_completed_last_min"`
+	ChunksEmbeddedLastMin int     `json:"chunks_embedded_last_min"`
+	ErrorsLastMin         int     `json:"errors_last_min"`
+	ETASeconds            float64 `json:"eta_seconds"`
+	IsHealthy             bool    `json:"is_healthy"`
+}
+
 // GCAnalysisResponse is the response for /api/memory/analysis/gc.
 type GCAnalysisResponse struct {
 	ZombieCount   int      `json:"zombie_count"`
