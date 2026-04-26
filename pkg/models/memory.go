@@ -127,6 +127,7 @@ type ConceptAnalysis struct {
 
 // ConceptChunk is a concept document path with its chunk count.
 type ConceptChunk struct {
+	Workspace  string `json:"workspace"`
 	Path       string `json:"path"`
 	ChunkCount int    `json:"chunk_count"`
 }
