@@ -942,6 +942,43 @@ func (c *RemoteClient) EnvDown(ctx context.Context, req env.EnvRequest) (*env.En
 	return &result, nil
 }
 
+// EnsureRepo asks the daemon to clone+checkout a repository at the given version.
+func (c *RemoteClient) EnsureRepo(ctx context.Context, req models.RepoEnsureRequest) (*models.RepoEnsureResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal repo ensure request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/repos/ensure", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	// envHttpClient (30m) — clones can be slow; the regular httpClient's 10s would trip on large repos.
+	resp, err := c.envHttpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("call daemon ensure repo: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound && c.fallback != nil {
+		return c.fallback.EnsureRepo(ctx, req)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var msg struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&msg)
+		if msg.Error != "" {
+			return nil, fmt.Errorf("daemon ensure repo: %s", msg.Error)
+		}
+		return nil, fmt.Errorf("daemon ensure repo: status %d", resp.StatusCode)
+	}
+	var out models.RepoEnsureResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode repo ensure response: %w", err)
+	}
+	return &out, nil
+}
+
 // EnvStatus requests environment status from the daemon.
 func (c *RemoteClient) EnvStatus(ctx context.Context, worktree string) (*env.EnvResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/env/status?worktree="+worktree, nil)

@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -139,7 +140,7 @@ func extractShorthand(repoURL string) string {
 
 // Ensure makes sure the bare clone for the given repository exists and is up-to-date.
 // It does not perform any checkouts. Use EnsureVersion for version-specific worktrees.
-func (m *Manager) Ensure(repoURL string) error {
+func (m *Manager) Ensure(ctx context.Context, repoURL string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -153,7 +154,7 @@ func (m *Manager) Ensure(repoURL string) error {
 	// Check if bare repository exists
 	if _, err := os.Stat(barePath); os.IsNotExist(err) {
 		// Clone as bare repository
-		if err := m.cloneRepository(repoURL, barePath); err != nil {
+		if err := m.cloneRepository(ctx, repoURL, barePath); err != nil {
 			return fmt.Errorf("cloning repository: %w", err)
 		}
 		markEnsured(repoURL)
@@ -164,7 +165,7 @@ func (m *Manager) Ensure(repoURL string) error {
 		// which can be 100s of ms per call against large repos and was
 		// the dominant cost for cx commands that resolve many @a:git:
 		// aliases (>20s for ~25 ghostty references in a single rules file).
-		if err := m.fetchRepository(barePath); err != nil {
+		if err := m.fetchRepository(ctx, barePath); err != nil {
 			return fmt.Errorf("fetching repository: %w", err)
 		}
 		markEnsured(repoURL)
@@ -192,9 +193,9 @@ func (m *Manager) Ensure(repoURL string) error {
 
 // EnsureVersion ensures a specific version of a repository is checked out in a worktree.
 // It returns the absolute path to the worktree and the resolved commit hash.
-func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, resolvedCommit string, err error) {
+func (m *Manager) EnsureVersion(ctx context.Context, repoURL, version string) (worktreePath string, resolvedCommit string, err error) {
 	// Ensure the bare clone exists and is up-to-date
-	if err := m.Ensure(repoURL); err != nil {
+	if err := m.Ensure(ctx, repoURL); err != nil {
 		return "", "", fmt.Errorf("ensuring bare clone: %w", err)
 	}
 
@@ -220,7 +221,7 @@ func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, r
 		versionToResolve = "origin/HEAD"
 	}
 
-	resolvedCommit, err = m.resolveVersion(barePath, versionToResolve)
+	resolvedCommit, err = m.resolveVersion(ctx, barePath, versionToResolve)
 	if err != nil {
 		return "", "", fmt.Errorf("resolving version %s: %w", versionToResolve, err)
 	}
@@ -238,7 +239,7 @@ func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, r
 	// Check if worktree already exists
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 		// Create the worktree
-		if err := m.createWorktree(barePath, worktreePath, resolvedCommit); err != nil {
+		if err := m.createWorktree(ctx, barePath, worktreePath, resolvedCommit); err != nil {
 			return "", "", fmt.Errorf("creating worktree: %w", err)
 		}
 	}
@@ -266,11 +267,11 @@ func (m *Manager) EnsureVersion(repoURL, version string) (worktreePath string, r
 }
 
 // resolveVersion resolves a version string (branch, tag, or commit) to a full commit hash
-func (m *Manager) resolveVersion(barePath, version string) (string, error) {
+func (m *Manager) resolveVersion(ctx context.Context, barePath, version string) (string, error) {
 	// Special handling for origin/HEAD or empty version - find the default branch
 	if version == "origin/HEAD" || version == "" {
 		// Try to get the symbolic ref for origin/HEAD
-		cmd := exec.Command("git", "-C", barePath, "symbolic-ref", "refs/remotes/origin/HEAD")
+		cmd := exec.CommandContext(ctx, "git", "-C", barePath, "symbolic-ref", "refs/remotes/origin/HEAD")
 		if output, err := cmd.Output(); err == nil {
 			// Parse the ref (e.g., "refs/remotes/origin/main" -> "origin/main")
 			ref := strings.TrimSpace(string(output))
@@ -280,7 +281,7 @@ func (m *Manager) resolveVersion(barePath, version string) (string, error) {
 		} else {
 			// Fallback: try common default branch names
 			for _, branch := range []string{"origin/main", "origin/master"} {
-				cmd := exec.Command("git", "-C", barePath, "rev-parse", branch+"^{commit}")
+				cmd := exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", branch+"^{commit}")
 				if output, err := cmd.Output(); err == nil {
 					return strings.TrimSpace(string(output)), nil
 				}
@@ -290,7 +291,7 @@ func (m *Manager) resolveVersion(barePath, version string) (string, error) {
 	}
 
 	// Try the version as-is first (could be a tag, commit hash, or already-prefixed branch)
-	cmd := exec.Command("git", "-C", barePath, "rev-parse", version+"^{commit}")
+	cmd := exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", version+"^{commit}")
 	output, err := cmd.Output()
 	if err == nil {
 		return strings.TrimSpace(string(output)), nil
@@ -306,7 +307,7 @@ func (m *Manager) resolveVersion(barePath, version string) (string, error) {
 		}
 
 		for _, candidate := range candidates {
-			cmd = exec.Command("git", "-C", barePath, "rev-parse", candidate+"^{commit}")
+			cmd = exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", candidate+"^{commit}")
 			output, err = cmd.Output()
 			if err == nil {
 				return strings.TrimSpace(string(output)), nil
@@ -315,7 +316,7 @@ func (m *Manager) resolveVersion(barePath, version string) (string, error) {
 	}
 
 	// Resolution failed - try to provide helpful suggestions
-	cmd = exec.Command("git", "-C", barePath, "for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/tags/")
+	cmd = exec.CommandContext(ctx, "git", "-C", barePath, "for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/tags/")
 	if output, err := cmd.Output(); err == nil {
 		refs := strings.TrimSpace(string(output))
 		if refs != "" {
@@ -331,8 +332,8 @@ func (m *Manager) resolveVersion(barePath, version string) (string, error) {
 }
 
 // createWorktree creates a new worktree at the specified path for the given commit
-func (m *Manager) createWorktree(barePath, worktreePath, commitHash string) error {
-	cmd := exec.Command("git", "-C", barePath, "worktree", "add", worktreePath, commitHash)
+func (m *Manager) createWorktree(ctx context.Context, barePath, worktreePath, commitHash string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", barePath, "worktree", "add", worktreePath, commitHash)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add failed: %w\nOutput: %s", err, string(output))
@@ -371,7 +372,7 @@ func (m *Manager) List() ([]RepoInfo, error) {
 	return repos, nil
 }
 
-func (m *Manager) Sync() error {
+func (m *Manager) Sync(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -382,7 +383,7 @@ func (m *Manager) Sync() error {
 
 	for url, info := range manifest.Repositories {
 		// Fetch latest changes for each bare repository
-		if err := m.fetchRepository(info.BarePath); err != nil {
+		if err := m.fetchRepository(ctx, info.BarePath); err != nil {
 			return fmt.Errorf("fetching %s: %w", url, err)
 		}
 	}
@@ -441,17 +442,24 @@ func (m *Manager) getLocalPath(repoURL string) string {
 	return filepath.Join(m.basePath, dirName)
 }
 
-func (m *Manager) cloneRepository(repoURL, barePath string) error {
-	cmd := exec.Command("git", "clone", "--bare", repoURL, barePath)
+func (m *Manager) cloneRepository(ctx context.Context, repoURL, barePath string) error {
+	cmd := exec.CommandContext(ctx, "git", "clone", "--bare", repoURL, barePath)
+	// git clone forks remote-helpers (git-remote-http, etc.) that inherit our pipes;
+	// without WaitDelay, ctx-cancel kills git but Wait() blocks on the helper's pipe FDs.
+	cmd.WaitDelay = 2 * time.Second
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			os.RemoveAll(barePath)
+		}
 		return fmt.Errorf("git clone --bare failed: %w\nOutput: %s", err, string(output))
 	}
 	return nil
 }
 
-func (m *Manager) fetchRepository(localPath string) error {
-	cmd := exec.Command("git", "-C", localPath, "fetch", "--all", "--prune")
+func (m *Manager) fetchRepository(ctx context.Context, localPath string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", localPath, "fetch", "--all", "--prune")
+	cmd.WaitDelay = 2 * time.Second
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git fetch failed: %w\nOutput: %s", err, string(output))

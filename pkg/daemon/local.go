@@ -12,6 +12,7 @@ import (
 	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/repo"
 	"github.com/grovetools/core/pkg/sessions"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/sirupsen/logrus"
@@ -116,6 +117,19 @@ func (c *LocalClient) IsRunning() bool {
 // Close is a no-op for LocalClient.
 func (c *LocalClient) Close() error {
 	return nil
+}
+
+// EnsureRepo runs the clone+checkout in-process when the daemon is unavailable.
+func (c *LocalClient) EnsureRepo(ctx context.Context, req models.RepoEnsureRequest) (*models.RepoEnsureResponse, error) {
+	mgr, err := repo.NewManager()
+	if err != nil {
+		return nil, err
+	}
+	path, commit, err := mgr.EnsureVersion(ctx, req.URL, req.Version)
+	if err != nil {
+		return nil, err
+	}
+	return &models.RepoEnsureResponse{WorktreePath: path, Commit: commit}, nil
 }
 
 // GetSession returns a specific session by ID.

@@ -186,6 +186,12 @@ type Client interface {
 	// EnvStatus returns the current status of an environment for a worktree.
 	EnvStatus(ctx context.Context, worktree string) (*env.EnvResponse, error)
 
+	// EnsureRepo asks the daemon to clone (or fetch) a repository and check out
+	// the requested version, returning the worktree path and resolved commit.
+	// Single-flighted on the daemon so concurrent requests for the same URL
+	// produce one network operation. Honors ctx cancellation.
+	EnsureRepo(ctx context.Context, req models.RepoEnsureRequest) (*models.RepoEnsureResponse, error)
+
 	// RegisterProxyRoute asks the global daemon to add a single host-based
 	// route for (worktree, route) -> 127.0.0.1:<port>. Scoped daemons call
 	// this for every route allocated during env up so *.grove.local

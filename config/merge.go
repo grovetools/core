@@ -410,6 +410,7 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 
 	// Merge Context configuration
+	// keep this list in sync with the ContextConfig struct in types.go
 	if override.Context != nil {
 		if result.Context == nil {
 			result.Context = &ContextConfig{}
@@ -422,6 +423,15 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 		if override.Context.ReposDir != nil {
 			result.Context.ReposDir = override.Context.ReposDir
+		}
+		if override.Context.AllowedPaths != nil {
+			result.Context.AllowedPaths = override.Context.AllowedPaths
+		}
+		if override.Context.IncludedWorkspaces != nil {
+			result.Context.IncludedWorkspaces = override.Context.IncludedWorkspaces
+		}
+		if override.Context.ExcludedWorkspaces != nil {
+			result.Context.ExcludedWorkspaces = override.Context.ExcludedWorkspaces
 		}
 	}
 
