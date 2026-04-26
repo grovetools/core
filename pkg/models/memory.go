@@ -144,8 +144,9 @@ type FatFile struct {
 
 // ConceptAnalysis is a concept-coverage summary.
 type ConceptAnalysis struct {
-	TotalConcepts int            `json:"total_concepts"`
-	ConceptCounts []ConceptChunk `json:"concept_counts"`
+	TotalConcepts int               `json:"total_concepts"`
+	ConceptCounts []ConceptChunk    `json:"concept_counts"`
+	Manifests     []ConceptManifest `json:"manifests,omitempty"`
 }
 
 // ConceptChunk is a concept document path with its chunk count.
@@ -153,6 +154,20 @@ type ConceptChunk struct {
 	Workspace  string `json:"workspace"`
 	Path       string `json:"path"`
 	ChunkCount int    `json:"chunk_count"`
+}
+
+// ConceptManifest is metadata parsed from a concept-manifest.yml file.
+type ConceptManifest struct {
+	Workspace       string   `json:"workspace"`
+	Path            string   `json:"path"`
+	ID              string   `json:"id"`
+	Title           string   `json:"title"`
+	Description     string   `json:"description"`
+	Status          string   `json:"status"`
+	RelatedConcepts []string `json:"related_concepts,omitempty"`
+	RelatedPlans    []string `json:"related_plans,omitempty"`
+	RelatedNotes    []string `json:"related_notes,omitempty"`
+	RelatedSkills   []string `json:"related_skills,omitempty"`
 }
 
 // EmbeddingAnalysis describes embedder health and dedup savings.
