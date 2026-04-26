@@ -341,6 +341,10 @@ func (c *LocalClient) GetChannelStatus(ctx context.Context) (*models.ChannelStat
 	return nil, errors.New("channel status requires the grove daemon")
 }
 
+func (c *LocalClient) CleanupChannels(ctx context.Context) (*models.ChannelCleanupResponse, error) {
+	return nil, errors.New("channel cleanup requires the grove daemon")
+}
+
 // SendSessionInput returns an error since agent input requires the daemon for tmux target resolution.
 func (c *LocalClient) SendSessionInput(ctx context.Context, sessionID string, input string) error {
 	return errors.New("sending input to agent sessions requires the grove daemon")

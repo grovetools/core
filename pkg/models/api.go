@@ -137,6 +137,11 @@ type ChannelStatusResponse struct {
 	RefCount         int  `json:"ref_count"`
 }
 
+// ChannelCleanupResponse represents the result of a channel cleanup operation.
+type ChannelCleanupResponse struct {
+	Purged int `json:"purged"`
+}
+
 // SessionChannelsRequest represents a request to update session channels.
 type SessionChannelsRequest struct {
 	Channels []string `json:"channels"`

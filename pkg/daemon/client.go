@@ -175,6 +175,9 @@ type Client interface {
 	// GetChannelStatus returns the status of the channel system.
 	GetChannelStatus(ctx context.Context) (*models.ChannelStatusResponse, error)
 
+	// CleanupChannels purges stale sessions and routes from the channel manager.
+	CleanupChannels(ctx context.Context) (*models.ChannelCleanupResponse, error)
+
 	// --- Environment Management ---
 
 	// EnvUp requests the daemon to spin up an environment for a workspace.

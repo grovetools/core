@@ -69,6 +69,7 @@ type MemoryStatusResponse struct {
 type DocumentPathInfo struct {
 	ID        string    `json:"id"`
 	Path      string    `json:"path"`
+	DocType   string    `json:"doc_type"`
 	Workspace string    `json:"workspace"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

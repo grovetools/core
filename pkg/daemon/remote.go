@@ -1179,6 +1179,30 @@ func (c *RemoteClient) GetChannelStatus(ctx context.Context) (*models.ChannelSta
 	return &result, nil
 }
 
+// CleanupChannels purges stale sessions and routes from the channel manager.
+func (c *RemoteClient) CleanupChannels(ctx context.Context) (*models.ChannelCleanupResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/channels/cleanup", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var result models.ChannelCleanupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // SendSessionInput sends input to an interactive agent session via the daemon.
 func (c *RemoteClient) SendSessionInput(ctx context.Context, sessionID string, input string) error {
 	body, err := json.Marshal(map[string]string{"input": input})
