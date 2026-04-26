@@ -214,9 +214,7 @@ func (m *Model) buildTableRows(projects []*workspace.WorkspaceNode) [][]string {
 		//
 		// External callers should follow this pattern to display their own
 		// enrichment data (sessions, note counts, plan stats, etc.)
-		m.gitStatusMutex.RLock()
 		gitStatus := m.gitStatus[p.Path]
-		m.gitStatusMutex.RUnlock()
 
 		// Render git status icon based on enrichment data
 		statusIcon := " "

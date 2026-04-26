@@ -438,7 +438,7 @@ func (m Model) View() string {
 			if project.IsWorktree() {
 				line.WriteString(core_theme.DefaultTheme.Info.Render(displayName))
 			} else {
-				line.WriteString(core_theme.DefaultTheme.Highlight.Copy().Bold(true).Render(displayName))
+				line.WriteString(core_theme.DefaultTheme.Highlight.Bold(true).Render(displayName))
 			}
 		}
 

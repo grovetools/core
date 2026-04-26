@@ -1,8 +1,6 @@
 package wsnav
 
 import (
-	"sync"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
@@ -16,11 +14,9 @@ type Model struct {
 	SelectedProject *workspace.WorkspaceNode // The project selected when Enter is pressed
 
 	// ENRICHMENT EXAMPLE: These fields demonstrate how to store enrichment data.
-	// The map is keyed by workspace path, and the mutex ensures thread-safe access
-	// from concurrent enrichment commands. External callers should add similar
+	// The map is keyed by workspace path. External callers should add similar
 	// fields for their own enrichment data (e.g., sessionInfo, noteCounts, etc.)
-	gitStatus      map[string]*git.StatusInfo
-	gitStatusMutex sync.RWMutex
+	gitStatus map[string]*git.StatusInfo
 }
 
 // Init is the first command that will be executed.

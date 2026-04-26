@@ -27,17 +27,13 @@ func (c *Client) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, wi
 
 	// Handle reset flag
 	if windowExists && reset {
-		if err := c.KillWindow(ctx, windowTarget); err != nil {
-			// Log as a warning but continue as if it didn't exist
-		}
+		_ = c.KillWindow(ctx, windowTarget)
 		windowExists = false
 	}
 
 	if windowExists {
 		// Window exists, focus it and open the file if provided
-		if err := c.SwitchClient(ctx, windowTarget); err != nil {
-			// This might fail if client is already there, which is fine.
-		}
+		_ = c.SwitchClient(ctx, windowTarget)
 
 		if filePath != "" {
 			currentCmd, err := c.GetPaneCommand(ctx, windowTarget)

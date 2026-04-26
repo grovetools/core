@@ -110,11 +110,6 @@ func (m Manager) renderPaneContent(index, w, h int) string {
 func (m Manager) renderSeparator(index int) string {
 	isActive := index == m.ActivePaneIdx || m.isAdjacentToActive(index)
 
-	t := theme.DefaultTheme
-	if t == nil {
-		t = &theme.Theme{}
-	}
-
 	var color lipgloss.TerminalColor
 	if isActive {
 		color = theme.DefaultColors.Orange

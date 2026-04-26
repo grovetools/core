@@ -20,10 +20,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// enrichment message types (e.g., sessionInfoLoadedMsg, noteCountsLoadedMsg)
 	switch msg := msg.(type) {
 	case gitStatusLoadedMsg:
-		// Store the git status in our map (thread-safe)
-		m.gitStatusMutex.Lock()
 		m.gitStatus[msg.path] = msg.status
-		m.gitStatusMutex.Unlock()
 
 	case navigator.ProjectsLoadedMsg:
 		// When projects are refreshed, dispatch new enrichment commands.

@@ -153,7 +153,7 @@ func (p *logPane) View() string {
 
 // StatusLine implements panes.StatusProvider.
 func (p *logPane) StatusLine() string {
-	follow := "ON"
+	var follow string
 	if p.viewport.AtBottom() {
 		follow = "ON"
 	} else {

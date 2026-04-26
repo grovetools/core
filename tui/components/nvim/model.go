@@ -67,7 +67,7 @@ type Model struct {
 	redraws                chan [][]interface{}
 	grid                   [][]nvimCell
 	hlDefs                 map[int]lipgloss.Style
-	hlMutex                sync.RWMutex
+	hlMutex                *sync.RWMutex
 	needDefaultColors      bool // true if queried Normal was empty
 	defaultColorsProcessed bool // true after first default_colors_set
 	nvimWidth              int
@@ -182,6 +182,7 @@ func New(opts Options) (Model, error) {
 		v:                 v,
 		redraws:           redrawCh,
 		hlDefs:            hlDefs,
+		hlMutex:           &sync.RWMutex{},
 		needDefaultColors: normalWasEmpty,
 		nvimWidth:         opts.Width,
 		nvimHeight:        opts.Height,

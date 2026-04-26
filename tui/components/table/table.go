@@ -240,7 +240,7 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		// Regular data rows with padding
 		// The logic for alternating row backgrounds has been removed to ensure
 		// readability across all terminal themes by inheriting the default background.
-		return t.TableRow.Copy().Padding(0, 1)
+		return t.TableRow.Padding(0, 1)
 	})
 
 	// Add rows

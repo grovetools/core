@@ -164,8 +164,6 @@ func (m *Model) setViewportContent() {
 	switch k := m.Keys.(type) {
 	case keymap.SectionedKeyMap:
 		sections = k.Sections()
-	case keymap.Base:
-		sections = k.Sections()
 	case interface{ FullHelp() [][]key.Binding }:
 		helpGroups = k.FullHelp()
 	}

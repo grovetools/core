@@ -60,10 +60,7 @@ func NewEditorCmd() *cobra.Command {
 				return err
 			}
 
-			// Close the popup this command was launched from.
-			if err := client.ClosePopup(ctx); err != nil {
-				// This might fail if not in a popup, which is acceptable.
-			}
+			_ = client.ClosePopup(ctx)
 
 			return nil
 		},

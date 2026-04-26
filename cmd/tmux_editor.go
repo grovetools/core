@@ -95,9 +95,7 @@ func NewTmuxEditorCmd() *cobra.Command {
 							fmt.Fprintf(os.Stderr, "SendKeys error: %v\n", err)
 							return err
 						}
-						if err := client.ClosePopup(ctx); err != nil {
-							// Ignore popup close errors
-						}
+						_ = client.ClosePopup(ctx)
 						return nil
 					} else {
 						// Window exists but vim isn't running - kill it so we can recreate
@@ -111,14 +109,6 @@ func NewTmuxEditorCmd() *cobra.Command {
 				}
 
 				// Window doesn't exist or vim isn't running
-				// For new editor windows, use --cmd approach which is simpler
-				if editorCmdStr == "" {
-					editorCmdStr = os.Getenv("EDITOR")
-					if editorCmdStr == "" {
-						editorCmdStr = "nvim"
-					}
-				}
-				// Use the cmd flag to pass the vim command on startup
 				editorCmdStr = "nvim -c '" + strings.ReplaceAll(vimCmd, "'", `'\''`) + "'"
 				fmt.Fprintf(os.Stderr, "Starting new editor with command: %s\n", editorCmdStr)
 			}
@@ -128,10 +118,7 @@ func NewTmuxEditorCmd() *cobra.Command {
 				return err
 			}
 
-			// Close the popup this command was launched from.
-			if err := client.ClosePopup(ctx); err != nil {
-				// This might fail if not in a popup, which is acceptable.
-			}
+			_ = client.ClosePopup(ctx)
 
 			return nil
 		},

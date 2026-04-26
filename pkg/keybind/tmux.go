@@ -211,9 +211,8 @@ func parseTmuxKeys(output, source string, layer Layer, tableName string) ([]Bind
 		}
 
 		normalizedKey := Normalize(key, "tmux")
-		provenance := ProvenanceDetected
+		var provenance Provenance
 
-		// Check if this is a Grove binding
 		if strings.Contains(action, "grove") || strings.Contains(action, "flow") ||
 			strings.Contains(action, "nb ") || strings.Contains(action, "nav ") ||
 			strings.Contains(action, "cx ") || strings.Contains(action, "tend ") ||

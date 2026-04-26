@@ -115,8 +115,7 @@ func analyzeConflict(key string, bindings []Binding) *Conflict {
 		shadowedLayers = append(shadowedLayers, bindings[i].Layer)
 	}
 
-	// Determine severity based on conflict type
-	severity := SeverityInfo
+	var severity ConflictSeverity
 	var description string
 
 	switch {

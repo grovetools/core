@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	stdlog "log"
 	"os/exec"
 	"path/filepath"
@@ -140,7 +139,7 @@ func (i logItem) Title() string {
 	wsStyle := i.workspaceStyle()
 	levelStyle := themeLevelStyle(i.level)
 	timeStyle := theme.DefaultTheme.Muted
-	componentStyle := theme.DefaultTheme.Muted.Copy().Bold(true)
+	componentStyle := theme.DefaultTheme.Muted.Bold(true)
 
 	return fmt.Sprintf("%s %s %s %s %s",
 		wsStyle.Render(fmt.Sprintf("[%s]", i.workspace)),
@@ -173,7 +172,7 @@ func (i logItem) FormatDetails() string {
 	wsStyle := i.workspaceStyle()
 	levelStyle := themeLevelStyle(i.level)
 	timeStyle := theme.DefaultTheme.Muted
-	componentStyle := theme.DefaultTheme.Muted.Copy().Bold(true)
+	componentStyle := theme.DefaultTheme.Muted.Bold(true)
 
 	lines = append(lines, fmt.Sprintf("Workspace:  %s", wsStyle.Render(i.workspace)))
 	lines = append(lines, fmt.Sprintf("Level:      %s", levelStyle.Render(strings.ToUpper(i.level))))
@@ -463,7 +462,7 @@ func New(ctx context.Context, cfg Config) *Model {
 	l.SetShowPagination(true)
 	l.InfiniteScrolling = false
 	l.DisableQuitKeybindings()
-	l.Styles.PaginationStyle = theme.DefaultTheme.Muted.Copy().PaddingLeft(2)
+	l.Styles.PaginationStyle = theme.DefaultTheme.Muted.PaddingLeft(2)
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -743,7 +742,7 @@ func (m *Model) startTailing(wsCtx context.Context, path, wsName, wsPath string)
 			ReOpen: true,
 			// Stream only new lines — never replay historical content.
 			Location: &tail.SeekInfo{Offset: 0, Whence: io.SeekEnd},
-			Logger:   stdlog.New(ioutil.Discard, "", 0),
+			Logger:   stdlog.New(io.Discard, "", 0),
 		}
 		t, err := tail.TailFile(path, cfg)
 		if err != nil {
@@ -1559,7 +1558,7 @@ func (m *Model) View() string {
 	}
 
 	if m.focus == viewportPane {
-		detailsStyle := theme.DefaultTheme.DetailsBox.Copy().
+		detailsStyle := theme.DefaultTheme.DetailsBox.
 			Padding(0, 2).
 			BorderForeground(theme.DefaultTheme.Highlight.GetForeground())
 
@@ -1589,7 +1588,7 @@ func (m *Model) View() string {
 		listView = m.list.View()
 	}()
 
-	detailsStyle := theme.DefaultTheme.DetailsBox.Copy().
+	detailsStyle := theme.DefaultTheme.DetailsBox.
 		Padding(0, 2).
 		MarginLeft(1).
 		Width(m.width - 3)
