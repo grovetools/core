@@ -1496,6 +1496,34 @@ func (c *RemoteClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatu
 	return &status, nil
 }
 
+func (c *RemoteClient) ExecuteMemoryReindex(ctx context.Context, req models.MemoryReindexRequest) (*models.MemoryReindexResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/memory/reindex", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute memory reindex: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errMemoryEndpointMissing
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	var out models.MemoryReindexResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("failed to decode reindex response: %w", err)
+	}
+	return &out, nil
+}
+
 // --- Memory Analysis ---
 
 func (c *RemoteClient) memoryAnalysisGetJSON(ctx context.Context, path string, out any) error {

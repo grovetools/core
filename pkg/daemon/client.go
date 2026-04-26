@@ -280,6 +280,10 @@ type Client interface {
 	// GetMemoryStatus returns database stats (size, document/chunk counts, doctype distribution).
 	GetMemoryStatus(ctx context.Context) (*models.MemoryStatusResponse, error)
 
+	// ExecuteMemoryReindex triggers an async re-index of memory documents.
+	// Returns a count of queued files; actual embedding happens in the background.
+	ExecuteMemoryReindex(ctx context.Context, req models.MemoryReindexRequest) (*models.MemoryReindexResponse, error)
+
 	// --- Memory Analysis ---
 
 	// GetMemoryAnalysisGC returns a dry-run GC report (zombie/missing/stale paths).

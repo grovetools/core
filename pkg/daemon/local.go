@@ -486,6 +486,10 @@ func (c *LocalClient) GetMemoryStatus(ctx context.Context) (*models.MemoryStatus
 	return nil, errors.New("memory operations require the grove daemon; start groved first")
 }
 
+func (c *LocalClient) ExecuteMemoryReindex(ctx context.Context, req models.MemoryReindexRequest) (*models.MemoryReindexResponse, error) {
+	return nil, errors.New("memory reindex requires the grove daemon; start groved first")
+}
+
 // --- Memory Analysis (require daemon) ---
 
 func (c *LocalClient) GetMemoryAnalysisGC(ctx context.Context) (*models.GCAnalysisResponse, error) {
