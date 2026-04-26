@@ -199,14 +199,21 @@ type ReusedChunk struct {
 	Snippet     string `json:"snippet"`
 }
 
-// NotebookAnalysis is per-workspace notebook lifecycle counts.
+// NotebookAnalysis is per-workspace notebook lifecycle counts with aging and velocity metrics.
 type NotebookAnalysis struct {
-	Workspace      string `json:"workspace"`
-	InboxCount     int    `json:"inbox_count"`
-	IssuesCount    int    `json:"issues_count"`
-	CompletedCount int    `json:"completed_count"`
-	ConceptsCount  int    `json:"concepts_count"`
-	SkillsCount    int    `json:"skills_count"`
+	Workspace       string `json:"workspace"`
+	InboxCount      int    `json:"inbox_count"`
+	InProgressCount int    `json:"in_progress_count"`
+	IssuesCount     int    `json:"issues_count"`
+	CompletedCount  int    `json:"completed_count"`
+	ConceptsCount   int    `json:"concepts_count"`
+	SkillsCount     int    `json:"skills_count"`
+
+	AverageInboxAgeDays float32 `json:"avg_inbox_age_days"`
+	StaleInboxCount     int     `json:"stale_inbox_count"`
+	CompletionRate      float32 `json:"completion_rate"`
+	CompletedLastWeek   int     `json:"completed_last_week"`
+	CompletedLastMonth  int     `json:"completed_last_month"`
 }
 
 // ContextAnalysis is the response for /api/memory/analysis/context.
