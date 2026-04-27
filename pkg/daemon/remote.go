@@ -1901,6 +1901,33 @@ func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, e
 	return nil
 }
 
+func (c *RemoteClient) ReportTestResults(ctx context.Context, workspace string, report *models.TestReport) error {
+	body, err := json.Marshal(report)
+	if err != nil {
+		return fmt.Errorf("failed to marshal test report: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		fmt.Sprintf("%s/api/workspaces/%s/test-results", baseURL, workspace),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to report test results: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // SocketPath returns the Unix socket path used by this client.
 // Used by the terminal to configure WebSocket dialers for PTY attach.
 func (c *RemoteClient) SocketPath() string {

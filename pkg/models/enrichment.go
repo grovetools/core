@@ -19,6 +19,31 @@ type TaskResult struct {
 	ErrorSummary string    `json:"error_summary,omitempty"`
 }
 
+type ScenarioResult struct {
+	Name       string   `json:"name"`
+	Status     string   `json:"status"` // pass, fail, skip
+	DurationMs int64    `json:"duration_ms"`
+	Steps      int      `json:"steps"`
+	FailedStep string   `json:"failed_step,omitempty"`
+	Error      string   `json:"error,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+}
+
+type TestSummary struct {
+	Total      int   `json:"total"`
+	Passed     int   `json:"passed"`
+	Failed     int   `json:"failed"`
+	Skipped    int   `json:"skipped"`
+	DurationMs int64 `json:"duration_ms"`
+}
+
+type TestReport struct {
+	Verb      string           `json:"verb"`
+	Scenarios []ScenarioResult `json:"scenarios"`
+	Summary   TestSummary      `json:"summary"`
+	Timestamp time.Time        `json:"timestamp"`
+}
+
 // EnrichmentOptions controls which data to fetch and for which projects.
 type EnrichmentOptions struct {
 	FetchNoteCounts   bool
@@ -89,6 +114,7 @@ type EnrichedWorkspace struct {
 	CxStats      *CxStats               `json:"cx_stats,omitempty"`
 	GitRemoteURL string                 `json:"git_remote_url,omitempty"`
 	TaskResults  map[string]*TaskResult `json:"task_results,omitempty"`
+	TestReports  map[string]*TestReport `json:"test_reports,omitempty"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.
@@ -102,4 +128,6 @@ type WorkspaceDelta struct {
 	ActiveBinary *BinaryStatus          `json:"active_binary,omitempty"`
 	CxStats      *CxStats               `json:"cx_stats,omitempty"`
 	GitRemoteURL *string                `json:"git_remote_url,omitempty"`
+	TaskResults  map[string]*TaskResult `json:"task_results,omitempty"`
+	TestReports  map[string]*TestReport `json:"test_reports,omitempty"`
 }

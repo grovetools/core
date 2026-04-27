@@ -584,5 +584,9 @@ func (c *LocalClient) ReportTask(ctx context.Context, workspace, verb string, ex
 	return nil // No daemon to report to
 }
 
+func (c *LocalClient) ReportTestResults(ctx context.Context, workspace string, report *models.TestReport) error {
+	return nil // No daemon to report to
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)
