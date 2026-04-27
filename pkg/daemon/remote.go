@@ -1864,13 +1864,16 @@ func (c *RemoteClient) GetPTYAttachURL(id string) string {
 	return "ws://unix/api/pty/attach/" + id
 }
 
-func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error {
+func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64, errorSummary string) error {
 	payload := map[string]interface{}{
 		"workspace":   workspace,
 		"verb":        verb,
 		"exit_code":   exitCode,
 		"commit_hash": commitHash,
 		"duration_ms": durationMs,
+	}
+	if errorSummary != "" {
+		payload["error_summary"] = errorSummary
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

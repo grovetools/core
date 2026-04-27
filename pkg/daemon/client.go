@@ -348,7 +348,7 @@ type Client interface {
 
 	// ReportTask reports the outcome of a developer hygiene task (build, check, fmt, lint)
 	// to the daemon for cache-based skipping in future runs.
-	ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error
+	ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64, errorSummary string) error
 }
 
 // SpawnAgentRequest contains the parameters for spawning a native agent pane.

@@ -580,7 +580,7 @@ func (c *LocalClient) GetPTYAttachURL(id string) string {
 	return ""
 }
 
-func (c *LocalClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error {
+func (c *LocalClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64, errorSummary string) error {
 	return nil // No daemon to report to
 }
 

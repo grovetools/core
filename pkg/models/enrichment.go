@@ -12,10 +12,11 @@ import (
 
 // TaskResult records the outcome of a developer hygiene or build task.
 type TaskResult struct {
-	ExitCode   int       `json:"exit_code"`
-	CommitHash string    `json:"commit_hash"`
-	DurationMs int64     `json:"duration_ms"`
-	Timestamp  time.Time `json:"timestamp"`
+	ExitCode     int       `json:"exit_code"`
+	CommitHash   string    `json:"commit_hash"`
+	DurationMs   int64     `json:"duration_ms"`
+	Timestamp    time.Time `json:"timestamp"`
+	ErrorSummary string    `json:"error_summary,omitempty"`
 }
 
 // EnrichmentOptions controls which data to fetch and for which projects.
