@@ -1864,6 +1864,39 @@ func (c *RemoteClient) GetPTYAttachURL(id string) string {
 	return "ws://unix/api/pty/attach/" + id
 }
 
+func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error {
+	payload := map[string]interface{}{
+		"verb":        verb,
+		"exit_code":   exitCode,
+		"commit_hash": commitHash,
+		"duration_ms": durationMs,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal task report: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		fmt.Sprintf("%s/api/workspaces/%s/tasks", baseURL, url.PathEscape(workspace)),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to report task: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // SocketPath returns the Unix socket path used by this client.
 // Used by the terminal to configure WebSocket dialers for PTY attach.
 func (c *RemoteClient) SocketPath() string {

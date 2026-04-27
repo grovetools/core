@@ -580,5 +580,9 @@ func (c *LocalClient) GetPTYAttachURL(id string) string {
 	return ""
 }
 
+func (c *LocalClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error {
+	return nil // No daemon to report to
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

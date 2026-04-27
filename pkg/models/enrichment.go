@@ -4,9 +4,19 @@
 package models
 
 import (
+	"time"
+
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
 )
+
+// TaskResult records the outcome of a developer hygiene or build task.
+type TaskResult struct {
+	ExitCode   int       `json:"exit_code"`
+	CommitHash string    `json:"commit_hash"`
+	DurationMs int64     `json:"duration_ms"`
+	Timestamp  time.Time `json:"timestamp"`
+}
 
 // EnrichmentOptions controls which data to fetch and for which projects.
 type EnrichmentOptions struct {
@@ -77,6 +87,7 @@ type EnrichedWorkspace struct {
 	ActiveBinary *BinaryStatus          `json:"active_binary,omitempty"`
 	CxStats      *CxStats               `json:"cx_stats,omitempty"`
 	GitRemoteURL string                 `json:"git_remote_url,omitempty"`
+	TaskResults  map[string]*TaskResult `json:"task_results,omitempty"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.

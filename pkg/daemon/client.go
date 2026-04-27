@@ -343,6 +343,12 @@ type Client interface {
 
 	// GetPTYAttachURL returns the WebSocket URL for attaching to a daemon PTY.
 	GetPTYAttachURL(id string) string
+
+	// --- Task Reporting ---
+
+	// ReportTask reports the outcome of a developer hygiene task (build, check, fmt, lint)
+	// to the daemon for cache-based skipping in future runs.
+	ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error
 }
 
 // SpawnAgentRequest contains the parameters for spawning a native agent pane.
