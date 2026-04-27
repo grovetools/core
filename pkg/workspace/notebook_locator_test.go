@@ -68,7 +68,7 @@ func TestNotebookLocator_DefaultPaths(t *testing.T) {
 	// Test Plans Path - should use default location
 	plansDir, err := locator.GetPlansDir(node)
 	require.NoError(t, err)
-	assert.Contains(t, plansDir, filepath.Join(".grove", "notebooks", "nb", "notebooks", "my-project"))
+	assert.Contains(t, plansDir, filepath.Join(".grove", "notebooks", "nb", "workspaces", "my-project", "plans"))
 
 	// Test global notebook fallback
 	globalNode := &WorkspaceNode{

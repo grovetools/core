@@ -73,15 +73,10 @@ func setupMockFS(t *testing.T) (string, string) {
 func TestDiscoveryService(t *testing.T) {
 	rootDir, homeDir := setupMockFS(t)
 
-	// Set XDG_CONFIG_HOME env var to our mock config directory
-	originalXDG := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
-	defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
-
-	// Set GROVE_CONFIG_OVERLAY to use the test config (which disables cx repo discovery)
-	originalOverlay := os.Getenv("GROVE_CONFIG_OVERLAY")
-	os.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(homeDir, ".config", "grove", "grove.yml"))
-	defer os.Setenv("GROVE_CONFIG_OVERLAY", originalOverlay)
+	// Isolate from real user environment
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	t.Setenv("HOME", homeDir)
+	t.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(homeDir, ".config", "grove", "grove.yml"))
 
 	logger := logrus.New()
 	logger.SetOutput(os.Stdout)

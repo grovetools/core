@@ -113,7 +113,9 @@ use ()
 
 func TestSetupGoWorkspaceForWorktree(t *testing.T) {
 	t.Run("setup go workspace for worktree", func(t *testing.T) {
-		// Create temp directories
+		// Create ecosystem-like structure: tmpDir has go.work,
+		// gitRoot is a submodule under tmpDir, worktree is separate.
+		// FindRootGoWorkspace searches from filepath.Dir(gitRoot) upward.
 		tmpDir := t.TempDir()
 		gitRoot := filepath.Join(tmpDir, "git-root")
 		worktreePath := filepath.Join(tmpDir, "worktree")
@@ -128,7 +130,7 @@ go 1.21
 		err := os.WriteFile(filepath.Join(gitRoot, "go.mod"), []byte(goModContent), 0o644)
 		require.NoError(t, err)
 
-		// Create go.work in git root
+		// Place go.work at tmpDir (parent of gitRoot) so FindRootGoWorkspace finds it
 		goWorkContent := `go 1.21
 
 use (
@@ -137,7 +139,7 @@ use (
 	./submodule2
 )
 `
-		err = os.WriteFile(filepath.Join(gitRoot, "go.work"), []byte(goWorkContent), 0o644)
+		err = os.WriteFile(filepath.Join(tmpDir, "go.work"), []byte(goWorkContent), 0o644)
 		require.NoError(t, err)
 
 		// Setup Go workspace for worktree

@@ -65,7 +65,7 @@ func TestValidateFileName(t *testing.T) {
 	}{
 		{"valid path", "/path/to/file.txt", false},
 		{"relative path", "relative/path.txt", false},
-		{"directory traversal", "etc/passwd", true},
+		{"directory traversal with ..", "../etc/passwd", true},
 		{"command injection semicolon", "file.txt; rm -rf /", true},
 		{"command injection pipe", "file.txt | cat", true},
 		{"command injection ampersand", "file.txt & echo", true},

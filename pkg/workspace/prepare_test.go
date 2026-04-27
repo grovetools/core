@@ -242,6 +242,9 @@ func TestPrepare(t *testing.T) {
 
 		secondWorktreePath, err := Prepare(ctx, opts2)
 		require.NoError(t, err)
-		assert.Equal(t, firstWorktreePath, secondWorktreePath, "Should return existing worktree path when branch is already checked out")
+		// Normalize to handle /var vs /private/var symlink on macOS
+		resolvedFirst, _ := filepath.EvalSymlinks(firstWorktreePath)
+		resolvedSecond, _ := filepath.EvalSymlinks(secondWorktreePath)
+		assert.Equal(t, resolvedFirst, resolvedSecond, "Should return existing worktree path when branch is already checked out")
 	})
 }
