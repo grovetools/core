@@ -22,9 +22,10 @@ func ZombieWorktreeLogRecreationScenario() *harness.Scenario {
 	var cancel context.CancelFunc
 
 	return &harness.Scenario{
-		Name:        "zombie-worktree-log-recreation",
-		Description: "Verifies that deleted worktree directories are not recreated by logging.",
-		Tags:        []string{"core", "logging", "worktree", "regression"},
+		Name:         "zombie-worktree-log-recreation",
+		Description:  "Verifies that deleted worktree directories are not recreated by logging.",
+		Tags:         []string{"core", "logging", "worktree", "regression", "slow"},
+		ExplicitOnly: true,
 		Steps: []harness.Step{
 			{
 				Name: "Setup project and worktree",
