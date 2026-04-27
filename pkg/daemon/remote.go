@@ -1902,13 +1902,19 @@ func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, e
 }
 
 func (c *RemoteClient) ReportTestResults(ctx context.Context, workspace string, report *models.TestReport) error {
-	body, err := json.Marshal(report)
+	payload := map[string]any{
+		"workspace": workspace,
+		"verb":      report.Verb,
+		"scenarios": report.Scenarios,
+		"summary":   report.Summary,
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal test report: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		fmt.Sprintf("%s/api/workspaces/%s/test-results", baseURL, workspace),
+		fmt.Sprintf("%s/api/workspaces/_/test-results", baseURL),
 		bytes.NewReader(body),
 	)
 	if err != nil {
