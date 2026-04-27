@@ -61,7 +61,7 @@ func TestLaunch(t *testing.T) {
 	// Don't check specific formatting as it varies between tmux versions
 
 	t.Cleanup(func() {
-		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 	})
 }
 
@@ -104,7 +104,7 @@ func TestLaunchSinglePane(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 	})
 }
 
@@ -140,7 +140,7 @@ func TestLaunchEmptySession(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 	})
 }
 

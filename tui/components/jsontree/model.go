@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -152,12 +153,6 @@ func buildTree(key string, value interface{}, depth int) *node {
 	}
 
 	return n
-}
-
-// closingBracket is a pseudo-node for rendering closing brackets
-type closingBracket struct {
-	depth   int
-	bracket string // "}" or "]"
 }
 
 // flattenTree creates a flattened list of visible nodes for rendering.
@@ -728,7 +723,7 @@ func (m *Model) updateContent() {
 }
 
 // renderNode renders a single node line.
-func (m *Model) renderNode(n *node, selected bool, isResult bool, isVisual bool) string {
+func (m *Model) renderNode(n *node, selected, isResult, isVisual bool) string {
 	// Build indentation
 	indent := strings.Repeat("  ", n.depth)
 	valueStyle := theme.DefaultTheme.Muted

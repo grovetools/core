@@ -4,8 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/grovetools/core/pkg/workspace"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 func TestAliasResolver_Resolve(t *testing.T) {

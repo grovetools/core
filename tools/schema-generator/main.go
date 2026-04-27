@@ -22,7 +22,7 @@ func main() {
 
 	// Write the schema to the file.
 	outputPath := filepath.Join(outputDir, "base.schema.json")
-	if err := os.WriteFile(outputPath, schemaBytes, 0o644); err != nil {
+	if err := os.WriteFile(outputPath, schemaBytes, 0o644); err != nil { //nolint:gosec // schema file is not sensitive
 		log.Fatalf("Error writing schema file: %v", err)
 	}
 

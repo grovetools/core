@@ -150,7 +150,7 @@ func GetStatus(path string) (*StatusInfo, error) {
 }
 
 // GetCommitsDivergenceFromMain returns the number of commits a branch is ahead of and behind the local main/master branch.
-func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead int, behind int) {
+func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead, behind int) {
 	cmdBuilder := command.NewSafeBuilder()
 
 	// Determine if main or master exists
@@ -197,7 +197,7 @@ func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead int, be
 
 // GetCommitsDivergenceFromRemoteMain returns the number of commits the local main/master branch
 // is ahead of and behind origin/main or origin/master.
-func GetCommitsDivergenceFromRemoteMain(repoPath, currentBranch string) (ahead int, behind int) {
+func GetCommitsDivergenceFromRemoteMain(repoPath, currentBranch string) (ahead, behind int) {
 	cmdBuilder := command.NewSafeBuilder()
 
 	// Check if origin/main or origin/master exists

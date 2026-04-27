@@ -12,9 +12,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hpcloud/tail"
+
 	"github.com/grovetools/core/tui/theme"
 	"github.com/grovetools/core/tui/utils/scrollbar"
-	"github.com/hpcloud/tail"
 )
 
 // LogLineMsg is sent when a new log line is received.
@@ -93,7 +94,7 @@ func (m *Model) Stop() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, t := range m.tails {
-		t.Stop()
+		_ = t.Stop()
 	}
 	m.tails = nil
 	m.tailing = false // Disable channel-based log line waiting

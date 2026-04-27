@@ -2,6 +2,7 @@ package chatpane
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/theme"
 )
 

@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/grovetools/core/pkg/tmux"
 	"github.com/spf13/cobra"
+
+	"github.com/grovetools/core/pkg/tmux"
 )
 
 func NewEditorCmd() *cobra.Command {

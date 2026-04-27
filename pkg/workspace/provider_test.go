@@ -132,7 +132,7 @@ func TestValidateAndWarnCollisions(t *testing.T) {
 			w.Close()
 			os.Stdout = oldStdout
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
+			_, _ = io.Copy(&buf, r)
 			output := buf.String()
 
 			if tt.expectWarning {
@@ -176,7 +176,7 @@ func TestValidateAndWarnCollisions_NoCollisions(t *testing.T) {
 	w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	assert.Empty(t, output, "Expected no output when there are no collisions")

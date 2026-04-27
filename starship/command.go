@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/grovetools/core/state"
 	"github.com/spf13/cobra"
+
+	"github.com/grovetools/core/state"
 )
 
 // NewStarshipCmd creates the starship command and its subcommands.
@@ -118,7 +119,7 @@ format = " $output "
 	}
 
 	// --- 3. Write the updated config back ---
-	err = os.WriteFile(configPath, []byte(content), 0o644)
+	err = os.WriteFile(configPath, []byte(content), 0o644) //nolint:gosec // starship config is not sensitive
 	if err != nil {
 		return fmt.Errorf("failed to write updated starship config: %w", err)
 	}

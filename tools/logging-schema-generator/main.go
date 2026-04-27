@@ -5,8 +5,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/grovetools/core/logging"
 	"github.com/invopop/jsonschema"
+
+	"github.com/grovetools/core/logging"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	}
 
 	// Write to the package root
-	if err := os.WriteFile("logging.schema.json", data, 0o644); err != nil {
+	if err := os.WriteFile("logging.schema.json", data, 0o644); err != nil { //nolint:gosec // schema file is not sensitive
 		log.Fatalf("Error writing schema file: %v", err)
 	}
 

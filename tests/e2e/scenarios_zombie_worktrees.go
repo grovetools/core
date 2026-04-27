@@ -178,7 +178,7 @@ func main() {
 						cancel() // Ensure the background process is terminated
 					}
 					if bgProcess != nil {
-						bgProcess.Wait() // Wait for it to clean up
+						_ = bgProcess.Wait() // Wait for it to clean up
 					}
 					return nil
 				},

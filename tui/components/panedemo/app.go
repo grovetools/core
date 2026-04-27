@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/components/help"
 	"github.com/grovetools/core/tui/components/nvim"
 	nvim_input "github.com/grovetools/core/tui/components/nvim_input"
@@ -226,7 +227,7 @@ func (a Model) openEditorSplit(path string) (tea.Model, tea.Cmd) {
 
 	// Create a scratch file if it doesn't exist
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.WriteFile(path, []byte("# "+path+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("# "+path+"\n"), 0o644); err != nil { //nolint:gosec // demo scratch file
 			return a, nil
 		}
 	}

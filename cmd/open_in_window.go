@@ -7,8 +7,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/grovetools/core/pkg/tmux"
 	"github.com/spf13/cobra"
+
+	"github.com/grovetools/core/pkg/tmux"
 )
 
 // NewOpenInWindowCmd creates the `open-in-window` command.
@@ -32,7 +33,7 @@ func NewOpenInWindowCmd() *cobra.Command {
 			client, err := tmux.NewClient()
 			if err != nil {
 				// Not in a tmux session, so run the command directly as a fallback.
-				execCmd := exec.Command(args[0], args[1:]...)
+				execCmd := exec.Command(args[0], args[1:]...) //nolint:gosec // args from CLI invocation
 				execCmd.Stdin = os.Stdin
 				execCmd.Stdout = os.Stdout
 				execCmd.Stderr = os.Stderr
@@ -46,6 +47,6 @@ func NewOpenInWindowCmd() *cobra.Command {
 
 	cmd.Flags().StringP("name", "n", "", "Name of the target tmux window (required)")
 	cmd.Flags().IntP("index", "i", -1, "Index (position) for the tmux window")
-	cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

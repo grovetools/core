@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grovetools/core/tui/theme"
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/tui/theme"
 )
 
 func TestNewUnifiedLogger(t *testing.T) {

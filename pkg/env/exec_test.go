@@ -35,20 +35,20 @@ func TestHelperProcess(t *testing.T) {
 			Endpoints: []string{"http://localhost:9090"},
 			State:     map[string]string{"pid": "12345"},
 		}
-		json.NewEncoder(os.Stdout).Encode(resp)
+		_ = json.NewEncoder(os.Stdout).Encode(resp)
 
 	case "success_down":
 		resp := EnvResponse{
 			Status: "stopped",
 		}
-		json.NewEncoder(os.Stdout).Encode(resp)
+		_ = json.NewEncoder(os.Stdout).Encode(resp)
 
 	case "response_error":
 		resp := EnvResponse{
 			Status: "failed",
 			Error:  "auth credentials expired",
 		}
-		json.NewEncoder(os.Stdout).Encode(resp)
+		_ = json.NewEncoder(os.Stdout).Encode(resp)
 
 	case "malformed_json":
 		fmt.Fprint(os.Stdout, "{invalid json")
@@ -63,7 +63,7 @@ func TestHelperProcess(t *testing.T) {
 			Status: "ok",
 			State:  map[string]string{"received_action": req.Action, "received_provider": req.Provider},
 		}
-		json.NewEncoder(os.Stdout).Encode(resp)
+		_ = json.NewEncoder(os.Stdout).Encode(resp)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown helper mode: %s", mode)
@@ -89,10 +89,8 @@ func newTestExecProviderWithArgs(t *testing.T, mode string) *ExecProvider {
 		t.Fatalf("failed to create helper script: %v", err)
 	}
 
-	// Verify the helper script is executable
-	if _, err := exec.LookPath(scriptPath); err != nil {
-		// LookPath may fail for absolute paths on some systems, that's ok
-	}
+	// LookPath may fail for absolute paths on some systems, that's ok
+	_, _ = exec.LookPath(scriptPath)
 
 	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
 	t.Setenv("HELPER_MODE", mode)

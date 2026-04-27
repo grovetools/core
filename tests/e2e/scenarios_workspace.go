@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/grovetools/core/config"
-	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/tend/pkg/assert"
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/git"
 	"github.com/grovetools/tend/pkg/harness"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // WorkspaceModelScenario verifies the workspace discovery, classification, and lookup logic.

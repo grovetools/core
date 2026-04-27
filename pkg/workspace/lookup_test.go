@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/grovetools/core/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/config"
 )
 
 // setupMockFSForLookup creates a mock filesystem structure for testing GetProjectByPath.

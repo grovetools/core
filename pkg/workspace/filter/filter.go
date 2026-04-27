@@ -120,7 +120,7 @@ func SortByMatchQuality(projects []*workspace.WorkspaceNode, filterText string) 
 // SortByActivity sorts projects to show groups with active sessions first
 // The runningSessions map should have session names (derived from path) as keys
 func SortByActivity(projects []*workspace.WorkspaceNode, runningSessions map[string]bool) []*workspace.WorkspaceNode {
-	if runningSessions == nil || len(runningSessions) == 0 {
+	if len(runningSessions) == 0 {
 		return projects
 	}
 

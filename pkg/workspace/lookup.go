@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/util/pathutil"
-	"github.com/sirupsen/logrus"
 )
 
 // assignNotebookName sets the NotebookName field for a node based on grove configuration.
@@ -416,10 +417,4 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	}
 
 	return nil, fmt.Errorf("no workspace found containing path: %s", absPath)
-}
-
-// fileExists checks if a file exists
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

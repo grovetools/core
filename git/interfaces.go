@@ -22,7 +22,7 @@ type HookProvider interface {
 // RepositoryProvider defines the interface for general git repository operations
 type RepositoryProvider interface {
 	// Repository information
-	GetRepoInfo(ctx context.Context, dir string) (repo string, branch string, err error)
+	GetRepoInfo(ctx context.Context, dir string) (repo, branch string, err error)
 	IsGitRepo(ctx context.Context, dir string) bool
 	GetGitRoot(ctx context.Context, dir string) (string, error)
 	GetEnvironmentVars(ctx context.Context, workDir string) (*EnvironmentVars, error)

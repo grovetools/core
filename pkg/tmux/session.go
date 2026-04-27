@@ -143,7 +143,7 @@ func (c *Client) ListWindowsDetailed(ctx context.Context, sessionName string) ([
 }
 
 // RenameWindow renames a tmux window.
-func (c *Client) RenameWindow(ctx context.Context, target string, newName string) error {
+func (c *Client) RenameWindow(ctx context.Context, target, newName string) error {
 	_, err := c.run(ctx, "rename-window", "-t", target, newName)
 	return err
 }
@@ -278,7 +278,7 @@ func (c *Client) GetSessionPID(ctx context.Context, sessionName string) (int, er
 }
 
 // GetCursorPosition returns the 1-based row and column of the cursor in the specified session's active pane.
-func (c *Client) GetCursorPosition(ctx context.Context, sessionName string) (row int, col int, err error) {
+func (c *Client) GetCursorPosition(ctx context.Context, sessionName string) (row, col int, err error) {
 	// target-pane format is {session}:. which targets the active pane
 	targetPane := sessionName + ":."
 

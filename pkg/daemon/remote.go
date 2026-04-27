@@ -529,7 +529,7 @@ func (c *RemoteClient) ConfirmSession(ctx context.Context, confirmation SessionC
 }
 
 // UpdateSessionStatus updates the status of an active session.
-func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID string, status string) error {
+func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID, status string) error {
 	body, err := json.Marshal(map[string]string{"status": status})
 	if err != nil {
 		return fmt.Errorf("failed to marshal status update: %w", err)
@@ -554,7 +554,7 @@ func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID string, st
 }
 
 // EndSession marks a session as complete or interrupted.
-func (c *RemoteClient) EndSession(ctx context.Context, jobID string, outcome string) error {
+func (c *RemoteClient) EndSession(ctx context.Context, jobID, outcome string) error {
 	body, err := json.Marshal(map[string]string{"outcome": outcome})
 	if err != nil {
 		return fmt.Errorf("failed to marshal end session request: %w", err)
@@ -1100,7 +1100,7 @@ func (c *RemoteClient) UpdateSessionAutonomous(ctx context.Context, jobID string
 }
 
 // UpdateSessionTmuxTarget updates the tmux target for a session.
-func (c *RemoteClient) UpdateSessionTmuxTarget(ctx context.Context, jobID string, target string) error {
+func (c *RemoteClient) UpdateSessionTmuxTarget(ctx context.Context, jobID, target string) error {
 	payload := models.SessionPatchRequest{TmuxTarget: target}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -1204,7 +1204,7 @@ func (c *RemoteClient) CleanupChannels(ctx context.Context) (*models.ChannelClea
 }
 
 // SendSessionInput sends input to an interactive agent session via the daemon.
-func (c *RemoteClient) SendSessionInput(ctx context.Context, sessionID string, input string) error {
+func (c *RemoteClient) SendSessionInput(ctx context.Context, sessionID, input string) error {
 	body, err := json.Marshal(map[string]string{"input": input})
 	if err != nil {
 		return fmt.Errorf("failed to marshal input request: %w", err)
@@ -1707,7 +1707,7 @@ func (c *RemoteClient) SpawnAgentPane(ctx context.Context, req SpawnAgentRequest
 }
 
 // SendAgentInput relays input text to a native agent pane in groveterm.
-func (c *RemoteClient) SendAgentInput(ctx context.Context, jobID string, input string) error {
+func (c *RemoteClient) SendAgentInput(ctx context.Context, jobID, input string) error {
 	body, err := json.Marshal(map[string]string{"input": input})
 	if err != nil {
 		return fmt.Errorf("marshal input: %w", err)
@@ -1759,7 +1759,7 @@ func (c *RemoteClient) CaptureAgentPane(ctx context.Context, jobID string) (stri
 }
 
 // SubmitAgentCaptureResponse sends the captured screen text back to the daemon.
-func (c *RemoteClient) SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error {
+func (c *RemoteClient) SubmitAgentCaptureResponse(ctx context.Context, jobID, text string) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/agents/"+jobID+"/capture_response", strings.NewReader(text))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)

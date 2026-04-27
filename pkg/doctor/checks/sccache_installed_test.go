@@ -22,7 +22,7 @@ const noCargoToml = `
 command = "npm run dev"
 `
 
-func newSccacheFixture(t *testing.T, tomlBody string, sccachePath string) (*sccacheInstalledCheck, string) {
+func newSccacheFixture(t *testing.T, tomlBody, sccachePath string) (*sccacheInstalledCheck, string) {
 	t.Helper()
 	scope := t.TempDir()
 	if tomlBody != "" {

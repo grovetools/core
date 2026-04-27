@@ -3,6 +3,7 @@ package keymap
 
 import (
 	"github.com/charmbracelet/bubbles/key"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/tui/keymap"
 )

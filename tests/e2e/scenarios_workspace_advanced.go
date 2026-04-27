@@ -7,12 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/grovetools/core/config"
-	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/git"
 	"github.com/grovetools/tend/pkg/harness"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // WorkspaceAdvancedScenario verifies advanced workspace behaviors and potential issues.

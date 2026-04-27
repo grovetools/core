@@ -8,9 +8,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/grovetools/core/logging"
 	"github.com/neovim/go-client/nvim"
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/logging"
 )
 
 var (
@@ -22,16 +23,16 @@ func init() {
 	log = logging.NewLogger("nvim-component")
 	// Also write debug info to a file we can check
 	var err error
-	debugFile, err = os.Create("/tmp/nvim-component-debug.log")
+	debugFile, err = os.Create("/tmp/nvim-component-debug.log") //nolint:gosec // debug log, not security-sensitive
 	if err == nil {
-		debugFile.WriteString("=== Nvim Component Debug Log ===\n")
+		_, _ = debugFile.WriteString("=== Nvim Component Debug Log ===\n")
 	}
 }
 
 func debugLog(msg string) {
 	if debugFile != nil {
-		debugFile.WriteString(msg + "\n")
-		debugFile.Sync()
+		_, _ = debugFile.WriteString(msg + "\n")
+		_ = debugFile.Sync()
 	}
 }
 
@@ -149,7 +150,7 @@ func New(opts Options) (Model, error) {
 		if fg, ok := hlNormal["foreground"].(int64); ok {
 			fgVal = fg
 		} else if fg, ok := hlNormal["foreground"].(uint64); ok {
-			fgVal = int64(fg)
+			fgVal = int64(fg) //nolint:gosec // highlight values fit in int64
 		}
 		if fgVal != 0 && fgVal != -1 {
 			defaultStyle = defaultStyle.Foreground(lipgloss.Color(fmt.Sprintf("#%06x", fgVal)))
@@ -160,7 +161,7 @@ func New(opts Options) (Model, error) {
 		if bg, ok := hlNormal["background"].(int64); ok {
 			bgVal = bg
 		} else if bg, ok := hlNormal["background"].(uint64); ok {
-			bgVal = int64(bg)
+			bgVal = int64(bg) //nolint:gosec // highlight values fit in int64
 		}
 		if bgVal != 0 && bgVal != -1 {
 			defaultStyle = defaultStyle.Background(lipgloss.Color(fmt.Sprintf("#%06x", bgVal)))
@@ -176,7 +177,7 @@ func New(opts Options) (Model, error) {
 	// Initialize hlDefs with default style at index 0
 	hlDefs := make(map[int]lipgloss.Style)
 	hlDefs[0] = defaultStyle
-	debugLog(fmt.Sprintf("Initialized hlDefs[0] with default style"))
+	debugLog("Initialized hlDefs[0] with default style")
 
 	m := Model{
 		v:                 v,
@@ -194,7 +195,7 @@ func New(opts Options) (Model, error) {
 
 	// Open the file if specified
 	if opts.FileToOpen != "" {
-		go v.Command(fmt.Sprintf("edit %s", opts.FileToOpen))
+		go func() { _ = v.Command(fmt.Sprintf("edit %s", opts.FileToOpen)) }()
 	}
 
 	// Monitor neovim process: when Serve returns (process exited), close the
@@ -224,7 +225,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Forward all keys to Neovim - parent model should handle focus/quit
-		go m.v.Input(keyToNvim(msg))
+		go func() { _, _ = m.v.Input(keyToNvim(msg)) }()
 
 	case NvimExitMsg:
 		m.exited = true
@@ -241,7 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nvimHeight = msg.Height
 
 		// Inform Neovim of the new size
-		go m.v.TryResizeUI(m.nvimWidth, m.nvimHeight)
+		go func() { _ = m.v.TryResizeUI(m.nvimWidth, m.nvimHeight) }()
 
 	case error:
 		m.err = msg
@@ -291,7 +292,7 @@ func (m Model) View() string {
 func (m *Model) SetSize(width, height int) tea.Cmd {
 	m.nvimWidth = width
 	m.nvimHeight = height
-	go m.v.TryResizeUI(width, height)
+	go func() { _ = m.v.TryResizeUI(width, height) }()
 	return nil
 }
 
@@ -302,7 +303,7 @@ func (m *Model) SetFocused(focused bool) {
 
 // OpenFile opens a file in the Neovim instance.
 func (m *Model) OpenFile(filepath string) {
-	go m.v.Command(fmt.Sprintf("edit %s", filepath))
+	go func() { _ = m.v.Command(fmt.Sprintf("edit %s", filepath)) }()
 }
 
 // Save saves the current buffer and waits for completion.

@@ -22,7 +22,7 @@ func NewCLIRepository() *CLIRepository {
 }
 
 // GetRepoInfo returns repository and branch information
-func (r *CLIRepository) GetRepoInfo(ctx context.Context, dir string) (repo string, branch string, err error) {
+func (r *CLIRepository) GetRepoInfo(ctx context.Context, dir string) (repo, branch string, err error) {
 	return GetRepoInfo(dir)
 }
 

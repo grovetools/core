@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
+
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -223,7 +224,7 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		styledHeaders[i] = t.TableHeader.Render(h)
 	}
 
-	borderColor := lipgloss.TerminalColor(theme.Border)
+	borderColor := theme.Border
 	if opts.BorderColor != nil {
 		borderColor = opts.BorderColor
 	}

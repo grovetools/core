@@ -101,7 +101,7 @@ func createBundledSchema(resolvableSchema map[string]interface{}) (map[string]in
 			defer wg.Done()
 			log.Printf("Fetching schema for '%s' from %s", key, url)
 
-			resp, err := http.Get(url)
+			resp, err := http.Get(url) //nolint:gosec // URL from trusted config
 			if err != nil {
 				errs <- fmt.Errorf("failed to fetch schema for %s: %w", key, err)
 				return
@@ -146,7 +146,7 @@ func writeJSONFile(path string, data map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, bytes, 0o644)
+	return os.WriteFile(path, bytes, 0o644) //nolint:gosec // schema file is not sensitive
 }
 
 func deepCopyMap(m map[string]interface{}) map[string]interface{} {

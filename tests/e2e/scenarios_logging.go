@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/grovetools/core/logging"
 	"github.com/grovetools/tend/pkg/assert"
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/harness"
+
+	"github.com/grovetools/core/logging"
 )
 
 // LoggingJSONFormatScenario tests that the logger outputs valid JSON when configured.
@@ -257,7 +258,7 @@ logging:
 							continue
 						}
 						var entry map[string]interface{}
-						json.Unmarshal([]byte(line), &entry)
+						_ = json.Unmarshal([]byte(line), &entry)
 
 						if _, ok := entry["user_id"]; ok {
 							foundUserID = true
@@ -408,7 +409,7 @@ logging:
 							continue
 						}
 						var entry map[string]interface{}
-						json.Unmarshal([]byte(line), &entry)
+						_ = json.Unmarshal([]byte(line), &entry)
 
 						if metadata, ok := entry["metadata"].(map[string]interface{}); ok {
 							if nested, ok := metadata["nested"].(map[string]interface{}); ok {
@@ -518,7 +519,7 @@ logging:
 							continue
 						}
 						var entry map[string]interface{}
-						json.Unmarshal([]byte(line), &entry)
+						_ = json.Unmarshal([]byte(line), &entry)
 
 						level, _ := entry["level"].(string)
 						if level == "debug" || level == "trace" {
@@ -542,7 +543,7 @@ logging:
 							continue
 						}
 						var entry map[string]interface{}
-						json.Unmarshal([]byte(line), &entry)
+						_ = json.Unmarshal([]byte(line), &entry)
 
 						if entry["level"] == "info" {
 							return nil // Found info message
@@ -565,7 +566,7 @@ logging:
 							continue
 						}
 						var entry map[string]interface{}
-						json.Unmarshal([]byte(line), &entry)
+						_ = json.Unmarshal([]byte(line), &entry)
 
 						if entry["level"] == "warning" {
 							return nil // Found warning message

@@ -11,11 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/grovetools/core/errors"
-	"github.com/grovetools/core/pkg/paths"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/errors"
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // loadCacheEntry caches a resolved Config keyed by the absolute startDir passed
@@ -1012,7 +1013,7 @@ func findNotebookConfigPath(projectRoot string, globalCfg *Config) string {
 // the directory where a notebook config *should* be placed, even if it doesn't
 // exist yet. Returns the directory path and the workspace name, or empty strings
 // if the project is not in a grove or has no notebook configured.
-func ResolveNotebookDir(projectRoot string) (dir string, workspaceName string, err error) {
+func ResolveNotebookDir(projectRoot string) (dir, workspaceName string, err error) {
 	cfg, loadErr := LoadDefault()
 	if loadErr != nil {
 		return "", "", fmt.Errorf("failed to load config: %w", loadErr)

@@ -67,7 +67,7 @@ func TestSessionOperations(t *testing.T) {
 	})
 
 	t.Cleanup(func() {
-		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 	})
 }
 
@@ -122,6 +122,6 @@ func TestCapturePane(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 	})
 }

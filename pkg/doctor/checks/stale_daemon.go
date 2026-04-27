@@ -174,7 +174,7 @@ func processAlive(pid int) bool {
 // -F n output alternates `p<pid>` / `f<fd>` / `t<type>` / `n<name>` records;
 // we hold the most recent `t` value and emit the `n` when t == "txt".
 func defaultLsofBinaryPath(pid int) (string, error) {
-	out, err := exec.Command("lsof", "-p", strconv.Itoa(pid), "-F", "ftn").Output()
+	out, err := exec.Command("lsof", "-p", strconv.Itoa(pid), "-F", "ftn").Output() //nolint:gosec // pid is from trusted internal source
 	if err != nil {
 		return "", err
 	}

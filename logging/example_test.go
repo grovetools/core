@@ -1,8 +1,9 @@
 package logging_test
 
 import (
-	"github.com/grovetools/core/logging"
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/logging"
 )
 
 func ExampleNewLogger() {

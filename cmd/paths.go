@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/grovetools/core/pkg/paths"
 	"github.com/spf13/cobra"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // PathsOutput represents the XDG-compliant paths used by Grove.

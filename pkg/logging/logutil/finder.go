@@ -21,7 +21,7 @@ func GetSystemLogsDir() string {
 
 // FindLogFileForWorkspace determines the log file path for a given workspace.
 // Returns the log file path and the logs directory path.
-func FindLogFileForWorkspace(ws *workspace.WorkspaceNode) (logFile string, logsDir string, err error) {
+func FindLogFileForWorkspace(ws *workspace.WorkspaceNode) (logFile, logsDir string, err error) {
 	cfg, _ := config.LoadFrom(ws.Path)
 
 	var logCfg logging.Config

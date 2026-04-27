@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+
 	"github.com/grovetools/core/config"
 )
 

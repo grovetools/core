@@ -41,7 +41,7 @@ func (s standaloneLogs) View() string { return s.inner.View() }
 // passed in on the command line and captures them in a closure so the
 // discovery goroutine can re-read the set on every tick (the CLI set
 // is static, so the closure just returns the same slice).
-func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, systemOnly bool, includeSystem bool, ecosystem bool) error {
+func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, systemOnly, includeSystem, ecosystem bool) error {
 	// Load logging config for component filtering, starting with defaults
 	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {

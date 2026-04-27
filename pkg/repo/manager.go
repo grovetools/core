@@ -193,7 +193,7 @@ func (m *Manager) Ensure(ctx context.Context, repoURL string) error {
 
 // EnsureVersion ensures a specific version of a repository is checked out in a worktree.
 // It returns the absolute path to the worktree and the resolved commit hash.
-func (m *Manager) EnsureVersion(ctx context.Context, repoURL, version string) (worktreePath string, resolvedCommit string, err error) {
+func (m *Manager) EnsureVersion(ctx context.Context, repoURL, version string) (worktreePath, resolvedCommit string, err error) {
 	// Ensure the bare clone exists and is up-to-date
 	if err := m.Ensure(ctx, repoURL); err != nil {
 		return "", "", fmt.Errorf("ensuring bare clone: %w", err)
@@ -281,7 +281,7 @@ func (m *Manager) resolveVersion(ctx context.Context, barePath, version string) 
 		} else {
 			// Fallback: try common default branch names
 			for _, branch := range []string{"origin/main", "origin/master"} {
-				cmd := exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", branch+"^{commit}")
+				cmd := exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", branch+"^{commit}") //nolint:gosec // args from trusted config
 				if output, err := cmd.Output(); err == nil {
 					return strings.TrimSpace(string(output)), nil
 				}
@@ -291,7 +291,7 @@ func (m *Manager) resolveVersion(ctx context.Context, barePath, version string) 
 	}
 
 	// Try the version as-is first (could be a tag, commit hash, or already-prefixed branch)
-	cmd := exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", version+"^{commit}")
+	cmd := exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", version+"^{commit}") //nolint:gosec // args from trusted config
 	output, err := cmd.Output()
 	if err == nil {
 		return strings.TrimSpace(string(output)), nil
@@ -307,7 +307,7 @@ func (m *Manager) resolveVersion(ctx context.Context, barePath, version string) 
 		}
 
 		for _, candidate := range candidates {
-			cmd = exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", candidate+"^{commit}")
+			cmd = exec.CommandContext(ctx, "git", "-C", barePath, "rev-parse", candidate+"^{commit}") //nolint:gosec // args from trusted config
 			output, err = cmd.Output()
 			if err == nil {
 				return strings.TrimSpace(string(output)), nil
@@ -524,7 +524,7 @@ func (m *Manager) loadFromBackup(originalManifest *Manifest) (*Manifest, error) 
 	}
 
 	// Restore the main manifest from the backup
-	if err := os.WriteFile(m.manifestPath, backupData, 0o644); err != nil {
+	if err := os.WriteFile(m.manifestPath, backupData, 0o644); err != nil { //nolint:gosec // manifest is not sensitive
 		fmt.Fprintf(os.Stderr, "Warning: failed to restore manifest from backup: %v\n", err)
 	} else {
 		fmt.Fprintf(os.Stderr, "Successfully recovered manifest from backup %s.\n", backupPath)
@@ -573,7 +573,7 @@ func (m *Manager) saveManifest(manifest *Manifest) error {
 	if err := os.Rename(tempFile.Name(), m.manifestPath); err != nil {
 		// If the final rename fails, try to restore the backup.
 		if _, backupErr := os.Stat(backupPath); backupErr == nil {
-			os.Rename(backupPath, m.manifestPath)
+			_ = os.Rename(backupPath, m.manifestPath)
 		}
 		return fmt.Errorf("failed to activate new manifest: %w", err)
 	}

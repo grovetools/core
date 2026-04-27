@@ -1131,7 +1131,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								switch v.(type) {
 								case map[string]interface{}, []interface{}:
 									jsonData = v
-									break
 								}
 								if jsonData != nil {
 									break
@@ -1273,7 +1272,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							switch v.(type) {
 							case map[string]interface{}, []interface{}:
 								jsonData = v
-								break
 							}
 							if jsonData != nil {
 								break

@@ -6,10 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/harness"
 	"github.com/grovetools/tend/pkg/verify"
+
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // --- Helpers ---
@@ -24,7 +25,7 @@ func nbCreateGitRepo(repoPath string) error {
 }
 
 // nbCreateEcosystemDir creates a directory with a grove.toml ecosystem marker.
-func nbCreateEcosystemDir(path string, name string) error {
+func nbCreateEcosystemDir(path, name string) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
 	}
@@ -33,7 +34,7 @@ func nbCreateEcosystemDir(path string, name string) error {
 }
 
 // nbCreateGroveProject creates a git repo with a grove.toml config file.
-func nbCreateGroveProject(path string, name string) error {
+func nbCreateGroveProject(path, name string) error {
 	if err := nbCreateGitRepo(path); err != nil {
 		return err
 	}

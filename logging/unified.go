@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"runtime"
 
-	"github.com/grovetools/core/tui/theme"
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/tui/theme"
 )
 
 // ansiRegex matches ANSI escape sequences for stripping

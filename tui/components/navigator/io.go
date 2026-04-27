@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/grovetools/core/pkg/workspace"
 )
 
@@ -14,13 +15,6 @@ type ProjectsLoadedMsg struct {
 
 // tickMsg is sent periodically to trigger a refresh
 type tickMsg time.Time
-
-// tickCmd returns a command that sends a tick message after a delay
-func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
-}
 
 // tick returns a command that sends a tick message after the configured RefreshInterval
 func (m Model) tick() tea.Cmd {

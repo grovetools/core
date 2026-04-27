@@ -2,6 +2,7 @@ package wsnav
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/tui/components/navigator"

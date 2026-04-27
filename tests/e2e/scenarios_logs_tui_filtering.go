@@ -121,23 +121,9 @@ extensions:
 					return fmt.Errorf("UI did not stabilize after enabling filters: %w", err)
 				}
 
-				// Verify that cache logs are now hidden (filtered out)
-				content, err := session.Capture()
-				if err != nil {
-					return fmt.Errorf("failed to capture screen: %w", err)
-				}
-
 				// API should still be visible
 				if err := session.AssertContains("[api]"); err != nil {
 					return fmt.Errorf("expected '[api]' component not found: %w", err)
-				}
-
-				// Cache should be hidden when filters are ON
-				// Note: We check the content doesn't contain the cache message
-				// This is a simple way to verify filtering is working
-				if len(content) > 0 {
-					// If cache is visible, test should fail
-					// We accept that this is a simple check - the CLI tests verify detailed filtering
 				}
 
 				return nil

@@ -9,9 +9,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
+
 	"github.com/grovetools/core/pkg/doctor"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/pelletier/go-toml/v2"
 )
 
 func init() {

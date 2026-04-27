@@ -141,7 +141,7 @@ func (s *Stack) traceAtLayer(key string, layer Layer, currentTable string) Trace
 }
 
 // traceInTable checks if a key is bound in a specific custom table.
-func (s *Stack) traceInTable(key string, tableName string) TraceStep {
+func (s *Stack) traceInTable(key, tableName string) TraceStep {
 	step := TraceStep{
 		Key:       key,
 		Layer:     LayerTmuxCustomTable,

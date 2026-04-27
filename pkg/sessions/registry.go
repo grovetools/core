@@ -44,7 +44,7 @@ func (r *FileSystemRegistry) Register(metadata SessionMetadata) error {
 
 	// Write pid.lock
 	pidFile := filepath.Join(sessionDir, "pid.lock")
-	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", metadata.PID)), 0o644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", metadata.PID)), 0o644); err != nil { //nolint:gosec // pid file is not sensitive
 		return fmt.Errorf("failed to write pid.lock: %w", err)
 	}
 
@@ -54,7 +54,7 @@ func (r *FileSystemRegistry) Register(metadata SessionMetadata) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	if err := os.WriteFile(metadataFile, metadataJSON, 0o644); err != nil {
+	if err := os.WriteFile(metadataFile, metadataJSON, 0o644); err != nil { //nolint:gosec // session metadata is not sensitive
 		return fmt.Errorf("failed to write metadata.json: %w", err)
 	}
 
@@ -93,7 +93,7 @@ func (r *FileSystemRegistry) IsAlive(sessionID string) (bool, error) {
 
 // UpdateStatus updates the status field in the session's metadata.json file.
 // This ensures crash recovery can restore the correct status (e.g., "idle").
-func (r *FileSystemRegistry) UpdateStatus(sessionID string, status string) error {
+func (r *FileSystemRegistry) UpdateStatus(sessionID, status string) error {
 	if sessionID == "" {
 		return nil
 	}
@@ -118,7 +118,7 @@ func (r *FileSystemRegistry) UpdateStatus(sessionID string, status string) error
 		return nil
 	}
 
-	return os.WriteFile(metadataFile, updated, 0o644)
+	return os.WriteFile(metadataFile, updated, 0o644) //nolint:gosec // session metadata is not sensitive
 }
 
 // RemovePIDLock removes the pid.lock for a session directory while

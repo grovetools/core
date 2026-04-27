@@ -9,11 +9,12 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/tui/components/nvim"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 )
 
 var log *logrus.Entry
@@ -262,7 +263,7 @@ func (m nvimDemoModel) View() string {
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, fileListView, nvimView)
 
 	// Status line
-	statusText := fmt.Sprintf(" Ctrl+B: Switch Focus | Ctrl+C: Quit")
+	statusText := " Ctrl+B: Switch Focus | Ctrl+C: Quit"
 	if m.currentFile != "" {
 		statusText = fmt.Sprintf(" File: %s | Mode: %s | %s",
 			m.currentFile,

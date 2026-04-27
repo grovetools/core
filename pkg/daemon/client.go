@@ -141,12 +141,12 @@ type Client interface {
 	// UpdateSessionStatus updates the status of an active session.
 	// Valid statuses: "running", "idle", "pending_user"
 	// For LocalClient, this updates the filesystem registry.
-	UpdateSessionStatus(ctx context.Context, jobID string, status string) error
+	UpdateSessionStatus(ctx context.Context, jobID, status string) error
 
 	// EndSession marks a session as complete or interrupted.
 	// Valid outcomes: "completed", "interrupted", "failed"
 	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
-	EndSession(ctx context.Context, jobID string, outcome string) error
+	EndSession(ctx context.Context, jobID, outcome string) error
 
 	// KillSession terminates a tracked agent session by sending SIGTERM to its
 	// PID and removing the filesystem registry entry. The daemon owns the kill
@@ -167,7 +167,7 @@ type Client interface {
 	UpdateSessionAutonomous(ctx context.Context, jobID string, config *models.AutonomousConfig) error
 
 	// UpdateSessionTmuxTarget updates the tmux target for a session (after detach/attach).
-	UpdateSessionTmuxTarget(ctx context.Context, jobID string, target string) error
+	UpdateSessionTmuxTarget(ctx context.Context, jobID, target string) error
 
 	// SendChannelMessage sends a message via an external channel (e.g., Signal).
 	SendChannelMessage(ctx context.Context, req models.ChannelSendRequest) (*models.ChannelSendResponse, error)
@@ -230,7 +230,7 @@ type Client interface {
 
 	// SendSessionInput sends input text to an interactive agent session.
 	// The daemon handles vim-mode detection and tmux key sending.
-	SendSessionInput(ctx context.Context, sessionID string, input string) error
+	SendSessionInput(ctx context.Context, sessionID, input string) error
 
 	// SendSessionInterrupt sends Ctrl+C to interrupt an interactive agent session.
 	SendSessionInterrupt(ctx context.Context, sessionID string) error
@@ -320,7 +320,7 @@ type Client interface {
 	SpawnAgentPane(ctx context.Context, req SpawnAgentRequest) error
 
 	// SendAgentInput relays input text to a native agent pane in groveterm.
-	SendAgentInput(ctx context.Context, jobID string, input string) error
+	SendAgentInput(ctx context.Context, jobID, input string) error
 
 	// CaptureAgentPane requests a screen capture from a native agent pane.
 	// Blocks until groveterm responds or the request times out.
@@ -328,7 +328,7 @@ type Client interface {
 
 	// SubmitAgentCaptureResponse sends the captured screen text back to
 	// the daemon to unblock a pending CaptureAgentPane request.
-	SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error
+	SubmitAgentCaptureResponse(ctx context.Context, jobID, text string) error
 
 	// --- Daemon PTY Management ---
 

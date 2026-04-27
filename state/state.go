@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/grovetools/core/pkg/workspace"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // State represents the local Grove state as a generic map of key-value pairs.
@@ -97,7 +98,7 @@ func Save(state State) error {
 		return fmt.Errorf("marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // state file is not sensitive
 		return fmt.Errorf("write state file: %w", err)
 	}
 

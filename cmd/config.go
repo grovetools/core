@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/grovetools/core/config"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/config"
 )
 
 func NewConfigCmd() *cobra.Command {
@@ -30,7 +31,7 @@ This is useful for debugging configuration issues.`,
 				return fmt.Errorf("failed to load layered config: %w", err)
 			}
 
-			printLayer := func(title string, path string, cfg *config.Config) {
+			printLayer := func(title, path string, cfg *config.Config) {
 				if cfg == nil {
 					return
 				}

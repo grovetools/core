@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
+
 	"github.com/grovetools/core/tui/keymap"
 	"github.com/grovetools/core/tui/theme"
 )

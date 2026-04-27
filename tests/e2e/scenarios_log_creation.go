@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/grovetools/core/logging"
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/git"
 	"github.com/grovetools/tend/pkg/harness"
+
+	"github.com/grovetools/core/logging"
 )
 
 // WorkspaceLogCreationScenario tests that logs can be created in a workspace project's .grove/logs dir.

@@ -19,7 +19,7 @@ func TestStateOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("failed to change directory: %v", err)

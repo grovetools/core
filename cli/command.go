@@ -4,10 +4,11 @@ import (
 	"context"
 	"os"
 
-	"github.com/grovetools/core/config"
-	"github.com/grovetools/core/logging"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/logging"
 )
 
 // CommandOptions holds common options for Grove commands

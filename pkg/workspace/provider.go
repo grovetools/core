@@ -165,7 +165,7 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 // FindByIdentifier resolves a colon-delimited alias to a WorkspaceNode using
 // progressive disambiguation. It tries exact fully-qualified matches first,
 // then falls back to short name matching with context-aware scoping.
-func (p *Provider) FindByIdentifier(identifier string, currentPath string) *WorkspaceNode {
+func (p *Provider) FindByIdentifier(identifier, currentPath string) *WorkspaceNode {
 	components := strings.Split(identifier, ":")
 
 	// 1. For multi-component identifiers, try exact fully qualified match

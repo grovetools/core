@@ -8,10 +8,11 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
+
 	"github.com/grovetools/core/cli"
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/spf13/cobra"
 )
 
 // Styles for worktree display

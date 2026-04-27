@@ -3,6 +3,7 @@ package chatpane
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/grovetools/core/tui/components/logviewer"
 )
 

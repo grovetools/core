@@ -7,10 +7,11 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/grovetools/core/tui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
+
+	"github.com/grovetools/core/tui/theme"
 )
 
 // HelpExtrasFunc is a callback that renders additional help sections.
@@ -112,7 +113,7 @@ func SetStyledHelpWithExtras(cmd *cobra.Command, extras HelpExtrasFunc) {
 }
 
 // parseDescription splits a command's long description into main text and examples.
-func parseDescription(long string) (description string, examples string) {
+func parseDescription(long string) (description, examples string) {
 	// Look for "Examples:" or "Example:" section
 	markers := []string{"\nExamples:\n", "\nExample:\n", "\nEXAMPLES:\n", "\nEXAMPLE:\n"}
 	for _, marker := range markers {
@@ -124,7 +125,7 @@ func parseDescription(long string) (description string, examples string) {
 }
 
 // renderExamples styles example lines with muted comments and styled commands.
-func renderExamples(t *theme.Theme, examples string, cmdPath string) {
+func renderExamples(t *theme.Theme, examples, cmdPath string) {
 	cyan := lipgloss.NewStyle().Foreground(t.Colors.Cyan)
 	blue := lipgloss.NewStyle().Foreground(t.Colors.Blue)
 	magenta := lipgloss.NewStyle().Foreground(t.Colors.Violet)

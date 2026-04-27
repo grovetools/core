@@ -728,10 +728,8 @@ logging:
 			harness.NewStep("Enter visual mode and verify status", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Verify we're NOT in visual mode initially
-				if err := session.AssertNotContains("[VISUAL]"); err == nil {
-					// Good - no VISUAL indicator yet
-				}
+				// Verify we're NOT in visual mode initially (best-effort check)
+				_ = session.AssertNotContains("[VISUAL]")
 
 				// Press 'V' to enter visual mode
 				if err := session.SendKeys("V"); err != nil {

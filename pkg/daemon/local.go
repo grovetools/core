@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
@@ -15,8 +18,6 @@ import (
 	"github.com/grovetools/core/pkg/repo"
 	"github.com/grovetools/core/pkg/sessions"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
 )
 
 // LocalClient implements Client by calling library functions directly.
@@ -204,7 +205,7 @@ func (c *LocalClient) ConfirmSession(ctx context.Context, confirmation SessionCo
 // In local mode, this persists the status to the filesystem registry's
 // metadata.json so subsequent reads (RecoverSessions) return the right
 // value instead of defaulting to "running".
-func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID string, status string) error {
+func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID, status string) error {
 	registry, err := sessions.NewFileSystemRegistry()
 	if err != nil {
 		return err
@@ -228,7 +229,7 @@ func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID string, sta
 // defaulting to "running" because the (parent) PID in pid.lock is alive.
 // The session directory and pid.lock are preserved for transcript
 // archival; cleanup is handled separately.
-func (c *LocalClient) EndSession(ctx context.Context, jobID string, outcome string) error {
+func (c *LocalClient) EndSession(ctx context.Context, jobID, outcome string) error {
 	registry, err := sessions.NewFileSystemRegistry()
 	if err != nil {
 		return err
@@ -329,7 +330,7 @@ func (c *LocalClient) UpdateSessionAutonomous(ctx context.Context, jobID string,
 	return errors.New("autonomous management requires the grove daemon")
 }
 
-func (c *LocalClient) UpdateSessionTmuxTarget(ctx context.Context, jobID string, target string) error {
+func (c *LocalClient) UpdateSessionTmuxTarget(ctx context.Context, jobID, target string) error {
 	return errors.New("tmux target updates require the grove daemon")
 }
 
@@ -346,7 +347,7 @@ func (c *LocalClient) CleanupChannels(ctx context.Context) (*models.ChannelClean
 }
 
 // SendSessionInput returns an error since agent input requires the daemon for tmux target resolution.
-func (c *LocalClient) SendSessionInput(ctx context.Context, sessionID string, input string) error {
+func (c *LocalClient) SendSessionInput(ctx context.Context, sessionID, input string) error {
 	return errors.New("sending input to agent sessions requires the grove daemon")
 }
 
@@ -428,7 +429,7 @@ func (c *LocalClient) writeNavBindings(file *models.NavSessionsFile) error {
 	if err := os.MkdirAll(filepath.Dir(sessionsPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create nav state directory: %w", err)
 	}
-	return os.WriteFile(sessionsPath, data, 0o644)
+	return os.WriteFile(sessionsPath, data, 0o644) //nolint:gosec // nav session state is not sensitive
 }
 
 // GetNavConfig loads the static nav config from the grove config files
@@ -547,7 +548,7 @@ func (c *LocalClient) SpawnAgentPane(ctx context.Context, req SpawnAgentRequest)
 }
 
 // SendAgentInput returns an error since native agent input requires the daemon relay.
-func (c *LocalClient) SendAgentInput(ctx context.Context, jobID string, input string) error {
+func (c *LocalClient) SendAgentInput(ctx context.Context, jobID, input string) error {
 	return errors.New("native agent input requires the grove daemon")
 }
 
@@ -557,7 +558,7 @@ func (c *LocalClient) CaptureAgentPane(ctx context.Context, jobID string) (strin
 }
 
 // SubmitAgentCaptureResponse returns an error since capture response requires the daemon relay.
-func (c *LocalClient) SubmitAgentCaptureResponse(ctx context.Context, jobID string, text string) error {
+func (c *LocalClient) SubmitAgentCaptureResponse(ctx context.Context, jobID, text string) error {
 	return errors.New("native agent capture response requires the grove daemon")
 }
 

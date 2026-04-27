@@ -206,7 +206,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 					width = w
 					ok1 = true
 				} else if w, ok := args[1].(uint64); ok {
-					width = int64(w)
+					width = int64(w) //nolint:gosec // grid dimensions fit in int64
 					ok1 = true
 				}
 
@@ -214,7 +214,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 					height = h
 					ok2 = true
 				} else if h, ok := args[2].(uint64); ok {
-					height = int64(h)
+					height = int64(h) //nolint:gosec // grid dimensions fit in int64
 					ok2 = true
 				}
 
@@ -246,13 +246,13 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				var fg, bg int64
 
 				if fgU, ok := args[0].(uint64); ok {
-					fg = int64(fgU)
+					fg = int64(fgU) //nolint:gosec // color values fit in int64
 				} else if fgI, ok := args[0].(int64); ok {
 					fg = fgI
 				}
 
 				if bgU, ok := args[1].(uint64); ok {
-					bg = int64(bgU)
+					bg = int64(bgU) //nolint:gosec // color values fit in int64
 				} else if bgI, ok := args[1].(int64); ok {
 					bg = bgI
 				}
@@ -390,7 +390,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if v, ok := args[1].(int64); ok {
 					top = int(v)
 				} else if v, ok := args[1].(uint64); ok {
-					top = int(v)
+					top = int(v) //nolint:gosec // grid scroll values fit in int
 				} else {
 					debugLogf("grid_scroll: failed to convert top, got type %T value %v", args[1], args[1])
 					continue
@@ -399,7 +399,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if v, ok := args[2].(int64); ok {
 					bot = int(v)
 				} else if v, ok := args[2].(uint64); ok {
-					bot = int(v)
+					bot = int(v) //nolint:gosec // grid scroll values fit in int
 				} else {
 					debugLogf("grid_scroll: failed to convert bot, got type %T value %v", args[2], args[2])
 					continue
@@ -408,7 +408,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if v, ok := args[3].(int64); ok {
 					left = int(v)
 				} else if v, ok := args[3].(uint64); ok {
-					left = int(v)
+					left = int(v) //nolint:gosec // grid scroll values fit in int
 				} else {
 					debugLogf("grid_scroll: failed to convert left, got type %T value %v", args[3], args[3])
 					continue
@@ -417,7 +417,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if v, ok := args[4].(int64); ok {
 					right = int(v)
 				} else if v, ok := args[4].(uint64); ok {
-					right = int(v)
+					right = int(v) //nolint:gosec // grid scroll values fit in int
 				} else {
 					debugLogf("grid_scroll: failed to convert right, got type %T value %v", args[4], args[4])
 					continue
@@ -426,7 +426,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if v, ok := args[5].(int64); ok {
 					rows = int(v)
 				} else if v, ok := args[5].(uint64); ok {
-					rows = int(v)
+					rows = int(v) //nolint:gosec // grid scroll values fit in int
 				} else {
 					debugLogf("grid_scroll: failed to convert rows, got type %T value %v", args[5], args[5])
 					continue
@@ -435,7 +435,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 				if v, ok := args[6].(int64); ok {
 					cols = int(v)
 				} else if v, ok := args[6].(uint64); ok {
-					cols = int(v)
+					cols = int(v) //nolint:gosec // grid scroll values fit in int
 				} else {
 					debugLogf("grid_scroll: failed to convert cols, got type %T value %v", args[6], args[6])
 					continue
@@ -486,7 +486,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 						if id, ok := cell[1].(int64); ok {
 							currentHlID = int(id)
 						} else if id, ok := cell[1].(uint64); ok {
-							currentHlID = int(id)
+							currentHlID = int(id) //nolint:gosec // highlight ID fits in int
 						}
 					}
 					repeat := 1
@@ -495,7 +495,7 @@ func (m *Model) handleRedraw(updates [][]interface{}) {
 						if r, ok := cell[2].(int64); ok {
 							repeat = int(r)
 						} else if r, ok := cell[2].(uint64); ok {
-							repeat = int(r)
+							repeat = int(r) //nolint:gosec // repeat count fits in int
 						}
 					}
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/pkg/workspace/filter"
 	"github.com/grovetools/core/tui/components/table"

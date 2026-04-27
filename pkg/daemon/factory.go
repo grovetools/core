@@ -324,7 +324,7 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 
 	// Don't wait for the process - let it run in background
 	go func() {
-		cmd.Wait()
+		_ = cmd.Wait()
 	}()
 
 	return readyR, true

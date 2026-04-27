@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/tui/components/help"
 	core_theme "github.com/grovetools/core/tui/theme"

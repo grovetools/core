@@ -11,12 +11,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mattn/go-isatty"
+	"github.com/sirupsen/logrus"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/version"
-	"github.com/mattn/go-isatty"
-	"github.com/sirupsen/logrus"
 )
 
 // LogScope defines the execution scope for log routing.

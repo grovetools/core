@@ -53,7 +53,7 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 		if i == 0 {
 			target := opts.SessionName
 			// Set environment variables before running the command
-			if pane.Env != nil && len(pane.Env) > 0 {
+			if len(pane.Env) > 0 {
 				if err := c.SetPaneEnvironment(ctx, target, pane.Env); err != nil {
 					return fmt.Errorf("failed to set environment for first pane: %w", err)
 				}
@@ -96,7 +96,7 @@ func (c *Client) Launch(ctx context.Context, opts LaunchOptions) error {
 
 			target := fmt.Sprintf("%s.%d", opts.SessionName, i)
 			// Set environment variables before running the command
-			if pane.Env != nil && len(pane.Env) > 0 {
+			if len(pane.Env) > 0 {
 				if err := c.SetPaneEnvironment(ctx, target, pane.Env); err != nil {
 					return fmt.Errorf("failed to set environment for pane %d: %w", i, err)
 				}

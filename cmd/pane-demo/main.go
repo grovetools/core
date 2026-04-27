@@ -5,6 +5,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/grovetools/core/tui/components/panedemo"
 )
 

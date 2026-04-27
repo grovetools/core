@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/key"
+
 	"github.com/grovetools/core/config"
 )
 
@@ -38,7 +39,7 @@ type TestKeyMap struct {
 	ViewLogs    key.Binding
 	RunJob      key.Binding
 	GoToTop     key.Binding
-	unexported  key.Binding // Should be skipped
+	unexported  key.Binding //nolint:unused // intentionally unexported to verify reflection skips it
 	NotABinding string      // Should be skipped
 }
 

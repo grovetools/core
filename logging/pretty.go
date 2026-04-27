@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -129,7 +130,7 @@ func (p *PrettyLogger) Field(key string, value interface{}) {
 }
 
 // PathCtx logs a file path with special formatting to the writer from the context.
-func (p *PrettyLogger) PathCtx(ctx context.Context, label string, path string) {
+func (p *PrettyLogger) PathCtx(ctx context.Context, label, path string) {
 	writer := GetWriter(ctx)
 	fmt.Fprintf(writer, "%s: %s\n",
 		p.styles.Key.Render(label),
@@ -137,7 +138,7 @@ func (p *PrettyLogger) PathCtx(ctx context.Context, label string, path string) {
 }
 
 // Path logs a file path with special formatting
-func (p *PrettyLogger) Path(label string, path string) {
+func (p *PrettyLogger) Path(label, path string) {
 	p.PathCtx(context.Background(), label, path)
 }
 

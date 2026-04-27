@@ -17,7 +17,7 @@ type ExecProvider struct {
 // NewExecProvider creates a provider that shells out to grove-env-<name>.
 // If command is non-empty, it is used as the binary path directly;
 // otherwise the binary is resolved from PATH as grove-env-<name>.
-func NewExecProvider(name string, command string) *ExecProvider {
+func NewExecProvider(name, command string) *ExecProvider {
 	bin := command
 	if bin == "" {
 		bin = fmt.Sprintf("grove-env-%s", name)
@@ -44,7 +44,7 @@ func (p *ExecProvider) execute(ctx context.Context, req EnvRequest) (*EnvRespons
 		return nil, fmt.Errorf("failed to marshal env request: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, p.binaryName)
+	cmd := exec.CommandContext(ctx, p.binaryName) //nolint:gosec // binary name is from trusted config
 	cmd.Stdin = bytes.NewReader(reqBytes)
 
 	var stdout, stderr bytes.Buffer

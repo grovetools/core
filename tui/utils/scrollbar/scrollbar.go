@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
+
 	"github.com/grovetools/core/tui/theme"
 )
 

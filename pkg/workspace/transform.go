@@ -8,43 +8,6 @@ import (
 	"github.com/grovetools/core/config"
 )
 
-// determineKind classifies a project or workspace based on its path and context.
-func determineKind(path, parentEcosystemPath, parentProjectPath string, isWorktree bool, isEcosystemRoot bool) WorkspaceKind {
-	isInsideEcosystem := parentEcosystemPath != ""
-	isInEcosystemWorktree := isInsideEcosystem && strings.Contains(path, filepath.Join(parentEcosystemPath, ".grove-worktrees"))
-
-	if isWorktree {
-		if isEcosystemRoot {
-			return KindEcosystemWorktree
-		}
-		if isInEcosystemWorktree {
-			// This case is tricky. It could be a worktree of a subproject inside an ecosystem worktree.
-			// Let's assume for now that if it's a worktree inside an ecosystem worktree's subproject,
-			// it's of the most specific kind.
-			return KindEcosystemWorktreeSubProjectWorktree // This is the linked-development case
-		}
-		if isInsideEcosystem {
-			return KindEcosystemSubProjectWorktree
-		}
-		return KindStandaloneProjectWorktree
-	}
-
-	// Not a worktree
-	if isEcosystemRoot {
-		return KindEcosystemRoot
-	}
-	if isInEcosystemWorktree {
-		// This is a primary repo checkout inside an eco worktree (the fallback case)
-		return KindEcosystemWorktreeSubProject
-	}
-	if isInsideEcosystem {
-		return KindEcosystemSubProject
-	}
-
-	// If no grove.yml, it would be NonGroveRepo, but this function assumes a Project.
-	return KindStandaloneProject
-}
-
 // TransformToWorkspaceNodes converts a hierarchical DiscoveryResult into a flat list
 // of WorkspaceNode items suitable for display in UIs.
 func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*WorkspaceNode {

@@ -61,7 +61,7 @@ io.write("GROVE_JSON_END")
 
 	// Run nvim headless with minimal config to be faster
 	// Using --clean to skip user config for speed, or we could use user config
-	cmd := exec.CommandContext(ctx, "nvim", "--headless", "-u", "NONE", "-c", "lua "+strings.ReplaceAll(luaScript, "\n", " "), "-c", "q")
+	cmd := exec.CommandContext(ctx, "nvim", "--headless", "-u", "NONE", "-c", "lua "+strings.ReplaceAll(luaScript, "\n", " "), "-c", "q") //nolint:gosec // script is hardcoded, not user input
 	output, err := cmd.Output()
 	if err != nil {
 		// Nvim failed to run, not critical

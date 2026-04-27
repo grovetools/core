@@ -219,13 +219,13 @@ func (k *KeybindingsConfig) UnmarshalTOML(data []byte) error {
 	}
 
 	// Process known sections
-	decodeSection("navigation", &k.Navigation)
-	decodeSection("selection", &k.Selection)
-	decodeSection("actions", &k.Actions)
-	decodeSection("search", &k.Search)
-	decodeSection("view", &k.View)
-	decodeSection("fold", &k.Fold)
-	decodeSection("system", &k.System)
+	_ = decodeSection("navigation", &k.Navigation)
+	_ = decodeSection("selection", &k.Selection)
+	_ = decodeSection("actions", &k.Actions)
+	_ = decodeSection("search", &k.Search)
+	_ = decodeSection("view", &k.View)
+	_ = decodeSection("fold", &k.Fold)
+	_ = decodeSection("system", &k.System)
 
 	// Process unknown keys as package names (per-TUI overrides)
 	for key, value := range raw {
@@ -720,7 +720,7 @@ func (c *Config) UnmarshalExtension(key string, target interface{}) error {
 //	[nav.groups.personal.sessions.o]
 //	path = "/path/to/dir"
 func stringToPathStructHook() mapstructure.DecodeHookFunc {
-	return func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+	return func(from, to reflect.Type, data interface{}) (interface{}, error) {
 		// Only handle string -> struct conversions
 		if from.Kind() != reflect.String || to.Kind() != reflect.Struct {
 			return data, nil

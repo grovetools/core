@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +31,7 @@ func initGitRepo(t *testing.T, dir string) {
 }
 
 // Helper function to add and commit files
-func commitFiles(t *testing.T, dir string, message string) {
+func commitFiles(t *testing.T, dir, message string) {
 	cmd := exec.Command("git", "add", ".")
 	cmd.Dir = dir
 	err := cmd.Run()
@@ -442,8 +441,3 @@ func TestParseGitmodules(t *testing.T) {
 
 // Variable to allow mocking in tests
 // var discoverLocalWorkspacesFunc = DiscoverLocalWorkspaces
-
-// Add this function to check if a path contains spaces
-func pathContainsSpaces(path string) bool {
-	return strings.Contains(path, " ")
-}

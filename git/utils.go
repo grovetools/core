@@ -10,7 +10,7 @@ import (
 )
 
 // GetRepoInfo returns the repository name and current branch
-func GetRepoInfo(dir string) (repo string, branch string, err error) {
+func GetRepoInfo(dir string) (repo, branch string, err error) {
 	cmdBuilder := command.NewSafeBuilder()
 
 	// Find git root first to ensure context is correct for worktrees

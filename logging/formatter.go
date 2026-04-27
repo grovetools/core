@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/grovetools/core/tui/theme"
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/tui/theme"
 )
 
 // TextFormatter is a custom logrus formatter.

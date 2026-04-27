@@ -91,7 +91,7 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		// Try to create a linked worktree from the main checkout
 		if _, err := os.Stat(filepath.Join(mainProjectPath, ".git")); err == nil {
 			fmt.Printf("%s: creating linked worktree\n", projectName)
-			os.MkdirAll(filepath.Dir(targetPath), 0o755)
+			_ = os.MkdirAll(filepath.Dir(targetPath), 0o755)
 			os.RemoveAll(targetPath)
 			cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
 			cmdWorktree.Dir = mainProjectPath
@@ -108,7 +108,7 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		// Try via provider lookup (project may be elsewhere on disk)
 		if localRepoPath, hasLocal := localWorkspaces[projectName]; hasLocal {
 			fmt.Printf("%s: creating linked worktree\n", projectName)
-			os.MkdirAll(filepath.Dir(targetPath), 0o755)
+			_ = os.MkdirAll(filepath.Dir(targetPath), 0o755)
 			os.RemoveAll(targetPath)
 			cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
 			cmdWorktree.Dir = localRepoPath
@@ -130,7 +130,7 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 	for _, submodulePath := range uninitializedSubmodules {
 		cmdUpdate := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive", "--", submodulePath)
 		cmdUpdate.Dir = worktreePath
-		cmdUpdate.Run()
+		_ = cmdUpdate.Run()
 	}
 	return nil
 }

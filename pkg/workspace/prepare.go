@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/grovetools/core/git"
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/git"
 )
 
 // Prepare creates or gets a fully configured worktree.
@@ -56,7 +57,7 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 
 		// Create a generic workspace marker file
 		groveDir := filepath.Join(worktreePath, ".grove")
-		os.MkdirAll(groveDir, 0o755)
+		_ = os.MkdirAll(groveDir, 0o755)
 		markerPath := filepath.Join(groveDir, "workspace")
 
 		// Determine if this is an ecosystem worktree
@@ -73,7 +74,7 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 			}
 		}
 
-		os.WriteFile(markerPath, []byte(markerContent), 0o644)
+		_ = os.WriteFile(markerPath, []byte(markerContent), 0o644) //nolint:gosec // workspace marker is not sensitive
 	}
 
 	return worktreePath, nil

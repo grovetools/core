@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/grovetools/core/version"
 	"github.com/spf13/cobra"
+
+	"github.com/grovetools/core/version"
 )
 
 func NewVersionCmd() *cobra.Command {

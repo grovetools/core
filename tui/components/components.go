@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -177,7 +178,7 @@ func RenderList(items []string, ordered bool) string {
 }
 
 // RenderProgress creates a progress bar
-func RenderProgress(current, total int, width int) string {
+func RenderProgress(current, total, width int) string {
 	t := theme.DefaultTheme
 
 	if total <= 0 {

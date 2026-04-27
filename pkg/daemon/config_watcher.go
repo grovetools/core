@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/sirupsen/logrus"
+
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/paths"
-	"github.com/sirupsen/logrus"
 )
 
 // ConfigHook defines a hook that runs when specific config sections change.
@@ -192,7 +193,7 @@ func (w *ConfigWatcher) handleChange(file string) {
 	for _, hook := range w.hooks {
 		if w.sectionAffected(file, hook.Section) {
 			w.logger.Infof("Running config hook: %s", hook.Name)
-			cmd := exec.Command(hook.Command[0], hook.Command[1:]...)
+			cmd := exec.Command(hook.Command[0], hook.Command[1:]...) //nolint:gosec // hook commands from trusted config
 			if err := cmd.Run(); err != nil {
 				w.logger.Errorf("Hook %s failed: %v", hook.Name, err)
 			}

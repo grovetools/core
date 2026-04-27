@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -258,21 +259,11 @@ func StyleInlineMarkdown(line string, th *theme.Theme) string {
 // ☒ -> completed
 // ☐ -> pending
 func StyleTodoMarkers(line string, th *theme.Theme) string {
-	if strings.Contains(line, "[*]") {
-		line = strings.Replace(line, "[*]", th.Success.Render(theme.IconStatusCompleted), -1)
-	}
-	if strings.Contains(line, "[→]") {
-		line = strings.Replace(line, "[→]", th.Info.Render(theme.IconStatusRunning), -1)
-	}
-	if strings.Contains(line, "[ ]") {
-		line = strings.Replace(line, "[ ]", th.Muted.Render(theme.IconStatusTodo), -1)
-	}
-	if strings.Contains(line, "☒") {
-		line = strings.Replace(line, "☒", th.Success.Render(theme.IconStatusCompleted), -1)
-	}
-	if strings.Contains(line, "☐") {
-		line = strings.Replace(line, "☐", th.Muted.Render(theme.IconStatusTodo), -1)
-	}
+	line = strings.ReplaceAll(line, "[*]", th.Success.Render(theme.IconStatusCompleted))
+	line = strings.ReplaceAll(line, "[→]", th.Info.Render(theme.IconStatusRunning))
+	line = strings.ReplaceAll(line, "[ ]", th.Muted.Render(theme.IconStatusTodo))
+	line = strings.ReplaceAll(line, "☒", th.Success.Render(theme.IconStatusCompleted))
+	line = strings.ReplaceAll(line, "☐", th.Muted.Render(theme.IconStatusTodo))
 	return line
 }
 

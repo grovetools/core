@@ -5,11 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/grovetools/core/config"
 	"github.com/grovetools/tend/pkg/assert"
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/harness"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grovetools/core/config"
 )
 
 // NotebooksConfigIsolationScenario tests that notebooks config is properly isolated from user's real config.

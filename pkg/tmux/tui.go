@@ -87,9 +87,7 @@ func (c *Client) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, wi
 			}
 		}
 
-		if err := c.SwitchClient(ctx, windowTarget); err != nil {
-			// Ignore switch errors, window was created
-		}
+		_ = c.SwitchClient(ctx, windowTarget) // best-effort; window was already created
 	}
 
 	return nil

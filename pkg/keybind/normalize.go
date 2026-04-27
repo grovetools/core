@@ -701,11 +701,8 @@ func extractModifiersForDenorm(key string) (ctrl, meta bool, base string) {
 		remaining = remaining[2:]
 	}
 
-	// Check for S- prefix (shift) - we'll ignore it for shell denormalization
-	// since shells typically don't use shift modifier notation
-	if strings.HasPrefix(remaining, "S-") {
-		remaining = remaining[2:]
-	}
+	// Strip S- prefix (shift) — shells typically don't use shift modifier notation
+	remaining = strings.TrimPrefix(remaining, "S-")
 
 	base = remaining
 	return

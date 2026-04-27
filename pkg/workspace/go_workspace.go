@@ -10,7 +10,7 @@ import (
 
 // SetupGoWorkspaceForWorktree checks if the current project uses Go workspaces
 // and if so, creates an appropriate go.work file in the worktree.
-func SetupGoWorkspaceForWorktree(worktreePath string, gitRoot string) error {
+func SetupGoWorkspaceForWorktree(worktreePath, gitRoot string) error {
 	goModPath := filepath.Join(gitRoot, "go.mod")
 	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
 		return nil // Not a Go project
@@ -26,7 +26,7 @@ func SetupGoWorkspaceForWorktree(worktreePath string, gitRoot string) error {
 	content := GenerateWorktreeGoWork(config)
 
 	worktreeGoWorkPath := filepath.Join(worktreePath, "go.work")
-	return os.WriteFile(worktreeGoWorkPath, []byte(content), 0o644)
+	return os.WriteFile(worktreeGoWorkPath, []byte(content), 0o644) //nolint:gosec // go.work file is not sensitive
 }
 
 // FindRootGoWorkspace searches for a go.work file by walking up the directory tree.

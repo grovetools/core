@@ -73,7 +73,7 @@ func (h *AccessHistory) Save(configDir string) error {
 		return err
 	}
 
-	return os.WriteFile(historyFile, data, 0o644)
+	return os.WriteFile(historyFile, data, 0o644) //nolint:gosec // history file is not sensitive
 }
 
 // RecordAccess records that a project was accessed

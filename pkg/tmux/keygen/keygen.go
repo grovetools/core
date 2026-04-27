@@ -155,7 +155,7 @@ func (c *Config) BindTarget() string {
 
 // FormatBindKey formats a complete bind-key command.
 // extraFlags can include flags like "-r" for repeatable bindings.
-func (c *Config) FormatBindKey(key string, action string, extraFlags ...string) string {
+func (c *Config) FormatBindKey(key, action string, extraFlags ...string) string {
 	var parts []string
 	parts = append(parts, "bind-key")
 

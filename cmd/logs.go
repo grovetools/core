@@ -8,14 +8,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+
 	"github.com/grovetools/core/cli"
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/logging/logutil"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 )
 
 // NewLogsCmd creates the `logs` command.

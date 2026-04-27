@@ -7,10 +7,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/profiling"
 	"github.com/grovetools/core/pkg/workspace"
-	"github.com/sirupsen/logrus"
 )
 
 // aliasLineParts holds the parsed components of a rule line containing an alias.
@@ -147,9 +148,7 @@ func (r *AliasResolver) Resolve(alias string) (string, error) {
 	}
 
 	// Optional: support explicit project: prefix (can be omitted)
-	if strings.HasPrefix(alias, "project:") {
-		alias = strings.TrimPrefix(alias, "project:")
-	}
+	alias = strings.TrimPrefix(alias, "project:")
 
 	// Normalize workDir for macOS /private/var symlink
 	currentPath := r.workDir

@@ -169,7 +169,7 @@ func (c *Command) WithTimeout(timeout time.Duration) *Command {
 }
 
 // Validate validates specific arguments
-func (sb *SafeBuilder) Validate(argType string, value string) error {
+func (sb *SafeBuilder) Validate(argType, value string) error {
 	validator, exists := sb.validators[argType]
 	if !exists {
 		return fmt.Errorf("no validator for argument type: %s", argType)

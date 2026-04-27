@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/embed"
 	"github.com/grovetools/core/tui/panes"
 	"github.com/grovetools/core/tui/theme"
@@ -48,10 +49,9 @@ func (d listDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 // listPane wraps a bubbles/list model as a pane.
 type listPane struct {
-	list    list.Model
-	width   int
-	height  int
-	focused bool
+	list   list.Model
+	width  int
+	height int
 }
 
 func newListPane() *listPane {

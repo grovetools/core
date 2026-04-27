@@ -8,10 +8,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/repo"
 	"github.com/grovetools/core/util/pathutil"
-	"github.com/sirupsen/logrus"
 )
 
 // findGroveConfig checks for various grove config file names in a directory.
@@ -182,7 +183,7 @@ func processProject(path string, cfg *config.Config) Project {
 
 // processEcosystemWorktreeDir handles the special case of .grove-worktrees directory
 // inside an ecosystem, treating each subdirectory as a project
-func processEcosystemWorktreeDir(path string, parentEcoPath string) []Project {
+func processEcosystemWorktreeDir(path, parentEcoPath string) []Project {
 	var projects []Project
 
 	if entries, readErr := os.ReadDir(path); readErr == nil {
@@ -797,8 +798,8 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 		}
 
 		// Get the default branch for the bare repo
-		defaultBranch := "main" // fallback
-		cmd := exec.Command("git", "-C", r.BarePath, "symbolic-ref", "refs/remotes/origin/HEAD")
+		defaultBranch := "main"                                                                  // fallback
+		cmd := exec.Command("git", "-C", r.BarePath, "symbolic-ref", "refs/remotes/origin/HEAD") //nolint:gosec // path from trusted workspace config
 		if output, err := cmd.Output(); err == nil {
 			ref := strings.TrimSpace(string(output))
 			if strings.HasPrefix(ref, "refs/remotes/origin/") {

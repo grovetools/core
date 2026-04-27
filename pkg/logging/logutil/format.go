@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/grovetools/core/tui/theme"
 )
 
 // FormatLogLine formats a parsed log entry in the specified format.
 // Supported formats: text, json, full, rich, pretty, pretty-text.
 // compact controls whether blank lines are added between entries.
-func FormatLogLine(logMap map[string]interface{}, workspace string, format string, compact bool) string {
+func FormatLogLine(logMap map[string]interface{}, workspace, format string, compact bool) string {
 	switch format {
 	case "json":
 		return formatJSON(logMap, workspace)
@@ -93,7 +94,7 @@ func formatJSON(logMap map[string]interface{}, workspace string) string {
 	return string(jsonData)
 }
 
-func formatPretty(logMap map[string]interface{}, withANSI bool, compact bool) string {
+func formatPretty(logMap map[string]interface{}, withANSI, compact bool) string {
 	var prettyOutput string
 	if withANSI {
 		prettyOutput, _ = logMap["pretty_ansi"].(string)

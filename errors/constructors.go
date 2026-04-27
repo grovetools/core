@@ -23,7 +23,7 @@ func ServiceNotFound(service string) *GroveError {
 }
 
 // ContainerTimeout creates a container timeout error
-func ContainerTimeout(service string, timeout string) *GroveError {
+func ContainerTimeout(service, timeout string) *GroveError {
 	return New(ErrCodeContainerTimeout,
 		fmt.Sprintf("container '%s' failed to become ready within %s", service, timeout)).
 		WithDetail("service", service).
