@@ -1866,6 +1866,7 @@ func (c *RemoteClient) GetPTYAttachURL(id string) string {
 
 func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, exitCode int, commitHash string, durationMs int64) error {
 	payload := map[string]interface{}{
+		"workspace":   workspace,
 		"verb":        verb,
 		"exit_code":   exitCode,
 		"commit_hash": commitHash,
@@ -1877,7 +1878,7 @@ func (c *RemoteClient) ReportTask(ctx context.Context, workspace, verb string, e
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		fmt.Sprintf("%s/api/workspaces/%s/tasks", baseURL, url.PathEscape(workspace)),
+		fmt.Sprintf("%s/api/tasks", baseURL),
 		bytes.NewReader(body),
 	)
 	if err != nil {
