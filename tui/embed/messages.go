@@ -226,6 +226,12 @@ type SplitMemoryCloseRequestMsg struct{}
 // memory panel is closed.
 type SplitMemoryClosedMsg struct{}
 
+// WorkspacesUpdatedMsg is broadcast by the host to all panels when the
+// daemon SSE stream delivers a workspace update and the host's enriched
+// cache has been refreshed. Panels that display workspace data should
+// re-read the host's snapshot and update their view.
+type WorkspacesUpdatedMsg struct{}
+
 // AppendContextRuleMsg is emitted by a sub-TUI (e.g. the memory panel)
 // when the user wants to add a file to the originating panel's context
 // rules. The host routes it to the BSP sibling of the emitting panel.
