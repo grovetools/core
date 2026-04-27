@@ -492,6 +492,13 @@ type Notebook struct {
 	Obsidian               *ObsidianConfig            `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
 }
 
+// TestScopeConfig defines a smart test triggering scope
+type TestScopeConfig struct {
+	Name      string   `yaml:"name" toml:"name" jsonschema:"description=Name of the test scope"`
+	Rules     string   `yaml:"rules" toml:"rules" jsonschema:"description=Path to cx .rules file"`
+	Scenarios []string `yaml:"scenarios" toml:"scenarios" jsonschema:"description=List of tend scenarios to trigger"`
+}
+
 // Config represents the grove.yml configuration
 type Config struct {
 	Name       string   `yaml:"name,omitempty" toml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem"`
@@ -511,6 +518,9 @@ type Config struct {
 	Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
 	SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" toml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
 	ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" toml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
+
+	Commands   map[string]string `yaml:"commands,omitempty" toml:"commands,omitempty" jsonschema:"description=Command overrides per verb"`
+	TestScopes []TestScopeConfig `yaml:"test_scopes,omitempty" toml:"test_scopes,omitempty" jsonschema:"description=Smart test triggering scopes"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	Extensions map[string]interface{} `yaml:",inline" toml:"-" jsonschema:"-"`
@@ -534,6 +544,8 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty"`
 		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty"`
+		Commands         map[string]string             `yaml:"commands,omitempty"`
+		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty"`
 		Extensions       map[string]interface{}        `yaml:",inline"`
 
 		// --- Legacy Fields for Backward Compatibility ---
@@ -561,6 +573,8 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Environment = raw.Environment
 	c.Environments = raw.Environments
 	c.ExplicitProjects = raw.ExplicitProjects
+	c.Commands = raw.Commands
+	c.TestScopes = raw.TestScopes
 	c.Extensions = raw.Extensions
 
 	// Handle backward compatibility for `search_paths` -> `groves`

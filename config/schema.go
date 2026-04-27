@@ -81,6 +81,8 @@ func GenerateSchema() ([]byte, error) {
 		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
 		SearchPaths      map[string]SearchPathConfig   `yaml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1000,x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
 		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery" jsonschema_extras:"x-layer=global,x-priority=5"`
+		Commands         map[string]string             `yaml:"commands,omitempty" jsonschema:"description=Command overrides per verb (e.g. build check fmt lint)" jsonschema_extras:"x-layer=project,x-priority=22"`
+		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty" jsonschema:"description=Smart test triggering scopes" jsonschema_extras:"x-layer=project,x-priority=23"`
 	}
 
 	schema := r.Reflect(&BaseConfig{})

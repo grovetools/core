@@ -630,6 +630,32 @@
         }
       },
       "type": "object"
+    },
+    "TestScopeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Name of the test scope",
+          "type": "string"
+        },
+        "rules": {
+          "description": "Path to cx .rules file",
+          "type": "string"
+        },
+        "scenarios": {
+          "description": "List of tend scenarios to trigger",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "rules",
+        "scenarios"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://github.com/grovetools/core/config/base-config",
@@ -651,6 +677,15 @@
       "type": "string",
       "x-layer": "project",
       "x-priority": "20"
+    },
+    "commands": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Command overrides per verb (e.g. build check fmt lint)",
+      "type": "object",
+      "x-layer": "project",
+      "x-priority": "22"
     },
     "context": {
       "$ref": "#/$defs/ContextConfig",
@@ -729,6 +764,15 @@
       "x-status-replaced-by": "groves",
       "x-status-since": "v0.5.0",
       "x-status-target": "v1.0.0"
+    },
+    "test_scopes": {
+      "description": "Smart test triggering scopes",
+      "items": {
+        "$ref": "#/$defs/TestScopeConfig"
+      },
+      "type": "array",
+      "x-layer": "project",
+      "x-priority": "23"
     },
     "tui": {
       "$ref": "#/$defs/TUISchemaConfig",
