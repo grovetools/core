@@ -62,8 +62,8 @@ func nbResolveSymlinks(path string) string {
 	return resolved
 }
 
-// nbRunDiscovery runs `core ws --json` from the given directory and returns the parsed projects.
-func nbRunDiscovery(ctx *harness.Context, dir string) ([]workspace.Project, error) {
+// nbRunDiscovery runs `core ws --json` from the given directory and returns the parsed workspace nodes.
+func nbRunDiscovery(ctx *harness.Context, dir string) ([]workspace.WorkspaceNode, error) {
 	cmd := ctx.Bin("ws", "--json")
 	cmd.Dir(dir)
 	result := cmd.Run()
@@ -71,17 +71,27 @@ func nbRunDiscovery(ctx *harness.Context, dir string) ([]workspace.Project, erro
 	if err := result.AssertSuccess(); err != nil {
 		return nil, fmt.Errorf("core ws --json failed: %w\nStdout: %s\nStderr: %s", err, result.Stdout, result.Stderr)
 	}
-	var projects []workspace.Project
-	if err := json.Unmarshal([]byte(result.Stdout), &projects); err != nil {
+	var nodes []workspace.WorkspaceNode
+	if err := json.Unmarshal([]byte(result.Stdout), &nodes); err != nil {
 		return nil, fmt.Errorf("failed to parse ws JSON: %w\nStdout: %s", err, result.Stdout)
 	}
-	return projects, nil
+	return nodes, nil
 }
 
-// nbHasProject checks if a project with the given name exists in the slice.
-func nbHasProject(projects []workspace.Project, name string) bool {
-	for _, p := range projects {
-		if p.Name == name {
+// nbHasProject checks if a promoted project (not NonGroveRepo) with the given name exists.
+func nbHasProject(nodes []workspace.WorkspaceNode, name string) bool {
+	for _, n := range nodes {
+		if n.Name == name && n.Kind != workspace.KindNonGroveRepo {
+			return true
+		}
+	}
+	return false
+}
+
+// nbHasNode checks if any node with the given name exists regardless of kind.
+func nbHasNode(nodes []workspace.WorkspaceNode, name string) bool {
+	for _, n := range nodes {
+		if n.Name == name {
 			return true
 		}
 	}

@@ -80,6 +80,12 @@ type Config struct {
 	// system entries, per IncludeSystem). Ignored when Ecosystem is
 	// true.
 	InitialWorkspacePath string
+	// ReplayExisting controls whether existing log file content is
+	// read from the beginning (true) or only new lines are shown
+	// (false). Standalone CLI usage sets this to true so historical
+	// entries are visible; the embedded drawer leaves it false to
+	// avoid replaying stale logs on panel open.
+	ReplayExisting bool
 }
 
 // paneFocus tracks which pane has focus.
@@ -721,12 +727,10 @@ func (m *Model) discoverAndTailFiles() {
 // a workspace switch halts the tailer before the panel starts
 // feeding a stale file into the active workspace's view.
 //
-// The initial SeekInfo is now {Offset: 0, Whence: SeekEnd}: we do
-// NOT replay the historical contents of the file. The embedded
-// drawer is meant for "what's happening now" — users who want
-// backlog use `core logs --tui` or `core logs -f` from the CLI.
-// This eliminates the bulk of the stale-log problem the user saw
-// with old workspace-2025-*.log files.
+// When cfg.ReplayExisting is true the tailer starts from the
+// beginning of the file so historical entries are visible (standalone
+// CLI mode). Otherwise it starts from the end, streaming only new
+// lines (embedded drawer mode).
 func (m *Model) startTailing(wsCtx context.Context, path, wsName, wsPath string) {
 	m.tailedFilesMu.Lock()
 	if m.tailedFiles[path] {
@@ -737,11 +741,14 @@ func (m *Model) startTailing(wsCtx context.Context, path, wsName, wsPath string)
 	m.tailedFilesMu.Unlock()
 
 	go func() {
+		whence := io.SeekEnd
+		if m.cfg.ReplayExisting {
+			whence = io.SeekStart
+		}
 		cfg := tail.Config{
-			Follow: true,
-			ReOpen: true,
-			// Stream only new lines — never replay historical content.
-			Location: &tail.SeekInfo{Offset: 0, Whence: io.SeekEnd},
+			Follow:   true,
+			ReOpen:   true,
+			Location: &tail.SeekInfo{Offset: 0, Whence: whence},
 			Logger:   stdlog.New(io.Discard, "", 0),
 		}
 		t, err := tail.TailFile(path, cfg)

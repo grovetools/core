@@ -128,9 +128,12 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 
 	// Initialize any submodules that weren't available locally
 	for _, submodulePath := range uninitializedSubmodules {
+		targetPath := filepath.Join(worktreePath, submodulePath)
 		cmdUpdate := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive", "--", submodulePath)
 		cmdUpdate.Dir = worktreePath
-		_ = cmdUpdate.Run()
+		if err := cmdUpdate.Run(); err != nil {
+			_ = os.MkdirAll(targetPath, 0o755)
+		}
 	}
 	return nil
 }
@@ -151,8 +154,14 @@ func parseGitmodules(gitmodulesPath string) (map[string]string, error) {
 			if start != -1 && end != -1 && start < end {
 				currentName = line[start+1 : end]
 			}
-		} else if strings.HasPrefix(line, "path =") && currentName != "" {
-			submodules[currentName] = strings.TrimSpace(strings.TrimPrefix(line, "path ="))
+		} else if currentName != "" && (strings.HasPrefix(line, "path =") || strings.HasPrefix(line, "path=")) {
+			value := line
+			value = strings.TrimPrefix(value, "path")
+			value = strings.TrimSpace(value)
+			value = strings.TrimPrefix(value, "=")
+			value = strings.TrimSpace(value)
+			value = strings.Trim(value, "\"")
+			submodules[currentName] = value
 		}
 	}
 	return submodules, scanner.Err()

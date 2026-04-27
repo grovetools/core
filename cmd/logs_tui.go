@@ -50,13 +50,14 @@ func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts
 
 	ws := workspaces
 	cfg := logs.Config{
-		GetWorkspaces: func() []*workspace.WorkspaceNode { return ws },
-		Ecosystem:     ecosystem,
-		SystemOnly:    systemOnly,
-		IncludeSystem: includeSystem,
-		LogConfig:     &logCfg,
-		OverrideOpts:  overrideOpts,
-		Follow:        follow,
+		GetWorkspaces:  func() []*workspace.WorkspaceNode { return ws },
+		Ecosystem:      ecosystem,
+		SystemOnly:     systemOnly,
+		IncludeSystem:  includeSystem,
+		LogConfig:      &logCfg,
+		OverrideOpts:   overrideOpts,
+		Follow:         follow,
+		ReplayExisting: true,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

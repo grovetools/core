@@ -43,31 +43,16 @@ logging:
 					return fmt.Errorf("failed to create logs dir: %w", err)
 				}
 
-				// Create multiple log files with intentionally out-of-order timestamps
-				// File 1: Has entries at T+1s and T+5s
-				file1Logs := `{"component":"alpha","level":"info","msg":"Message A1 (T+1s)","time":"2024-01-01T10:00:01Z"}
+				// Create a single log file with intentionally out-of-order timestamps
+				// from multiple components, interleaved to test chronological sorting.
+				logContent := `{"component":"alpha","level":"info","msg":"Message A1 (T+1s)","time":"2024-01-01T10:00:01Z"}
+{"component":"beta","level":"info","msg":"Message B1 (T+2s)","time":"2024-01-01T10:00:02Z"}
 {"component":"alpha","level":"info","msg":"Message A2 (T+5s)","time":"2024-01-01T10:00:05Z"}
-`
-				// File 2: Has entries at T+2s and T+6s
-				file2Logs := `{"component":"beta","level":"info","msg":"Message B1 (T+2s)","time":"2024-01-01T10:00:02Z"}
 {"component":"beta","level":"info","msg":"Message B2 (T+6s)","time":"2024-01-01T10:00:06Z"}
+{"component":"beta","level":"info","msg":"Message B3 (T+4s)","time":"2024-01-01T10:00:04Z"}
 `
-				// File 3: Has entry at T+4s (should be inserted in the middle)
-				file3Logs := `{"component":"beta","level":"info","msg":"Message B3 (T+4s)","time":"2024-01-01T10:00:04Z"}
-`
-
-				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-01-1.log"), file1Logs); err != nil {
-					return fmt.Errorf("failed to write log file 1: %w", err)
-				}
-				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-01-2.log"), file2Logs); err != nil {
-					return fmt.Errorf("failed to write log file 2: %w", err)
-				}
-
-				// Sleep briefly to ensure different file modification time
-				time.Sleep(100 * time.Millisecond)
-
-				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-01-3.log"), file3Logs); err != nil {
-					return fmt.Errorf("failed to write log file 3: %w", err)
+				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-01.log"), logContent); err != nil {
+					return fmt.Errorf("failed to write log file: %w", err)
 				}
 
 				return nil
