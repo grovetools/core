@@ -121,6 +121,35 @@ func (r *FileSystemRegistry) UpdateStatus(sessionID, status string) error {
 	return os.WriteFile(metadataFile, updated, 0o644) //nolint:gosec // session metadata is not sensitive
 }
 
+// UpdateFields applies a partial update to a session's metadata.json.
+// The updater function receives the current metadata and mutates it in place.
+func (r *FileSystemRegistry) UpdateFields(sessionID string, updater func(*SessionMetadata)) error {
+	if sessionID == "" {
+		return nil
+	}
+	sessionDir := filepath.Join(r.baseDir, sessionID)
+	metadataFile := filepath.Join(sessionDir, "metadata.json")
+
+	content, err := os.ReadFile(metadataFile)
+	if err != nil {
+		return nil
+	}
+
+	var metadata SessionMetadata
+	if err := json.Unmarshal(content, &metadata); err != nil {
+		return nil
+	}
+
+	updater(&metadata)
+
+	updated, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return nil
+	}
+
+	return os.WriteFile(metadataFile, updated, 0o644) //nolint:gosec // session metadata
+}
+
 // RemovePIDLock removes the pid.lock for a session directory while
 // preserving the rest of the dir (transcripts, metadata). After removal,
 // RecoverSessions will skip the session as no longer live, so a previously

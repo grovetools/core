@@ -166,6 +166,9 @@ func (c *LocalClient) RegisterSessionIntent(ctx context.Context, intent SessionI
 		JobTitle:         intent.Title,
 		PlanName:         intent.PlanName,
 		JobFilePath:      intent.JobFilePath,
+		Mux:              intent.Mux,
+		TmuxTarget:       intent.TmuxTarget,
+		Channels:         intent.Channels,
 	}
 
 	return registry.Register(metadata)

@@ -20,4 +20,8 @@ type SessionMetadata struct {
 	JobTitle         string    `json:"job_title,omitempty"`
 	PlanName         string    `json:"plan_name,omitempty"`
 	JobFilePath      string    `json:"job_file_path,omitempty"`
+	Mux              string    `json:"mux,omitempty"`
+	TmuxTarget       string    `json:"tmux_target,omitempty"`
+	PtyID            string    `json:"pty_id,omitempty"`
+	Channels         []string  `json:"channels,omitempty"`
 }
