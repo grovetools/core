@@ -130,11 +130,26 @@ type ChannelSendResponse struct {
 	Status    string `json:"status"`
 }
 
+// InboundRecord captures a single inbound routing decision for observability.
+type InboundRecord struct {
+	Timestamp time.Time `json:"timestamp"`
+	Sender    string    `json:"sender"`
+	Strategy  string    `json:"strategy"` // quote, tag, single_active, dropped
+	TargetJob string    `json:"target_job,omitempty"`
+	Delivered bool      `json:"delivered"`
+	Error     string    `json:"error,omitempty"`
+}
+
 // ChannelStatusResponse represents the status of the channel system.
 type ChannelStatusResponse struct {
-	SignalCLIRunning bool `json:"signal_cli_running"`
-	ActiveRoutes     int  `json:"active_routes"`
-	RefCount         int  `json:"ref_count"`
+	SignalCLIRunning     bool            `json:"signal_cli_running"`
+	ActiveRoutes         int             `json:"active_routes"`
+	RefCount             int             `json:"ref_count"`
+	SignalRestartCount   int             `json:"signal_restart_count"`
+	SignalLastRestart    *time.Time      `json:"signal_last_restart,omitempty"`
+	SignalIsAlive        bool            `json:"signal_is_alive"`
+	LastInboundTimestamp *time.Time      `json:"last_inbound_timestamp,omitempty"`
+	RecentInbound        []InboundRecord `json:"recent_inbound,omitempty"`
 }
 
 // ChannelCleanupResponse represents the result of a channel cleanup operation.
@@ -197,6 +212,7 @@ type JobInfo struct {
 	TimeoutStr  string            `json:"timeout,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
 	AgentTarget string            `json:"agent_target,omitempty"` // "native" or "tmux"
+	Channels    []string          `json:"channels,omitempty"`
 	SubmittedAt time.Time         `json:"submitted_at"`
 	StartedAt   *time.Time        `json:"started_at,omitempty"`
 	CompletedAt *time.Time        `json:"completed_at,omitempty"`

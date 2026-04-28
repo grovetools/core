@@ -19,6 +19,7 @@ type DocMetadata struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Worktree  string    `json:"worktree"`
 	Tags      []string  `json:"tags,omitempty"`
+	Channels  []string  `json:"channels,omitempty"`
 	PlanRef   string    `json:"plan_ref,omitempty"`
 	Created   time.Time `json:"created,omitempty"`
 	Modified  time.Time `json:"modified,omitempty"`
@@ -36,6 +37,7 @@ func Parse(r io.Reader) (DocMetadata, error) {
 	inFrontmatter := false
 	lineCount := 0
 	collectingTags := false
+	collectingChannels := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -59,17 +61,22 @@ func Parse(r io.Reader) (DocMetadata, error) {
 			continue
 		}
 
-		// Check for block-sequence tag items (  - item)
-		if collectingTags {
+		// Check for block-sequence items (  - item)
+		if collectingTags || collectingChannels {
 			if strings.HasPrefix(line, "  - ") || strings.HasPrefix(line, "\t- ") {
-				tag := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
-				tag = strings.Trim(tag, `"'`)
-				if tag != "" {
-					meta.Tags = append(meta.Tags, tag)
+				item := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
+				item = strings.Trim(item, `"'`)
+				if item != "" {
+					if collectingTags {
+						meta.Tags = append(meta.Tags, item)
+					} else {
+						meta.Channels = append(meta.Channels, item)
+					}
 				}
 				continue
 			}
 			collectingTags = false
+			collectingChannels = false
 		}
 
 		// Simple key: value parsing
@@ -96,11 +103,15 @@ func Parse(r io.Reader) (DocMetadata, error) {
 			meta.PlanRef = value
 		case "tags":
 			if value == "" {
-				// Block sequence format — collect on subsequent lines
 				collectingTags = true
 			} else {
-				// Flow array format: [a, b, c]
 				meta.Tags = parseFlowArray(value)
+			}
+		case "channels":
+			if value == "" {
+				collectingChannels = true
+			} else {
+				meta.Channels = parseFlowArray(value)
 			}
 		case "created":
 			meta.Created = parseTimestamp(value)
