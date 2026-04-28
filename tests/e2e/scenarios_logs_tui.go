@@ -315,8 +315,9 @@ logging:
 					return fmt.Errorf("help menu did not appear: %w\nContent: %s", err, content)
 				}
 
-				// Verify help is showing by checking for key binding descriptions
-				if err := session.AssertContains("toggle follow"); err != nil {
+				// Verify help is showing by checking for a visible heading.
+				// "toggle follow" may be below the fold depending on terminal height.
+				if err := session.AssertContains("Navigation"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("help menu content missing: %w\nContent: %s", err, content)
 				}
@@ -819,15 +820,12 @@ logging:
 					return err
 				}
 
-				// Create first log file
-				logContent1 := `{"level":"info","component":"first-log","msg":"Message from first log file","time":"2024-01-01T10:00:00Z"}` + "\n"
-				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-01.log"), logContent1); err != nil {
-					return err
-				}
-
-				// Create second log file
-				logContent2 := `{"level":"warn","component":"second-log","msg":"Message from second log file","time":"2024-01-02T11:00:00Z"}` + "\n"
-				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-02.log"), logContent2); err != nil {
+				// Create a single log file with both entries.
+				// The TUI only tails the latest file per directory, so both entries
+				// must be in the same file to be loaded.
+				logContent := `{"level":"info","component":"first-log","msg":"Message from first","time":"2024-01-02T10:00:00Z"}` + "\n" +
+					`{"level":"warn","component":"second-log","msg":"Message from second","time":"2024-01-02T11:00:00Z"}` + "\n"
+				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-02.log"), logContent); err != nil {
 					return err
 				}
 

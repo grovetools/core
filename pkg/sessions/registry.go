@@ -209,8 +209,8 @@ func (r *FileSystemRegistry) Find(jobID string) (*SessionMetadata, error) {
 			continue // Skip invalid metadata
 		}
 
-		// Check if this session matches the job ID
-		if metadata.SessionID == jobID {
+		// Match by session ID, job ID, Claude session ID, or directory name
+		if metadata.SessionID == jobID || metadata.JobID == jobID || metadata.ClaudeSessionID == jobID || entry.Name() == jobID {
 			return &metadata, nil
 		}
 	}
