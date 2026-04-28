@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/grovetools/core/command"
 )
@@ -55,10 +57,25 @@ func (c *Client) Socket() string {
 }
 
 // KillServer kills the tmux server for this client's socket.
-// This is useful for cleaning up isolated test servers.
+// It first sends SIGTERM to all pane process groups to prevent orphaned TUI processes.
 // If the client uses the default socket, this will kill the default tmux server (use with caution!).
 func (c *Client) KillServer(ctx context.Context) error {
-	_, err := c.run(ctx, "kill-server")
+	// SIGTERM all pane process groups before killing the server.
+	// Without this, TUI processes that ignore SIGHUP survive the PTY closure and leak.
+	output, err := c.run(ctx, "list-panes", "-a", "-F", "#{pane_pid}")
+	if err == nil {
+		for _, pidStr := range strings.Split(strings.TrimSpace(output), "\n") {
+			pidStr = strings.TrimSpace(pidStr)
+			if pidStr == "" {
+				continue
+			}
+			if pid, err := strconv.Atoi(pidStr); err == nil && pid > 1 {
+				_ = syscall.Kill(-pid, syscall.SIGTERM)
+			}
+		}
+	}
+
+	_, err = c.run(ctx, "kill-server")
 	// Ignore "no server running" errors - server is already gone
 	if err != nil && strings.Contains(err.Error(), "no server running") {
 		return nil
