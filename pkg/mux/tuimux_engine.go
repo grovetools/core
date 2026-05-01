@@ -28,6 +28,16 @@ func NewTuimuxEngine() (*TuimuxEngine, error) {
 	return &TuimuxEngine{api: api, socketPath: socketPath}, nil
 }
 
+// NewTuimuxEngineWithSocket connects to an existing tuimux daemon at the given socket path.
+// Unlike NewTuimuxEngine, it does not attempt to start a daemon.
+func NewTuimuxEngineWithSocket(socketPath string) (*TuimuxEngine, error) {
+	api := tuimux.NewApiClient(socketPath)
+	if err := api.Ping(); err != nil {
+		return nil, fmt.Errorf("tuimux daemon not reachable at %s: %w", socketPath, err)
+	}
+	return &TuimuxEngine{api: api, socketPath: socketPath}, nil
+}
+
 func (e *TuimuxEngine) CreateSession(ctx context.Context, name string, opts ...SessionOption) error {
 	cfg := applySessionOptions(opts)
 

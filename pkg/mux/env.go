@@ -43,3 +43,8 @@ func GetTuimuxSocketPath() string {
 	}
 	return tuimux.DefaultSocketPath()
 }
+
+// PingTuimuxSocket checks if a tuimux daemon is reachable at the given socket path.
+func PingTuimuxSocket(socketPath string) error {
+	return tuimux.NewApiClient(socketPath).Ping()
+}
