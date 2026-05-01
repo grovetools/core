@@ -170,6 +170,10 @@ func (e *TmuxEngine) GetSessionPID(ctx context.Context, sessionName string) (int
 	return e.client.GetSessionPID(ctx, sessionName)
 }
 
+func (e *TmuxEngine) SwitchSession(ctx context.Context, name string) error {
+	return e.client.SwitchClientToSession(ctx, name)
+}
+
 // MuxTUIEngine methods
 
 func (e *TmuxEngine) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, windowName string, windowIndex int, reset bool) error {

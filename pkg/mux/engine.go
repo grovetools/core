@@ -39,6 +39,7 @@ type MuxEngine interface {
 	ListPanes(ctx context.Context, sessionName string) ([]PaneInfo, error)
 	NewWindow(ctx context.Context, sessionName string, windowName string, workDir string, detached bool) error
 	GetSessionPID(ctx context.Context, sessionName string) (int, error)
+	SwitchSession(ctx context.Context, name string) error
 }
 
 type MuxTUIEngine interface {

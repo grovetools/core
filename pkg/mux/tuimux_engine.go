@@ -277,6 +277,17 @@ func (e *TuimuxEngine) GetSessionPID(ctx context.Context, sessionName string) (i
 	return pid, nil
 }
 
+func (e *TuimuxEngine) SwitchSession(ctx context.Context, name string) error {
+	result, err := e.api.Execute(name, []string{"switch-session", "-t", name})
+	if err != nil {
+		return err
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("switch-session failed: %s", result.Error)
+	}
+	return nil
+}
+
 // MuxTUIEngine methods — not yet implemented for tuimux.
 
 func (e *TuimuxEngine) OpenInEditorWindow(ctx context.Context, editorCmd, filePath, windowName string, windowIndex int, reset bool) error {
