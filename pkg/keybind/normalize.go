@@ -33,6 +33,8 @@ func Normalize(key, source string) string {
 		return normalizeZsh(key)
 	case "tmux", "tmux-root", "tmux-prefix", "tmux-table", "grove":
 		return normalizeTmux(key)
+	case "tuimux", "tuimux-leader":
+		return normalizeTuimux(key)
 	case "nvim":
 		return normalizeNvim(key)
 	default:
@@ -314,6 +316,35 @@ func normalizeNvim(key string) string {
 	return normalizeCommon(key)
 }
 
+// normalizeTuimux converts bubbletea/tuimux key notation to standard form.
+// Examples: "ctrl+b" -> "C-B", "alt+f" -> "M-F", "shift+tab" -> "S-Tab"
+func normalizeTuimux(key string) string {
+	parts := strings.Split(key, "+")
+	if len(parts) == 1 {
+		return normalizeCommon(key)
+	}
+
+	var prefix string
+	for _, part := range parts[:len(parts)-1] {
+		switch strings.ToLower(part) {
+		case "ctrl":
+			prefix += "C-"
+		case "alt":
+			prefix += "M-"
+		case "shift":
+			prefix += "S-"
+		}
+	}
+
+	last := parts[len(parts)-1]
+	normalized := normalizeCommon(last)
+	if normalized == last && len(last) == 1 {
+		normalized = strings.ToUpper(last)
+	}
+
+	return prefix + normalized
+}
+
 // normalizeAuto tries to detect the format and normalize accordingly.
 func normalizeAuto(key string) string {
 	// Fish-style \cx
@@ -329,6 +360,14 @@ func normalizeAuto(key string) string {
 	// Zsh-style ^
 	if strings.HasPrefix(key, "^") {
 		return normalizeZsh(key)
+	}
+
+	// Bubbletea/tuimux-style ctrl+ or alt+
+	if strings.Contains(key, "+") {
+		lower := strings.ToLower(key)
+		if strings.HasPrefix(lower, "ctrl+") || strings.HasPrefix(lower, "alt+") || strings.HasPrefix(lower, "shift+") {
+			return normalizeTuimux(key)
+		}
 	}
 
 	// Tmux-style C- or M-

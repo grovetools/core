@@ -27,6 +27,10 @@ const (
 	// LayerTmuxCustomTable represents custom tmux tables (grove-popups, nav-workspaces).
 	// Entered via switch-client -T from other tables.
 	LayerTmuxCustomTable
+	// LayerTuimuxGlobal represents tuimux global keybindings (non-leader bindings).
+	LayerTuimuxGlobal
+	// LayerTuimuxLeader represents tuimux leader-chord keybindings.
+	LayerTuimuxLeader
 	// LayerApplication represents focused application bindings (neovim, TUIs).
 	// Only receives keys if lower layers pass them through.
 	LayerApplication
@@ -47,6 +51,10 @@ func (l Layer) String() string {
 		return "Tmux Prefix"
 	case LayerTmuxCustomTable:
 		return "Tmux Custom"
+	case LayerTuimuxGlobal:
+		return "Tuimux Global"
+	case LayerTuimuxLeader:
+		return "Tuimux Leader"
 	case LayerApplication:
 		return "Application"
 	default:
@@ -69,6 +77,10 @@ func (l Layer) ShortName() string {
 		return "L4"
 	case LayerTmuxCustomTable:
 		return "L5"
+	case LayerTuimuxGlobal:
+		return "L5t"
+	case LayerTuimuxLeader:
+		return "L5tl"
 	case LayerApplication:
 		return "L6"
 	default:
