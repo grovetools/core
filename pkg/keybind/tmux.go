@@ -7,13 +7,14 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/grovetools/core/pkg/mux"
 )
 
 func init() {
-	// Check if tmux is available
+	// Check if tmux is available and we're in a session
 	if _, err := exec.LookPath("tmux"); err == nil {
-		// Check if we're in a tmux session
-		if os.Getenv("TMUX") != "" {
+		if mux.ActiveMux() != mux.MuxNone {
 			tmuxAvailable = true
 		}
 	}
@@ -27,7 +28,7 @@ type TmuxRootCollector struct {
 // NewTmuxRootCollector creates a new tmux root table binding collector.
 func NewTmuxRootCollector() *TmuxRootCollector {
 	return &TmuxRootCollector{
-		socket: os.Getenv("GROVE_TMUX_SOCKET"),
+		socket: os.Getenv(mux.EnvGroveTmuxSocket),
 	}
 }
 
@@ -62,7 +63,7 @@ type TmuxPrefixCollector struct {
 // NewTmuxPrefixCollector creates a new tmux prefix table binding collector.
 func NewTmuxPrefixCollector() *TmuxPrefixCollector {
 	return &TmuxPrefixCollector{
-		socket: os.Getenv("GROVE_TMUX_SOCKET"),
+		socket: os.Getenv(mux.EnvGroveTmuxSocket),
 	}
 }
 
@@ -125,7 +126,7 @@ type TmuxCustomCollector struct {
 // NewTmuxCustomCollector creates a collector for custom tmux key tables.
 func NewTmuxCustomCollector() *TmuxCustomCollector {
 	return &TmuxCustomCollector{
-		socket: os.Getenv("GROVE_TMUX_SOCKET"),
+		socket: os.Getenv(mux.EnvGroveTmuxSocket),
 	}
 }
 
@@ -284,7 +285,7 @@ type TmuxTableCollector struct {
 func NewTmuxTableCollector(tableName string) *TmuxTableCollector {
 	return &TmuxTableCollector{
 		tableName: tableName,
-		socket:    os.Getenv("GROVE_TMUX_SOCKET"),
+		socket:    os.Getenv(mux.EnvGroveTmuxSocket),
 	}
 }
 
@@ -317,7 +318,7 @@ func (c *TmuxTableCollector) Collect(ctx context.Context) ([]Binding, error) {
 
 // GetTmuxPrefix returns the current tmux prefix key.
 func GetTmuxPrefix(ctx context.Context) (string, error) {
-	socket := os.Getenv("GROVE_TMUX_SOCKET")
+	socket := os.Getenv(mux.EnvGroveTmuxSocket)
 	args := []string{"show-option", "-gv", "prefix"}
 	if socket != "" {
 		args = append([]string{"-L", socket}, args...)
