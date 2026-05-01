@@ -16,6 +16,7 @@ const (
 	EnvGroveMux          = "GROVE_MUX"
 	EnvTmux              = "TMUX"
 	EnvTuimuxPTY         = "TUIMUX_PTY"
+	EnvTuimuxSession     = "TUIMUX_SESSION"
 	EnvGroveTmuxSocket   = "GROVE_TMUX_SOCKET"
 	EnvGroveTuimuxSocket = "GROVE_TUIMUX_SOCKET"
 )

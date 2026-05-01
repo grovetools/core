@@ -278,7 +278,11 @@ func (e *TuimuxEngine) GetSessionPID(ctx context.Context, sessionName string) (i
 }
 
 func (e *TuimuxEngine) SwitchSession(ctx context.Context, name string) error {
-	result, err := e.api.Execute(name, []string{"switch-session", "-t", name})
+	currentSession := os.Getenv(EnvTuimuxSession)
+	if currentSession == "" {
+		return fmt.Errorf("not inside a tuimux session (TUIMUX_SESSION not set)")
+	}
+	result, err := e.api.Execute(currentSession, []string{"switch-session", "-t", name})
 	if err != nil {
 		return err
 	}

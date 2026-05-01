@@ -32,6 +32,12 @@ func detectMuxEngine() (MuxEngine, error) {
 		return NewTmuxEngine()
 	}
 
+	// If GROVE_TMUX_SOCKET is set, we're in an isolated tmux environment (tend harness).
+	// Use tmux directly — don't auto-detect tuimux.
+	if os.Getenv(EnvGroveTmuxSocket) != "" {
+		return NewTmuxEngine()
+	}
+
 	// Auto-detect: try tuimux daemon first, fall back to tmux.
 	client := tuimux.NewApiClient(GetTuimuxSocketPath())
 	if err := client.Ping(); err == nil {
