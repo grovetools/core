@@ -23,6 +23,15 @@ func NewTmuxEngine() (*TmuxEngine, error) {
 	return &TmuxEngine{client: client}, nil
 }
 
+// NewTmuxEngineWithSocket creates a TmuxEngine connected to a specific tmux socket.
+func NewTmuxEngineWithSocket(socket string) (*TmuxEngine, error) {
+	client, err := tmux.NewClientWithSocket(socket)
+	if err != nil {
+		return nil, err
+	}
+	return &TmuxEngine{client: client}, nil
+}
+
 func (e *TmuxEngine) Client() *tmux.Client {
 	return e.client
 }
