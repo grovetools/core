@@ -38,7 +38,18 @@ func detectMuxEngine() (MuxEngine, error) {
 		return NewTmuxEngine()
 	}
 
-	// Auto-detect: try tuimux daemon first, fall back to tmux.
+	// Respect the active mux environment. If we're inside tmux, use tmux.
+	// If inside tuimux, use tuimux. This prevents auto-detection from
+	// picking tuimux when the daemon happens to be running but the caller
+	// is actually inside a tmux session.
+	switch ActiveMux() {
+	case MuxTuimux:
+		return NewTuimuxEngine()
+	case MuxTmux:
+		return NewTmuxEngine()
+	}
+
+	// Not inside either mux — auto-detect by pinging tuimux daemon.
 	client := tuimux.NewApiClient(GetTuimuxSocketPath())
 	if err := client.Ping(); err == nil {
 		return NewTuimuxEngine()
