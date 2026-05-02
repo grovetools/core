@@ -38,10 +38,7 @@ func detectMuxEngine() (MuxEngine, error) {
 		return NewTmuxEngine()
 	}
 
-	// Respect the active mux environment. If we're inside tmux, use tmux.
-	// If inside tuimux, use tuimux. This prevents auto-detection from
-	// picking tuimux when the daemon happens to be running but the caller
-	// is actually inside a tmux session.
+	// Respect the active mux environment.
 	switch ActiveMux() {
 	case MuxTuimux:
 		return NewTuimuxEngine()
@@ -56,6 +53,20 @@ func detectMuxEngine() (MuxEngine, error) {
 	}
 
 	return NewTmuxEngine()
+}
+
+// GetEngine returns a specific mux engine by name, bypassing cached auto-detection.
+// Use this in daemon-side code where the caller knows the target mux from the
+// submission path (agent_target field).
+func GetEngine(name string) (MuxEngine, error) {
+	switch name {
+	case "tuimux":
+		return NewTuimuxEngine()
+	case "tmux":
+		return NewTmuxEngine()
+	default:
+		return DetectMuxEngine(context.Background())
+	}
 }
 
 // IsAvailable returns true if any mux engine can be detected.

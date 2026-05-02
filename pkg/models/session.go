@@ -11,6 +11,7 @@ import (
 const (
 	MuxTreemux = "treemux"
 	MuxTmux    = "tmux"
+	MuxTuimux  = "tuimux"
 	MuxNone    = "none"
 )
 
