@@ -73,6 +73,7 @@ type MuxEngine interface {
 	GetPanePID(ctx context.Context, target string) (int, error)
 	GetCurrentSession(ctx context.Context) (string, error)
 	SelectWindow(ctx context.Context, target string) error
+	KillWindow(ctx context.Context, target string) error
 	ListWindows(ctx context.Context, session string) ([]WindowInfo, error)
 	PaneExists(ctx context.Context, target string) (bool, error)
 	GetPaneCommand(ctx context.Context, target string) (string, error)

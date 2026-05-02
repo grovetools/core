@@ -400,6 +400,10 @@ func (e *TuimuxEngine) SelectWindow(ctx context.Context, target string) error {
 	return e.SwitchSession(ctx, target, "")
 }
 
+func (e *TuimuxEngine) KillWindow(ctx context.Context, target string) error {
+	return ErrNotImplemented
+}
+
 func (e *TuimuxEngine) ListWindows(ctx context.Context, session string) ([]WindowInfo, error) {
 	sessions, err := e.ListSessions(ctx)
 	if err != nil {

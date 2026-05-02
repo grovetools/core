@@ -193,6 +193,10 @@ func (e *TmuxEngine) SelectWindow(ctx context.Context, target string) error {
 	return e.client.SelectWindow(ctx, target)
 }
 
+func (e *TmuxEngine) KillWindow(ctx context.Context, target string) error {
+	return e.client.KillWindow(ctx, target)
+}
+
 func (e *TmuxEngine) ListWindows(ctx context.Context, session string) ([]WindowInfo, error) {
 	windows, err := e.client.ListWindowsDetailed(ctx, session)
 	if err != nil {
