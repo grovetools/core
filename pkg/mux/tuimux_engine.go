@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -306,6 +307,7 @@ func (e *TuimuxEngine) ListPanes(ctx context.Context, sessionName string) ([]Pan
 		Idle              bool   `json:"idle"`
 		ForegroundProcess string `json:"foreground_process"`
 		Cwd               string `json:"cwd"`
+		PID               int    `json:"pid"`
 	}
 	if err := json.Unmarshal([]byte(result.Output), &raw); err != nil {
 		return nil, fmt.Errorf("parse panes: %w", err)
@@ -318,6 +320,7 @@ func (e *TuimuxEngine) ListPanes(ctx context.Context, sessionName string) ([]Pan
 			Idle:              r.Idle,
 			ForegroundProcess: r.ForegroundProcess,
 			Cwd:               r.Cwd,
+			PID:               r.PID,
 		}
 	}
 	return panes, nil
@@ -362,6 +365,175 @@ func (e *TuimuxEngine) SwitchSession(ctx context.Context, name string, cwd strin
 	if result.ExitCode != 0 {
 		return fmt.Errorf("switch-session failed: %s", result.Error)
 	}
+	return nil
+}
+
+func (e *TuimuxEngine) GetPanePID(ctx context.Context, target string) (int, error) {
+	session, paneID := splitTarget(target)
+	if session == "" {
+		session = e.resolveServerName()
+	}
+	panes, err := e.ListPanes(ctx, session)
+	if err != nil {
+		return 0, err
+	}
+	for _, p := range panes {
+		if paneID == "" && p.Active {
+			return p.PID, nil
+		}
+		if p.ID == paneID {
+			return p.PID, nil
+		}
+	}
+	return 0, fmt.Errorf("pane %q not found", target)
+}
+
+func (e *TuimuxEngine) GetCurrentSession(ctx context.Context) (string, error) {
+	name := os.Getenv(EnvTuimuxSession)
+	if name == "" {
+		return "", fmt.Errorf("not inside a tuimux session (TUIMUX_SESSION not set)")
+	}
+	return name, nil
+}
+
+func (e *TuimuxEngine) SelectWindow(ctx context.Context, target string) error {
+	return e.SwitchSession(ctx, target, "")
+}
+
+func (e *TuimuxEngine) ListWindows(ctx context.Context, session string) ([]WindowInfo, error) {
+	sessions, err := e.ListSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	currentSession := os.Getenv(EnvTuimuxSession)
+	windows := make([]WindowInfo, len(sessions))
+	for i, s := range sessions {
+		windows[i] = WindowInfo{
+			ID:       s.Name,
+			Index:    i,
+			Name:     s.Name,
+			IsActive: s.Name == currentSession,
+		}
+	}
+	return windows, nil
+}
+
+func (e *TuimuxEngine) PaneExists(ctx context.Context, target string) (bool, error) {
+	session, paneID := splitTarget(target)
+	if session == "" {
+		session = e.resolveServerName()
+	}
+	panes, err := e.ListPanes(ctx, session)
+	if err != nil {
+		return false, nil
+	}
+	if paneID == "" {
+		return len(panes) > 0, nil
+	}
+	for _, p := range panes {
+		if p.ID == paneID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (e *TuimuxEngine) GetPaneCommand(ctx context.Context, target string) (string, error) {
+	session, paneID := splitTarget(target)
+	if session == "" {
+		session = e.resolveServerName()
+	}
+	panes, err := e.ListPanes(ctx, session)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range panes {
+		if paneID == "" && p.Active {
+			return p.ForegroundProcess, nil
+		}
+		if p.ID == paneID {
+			return p.ForegroundProcess, nil
+		}
+	}
+	return "", fmt.Errorf("pane %q not found", target)
+}
+
+func (e *TuimuxEngine) GetSessionPath(ctx context.Context, session string) (string, error) {
+	panes, err := e.ListPanes(ctx, session)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range panes {
+		if p.Active {
+			return p.Cwd, nil
+		}
+	}
+	if len(panes) > 0 {
+		return panes[0].Cwd, nil
+	}
+	return "", fmt.Errorf("no panes found in session %q", session)
+}
+
+func (e *TuimuxEngine) WaitForSessionClose(ctx context.Context, session string, interval time.Duration) error {
+	for {
+		exists, err := e.SessionExists(ctx, session)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+}
+
+func (e *TuimuxEngine) GetCursorPosition(ctx context.Context, target string) (int, int, error) {
+	return 0, 0, ErrNotImplemented
+}
+
+func (e *TuimuxEngine) Launch(ctx context.Context, opts LaunchOptions) error {
+	if opts.SessionName == "" {
+		return fmt.Errorf("session name is required")
+	}
+
+	var createOpts []SessionOption
+	if opts.WorkingDirectory != "" {
+		createOpts = append(createOpts, WithWorkDir(opts.WorkingDirectory))
+	}
+	if err := e.CreateSession(ctx, opts.SessionName, createOpts...); err != nil {
+		return fmt.Errorf("launch: create session: %w", err)
+	}
+
+	for i, pane := range opts.Panes {
+		target := opts.SessionName
+		if i > 0 {
+			_, err := e.SplitWindow(ctx, target, false)
+			if err != nil {
+				return fmt.Errorf("launch: split pane %d: %w", i, err)
+			}
+			target = opts.SessionName + ":" + strconv.Itoa(i)
+		}
+		if len(pane.Env) > 0 {
+			for k, v := range pane.Env {
+				_ = e.SendKeys(ctx, target, fmt.Sprintf("export %s=%q", k, v), "C-m")
+			}
+		}
+		if pane.Command != "" {
+			if err := e.SendKeys(ctx, target, pane.Command, "C-m"); err != nil {
+				return fmt.Errorf("launch: send command to pane %d: %w", i, err)
+			}
+		}
+		if pane.SendKeys != "" {
+			if err := e.SendKeys(ctx, target, pane.SendKeys, "C-m"); err != nil {
+				return fmt.Errorf("launch: send keys to pane %d: %w", i, err)
+			}
+		}
+	}
+
 	return nil
 }
 

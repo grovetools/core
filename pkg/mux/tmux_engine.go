@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -134,7 +135,7 @@ func (e *TmuxEngine) SplitWindow(ctx context.Context, target string, horizontal 
 
 func (e *TmuxEngine) ListPanes(ctx context.Context, sessionName string) ([]PaneInfo, error) {
 	output, err := e.client.Run(ctx, "list-panes", "-t", sessionName, "-F",
-		`#{pane_id}:#{?pane_active,1,0}:#{pane_current_command}:#{pane_current_path}`)
+		`#{pane_id}:#{?pane_active,1,0}:#{pane_current_command}:#{pane_pid}:#{pane_current_path}`)
 	if err != nil {
 		return nil, err
 	}
@@ -143,15 +144,17 @@ func (e *TmuxEngine) ListPanes(ctx context.Context, sessionName string) ([]PaneI
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, ":", 4)
-		if len(parts) < 4 {
+		parts := strings.SplitN(line, ":", 5)
+		if len(parts) < 5 {
 			continue
 		}
+		pid, _ := strconv.Atoi(parts[3])
 		panes = append(panes, PaneInfo{
 			ID:                parts[0],
 			Active:            parts[1] == "1",
 			ForegroundProcess: parts[2],
-			Cwd:               parts[3],
+			PID:               pid,
+			Cwd:               parts[4],
 		})
 	}
 	return panes, nil
@@ -172,6 +175,92 @@ func (e *TmuxEngine) GetSessionPID(ctx context.Context, sessionName string) (int
 
 func (e *TmuxEngine) SwitchSession(ctx context.Context, name string, _ string) error {
 	return e.client.SwitchClientToSession(ctx, name)
+}
+
+func (e *TmuxEngine) GetPanePID(ctx context.Context, target string) (int, error) {
+	output, err := e.client.Run(ctx, "display-message", "-p", "-t", target, "#{pane_pid}")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(output))
+}
+
+func (e *TmuxEngine) GetCurrentSession(ctx context.Context) (string, error) {
+	return e.client.GetCurrentSession(ctx)
+}
+
+func (e *TmuxEngine) SelectWindow(ctx context.Context, target string) error {
+	return e.client.SelectWindow(ctx, target)
+}
+
+func (e *TmuxEngine) ListWindows(ctx context.Context, session string) ([]WindowInfo, error) {
+	windows, err := e.client.ListWindowsDetailed(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]WindowInfo, len(windows))
+	for i, w := range windows {
+		result[i] = WindowInfo{
+			ID:       w.ID,
+			Index:    w.Index,
+			Name:     w.Name,
+			IsActive: w.IsActive,
+			Command:  w.Command,
+			PID:      w.PID,
+		}
+	}
+	return result, nil
+}
+
+func (e *TmuxEngine) PaneExists(ctx context.Context, target string) (bool, error) {
+	return e.client.PaneExists(ctx, target), nil
+}
+
+func (e *TmuxEngine) GetPaneCommand(ctx context.Context, target string) (string, error) {
+	return e.client.GetPaneCommand(ctx, target)
+}
+
+func (e *TmuxEngine) GetSessionPath(ctx context.Context, session string) (string, error) {
+	return e.client.GetSessionPath(ctx, session)
+}
+
+func (e *TmuxEngine) WaitForSessionClose(ctx context.Context, session string, interval time.Duration) error {
+	for {
+		exists, err := e.SessionExists(ctx, session)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+}
+
+func (e *TmuxEngine) GetCursorPosition(ctx context.Context, target string) (int, int, error) {
+	return e.client.GetCursorPosition(ctx, target)
+}
+
+func (e *TmuxEngine) Launch(ctx context.Context, opts LaunchOptions) error {
+	tmuxOpts := tmux.LaunchOptions{
+		SessionName:      opts.SessionName,
+		WorkingDirectory: opts.WorkingDirectory,
+		WindowName:       opts.WindowName,
+		WindowIndex:      opts.WindowIndex,
+	}
+	for _, p := range opts.Panes {
+		tmuxOpts.Panes = append(tmuxOpts.Panes, tmux.PaneOptions{
+			Command:          p.Command,
+			WorkingDirectory: p.WorkingDirectory,
+			SendKeys:         p.SendKeys,
+			Env:              p.Env,
+		})
+	}
+	return e.client.Launch(ctx, tmuxOpts)
 }
 
 // MuxTUIEngine methods
