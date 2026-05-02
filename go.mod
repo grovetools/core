@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/grovetools/tend v0.6.0
 	github.com/grovetools/tuimux v0.0.1
 	github.com/hpcloud/tail v1.0.0
