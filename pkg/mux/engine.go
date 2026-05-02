@@ -30,6 +30,9 @@ type MuxEngine interface {
 	KillSession(ctx context.Context, name string) error
 	ListSessions(ctx context.Context) ([]SessionInfo, error)
 	SessionExists(ctx context.Context, name string) (bool, error)
+	StartServer(ctx context.Context, name string, opts ...SessionOption) error
+	KillServer(ctx context.Context, name string) error
+	ListServers(ctx context.Context) ([]ServerInfo, error)
 	SendKeys(ctx context.Context, target string, keys ...string) error
 	CapturePane(ctx context.Context, target string) (string, error)
 	WaitForIdle(ctx context.Context, target string, timeout time.Duration) error
@@ -51,6 +54,11 @@ type MuxTUIEngine interface {
 }
 
 type SessionInfo struct {
+	Name        string
+	ClientCount int
+}
+
+type ServerInfo struct {
 	Name        string
 	ClientCount int
 }

@@ -206,6 +206,29 @@ func isAgentIdleFromOutput(output string) bool {
 	return false
 }
 
+func (e *TmuxEngine) StartServer(ctx context.Context, name string, opts ...SessionOption) error {
+	return e.CreateSession(ctx, name, opts...)
+}
+
+func (e *TmuxEngine) KillServer(ctx context.Context, name string) error {
+	return e.KillSession(ctx, name)
+}
+
+func (e *TmuxEngine) ListServers(ctx context.Context) ([]ServerInfo, error) {
+	sessions, err := e.ListSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	servers := make([]ServerInfo, len(sessions))
+	for i, s := range sessions {
+		servers[i] = ServerInfo{
+			Name:        s.Name,
+			ClientCount: s.ClientCount,
+		}
+	}
+	return servers, nil
+}
+
 var (
 	_ MuxEngine    = (*TmuxEngine)(nil)
 	_ MuxTUIEngine = (*TmuxEngine)(nil)

@@ -38,11 +38,11 @@ func NewTuimuxEngineWithSocket(socketPath string) (*TuimuxEngine, error) {
 	return &TuimuxEngine{api: api, socketPath: socketPath}, nil
 }
 
-func (e *TuimuxEngine) CreateSession(ctx context.Context, name string, opts ...SessionOption) error {
+func (e *TuimuxEngine) StartServer(ctx context.Context, name string, opts ...SessionOption) error {
 	cfg := applySessionOptions(opts)
 
-	if err := e.api.CreateSession(name); err != nil {
-		return fmt.Errorf("create tuimux session: %w", err)
+	if err := e.api.CreateServer(name); err != nil {
+		return fmt.Errorf("create tuimux server: %w", err)
 	}
 
 	args := []string{"new", "-s", name, "-d"}
@@ -60,11 +60,11 @@ func (e *TuimuxEngine) CreateSession(ctx context.Context, name string, opts ...S
 
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
-		sessions, err := e.api.ListSessions()
+		servers, err := e.api.ListServers()
 		if err != nil {
 			continue
 		}
-		for _, s := range sessions {
+		for _, s := range servers {
 			if s.Name == name && s.ClientCount > 0 {
 				return nil
 			}
@@ -73,41 +73,92 @@ func (e *TuimuxEngine) CreateSession(ctx context.Context, name string, opts ...S
 	return nil
 }
 
-func (e *TuimuxEngine) KillSession(ctx context.Context, name string) error {
-	return e.api.DeleteSession(name)
+func (e *TuimuxEngine) KillServer(ctx context.Context, name string) error {
+	return e.api.DeleteServer(name)
 }
 
-func (e *TuimuxEngine) ListSessions(ctx context.Context) ([]SessionInfo, error) {
-	// Query the model's internal sessions via the hub command, which returns
-	// the sessions created by switch-session (not daemon-level sessions).
-	currentSession := os.Getenv(EnvTuimuxSession)
-	if currentSession != "" {
-		result, err := e.api.Execute(currentSession, []string{"list-sessions"})
-		if err == nil && result.ExitCode == 0 {
-			var names []string
-			if jsonErr := json.Unmarshal([]byte(result.Output), &names); jsonErr == nil {
-				sessions := make([]SessionInfo, len(names))
-				for i, name := range names {
-					sessions[i] = SessionInfo{Name: name}
-				}
-				return sessions, nil
-			}
-		}
-	}
-
-	// Fallback to daemon-level sessions.
-	sessions, err := e.api.ListSessions()
+func (e *TuimuxEngine) ListServers(ctx context.Context) ([]ServerInfo, error) {
+	servers, err := e.api.ListServers()
 	if err != nil {
 		return nil, err
 	}
-	result := make([]SessionInfo, len(sessions))
-	for i, s := range sessions {
-		result[i] = SessionInfo{
+	result := make([]ServerInfo, len(servers))
+	for i, s := range servers {
+		result[i] = ServerInfo{
 			Name:        s.Name,
 			ClientCount: s.ClientCount,
 		}
 	}
 	return result, nil
+}
+
+func (e *TuimuxEngine) resolveServerName() string {
+	if name := os.Getenv(EnvTuimuxSession); name != "" {
+		return name
+	}
+	servers, err := e.api.ListServers()
+	if err == nil && len(servers) > 0 {
+		return servers[0].Name
+	}
+	return ""
+}
+
+func (e *TuimuxEngine) CreateSession(ctx context.Context, name string, opts ...SessionOption) error {
+	serverName := e.resolveServerName()
+	if serverName == "" {
+		return fmt.Errorf("no tuimux server available")
+	}
+	cfg := applySessionOptions(opts)
+	args := []string{"new-session", "-t", name}
+	if cfg.WorkDir != "" {
+		args = append(args, "-c", cfg.WorkDir)
+	}
+	result, err := e.api.Execute(serverName, args)
+	if err != nil {
+		return fmt.Errorf("create tuimux session: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("create tuimux session: %s", result.Error)
+	}
+	return nil
+}
+
+func (e *TuimuxEngine) KillSession(ctx context.Context, name string) error {
+	serverName := e.resolveServerName()
+	if serverName == "" {
+		return fmt.Errorf("no tuimux server available")
+	}
+	result, err := e.api.Execute(serverName, []string{"kill-session", "-t", name})
+	if err != nil {
+		return fmt.Errorf("kill tuimux session: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("kill tuimux session: %s", result.Error)
+	}
+	return nil
+}
+
+func (e *TuimuxEngine) ListSessions(ctx context.Context) ([]SessionInfo, error) {
+	serverName := e.resolveServerName()
+	if serverName == "" {
+		return nil, fmt.Errorf("no tuimux server available")
+	}
+	result, err := e.api.Execute(serverName, []string{"list-sessions"})
+	if err != nil {
+		return nil, fmt.Errorf("list tuimux sessions: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("list tuimux sessions: %s", result.Error)
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(result.Output), &names); err != nil {
+		return nil, fmt.Errorf("parse session list: %w", err)
+	}
+	sessions := make([]SessionInfo, len(names))
+	for i, n := range names {
+		sessions[i] = SessionInfo{Name: n}
+	}
+	return sessions, nil
 }
 
 func (e *TuimuxEngine) SessionExists(ctx context.Context, name string) (bool, error) {
