@@ -429,6 +429,7 @@ type DaemonSSHConfig struct {
 	Enabled     *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Enable the embedded SSH server (default: false)"`
 	Port        int    `yaml:"port,omitempty" toml:"port,omitempty" jsonschema:"description=Port to listen on (default: 2222)"`
 	HostKeyPath string `yaml:"host_key_path,omitempty" toml:"host_key_path,omitempty" jsonschema:"description=Path to the SSH host key (default: ~/.local/state/grove/ssh_host_key)"`
+	BindAddress string `yaml:"bind_address,omitempty" toml:"bind_address,omitempty" jsonschema:"description=Address to bind the SSH server to (default: 127.0.0.1)"`
 }
 
 // DaemonHooks defines hooks that are triggered by daemon events.
