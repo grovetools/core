@@ -129,8 +129,20 @@ func (e *TmuxEngine) Run(ctx context.Context, target string, command string, tim
 	return e.CapturePane(ctx, target)
 }
 
-func (e *TmuxEngine) SplitWindow(ctx context.Context, target string, horizontal bool) (string, error) {
-	return e.client.SplitWindow(ctx, target, horizontal, 0, "")
+func (e *TmuxEngine) SplitWindow(ctx context.Context, target string, horizontal bool, size int, command string) (string, error) {
+	return e.client.SplitWindow(ctx, target, horizontal, size, command)
+}
+
+func (e *TmuxEngine) GetCurrentPaneID(ctx context.Context) (string, error) {
+	return e.client.GetCurrentPaneID(ctx)
+}
+
+func (e *TmuxEngine) GetPaneWidth(ctx context.Context, target string) (int, error) {
+	return e.client.GetPaneWidth(ctx, target)
+}
+
+func (e *TmuxEngine) SelectPane(ctx context.Context, target string) error {
+	return e.client.SelectPane(ctx, target)
 }
 
 func (e *TmuxEngine) ListPanes(ctx context.Context, sessionName string) ([]PaneInfo, error) {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/grovetools/core/pkg/tmux"
+	"github.com/grovetools/core/pkg/mux"
 )
 
 // NewOpenInWindowCmd creates the `open-in-window` command.
@@ -27,12 +27,12 @@ func NewOpenInWindowCmd() *cobra.Command {
 				return fmt.Errorf("--name flag is required")
 			}
 
-			// The command and its arguments are passed after "--"
 			commandToRun := strings.Join(args, " ")
 
-			client, err := tmux.NewClient()
+			ctx := context.Background()
+			engine, err := mux.DetectMuxEngine(ctx)
 			if err != nil {
-				// Not in a tmux session, so run the command directly as a fallback.
+				// Not in a mux session, so run the command directly as a fallback.
 				execCmd := exec.Command(args[0], args[1:]...) //nolint:gosec // args from CLI invocation
 				execCmd.Stdin = os.Stdin
 				execCmd.Stdout = os.Stdout
@@ -40,8 +40,12 @@ func NewOpenInWindowCmd() *cobra.Command {
 				return execCmd.Run()
 			}
 
-			// In a tmux session, use the new window management function.
-			return client.FocusOrRunCommandInWindow(context.Background(), commandToRun, windowName, windowIndex)
+			tuiEngine, ok := engine.(mux.MuxTUIEngine)
+			if !ok {
+				return fmt.Errorf("mux engine does not support window management")
+			}
+
+			return tuiEngine.FocusOrRunCommandInWindow(ctx, commandToRun, windowName, windowIndex)
 		},
 	}
 

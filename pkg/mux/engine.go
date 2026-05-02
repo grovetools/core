@@ -65,7 +65,7 @@ type MuxEngine interface {
 	WaitForIdle(ctx context.Context, target string, timeout time.Duration) error
 	WaitForText(ctx context.Context, target string, pattern string, timeout time.Duration) (string, error)
 	Run(ctx context.Context, target string, command string, timeout time.Duration) (string, error)
-	SplitWindow(ctx context.Context, target string, horizontal bool) (string, error)
+	SplitWindow(ctx context.Context, target string, horizontal bool, size int, command string) (string, error)
 	ListPanes(ctx context.Context, sessionName string) ([]PaneInfo, error)
 	NewWindow(ctx context.Context, sessionName string, windowName string, workDir string, detached bool) error
 	GetSessionPID(ctx context.Context, sessionName string) (int, error)
@@ -80,6 +80,9 @@ type MuxEngine interface {
 	GetSessionPath(ctx context.Context, session string) (string, error)
 	WaitForSessionClose(ctx context.Context, session string, interval time.Duration) error
 	GetCursorPosition(ctx context.Context, target string) (int, int, error)
+	GetCurrentPaneID(ctx context.Context) (string, error)
+	GetPaneWidth(ctx context.Context, target string) (int, error)
+	SelectPane(ctx context.Context, target string) error
 	Launch(ctx context.Context, opts LaunchOptions) error
 }
 

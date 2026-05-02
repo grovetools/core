@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/grovetools/core/pkg/tmux"
+	"github.com/grovetools/core/pkg/mux"
 )
 
 func NewTmuxEditorCmd() *cobra.Command {
@@ -39,17 +39,15 @@ func NewTmuxEditorCmd() *cobra.Command {
 				}
 			}
 
-			client, err := tmux.NewClient()
+			ctx := context.Background()
+			engine, err := mux.DetectMuxEngine(ctx)
 			if err != nil {
-				// Not in a tmux session, just open the editor normally.
-				// Use sh -c to properly handle complex commands and arguments.
+				// Not in a mux session, just open the editor normally.
 				fullCommand := editorCmdStr
 				if vimCmd != "" && strings.Contains(editorCmdStr, "vim") {
-					// If vim-cmd is provided and editor is vim-based, add -c flag
 					fullCommand += " -c " + "'" + strings.ReplaceAll(vimCmd, "'", `'\''`) + "'"
 				}
 				if filePath != "" {
-					// Basic shell quoting for file path
 					quotedPath := "'" + strings.ReplaceAll(filePath, "'", `'\''`) + "'"
 					fullCommand += " " + quotedPath
 				}
@@ -61,21 +59,24 @@ func NewTmuxEditorCmd() *cobra.Command {
 				return editorCmd.Run()
 			}
 
-			ctx := context.Background()
+			tuiEngine, ok := engine.(mux.MuxTUIEngine)
+			if !ok {
+				return fmt.Errorf("mux engine does not support TUI operations")
+			}
 
 			// If vim-cmd is provided, handle it specially
 			if vimCmd != "" {
-				session, err := client.GetCurrentSession(ctx)
+				session, err := engine.GetCurrentSession(ctx)
 				if err != nil {
 					return err
 				}
 				windowTarget := session + ":" + windowName
 
 				// Check if window exists
-				err = client.SelectWindow(ctx, windowTarget)
+				err = engine.SelectWindow(ctx, windowTarget)
 				if err == nil {
 					// Window exists, check if vim is running
-					currentCmd, err := client.GetPaneCommand(ctx, windowTarget)
+					currentCmd, err := engine.GetPaneCommand(ctx, windowTarget)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to get pane command: %v\n", err)
 					} else {
@@ -86,22 +87,19 @@ func NewTmuxEditorCmd() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "Editor running: %v\n", editorRunning)
 
 					if editorRunning {
-						// Editor is running, send the vim command
 						fmt.Fprintf(os.Stderr, "Sending vim command: :%s\n", vimCmd)
-						if err := client.SwitchClient(ctx, windowTarget); err != nil {
+						if err := engine.SwitchSession(ctx, windowTarget, ""); err != nil {
 							fmt.Fprintf(os.Stderr, "Switch client error: %v\n", err)
 						}
-						// Send keys directly to the window target
-						if err := client.SendKeys(ctx, windowTarget, ":"+vimCmd, "Enter"); err != nil {
+						if err := engine.SendKeys(ctx, windowTarget, ":"+vimCmd, "Enter"); err != nil {
 							fmt.Fprintf(os.Stderr, "SendKeys error: %v\n", err)
 							return err
 						}
-						_ = client.ClosePopup(ctx)
+						_ = tuiEngine.ClosePopup(ctx)
 						return nil
 					} else {
-						// Window exists but vim isn't running - kill it so we can recreate
 						fmt.Fprintf(os.Stderr, "Window exists but vim not running, killing window\n")
-						if err := client.KillWindow(ctx, windowTarget); err != nil {
+						if err := engine.KillWindow(ctx, windowTarget); err != nil {
 							fmt.Fprintf(os.Stderr, "Failed to kill window: %v\n", err)
 						}
 					}
@@ -114,12 +112,11 @@ func NewTmuxEditorCmd() *cobra.Command {
 				fmt.Fprintf(os.Stderr, "Starting new editor with command: %s\n", editorCmdStr)
 			}
 
-			// In a tmux session, use the new editor window management function.
-			if err := client.OpenInEditorWindow(ctx, editorCmdStr, filePath, windowName, windowIndex, reset); err != nil {
+			if err := tuiEngine.OpenInEditorWindow(ctx, editorCmdStr, filePath, windowName, windowIndex, reset); err != nil {
 				return err
 			}
 
-			_ = client.ClosePopup(ctx)
+			_ = tuiEngine.ClosePopup(ctx)
 
 			return nil
 		},

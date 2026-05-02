@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/grovetools/core/pkg/tmux"
+	"github.com/grovetools/core/pkg/mux"
 )
 
 func NewEditorCmd() *cobra.Command {
@@ -37,13 +37,12 @@ func NewEditorCmd() *cobra.Command {
 				}
 			}
 
-			client, err := tmux.NewClient()
+			ctx := context.Background()
+			engine, err := mux.DetectMuxEngine(ctx)
 			if err != nil {
-				// Not in a tmux session, just open the editor normally.
-				// Use sh -c to properly handle complex commands and arguments.
+				// Not in a mux session, just open the editor normally.
 				fullCommand := editorCmdStr
 				if filePath != "" {
-					// Basic shell quoting for file path
 					quotedPath := "'" + strings.ReplaceAll(filePath, "'", `'\''`) + "'"
 					fullCommand += " " + quotedPath
 				}
@@ -55,13 +54,16 @@ func NewEditorCmd() *cobra.Command {
 				return editorCmd.Run()
 			}
 
-			// In a tmux session, use the new editor window management function.
-			ctx := context.Background()
-			if err := client.OpenInEditorWindow(ctx, editorCmdStr, filePath, windowName, windowIndex, reset); err != nil {
+			tuiEngine, ok := engine.(mux.MuxTUIEngine)
+			if !ok {
+				return nil
+			}
+
+			if err := tuiEngine.OpenInEditorWindow(ctx, editorCmdStr, filePath, windowName, windowIndex, reset); err != nil {
 				return err
 			}
 
-			_ = client.ClosePopup(ctx)
+			_ = tuiEngine.ClosePopup(ctx)
 
 			return nil
 		},

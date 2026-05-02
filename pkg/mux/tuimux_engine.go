@@ -274,7 +274,19 @@ func (e *TuimuxEngine) Run(ctx context.Context, target string, command string, t
 	return result.Output, nil
 }
 
-func (e *TuimuxEngine) SplitWindow(ctx context.Context, target string, horizontal bool) (string, error) {
+func (e *TuimuxEngine) GetCurrentPaneID(ctx context.Context) (string, error) {
+	return "", ErrNotImplemented
+}
+
+func (e *TuimuxEngine) GetPaneWidth(ctx context.Context, target string) (int, error) {
+	return 0, ErrNotImplemented
+}
+
+func (e *TuimuxEngine) SelectPane(ctx context.Context, target string) error {
+	return ErrNotImplemented
+}
+
+func (e *TuimuxEngine) SplitWindow(ctx context.Context, target string, horizontal bool, size int, command string) (string, error) {
 	session, pane := splitTarget(target)
 	args := []string{"split-window"}
 	if horizontal {
@@ -515,7 +527,7 @@ func (e *TuimuxEngine) Launch(ctx context.Context, opts LaunchOptions) error {
 	for i, pane := range opts.Panes {
 		target := opts.SessionName
 		if i > 0 {
-			_, err := e.SplitWindow(ctx, target, false)
+			_, err := e.SplitWindow(ctx, target, false, 0, "")
 			if err != nil {
 				return fmt.Errorf("launch: split pane %d: %w", i, err)
 			}
