@@ -170,7 +170,7 @@ func (e *TmuxEngine) GetSessionPID(ctx context.Context, sessionName string) (int
 	return e.client.GetSessionPID(ctx, sessionName)
 }
 
-func (e *TmuxEngine) SwitchSession(ctx context.Context, name string) error {
+func (e *TmuxEngine) SwitchSession(ctx context.Context, name string, _ string) error {
 	return e.client.SwitchClientToSession(ctx, name)
 }
 

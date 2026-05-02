@@ -78,6 +78,24 @@ func (e *TuimuxEngine) KillSession(ctx context.Context, name string) error {
 }
 
 func (e *TuimuxEngine) ListSessions(ctx context.Context) ([]SessionInfo, error) {
+	// Query the model's internal sessions via the hub command, which returns
+	// the sessions created by switch-session (not daemon-level sessions).
+	currentSession := os.Getenv(EnvTuimuxSession)
+	if currentSession != "" {
+		result, err := e.api.Execute(currentSession, []string{"list-sessions"})
+		if err == nil && result.ExitCode == 0 {
+			var names []string
+			if jsonErr := json.Unmarshal([]byte(result.Output), &names); jsonErr == nil {
+				sessions := make([]SessionInfo, len(names))
+				for i, name := range names {
+					sessions[i] = SessionInfo{Name: name}
+				}
+				return sessions, nil
+			}
+		}
+	}
+
+	// Fallback to daemon-level sessions.
 	sessions, err := e.api.ListSessions()
 	if err != nil {
 		return nil, err
@@ -93,7 +111,7 @@ func (e *TuimuxEngine) ListSessions(ctx context.Context) ([]SessionInfo, error) 
 }
 
 func (e *TuimuxEngine) SessionExists(ctx context.Context, name string) (bool, error) {
-	sessions, err := e.api.ListSessions()
+	sessions, err := e.ListSessions(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -277,12 +295,16 @@ func (e *TuimuxEngine) GetSessionPID(ctx context.Context, sessionName string) (i
 	return pid, nil
 }
 
-func (e *TuimuxEngine) SwitchSession(ctx context.Context, name string) error {
+func (e *TuimuxEngine) SwitchSession(ctx context.Context, name string, cwd string) error {
 	currentSession := os.Getenv(EnvTuimuxSession)
 	if currentSession == "" {
 		return fmt.Errorf("not inside a tuimux session (TUIMUX_SESSION not set)")
 	}
-	result, err := e.api.Execute(currentSession, []string{"switch-session", "-t", name})
+	args := []string{"switch-session", "-t", name}
+	if cwd != "" {
+		args = append(args, "-c", cwd)
+	}
+	result, err := e.api.Execute(currentSession, args)
 	if err != nil {
 		return err
 	}
