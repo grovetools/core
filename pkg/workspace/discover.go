@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -224,6 +225,10 @@ type DiscoveryService struct {
 
 // NewDiscoveryService creates a new discovery service.
 func NewDiscoveryService(logger *logrus.Logger) *DiscoveryService {
+	if logger == nil {
+		logger = logrus.New()
+		logger.SetOutput(io.Discard)
+	}
 	return &DiscoveryService{logger: logger}
 }
 
