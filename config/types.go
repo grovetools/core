@@ -312,6 +312,16 @@ type TUIConfig struct {
 
 	// Focus configures the BSP pane focus indicator system.
 	Focus *FocusConfig `yaml:"focus,omitempty" toml:"focus,omitempty" jsonschema:"description=BSP pane focus indicator configuration" jsonschema_extras:"x-layer=global,x-priority=61"`
+
+	// DrawerOrientation controls the position of the active sessions drawer.
+	// "right" places it as a vertical sidebar; "bottom" places it as a
+	// horizontal bar. Default: "right".
+	DrawerOrientation string `yaml:"drawer_orientation,omitempty" toml:"drawer_orientation,omitempty" jsonschema:"description=Active sessions drawer position,enum=right,enum=bottom,default=right" jsonschema_extras:"x-layer=global,x-priority=62"`
+
+	// DrawerExpanded controls whether the active sessions drawer starts
+	// expanded (showing full list) or collapsed (mini icons only).
+	// Default: false (collapsed).
+	DrawerExpanded bool `yaml:"drawer_expanded,omitempty" toml:"drawer_expanded,omitempty" jsonschema:"description=Start active sessions drawer expanded,default=false" jsonschema_extras:"x-layer=global,x-priority=63"`
 }
 
 // FocusConfig controls how the focused BSP pane is visually distinguished.
