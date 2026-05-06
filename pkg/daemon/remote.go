@@ -741,6 +741,88 @@ func (c *RemoteClient) GetJobLogs(ctx context.Context, jobID string) ([]models.L
 	return lines, nil
 }
 
+// StreamLogs subscribes to the daemon's aggregated workspace log stream via SSE.
+func (c *RemoteClient) StreamLogs(ctx context.Context, opts models.LogStreamOptions) (<-chan models.LogStreamLine, error) {
+	params := url.Values{}
+	if opts.Scope != "" {
+		params.Set("scope", opts.Scope)
+	}
+	if opts.Workspace != "" {
+		params.Set("workspace", opts.Workspace)
+	}
+	if opts.Level != "" {
+		params.Set("level", opts.Level)
+	}
+	if opts.System {
+		params.Set("system", "true")
+	}
+	if opts.Replay > 0 {
+		params.Set("replay", fmt.Sprintf("%d", opts.Replay))
+	}
+
+	reqURL := baseURL + "/api/logs/stream?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stream request: %w", err)
+	}
+
+	streamTransport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(dialCtx, "unix", c.socketPath)
+		},
+	}
+	streamClient := &http.Client{
+		Transport: streamTransport,
+		Timeout:   0,
+	}
+
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to log stream: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("log stream returned status %d", resp.StatusCode)
+	}
+
+	ch := make(chan models.LogStreamLine, 100)
+
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		defer streamTransport.CloseIdleConnections()
+
+		scanner := bufio.NewScanner(resp.Body)
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 1*1024*1024)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if strings.HasPrefix(line, ":") || line == "" {
+				continue
+			}
+
+			if strings.HasPrefix(line, "data: ") {
+				jsonStr := strings.TrimPrefix(line, "data: ")
+				var entry models.LogStreamLine
+				if err := json.Unmarshal([]byte(jsonStr), &entry); err != nil {
+					continue
+				}
+				select {
+				case ch <- entry:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
 // StreamJobLogs subscribes to real-time log output for a specific job via SSE.
 func (c *RemoteClient) StreamJobLogs(ctx context.Context, jobID string) (<-chan models.JobStreamEvent, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/jobs/"+jobID+"/logs/stream", nil)

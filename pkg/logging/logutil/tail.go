@@ -3,6 +3,7 @@ package logutil
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -93,7 +94,7 @@ func readLastNLines(f *os.File, n int) ([]string, error) {
 // the interactive TUI uses hpcloud/tail for its richer rotation
 // semantics. See the `Tail-lines sentinel semantics` comment above
 // for the meaning of tailLines.
-func TailFile(wsName, wsPath, path string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
+func TailFile(ctx context.Context, wsName, wsPath, path string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
 	defer wg.Done()
 
 	f, err := os.Open(path)
@@ -145,6 +146,11 @@ func TailFile(wsName, wsPath, path string, lineChan chan<- TailedLine, wg *sync.
 	}
 	reader := bufio.NewReader(f)
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
 			lineChan <- TailedLine{Workspace: wsName, WorkspacePath: wsPath, Line: strings.TrimSpace(line)}
@@ -163,7 +169,7 @@ func TailFile(wsName, wsPath, path string, lineChan chan<- TailedLine, wg *sync.
 // It handles the case where the directory or files don't exist yet.
 // See the `Tail-lines sentinel semantics` comment above for the
 // meaning of tailLines.
-func TailDirectory(wsName, wsPath, logsDir string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
+func TailDirectory(ctx context.Context, wsName, wsPath, logsDir string, lineChan chan<- TailedLine, wg *sync.WaitGroup, follow bool, tailLines int) {
 	defer wg.Done()
 
 	var currentFile string
@@ -171,6 +177,11 @@ func TailDirectory(wsName, wsPath, logsDir string, lineChan chan<- TailedLine, w
 
 	// Wait for directory and files to appear.
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		logFile, err := FindLatestLogFile(logsDir)
 		if err == nil {
 			currentFile = logFile
@@ -234,6 +245,13 @@ func TailDirectory(wsName, wsPath, logsDir string, lineChan chan<- TailedLine, w
 	defer checkInterval.Stop()
 
 	for {
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return
+		default:
+		}
+
 		// Drain available lines.
 		for {
 			line, err := reader.ReadString('\n')
@@ -245,7 +263,12 @@ func TailDirectory(wsName, wsPath, logsDir string, lineChan chan<- TailedLine, w
 			}
 		}
 
-		<-checkInterval.C
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return
+		case <-checkInterval.C:
+		}
 
 		// Check for newer log file (daily rotation).
 		latestFile, err := FindLatestLogFile(logsDir)

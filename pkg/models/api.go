@@ -229,6 +229,22 @@ type PlanRunOptions struct {
 	AutoRun  bool     `json:"autorun,omitempty"`
 }
 
+// LogStreamOptions configures the daemon's aggregated workspace log stream.
+type LogStreamOptions struct {
+	Scope     string `json:"scope"`     // "workspace", "ecosystem", "all", "system"
+	Workspace string `json:"workspace"` // Path of the active workspace context
+	Level     string `json:"level"`     // "debug", "info", "warn", "error"
+	System    bool   `json:"system"`    // Whether to interleave system logs
+	Replay    int    `json:"replay"`    // Number of historical lines to replay
+}
+
+// LogStreamLine represents a single workspace log entry in the aggregated stream.
+type LogStreamLine struct {
+	Workspace     string `json:"workspace"`
+	WorkspacePath string `json:"workspace_path"`
+	Line          string `json:"line"`
+}
+
 // LogLine represents a single streamed log entry.
 type LogLine struct {
 	Line      string    `json:"line"`

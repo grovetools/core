@@ -276,6 +276,11 @@ func (c *LocalClient) ListJobs(ctx context.Context, filter models.JobFilter) ([]
 	return nil, errors.New("job execution requires the grove daemon")
 }
 
+// StreamLogs returns an error since aggregated log streaming requires the daemon.
+func (c *LocalClient) StreamLogs(ctx context.Context, opts models.LogStreamOptions) (<-chan models.LogStreamLine, error) {
+	return nil, errors.New("aggregated log streaming requires the grove daemon; start groved first")
+}
+
 // StreamJobLogs returns an error since log streaming requires the daemon.
 func (c *LocalClient) StreamJobLogs(ctx context.Context, jobID string) (<-chan models.JobStreamEvent, error) {
 	return nil, errors.New("log streaming requires the grove daemon; use daemon.NewWithAutoStart()")

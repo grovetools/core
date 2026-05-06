@@ -211,7 +211,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 				}).Debug("Waiting for log files in directory")
 
 				wg.Add(1)
-				go logutil.TailDirectory(ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
+				go logutil.TailDirectory(cmd.Context(), ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
 				continue
 			}
 			logger.WithField("workspace", ws.Name).Debugf("Skipping: %v", err)
@@ -226,9 +226,9 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		// Use TailDirectory to handle file rotation/switching
 		if follow {
-			go logutil.TailDirectory(ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
+			go logutil.TailDirectory(cmd.Context(), ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
 		} else {
-			go logutil.TailFile(ws.Name, ws.Path, logFile, lineChan, &wg, follow, tail)
+			go logutil.TailFile(cmd.Context(), ws.Name, ws.Path, logFile, lineChan, &wg, follow, tail)
 		}
 	}
 
@@ -237,10 +237,10 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(systemLogsDir); err == nil {
 		wg.Add(1)
 		if follow || systemOnly {
-			go logutil.TailDirectory("system", "", systemLogsDir, lineChan, &wg, follow || systemOnly, tail)
+			go logutil.TailDirectory(cmd.Context(), "system", "", systemLogsDir, lineChan, &wg, follow || systemOnly, tail)
 		} else {
 			if sysLogFile, err := logutil.FindLatestLogFile(systemLogsDir); err == nil {
-				go logutil.TailFile("system", "", sysLogFile, lineChan, &wg, follow, tail)
+				go logutil.TailFile(cmd.Context(), "system", "", sysLogFile, lineChan, &wg, follow, tail)
 			} else {
 				wg.Done()
 			}
