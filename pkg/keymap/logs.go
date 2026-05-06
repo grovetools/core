@@ -11,22 +11,25 @@ import (
 // LogKeyMap defines all key bindings for the logs TUI.
 type LogKeyMap struct {
 	keymap.Base
-	PageUp          key.Binding
-	PageDown        key.Binding
-	HalfUp          key.Binding
-	HalfDown        key.Binding
-	GotoTop         key.Binding
-	GotoEnd         key.Binding
-	Expand          key.Binding
-	Search          key.Binding
-	Clear           key.Binding
-	ToggleFollow    key.Binding
-	ToggleFilters   key.Binding
-	ViewJSON        key.Binding
-	VisualModeStart key.Binding
-	Yank            key.Binding
-	SwitchFocus     key.Binding
-	ToggleScope     key.Binding
+	PageUp           key.Binding
+	PageDown         key.Binding
+	HalfUp           key.Binding
+	HalfDown         key.Binding
+	GotoTop          key.Binding
+	GotoEnd          key.Binding
+	Expand           key.Binding
+	Search           key.Binding
+	Clear            key.Binding
+	ToggleFollow     key.Binding
+	ToggleFilters    key.Binding
+	ViewJSON         key.Binding
+	VisualModeStart  key.Binding
+	Yank             key.Binding
+	SwitchFocus      key.Binding
+	ToggleScope      key.Binding
+	ToggleSystem     key.Binding
+	CycleLevel       key.Binding
+	ComponentSummary key.Binding
 }
 
 // NewLogKeyMap creates a new LogKeyMap with user configuration applied.
@@ -94,8 +97,20 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 			key.WithHelp("tab", "switch focus"),
 		),
 		ToggleScope: key.NewBinding(
-			key.WithKeys("s", "S"),
-			key.WithHelp("s", "toggle scope"),
+			key.WithKeys("s"),
+			key.WithHelp("s", "cycle scope"),
+		),
+		ToggleSystem: key.NewBinding(
+			key.WithKeys("S"),
+			key.WithHelp("S", "toggle system logs"),
+		),
+		CycleLevel: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "cycle log level"),
+		),
+		ComponentSummary: key.NewBinding(
+			key.WithKeys("C"),
+			key.WithHelp("C", "component summary"),
 		),
 	}
 
@@ -107,7 +122,7 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 
 // ShortHelp returns keybindings to be shown in the mini help view.
 func (k LogKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleFollow, k.ToggleFilters, k.ToggleScope, k.Search}
+	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleFollow, k.ToggleFilters, k.ToggleScope, k.ToggleSystem, k.CycleLevel, k.ComponentSummary, k.Search}
 }
 
 // FullHelp returns keybindings for the expanded help view.
@@ -128,6 +143,9 @@ func (k LogKeyMap) FullHelp() [][]key.Binding {
 			k.ToggleFollow,
 			k.ToggleFilters,
 			k.ToggleScope,
+			k.ToggleSystem,
+			k.CycleLevel,
+			k.ComponentSummary,
 			k.Search,
 			k.ViewJSON,
 			k.VisualModeStart,

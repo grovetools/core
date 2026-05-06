@@ -3,11 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/pkg/daemon"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/tui/embed"
 	"github.com/grovetools/core/tui/logs"
@@ -37,27 +39,42 @@ func (s standaloneLogs) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (s standaloneLogs) View() string { return s.inner.View() }
 
 // runLogsTUI launches the interactive logs TUI as a standalone
-// bubbletea program. It builds a logs.Config rooted at the workspaces
-// passed in on the command line and captures them in a closure so the
-// discovery goroutine can re-read the set on every tick (the CLI set
-// is static, so the closure just returns the same slice).
+// bubbletea program. It connects to the daemon's aggregated log
+// stream instead of doing local file tailing.
 func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, systemOnly, includeSystem, ecosystem bool) error {
-	// Load logging config for component filtering, starting with defaults
 	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
 	}
 
-	ws := workspaces
+	// Resolve the initial workspace path from the workspace list.
+	var initialPath string
+	if len(workspaces) > 0 && workspaces[0] != nil {
+		initialPath = workspaces[0].Path
+	}
+
+	// Resolve scope from CLI flags.
+	initialScope := "workspace"
+	switch {
+	case systemOnly:
+		initialScope = "system"
+	case ecosystem:
+		initialScope = "ecosystem"
+	}
+
+	// Connect to the daemon (or auto-start it).
+	cwd, _ := os.Getwd()
+	daemonClient := daemon.NewWithAutoStart(cwd)
+
 	cfg := logs.Config{
-		GetWorkspaces:  func() []*workspace.WorkspaceNode { return ws },
-		Ecosystem:      ecosystem,
-		SystemOnly:     systemOnly,
-		IncludeSystem:  includeSystem,
-		LogConfig:      &logCfg,
-		OverrideOpts:   overrideOpts,
-		Follow:         follow,
-		ReplayExisting: true,
+		DaemonClient:         daemonClient,
+		InitialScope:         initialScope,
+		IncludeSystem:        includeSystem,
+		LogConfig:            &logCfg,
+		OverrideOpts:         overrideOpts,
+		Follow:               follow,
+		InitialWorkspacePath: initialPath,
+		Replay:               500,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
