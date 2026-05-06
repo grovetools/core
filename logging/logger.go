@@ -24,7 +24,7 @@ import (
 type LogScope int
 
 const (
-	// ScopeWorkspace routes logs to the local project's .grove/logs directory.
+	// ScopeWorkspace routes logs to the XDG state directory (~/.local/state/grove/logs/workspaces/<identifier>/).
 	ScopeWorkspace LogScope = iota
 	// ScopeSystem routes logs to the central XDG state directory (~/.local/state/grove/logs).
 	ScopeSystem
@@ -358,61 +358,47 @@ func NewLogger(component string) *logrus.Entry {
 			// Use explicitly configured path
 			logFilePath = expandPath(logCfg.File.Path)
 		} else {
-			// Default to .grove/logs/workspace-<date>.log in the project root
-			// Use workspace-aware path resolution to find the correct project root
+			// Default to XDG state directory organized by workspace identifier
 			cwd, err := os.Getwd()
 			if err == nil {
-				// Check if cwd actually exists. If not, skip file logging entirely.
-				// This prevents recreating zombie worktree directories that were deleted.
 				if _, err := os.Stat(cwd); err != nil {
-					// cwd doesn't exist - skip file logging (logs still go to stderr)
-					logger.Debugf("Current working directory does not exist: %s. Skipping file logging.", cwd)
 					cwd = ""
 				}
 			}
 
 			if cwd != "" {
-				// Determine the log base path using workspace discovery
-				logBasePath := cwd // fallback to cwd if not in a workspace
+				now := time.Now()
+				dateStr := now.Format("2006-01-02")
 
-				// Try to find the workspace containing the current directory
 				node, err := workspace.GetProjectByPath(cwd)
 				if err == nil && node != nil {
-					// Use the workspace root path for logs
-					logBasePath = node.Path
+					logFilePath = filepath.Join(paths.StateDir(), "logs", "workspaces", node.Identifier("/"), fmt.Sprintf("workspace-%s.log", dateStr))
 				} else {
-					// Not in a valid Grove project - fall back to system log
-					// to prevent dropping .grove/logs/ folders in random directories
-					now := time.Now()
-					dateStr := now.Format("2006-01-02")
 					logFilePath = filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", dateStr))
-				}
-
-				if logFilePath == "" {
-					now := time.Now()
-					dateStr := now.Format("2006-01-02")
-					logFilePath = filepath.Join(logBasePath, ".grove", "logs", fmt.Sprintf("workspace-%s.log", dateStr))
 				}
 			}
 		}
 
 		if logFilePath != "" {
-			// Use the zombie-aware writer instead of opening the file directly.
-			// This prevents recreating deleted worktree directories.
-			writer := newZombieAwareWriter(logFilePath)
-
-			var fileFormatter logrus.Formatter
-			if logCfg.File.Format == "json" {
-				fileFormatter = &logrus.JSONFormatter{}
-			} else {
-				// Default to a simple text formatter for files if not JSON
-				fileFormatter = &TextFormatter{Config: FormatConfig{DisableTimestamp: false}}
+			if err := os.MkdirAll(filepath.Dir(logFilePath), 0o755); err != nil {
+				fmt.Fprintf(os.Stderr, "grove-log: failed to create log directory: %v\n", err)
 			}
-			logger.AddHook(&FileHook{
-				Writer:    writer,
-				LogLevels: logrus.AllLevels,
-				Formatter: fileFormatter,
-			})
+			writer, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "grove-log: failed to open log file: %v\n", err)
+			} else {
+				var fileFormatter logrus.Formatter
+				if logCfg.File.Format == "json" {
+					fileFormatter = &logrus.JSONFormatter{}
+				} else {
+					fileFormatter = &TextFormatter{Config: FormatConfig{DisableTimestamp: false}}
+				}
+				logger.AddHook(&FileHook{
+					Writer:    writer,
+					LogLevels: logrus.AllLevels,
+					Formatter: fileFormatter,
+				})
+			}
 		}
 	}
 

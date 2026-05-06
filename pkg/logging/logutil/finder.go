@@ -37,8 +37,8 @@ func FindLogFileForWorkspace(ws *workspace.WorkspaceNode) (logFile, logsDir stri
 		return expanded, filepath.Dir(expanded), nil
 	}
 
-	// Default path logic
-	logsDir = filepath.Join(ws.Path, ".grove", "logs")
+	// Default: XDG state directory organized by workspace identifier
+	logsDir = filepath.Join(paths.StateDir(), "logs", "workspaces", ws.Identifier("/"))
 	logFile, err = FindLatestLogFile(logsDir)
 	return logFile, logsDir, err
 }

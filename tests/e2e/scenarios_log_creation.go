@@ -11,6 +11,7 @@ import (
 	"github.com/grovetools/tend/pkg/harness"
 
 	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // WorkspaceLogCreationScenario tests that logs can be created in a workspace project's .grove/logs dir.
@@ -65,7 +66,7 @@ logging:
 			{
 				Name: "Verify log directory was created",
 				Func: func(ctx *harness.Context) error {
-					logsDir := filepath.Join(projectDir, ".grove", "logs")
+					logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "log-test-proj")
 					if _, err := os.Stat(logsDir); os.IsNotExist(err) {
 						return fmt.Errorf("logs directory was not created at %s", logsDir)
 					}
@@ -75,7 +76,7 @@ logging:
 			{
 				Name: "Find and verify log file content",
 				Func: func(ctx *harness.Context) error {
-					logsDir := filepath.Join(projectDir, ".grove", "logs")
+					logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "log-test-proj")
 
 					// List all files in the logs directory
 					entries, err := os.ReadDir(logsDir)
@@ -222,7 +223,7 @@ logging:
 					log := logging.NewLogger("root-test")
 					log.Info("log from project root")
 
-					logsDir := filepath.Join(projectDir, ".grove", "logs")
+					logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "log-placement-proj")
 					if err := verifyLogFile(logsDir, "log from project root"); err != nil {
 						return fmt.Errorf("root execution: %w", err)
 					}
@@ -240,8 +241,8 @@ logging:
 					log := logging.NewLogger("subdir-test")
 					log.Info("log from subdirectory")
 
-					// Logs should still go to project root, not subdirectory
-					logsDir := filepath.Join(projectDir, ".grove", "logs")
+					// Logs should still go to project root's XDG log dir
+					logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "log-placement-proj")
 					if err := verifyLogFile(logsDir, "log from subdirectory"); err != nil {
 						return fmt.Errorf("subdirectory execution: %w", err)
 					}
@@ -256,7 +257,7 @@ logging:
 				},
 			},
 			{
-				Name: "Execute from worktree and verify logs go to worktree root",
+				Name: "Execute from worktree and verify logs go to worktree XDG dir",
 				Func: func(ctx *harness.Context) error {
 					if err := os.Chdir(worktreeDir); err != nil {
 						return err
@@ -266,8 +267,8 @@ logging:
 					log := logging.NewLogger("worktree-test")
 					log.Info("log from worktree")
 
-					// Logs should go to the worktree's own .grove/logs directory
-					worktreeLogsDir := filepath.Join(worktreeDir, ".grove", "logs")
+					// Logs should go to the worktree's XDG directory
+					worktreeLogsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "log-placement-proj", "feature-branch")
 					if err := verifyLogFile(worktreeLogsDir, "log from worktree"); err != nil {
 						return fmt.Errorf("worktree execution: %w", err)
 					}
@@ -388,7 +389,7 @@ logging:
 					log := logging.NewLogger("eco-root-test")
 					log.Info("log from ecosystem root")
 
-					logsDir := filepath.Join(ecoRootDir, ".grove", "logs")
+					logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "my-ecosystem")
 					if err := verifyLogFile(logsDir, "log from ecosystem root"); err != nil {
 						return fmt.Errorf("ecosystem root execution: %w", err)
 					}
@@ -396,7 +397,7 @@ logging:
 				},
 			},
 			{
-				Name: "Execute from sub-project and verify logs go to sub-project root",
+				Name: "Execute from sub-project and verify logs go to sub-project XDG dir",
 				Func: func(ctx *harness.Context) error {
 					if err := os.Chdir(subProjDir); err != nil {
 						return err
@@ -406,8 +407,7 @@ logging:
 					log := logging.NewLogger("subproj-test")
 					log.Info("log from sub-project")
 
-					// Logs should go to the sub-project's own .grove/logs directory
-					subProjLogsDir := filepath.Join(subProjDir, ".grove", "logs")
+					subProjLogsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "my-ecosystem", "my-subproject")
 					if err := verifyLogFile(subProjLogsDir, "log from sub-project"); err != nil {
 						return fmt.Errorf("sub-project execution: %w", err)
 					}
@@ -416,7 +416,7 @@ logging:
 				},
 			},
 			{
-				Name: "Execute from ecosystem worktree and verify logs go to ecosystem worktree",
+				Name: "Execute from ecosystem worktree and verify logs go to XDG dir",
 				Func: func(ctx *harness.Context) error {
 					if err := os.Chdir(ecoWorktreeDir); err != nil {
 						return err
@@ -426,7 +426,7 @@ logging:
 					log := logging.NewLogger("eco-worktree-test")
 					log.Info("log from ecosystem worktree")
 
-					ecoWorktreeLogsDir := filepath.Join(ecoWorktreeDir, ".grove", "logs")
+					ecoWorktreeLogsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "my-ecosystem", "eco-feature")
 					if err := verifyLogFile(ecoWorktreeLogsDir, "log from ecosystem worktree"); err != nil {
 						return fmt.Errorf("ecosystem worktree execution: %w", err)
 					}
@@ -445,8 +445,7 @@ logging:
 					log := logging.NewLogger("linked-subproj-worktree-test")
 					log.Info("log from linked sub-project worktree")
 
-					// Logs should go to the linked sub-project worktree's own directory
-					linkedLogsDir := filepath.Join(linkedSubProjWorktreeDir, ".grove", "logs")
+					linkedLogsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "my-ecosystem", "eco-feature", "my-subproject")
 					if err := verifyLogFile(linkedLogsDir, "log from linked sub-project worktree"); err != nil {
 						return fmt.Errorf("linked sub-project worktree execution: %w", err)
 					}
