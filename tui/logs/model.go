@@ -83,6 +83,7 @@ const (
 	ScopeEcosystem
 	ScopeAll
 	ScopeSystem
+	ScopeDaemon
 )
 
 // String returns the human-readable label used in the status bar.
@@ -96,6 +97,8 @@ func (s LogScope) String() string {
 		return "All"
 	case ScopeSystem:
 		return "System"
+	case ScopeDaemon:
+		return "Daemon"
 	default:
 		return "Unknown"
 	}
@@ -112,6 +115,8 @@ func (s LogScope) scopeToParam() string {
 		return "all"
 	case ScopeSystem:
 		return "system"
+	case ScopeDaemon:
+		return "daemon"
 	default:
 		return "workspace"
 	}
@@ -492,6 +497,8 @@ func New(ctx context.Context, cfg Config) *Model {
 		m.activeScope = ScopeAll
 	case "system":
 		m.activeScope = ScopeSystem
+	case "daemon":
+		m.activeScope = ScopeDaemon
 	default:
 		m.activeScope = ScopeProject
 	}
@@ -578,6 +585,16 @@ func (m *Model) connectToDaemon() tea.Cmd {
 	if client == nil {
 		return func() tea.Msg {
 			return streamErrMsg{err: fmt.Errorf("no daemon client configured")}
+		}
+	}
+
+	if m.activeScope == ScopeDaemon {
+		return func() tea.Msg {
+			ch, err := client.StreamState(sCtx)
+			if err != nil {
+				return streamErrMsg{err: err}
+			}
+			return m.pumpFirstStateUpdate(sCtx, ch)
 		}
 	}
 
@@ -1234,6 +1251,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case ScopeAll:
 					m.activeScope = ScopeSystem
 				case ScopeSystem:
+					m.activeScope = ScopeDaemon
+				case ScopeDaemon:
 					m.activeScope = ScopeProject
 				}
 				m.statusMessage = fmt.Sprintf("Scope: %s", m.activeScope)
@@ -1348,6 +1367,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pumpStreamMsg:
 		// Non-JSON line was skipped; re-arm the pump.
 		return m, pumpStream(msg.ctx, msg.ch)
+
+	case batchStateMsg:
+		cmd := m.handleNewLog(msg.log)
+		return m, tea.Batch(cmd, pumpStateStream(msg.ctx, msg.ch))
+
+	case pumpStateMsg:
+		return m, pumpStateStream(msg.ctx, msg.ch)
 
 	case streamErrMsg:
 		m.statusMessage = fmt.Sprintf("Stream error: %v", msg.err)
@@ -1526,7 +1552,7 @@ func (m *Model) View() string {
 	scopeIndicator := fmt.Sprintf(" [Scope: %s]", m.activeScope)
 
 	systemIndicator := ""
-	if m.includeSystem && m.activeScope != ScopeSystem {
+	if m.includeSystem && m.activeScope != ScopeSystem && m.activeScope != ScopeDaemon {
 		systemIndicator = " [+System]"
 	}
 
