@@ -122,6 +122,7 @@ type ChannelSendRequest struct {
 	JobID     string `json:"job_id"`
 	JobTitle  string `json:"job_title,omitempty"` // Explicit title for cross-daemon tagging
 	Recipient string `json:"recipient,omitempty"` // Empty = use LastSender or broadcast
+	GroupID   string `json:"group_id,omitempty"`  // Signal group ID (base64); when set, sends to group
 	Message   string `json:"message"`
 }
 
@@ -172,8 +173,9 @@ type SessionAutonomousRequest struct {
 
 // SessionPatchRequest represents a partial update to session metadata.
 type SessionPatchRequest struct {
-	TmuxTarget string `json:"tmux_target,omitempty"`
-	LastSender string `json:"last_sender,omitempty"`
+	TmuxTarget      string `json:"tmux_target,omitempty"`
+	LastSender      string `json:"last_sender,omitempty"`
+	LastSenderGroup string `json:"last_sender_group,omitempty"`
 }
 
 // --- Job Runner API Types ---
