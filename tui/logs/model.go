@@ -62,6 +62,9 @@ type Config struct {
 	InitialWorkspacePath string
 	// Replay is the number of historical lines the daemon should replay on connect.
 	Replay int
+	// Compact suppresses the detail split pane and focus-switching keys,
+	// rendering only the streaming log list.
+	Compact bool
 }
 
 // paneFocus tracks which pane has focus.
@@ -392,6 +395,9 @@ type Model struct {
 	jsonView       bool
 	lastGotoG      time.Time
 
+	// Compact mode: list-only, no detail viewport or focus switching.
+	compact bool
+
 	// Component picker overlay
 	showComponentPicker bool
 	hiddenComponents    map[string]bool
@@ -475,6 +481,7 @@ func New(ctx context.Context, cfg Config) *Model {
 		workspaceColorMap:   make(map[string]lipgloss.Style),
 		minLevel:            1, // default to INFO
 		hiddenComponents:    make(map[string]bool),
+		compact:             cfg.Compact,
 	}
 
 	// Resolve initial scope
@@ -931,7 +938,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// If in JSON view, delegate updates to the JSON tree component
-	if m.jsonView {
+	if m.jsonView && !m.compact {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			if key.Matches(msg, m.keys.Base.Quit) {
@@ -997,6 +1004,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, m.keys.SwitchFocus) || key.Matches(msg, m.keys.Expand):
+				if m.compact {
+					return m, nil
+				}
 				if m.focus == listPane {
 					m.focus = viewportPane
 					m.viewport.Height = m.height - 3
@@ -1256,7 +1266,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.openComponentPicker()
 				return m, nil
 
-			case key.Matches(msg, m.keys.ViewJSON):
+			case key.Matches(msg, m.keys.ViewJSON) && !m.compact:
 				if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 					if li, ok := selectedItem.(logItem); ok {
 						var jsonData interface{}
@@ -1291,7 +1301,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.help.SetSize(msg.Width, msg.Height)
 
-		if m.height < 15 {
+		if m.compact || m.height < 15 {
 			m.list.SetSize(msg.Width, m.height-1)
 			viewportWidth := msg.Width - 12
 			if viewportWidth < 1 {
@@ -1536,7 +1546,7 @@ func (m *Model) View() string {
 	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s | ? for help | q to quit",
 		position, scopeIndicator, systemIndicator, levelIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
 
-	if m.height < 15 {
+	if m.compact || m.height < 15 {
 		var listView string
 		func() {
 			defer func() {
