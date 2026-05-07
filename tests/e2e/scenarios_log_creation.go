@@ -14,14 +14,14 @@ import (
 	"github.com/grovetools/core/pkg/paths"
 )
 
-// WorkspaceLogCreationScenario tests that logs can be created in a workspace project's .grove/logs dir.
+// WorkspaceLogCreationScenario tests that logs can be created in the XDG state directory.
 func WorkspaceLogCreationScenario() *harness.Scenario {
 	var projectDir string
 	var origDir string
 
 	return &harness.Scenario{
 		Name:        "workspace-log-creation",
-		Description: "Verifies logs can be created in a workspace's .grove/logs directory",
+		Description: "Verifies logs can be created in the XDG state directory",
 		Tags:        []string{"core", "logging", "workspace"},
 		Steps: []harness.Step{
 			{
@@ -51,6 +51,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -136,6 +137,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -205,11 +207,15 @@ logging:
 				},
 			},
 			{
-				Name: "Save original directory",
+				Name: "Save original directory and isolate XDG state",
 				Func: func(ctx *harness.Context) error {
 					var err error
 					origDir, err = os.Getwd()
-					return err
+					if err != nil {
+						return err
+					}
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					return nil
 				},
 			},
 			{
@@ -279,6 +285,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -371,11 +378,15 @@ logging:
 				},
 			},
 			{
-				Name: "Save original directory",
+				Name: "Save original directory and isolate XDG state",
 				Func: func(ctx *harness.Context) error {
 					var err error
 					origDir, err = os.Getwd()
-					return err
+					if err != nil {
+						return err
+					}
+					os.Setenv("XDG_STATE_HOME", filepath.Join(ecoRootDir, ".xdg-state"))
+					return nil
 				},
 			},
 			{
@@ -456,6 +467,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}

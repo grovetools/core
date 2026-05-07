@@ -11,6 +11,8 @@ import (
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/git"
 	"github.com/grovetools/tend/pkg/harness"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // ZombieWorktreeLogRecreationScenario reproduces the issue where deleted worktree directories
@@ -32,6 +34,8 @@ func ZombieWorktreeLogRecreationScenario() *harness.Scenario {
 				Func: func(ctx *harness.Context) error {
 					projectDir = ctx.NewDir("zombie-test-proj")
 					worktreeDir = filepath.Join(projectDir, ".grove-worktrees", "zombie-feature")
+
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 
 					// 1. Create grove.yml with file logging
 					groveYML := `name: zombie-test-proj
@@ -116,8 +120,7 @@ func main() {
 					// Give it a moment to start logging
 					time.Sleep(2 * time.Second)
 
-					// Verify initial log file was created in the worktree
-					logFiles, err := filepath.Glob(filepath.Join(worktreeDir, ".grove", "logs", "*.log"))
+					logFiles, err := filepath.Glob(filepath.Join(paths.StateDir(), "logs", "workspaces", "zombie-test-proj", "zombie-feature", "*.log"))
 					if err != nil || len(logFiles) == 0 {
 						return fmt.Errorf("background logger did not create initial log file in worktree")
 					}
@@ -150,8 +153,7 @@ func main() {
 			{
 				Name: "Verify logs are redirected to project root",
 				Func: func(ctx *harness.Context) error {
-					// Find the log file in the main project root
-					logFiles, err := filepath.Glob(filepath.Join(projectDir, ".grove", "logs", "*.log"))
+					logFiles, err := filepath.Glob(filepath.Join(paths.StateDir(), "logs", "workspaces", "zombie-test-proj", "*.log"))
 					if err != nil || len(logFiles) == 0 {
 						return fmt.Errorf("log file was not created in the project root after redirection")
 					}
@@ -173,13 +175,14 @@ func main() {
 		},
 		Teardown: []harness.Step{
 			{
-				Name: "Stop background process",
+				Name: "Stop background process and cleanup",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if cancel != nil {
-						cancel() // Ensure the background process is terminated
+						cancel()
 					}
 					if bgProcess != nil {
-						_ = bgProcess.Wait() // Wait for it to clean up
+						_ = bgProcess.Wait()
 					}
 					return nil
 				},

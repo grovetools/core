@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/harness"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // LogsCLIFilteringScenario tests the core logs CLI filtering flags.
@@ -19,7 +22,8 @@ func LogsCLIFilteringScenario() *harness.Scenario {
 			harness.NewStep("Setup test logs and config", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				// Create grove.yml with component filtering
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYML := `name: log-filtering-test
 version: "1.0"
 logging:
@@ -45,7 +49,7 @@ logging:
 {"component":"frontend","level":"info","msg":"Component rendered","time":"2023-01-01T12:00:03Z"}
 {"component":"grove-mcp","level":"debug","msg":"Internal ecosystem log","time":"2023-01-01T12:00:04Z"}
 `
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "log-filtering-test")
 				if err := fs.EnsureDir(logsDir); err != nil {
 					return fmt.Errorf("failed to create logs directory: %w", err)
 				}
@@ -233,6 +237,12 @@ logging:
 					return fmt.Errorf("frontend should be visible")
 				}
 
+				return nil
+			}),
+		},
+		Teardown: []harness.Step{
+			harness.NewStep("Cleanup XDG state", func(ctx *harness.Context) error {
+				os.Unsetenv("XDG_STATE_HOME")
 				return nil
 			}),
 		},

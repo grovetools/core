@@ -12,6 +12,7 @@ import (
 	"github.com/grovetools/tend/pkg/harness"
 
 	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // LoggingJSONFormatScenario tests that the logger outputs valid JSON when configured.
@@ -54,7 +55,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					// Reset the logger cache to pick up new config
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -77,7 +78,7 @@ logging:
 			{
 				Name: "Verify log file exists",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "json-logging-test")
 					logFiles, err := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 					if err != nil {
 						return fmt.Errorf("failed to glob log files: %w", err)
@@ -91,7 +92,7 @@ logging:
 			{
 				Name: "Verify each log line is valid JSON with required fields",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "json-logging-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 
 					logContent, err := fs.ReadString(logFiles[0])
@@ -129,6 +130,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -178,6 +180,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -213,7 +216,7 @@ logging:
 			{
 				Name: "Verify component field in logs",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "json-fields-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 					if len(logFiles) == 0 {
 						return fmt.Errorf("no log files found")
@@ -244,7 +247,7 @@ logging:
 			{
 				Name: "Verify custom fields (user_id, request_id) in logs",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "json-fields-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 
 					logContent, _ := fs.ReadString(logFiles[0])
@@ -280,6 +283,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -329,6 +333,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -364,7 +369,7 @@ logging:
 			{
 				Name: "Verify nested 'user' object is properly serialized",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "nested-json-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 					if len(logFiles) == 0 {
 						return fmt.Errorf("no log files found")
@@ -398,7 +403,7 @@ logging:
 			{
 				Name: "Verify deeply nested 'metadata' object is properly serialized",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "nested-json-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 
 					logContent, _ := fs.ReadString(logFiles[0])
@@ -425,6 +430,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -474,6 +480,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -505,7 +512,7 @@ logging:
 			{
 				Name: "Verify DEBUG messages are NOT in log file",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "level-filter-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 					if len(logFiles) == 0 {
 						return fmt.Errorf("no log files found")
@@ -532,7 +539,7 @@ logging:
 			{
 				Name: "Verify INFO message IS in log file",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "level-filter-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 
 					logContent, _ := fs.ReadString(logFiles[0])
@@ -555,7 +562,7 @@ logging:
 			{
 				Name: "Verify WARN message IS in log file",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "level-filter-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 
 					logContent, _ := fs.ReadString(logFiles[0])
@@ -578,6 +585,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -656,6 +664,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -678,7 +687,7 @@ logging:
 			{
 				Name: "Verify all component logs appear in file",
 				Func: func(ctx *harness.Context) error {
-					logDir := filepath.Join(projectDir, ".grove", "logs")
+					logDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "filter-default-test")
 					logFiles, _ := filepath.Glob(filepath.Join(logDir, "workspace-*.log"))
 					if len(logFiles) == 0 {
 						return fmt.Errorf("no log files found")
@@ -722,6 +731,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -773,6 +783,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -823,6 +834,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -874,6 +886,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -924,6 +937,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
@@ -975,6 +989,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
+					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 					logging.Reset()
 					return nil
 				},
@@ -1021,6 +1036,7 @@ logging:
 			{
 				Name: "Cleanup: restore original directory",
 				Func: func(ctx *harness.Context) error {
+					os.Unsetenv("XDG_STATE_HOME")
 					if origDir != "" {
 						return os.Chdir(origDir)
 					}
