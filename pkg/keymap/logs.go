@@ -30,6 +30,9 @@ type LogKeyMap struct {
 	ToggleSystem     key.Binding
 	CycleLevel       key.Binding
 	ComponentSummary key.Binding
+	ClearBuffer      key.Binding
+	CopyRawText      key.Binding
+	OpenEditor       key.Binding
 }
 
 // NewLogKeyMap creates a new LogKeyMap with user configuration applied.
@@ -70,7 +73,7 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 		),
 		Clear: key.NewBinding(
 			key.WithKeys("esc"),
-			key.WithHelp("esc", "clear search"),
+			key.WithHelp("esc", "clear/back"),
 		),
 		ToggleFollow: key.NewBinding(
 			key.WithKeys("F"),
@@ -90,7 +93,7 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 		),
 		Yank: key.NewBinding(
 			key.WithKeys("y"),
-			key.WithHelp("y", "yank selection"),
+			key.WithHelp("y", "yank json"),
 		),
 		SwitchFocus: key.NewBinding(
 			key.WithKeys("tab"),
@@ -110,7 +113,19 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 		),
 		ComponentSummary: key.NewBinding(
 			key.WithKeys("C"),
-			key.WithHelp("C", "component summary"),
+			key.WithHelp("C", "component filter"),
+		),
+		ClearBuffer: key.NewBinding(
+			key.WithKeys("ctrl+l"),
+			key.WithHelp("ctrl+l", "clear buffer"),
+		),
+		CopyRawText: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "copy raw text"),
+		),
+		OpenEditor: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "open in editor"),
 		),
 	}
 
@@ -122,13 +137,13 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 
 // ShortHelp returns keybindings to be shown in the mini help view.
 func (k LogKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleFollow, k.ToggleFilters, k.ToggleScope, k.ToggleSystem, k.CycleLevel, k.ComponentSummary, k.Search}
+	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleScope, k.CycleLevel, k.ComponentSummary, k.Search, k.ToggleFollow}
 }
 
 // FullHelp returns keybindings for the expanded help view.
 func (k LogKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{ // Navigation column
+		{ // Navigation
 			k.Base.Up,
 			k.Base.Down,
 			k.PageUp,
@@ -138,18 +153,23 @@ func (k LogKeyMap) FullHelp() [][]key.Binding {
 			k.GotoTop,
 			k.GotoEnd,
 		},
-		{ // Actions column
-			k.SwitchFocus,
-			k.ToggleFollow,
-			k.ToggleFilters,
+		{ // Filters/View
 			k.ToggleScope,
 			k.ToggleSystem,
 			k.CycleLevel,
 			k.ComponentSummary,
+			k.ToggleFilters,
+			k.ToggleFollow,
 			k.Search,
+		},
+		{ // Actions
 			k.ViewJSON,
 			k.VisualModeStart,
 			k.Yank,
+			k.CopyRawText,
+			k.ClearBuffer,
+			k.OpenEditor,
+			k.SwitchFocus,
 			k.Base.Help,
 			k.Base.Quit,
 		},

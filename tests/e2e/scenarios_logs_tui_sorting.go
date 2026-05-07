@@ -11,6 +11,8 @@ import (
 	"github.com/grovetools/tend/pkg/harness"
 	"github.com/grovetools/tend/pkg/tui"
 	"github.com/grovetools/tend/pkg/verify"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // LoggingTUIChronologicalSortingScenario tests that logs are displayed in chronological order
@@ -25,7 +27,8 @@ func LoggingTUIChronologicalSortingScenario() *harness.Scenario {
 			harness.NewStep("Setup logs with interleaved timestamps from multiple files", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				// Create grove.yml
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: sorting-test
 version: "1.0"
 logging:
@@ -37,14 +40,11 @@ logging:
 					return fmt.Errorf("failed to write grove.yml: %w", err)
 				}
 
-				// Create logs directory
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "sorting-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs dir: %w", err)
 				}
 
-				// Create a single log file with intentionally out-of-order timestamps
-				// from multiple components, interleaved to test chronological sorting.
 				logContent := `{"component":"alpha","level":"info","msg":"Message A1 (T+1s)","time":"2024-01-01T10:00:01Z"}
 {"component":"beta","level":"info","msg":"Message B1 (T+2s)","time":"2024-01-01T10:00:02Z"}
 {"component":"alpha","level":"info","msg":"Message A2 (T+5s)","time":"2024-01-01T10:00:05Z"}
@@ -63,7 +63,6 @@ logging:
 					return fmt.Errorf("failed to find core binary: %w", err)
 				}
 
-				// Start TUI to read from log files
 				session, err := ctx.StartTUI(coreBinary, []string{"logs", "-i"})
 				if err != nil {
 					return fmt.Errorf("failed to start TUI: %w", err)
@@ -74,7 +73,6 @@ logging:
 			harness.NewStep("Verify logs are loaded", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Wait for TUI to load all entries
 				if err := session.WaitForText("Logs:", 10*time.Second); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("TUI did not load: %w\nContent: %s", err, content)
@@ -84,7 +82,6 @@ logging:
 					return fmt.Errorf("UI did not stabilize: %w", err)
 				}
 
-				// Verify we have 5 log entries loaded
 				if err := session.AssertContains("Logs: 1/5"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("expected 5 log entries: %w\nContent: %s", err, content)
@@ -95,7 +92,6 @@ logging:
 			harness.NewStep("Verify chronological order by navigating list", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// We should start at position 1/5, verify the timestamp is 10:00:01 (T+1s)
 				if err := session.AssertContains("10:00:01"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("position 1/5 should show 10:00:01 timestamp: %w\nContent: %s", err, content)
@@ -105,7 +101,6 @@ logging:
 					return fmt.Errorf("position 1/5 should show Message A1: %w\nContent: %s", err, content)
 				}
 
-				// Move to position 2/5 - should be T+2s (10:00:02)
 				if err := session.SendKeys("j"); err != nil {
 					return err
 				}
@@ -121,7 +116,6 @@ logging:
 					return fmt.Errorf("position 2/5 should show Message B1: %w\nContent: %s", err, content)
 				}
 
-				// Move to position 3/5 - should be T+4s (10:00:04)
 				if err := session.SendKeys("j"); err != nil {
 					return err
 				}
@@ -137,7 +131,6 @@ logging:
 					return fmt.Errorf("position 3/5 should show Message B3: %w\nContent: %s", err, content)
 				}
 
-				// Move to position 4/5 - should be T+5s (10:00:05)
 				if err := session.SendKeys("j"); err != nil {
 					return err
 				}
@@ -153,7 +146,6 @@ logging:
 					return fmt.Errorf("position 4/5 should show Message A2: %w\nContent: %s", err, content)
 				}
 
-				// Move to position 5/5 - should be T+6s (10:00:06)
 				if err := session.SendKeys("j"); err != nil {
 					return err
 				}
@@ -174,7 +166,6 @@ logging:
 			harness.NewStep("Verify final position", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Should be at position 5/5 after navigation
 				if err := session.AssertContains("Logs: 5/5"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("expected status to show 5/5: %w\nContent: %s", err, content)
@@ -202,6 +193,8 @@ func LoggingTUILiveUpdateSortingScenario() *harness.Scenario {
 			harness.NewStep("Setup initial logs", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: live-sorting-test
 version: "1.0"
 logging:
@@ -213,12 +206,11 @@ logging:
 					return err
 				}
 
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "live-sorting-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
-				// Create initial log entries
 				initialLogs := `{"component":"test","level":"info","msg":"Message T+2s","time":"2024-01-01T10:00:02Z"}
 {"component":"test","level":"info","msg":"Message T+4s","time":"2024-01-01T10:00:04Z"}
 {"component":"test","level":"info","msg":"Message T+6s","time":"2024-01-01T10:00:06Z"}
@@ -243,7 +235,6 @@ logging:
 				}
 				ctx.Set("tui_session", session)
 
-				// Wait for TUI to load
 				if err := session.WaitForText("Logs:", 10*time.Second); err != nil {
 					return err
 				}
@@ -253,7 +244,6 @@ logging:
 				session := ctx.Get("tui_session").(*tui.Session)
 
 				return ctx.Verify(func(v *verify.Collector) {
-					// Check for total count of 3 (shown as "X/3" in status bar)
 					v.Equal("initial count is 3", nil, session.AssertContains("/3"))
 					v.Equal("T+2s visible", nil, session.AssertContains("Message T+2s"))
 					v.Equal("T+4s visible", nil, session.AssertContains("Message T+4s"))
@@ -263,7 +253,6 @@ logging:
 			harness.NewStep("Append log with older timestamp (T+1s)", func(ctx *harness.Context) error {
 				logFile := ctx.Get("log_file").(string)
 
-				// Append a log entry that is OLDER than all existing ones
 				olderLog := `{"component":"test","level":"info","msg":"Message T+1s (older)","time":"2024-01-01T10:00:01Z"}
 `
 				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
@@ -278,7 +267,6 @@ logging:
 			harness.NewStep("Verify older entry inserted at beginning", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Wait for new entry to appear
 				if err := session.WaitForText("Message T+1s (older)", 5*time.Second); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("older log entry did not appear: %w\nContent: %s", err, content)
@@ -289,9 +277,7 @@ logging:
 					return err
 				}
 
-				// Verify chronological order: T+1s should appear before T+2s
 				return ctx.Verify(func(v *verify.Collector) {
-					// Check total count is now 4 (shown as "X/4" in status bar)
 					v.Equal("count is now 4", nil, session.AssertContains("/4"))
 
 					idxT1 := strings.Index(content, "Message T+1s (older)")
@@ -303,7 +289,6 @@ logging:
 			harness.NewStep("Append log with middle timestamp (T+3s)", func(ctx *harness.Context) error {
 				logFile := ctx.Get("log_file").(string)
 
-				// Append a log entry that should go in the MIDDLE
 				middleLog := `{"component":"test","level":"info","msg":"Message T+3s (middle)","time":"2024-01-01T10:00:03Z"}
 `
 				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
@@ -318,7 +303,6 @@ logging:
 			harness.NewStep("Verify middle entry inserted correctly", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Wait for new entry to appear
 				if err := session.WaitForText("Message T+3s (middle)", 5*time.Second); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("middle log entry did not appear: %w\nContent: %s", err, content)
@@ -329,9 +313,7 @@ logging:
 					return err
 				}
 
-				// Verify chronological order: T+2s < T+3s < T+4s
 				return ctx.Verify(func(v *verify.Collector) {
-					// Check total count is now 5 (shown as "X/5" in status bar)
 					v.Equal("count is now 5", nil, session.AssertContains("/5"))
 
 					idxT2 := strings.Index(content, "Message T+2s")
@@ -362,6 +344,8 @@ func LoggingTUIFollowModeSortingScenario() *harness.Scenario {
 			harness.NewStep("Setup initial logs", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: follow-sorting-test
 version: "1.0"
 logging:
@@ -373,12 +357,11 @@ logging:
 					return err
 				}
 
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "follow-sorting-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
-				// Create initial log entries
 				initialLogs := `{"component":"test","level":"info","msg":"Message T+1s","time":"2024-01-01T10:00:01Z"}
 {"component":"test","level":"info","msg":"Message T+2s","time":"2024-01-01T10:00:02Z"}
 `
@@ -396,14 +379,12 @@ logging:
 					return err
 				}
 
-				// Start with -f flag for follow mode
 				session, err := ctx.StartTUI(coreBinary, []string{"logs", "-i", "-f"})
 				if err != nil {
 					return err
 				}
 				ctx.Set("tui_session", session)
 
-				// Wait for TUI to load and verify follow mode is on
 				if err := session.WaitForText("Logs:", 10*time.Second); err != nil {
 					return err
 				}
@@ -418,7 +399,6 @@ logging:
 			harness.NewStep("Append new latest message", func(ctx *harness.Context) error {
 				logFile := ctx.Get("log_file").(string)
 
-				// Append a new LATEST message (T+10s)
 				latestLog := `{"component":"test","level":"info","msg":"Message T+10s (latest)","time":"2024-01-01T10:00:10Z"}
 `
 				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
@@ -433,13 +413,11 @@ logging:
 			harness.NewStep("Verify follow mode shows latest message", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Wait for latest message to appear
 				if err := session.WaitForText("Message T+10s (latest)", 5*time.Second); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("latest message did not appear: %w\nContent: %s", err, content)
 				}
 
-				// Verify we're at the latest entry (3/3 position)
 				if err := session.AssertContains("3/3"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("should be at position 3/3: %w\nContent: %s", err, content)
@@ -450,7 +428,6 @@ logging:
 			harness.NewStep("Append older message while in follow mode", func(ctx *harness.Context) error {
 				logFile := ctx.Get("log_file").(string)
 
-				// Append an OLDER message (T+5s) - this should NOT move the view
 				olderLog := `{"component":"test","level":"info","msg":"Message T+5s (older)","time":"2024-01-01T10:00:05Z"}
 `
 				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o644)
@@ -465,21 +442,17 @@ logging:
 			harness.NewStep("Verify follow mode still shows latest message", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Wait a moment for the log to be processed
 				time.Sleep(1 * time.Second)
 
 				if err := session.WaitStable(); err != nil {
 					return err
 				}
 
-				// Verify we now have 4 total entries
 				if err := session.WaitForText("4/4", 3*time.Second); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("count should be 4/4: %w\nContent: %s", err, content)
 				}
 
-				// Crucially: verify we're still showing the latest message (T+10s)
-				// Follow mode should keep us at the newest timestamp, not jump to the newly inserted older entry
 				if err := session.AssertContains("Message T+10s (latest)"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("follow mode should still show latest message: %w\nContent: %s", err, content)

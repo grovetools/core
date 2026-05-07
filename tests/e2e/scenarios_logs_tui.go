@@ -10,6 +10,8 @@ import (
 	"github.com/grovetools/tend/pkg/fs"
 	"github.com/grovetools/tend/pkg/harness"
 	"github.com/grovetools/tend/pkg/tui"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // LoggingTUITestScenario tests the interactive logs TUI.
@@ -21,10 +23,10 @@ func LoggingTUITestScenario() *harness.Scenario {
 		LocalOnly:   true, // TUI tests require tmux
 		Steps: []harness.Step{
 			harness.NewStep("Setup log files and config", func(ctx *harness.Context) error {
-				// Use RootDir directly since StartTUI sets working directory to RootDir
 				projectDir := ctx.RootDir
 
-				// Create grove.yml
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: tui-log-test
 version: "1.0"
 logging:
@@ -37,13 +39,11 @@ logging:
 					return fmt.Errorf("failed to write grove.yml: %w", err)
 				}
 
-				// Create logs directory
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "tui-log-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs directory: %w", err)
 				}
 
-				// Create log file with structured JSON logs
 				logContent := `{"level":"info","component":"test-component","msg":"This is the first test message","time":"2024-01-01T10:00:00Z"}
 {"level":"error","component":"another-component","msg":"This is an error message","time":"2024-01-01T10:00:01Z"}
 {"level":"debug","component":"test-component","msg":"A third debug message","time":"2024-01-01T10:00:02Z"}
@@ -85,8 +85,8 @@ logging:
 					return fmt.Errorf("UI did not stabilize: %w", err)
 				}
 
-				// Verify logs are visible (just check that we can see log entries with level indicators)
-				if err := session.AssertContains("[DEBUG]"); err != nil {
+				// Verify logs are visible (default level is INFO, so check for INFO entries)
+				if err := session.AssertContains("[INFO]"); err != nil {
 					content, _ := session.Capture()
 					return fmt.Errorf("expected log level indicators not found: %w\nContent: %s", err, content)
 				}
@@ -239,10 +239,11 @@ logging:
 					return fmt.Errorf("UI did not stabilize after filtering: %w", err)
 				}
 
-				// Verify filtering worked - status bar should show "1/1 (of 5)" indicating filter reduced results
-				if err := session.AssertContains("1/1 (of 5)"); err != nil {
+				// Verify filtering worked - status bar should show "1/1 (of 4)" indicating filter reduced results
+				// (4 entries because default level is INFO, so the DEBUG entry is excluded by the daemon)
+				if err := session.AssertContains("1/1 (of 4)"); err != nil {
 					content, _ := session.Capture()
-					return fmt.Errorf("filter did not reduce results to 1/1 (of 5): %w\nContent: %s", err, content)
+					return fmt.Errorf("filter did not reduce results to 1/1 (of 4): %w\nContent: %s", err, content)
 				}
 
 				// Verify filtered results - the only entry from another-component is an ERROR level log
@@ -408,8 +409,9 @@ func LoggingTUIVimNavigationScenario() *harness.Scenario {
 		LocalOnly:   true,
 		Steps: []harness.Step{
 			harness.NewStep("Setup log files", func(ctx *harness.Context) error {
-				// Use RootDir directly since StartTUI sets working directory to RootDir
 				projectDir := ctx.RootDir
+
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
 
 				groveYAML := `name: vim-nav-test
 version: "1.0"
@@ -423,12 +425,11 @@ logging:
 					return err
 				}
 
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "vim-nav-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
-				// Create multiple log entries for navigation testing
 				var logLines []string
 				for i := 1; i <= 10; i++ {
 					logLines = append(logLines, fmt.Sprintf(`{"level":"info","component":"nav-test","msg":"Log entry %d","time":"2024-01-01T10:00:%02dZ"}`, i, i))
@@ -570,6 +571,8 @@ func LoggingTUIJsonSearchScenario() *harness.Scenario {
 			harness.NewStep("Setup log files with JSON data", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: json-search-test
 version: "1.0"
 logging:
@@ -582,12 +585,11 @@ logging:
 					return err
 				}
 
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "json-search-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
-				// Create a log entry with deeply nested JSON for search testing
 				logContent := `{"level":"info","component":"search-test","msg":"Test entry with nested data","time":"2024-01-01T10:00:00Z","data":{"searchable":"findme","nested":{"deep_value":"needleinstack","array":["alpha","beta","gamma"]},"numbers":{"count":42,"total":100}}}
 `
 				logFile := filepath.Join(logsDir, "workspace-2024-01-01.log")
@@ -685,6 +687,8 @@ func LoggingTUIVisualModeYankScenario() *harness.Scenario {
 			harness.NewStep("Setup log files", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: visual-yank-test
 version: "1.0"
 logging:
@@ -697,12 +701,11 @@ logging:
 					return err
 				}
 
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "visual-yank-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
-				// Create multiple log entries for visual selection
 				logContent := `{"level":"info","component":"yank-test","msg":"First entry to copy","time":"2024-01-01T10:00:00Z"}
 {"level":"info","component":"yank-test","msg":"Second entry to copy","time":"2024-01-01T10:00:01Z"}
 {"level":"info","component":"yank-test","msg":"Third entry to copy","time":"2024-01-01T10:00:02Z"}
@@ -808,6 +811,9 @@ func LoggingTUIExistingLogsScenario() *harness.Scenario {
 		Steps: []harness.Step{
 			harness.NewStep("Setup with multiple existing log files", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
+
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: existing-logs-test
 logging:
   file: { enabled: true, format: json }`
@@ -815,14 +821,11 @@ logging:
 					return err
 				}
 
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "existing-logs-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return err
 				}
 
-				// Create a single log file with both entries.
-				// The TUI only tails the latest file per directory, so both entries
-				// must be in the same file to be loaded.
 				logContent := `{"level":"info","component":"first-log","msg":"Message from first","time":"2024-01-02T10:00:00Z"}` + "\n" +
 					`{"level":"warn","component":"second-log","msg":"Message from second","time":"2024-01-02T11:00:00Z"}` + "\n"
 				if err := fs.WriteString(filepath.Join(logsDir, "workspace-2024-01-02.log"), logContent); err != nil {
@@ -892,7 +895,8 @@ func LoggingTUINewFilesScenario() *harness.Scenario {
 			harness.NewStep("Setup workspace without logs", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				// Create grove.yml
+				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+
 				groveYAML := `name: new-files-test
 version: "1.0"
 logging:
@@ -905,8 +909,7 @@ logging:
 					return fmt.Errorf("failed to write grove.yml: %w", err)
 				}
 
-				// Create empty logs directory (no log files yet)
-				logsDir := filepath.Join(projectDir, ".grove", "logs")
+				logsDir := filepath.Join(paths.StateDir(), "logs", "workspaces", "new-files-test")
 				if err := os.MkdirAll(logsDir, 0o755); err != nil {
 					return fmt.Errorf("failed to create logs directory: %w", err)
 				}

@@ -392,6 +392,12 @@ type Model struct {
 	jsonView       bool
 	lastGotoG      time.Time
 
+	// Component picker overlay
+	showComponentPicker bool
+	hiddenComponents    map[string]bool
+	pickerItems         []string // sorted component names
+	pickerCursor        int
+
 	// Filter config
 	logConfig     *logging.Config
 	overrideOpts  *logging.OverrideOptions
@@ -467,6 +473,8 @@ func New(ctx context.Context, cfg Config) *Model {
 		overrideOpts:        cfg.OverrideOpts,
 		includeSystem:       cfg.IncludeSystem,
 		workspaceColorMap:   make(map[string]lipgloss.Style),
+		minLevel:            1, // default to INFO
+		hiddenComponents:    make(map[string]bool),
 	}
 
 	// Resolve initial scope
@@ -691,6 +699,9 @@ func (m *Model) rebuildVisible() {
 // component visibility filter. Level and scope filtering is handled by the
 // daemon, so this only checks component visibility.
 func (m *Model) matchesComponentFilter(it logItem) bool {
+	if m.hiddenComponents[it.component] {
+		return false
+	}
 	if !m.filtersEnabled || m.logConfig == nil {
 		return true
 	}
@@ -761,6 +772,57 @@ func (m *Model) copyToClipboard(content string) error {
 	return cmd.Run()
 }
 
+func (m *Model) openComponentPicker() {
+	counts := make(map[string]int)
+	for _, item := range m.items {
+		if item.component != "" {
+			counts[item.component]++
+		}
+	}
+	m.pickerItems = make([]string, 0, len(counts))
+	for name := range counts {
+		m.pickerItems = append(m.pickerItems, name)
+	}
+	sort.Strings(m.pickerItems)
+	m.pickerCursor = 0
+	m.showComponentPicker = true
+}
+
+func (m *Model) componentPickerView() string {
+	counts := make(map[string]int)
+	for _, item := range m.items {
+		if item.component != "" {
+			counts[item.component]++
+		}
+	}
+
+	titleStyle := theme.DefaultTheme.Header
+	lines := []string{titleStyle.Render("Component Filter") + "  (space: toggle, a: all, n: none, esc: close)", ""}
+
+	hiddenCount := 0
+	for _, name := range m.pickerItems {
+		check := "✓"
+		style := lipgloss.NewStyle()
+		if m.hiddenComponents[name] {
+			check = " "
+			style = theme.DefaultTheme.Muted
+			hiddenCount++
+		}
+		cursor := "  "
+		if m.pickerCursor < len(m.pickerItems) && m.pickerItems[m.pickerCursor] == name {
+			cursor = "> "
+		}
+		line := fmt.Sprintf("%s[%s] %-40s %d events", cursor, check, name, counts[name])
+		lines = append(lines, style.Render(line))
+	}
+
+	if hiddenCount > 0 {
+		lines = append(lines, "", theme.DefaultTheme.Warning.Render(fmt.Sprintf("  %d component(s) hidden", hiddenCount)))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 func doneCmd() tea.Cmd {
 	return func() tea.Msg { return embed.DoneMsg{} }
 }
@@ -815,6 +877,53 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if key.Matches(kmsg, m.keys.Clear) || kmsg.String() == "esc" {
 				m.help.Toggle()
+				return m, nil
+			}
+		}
+		return m, nil
+	}
+
+	// If component picker is showing, handle its input
+	if m.showComponentPicker {
+		if kmsg, ok := msg.(tea.KeyMsg); ok {
+			if key.Matches(kmsg, m.keys.Base.Quit) {
+				return m, doneCmd()
+			}
+			switch kmsg.String() {
+			case "esc", "C":
+				m.showComponentPicker = false
+				return m, nil
+			case "j", "down":
+				if m.pickerCursor < len(m.pickerItems)-1 {
+					m.pickerCursor++
+				}
+				return m, nil
+			case "k", "up":
+				if m.pickerCursor > 0 {
+					m.pickerCursor--
+				}
+				return m, nil
+			case " ", "enter":
+				if m.pickerCursor < len(m.pickerItems) {
+					name := m.pickerItems[m.pickerCursor]
+					m.hiddenComponents[name] = !m.hiddenComponents[name]
+					if !m.hiddenComponents[name] {
+						delete(m.hiddenComponents, name)
+					}
+					m.rebuildVisible()
+				}
+				return m, nil
+			case "a":
+				for k := range m.hiddenComponents {
+					delete(m.hiddenComponents, k)
+				}
+				m.rebuildVisible()
+				return m, nil
+			case "n":
+				for _, name := range m.pickerItems {
+					m.hiddenComponents[name] = true
+				}
+				m.rebuildVisible()
 				return m, nil
 			}
 		}
@@ -991,6 +1100,63 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.list.SetDelegate(itemDelegate{model: m})
 					return m, m.clearStatusMessageAfter(2 * time.Second)
 				}
+				// Single item yank: copy selected item's JSON
+				if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+					if li, ok := selectedItem.(logItem); ok {
+						jsonBytes, err := json.MarshalIndent(li.rawData, "", "  ")
+						if err == nil {
+							if clipErr := m.copyToClipboard(string(jsonBytes)); clipErr == nil {
+								m.statusMessage = "Copied log entry JSON"
+							} else {
+								m.statusMessage = fmt.Sprintf("Copy failed: %v", clipErr)
+							}
+						}
+						return m, m.clearStatusMessageAfter(2 * time.Second)
+					}
+				}
+				return m, nil
+
+			case key.Matches(msg, m.keys.CopyRawText):
+				if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+					if li, ok := selectedItem.(logItem); ok {
+						rawText := fmt.Sprintf("[%s] [%s] %s [%s] %s",
+							li.workspace, strings.ToUpper(li.level),
+							li.timestamp.Format("2006-01-02 15:04:05"),
+							li.component, li.message)
+						if err := m.copyToClipboard(rawText); err == nil {
+							m.statusMessage = "Copied log line text"
+						} else {
+							m.statusMessage = fmt.Sprintf("Copy failed: %v", err)
+						}
+						return m, m.clearStatusMessageAfter(2 * time.Second)
+					}
+				}
+				return m, nil
+
+			case key.Matches(msg, m.keys.ClearBuffer):
+				m.items = nil
+				m.visible = m.visible[:0]
+				m.list.SetItems(nil)
+				m.statusMessage = "Buffer cleared"
+				return m, m.clearStatusMessageAfter(2 * time.Second)
+
+			case key.Matches(msg, m.keys.OpenEditor):
+				if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+					if li, ok := selectedItem.(logItem); ok {
+						if filePath, ok := li.rawData["file"].(string); ok && filePath != "" {
+							line := 0
+							if parts := strings.SplitN(filePath, ":", 2); len(parts) == 2 {
+								filePath = parts[0]
+								fmt.Sscanf(parts[1], "%d", &line)
+							}
+							return m, func() tea.Msg {
+								return embed.SplitEditorRequestMsg{Path: filePath, Line: line, Focus: true}
+							}
+						}
+						m.statusMessage = "No file path in this log entry"
+						return m, m.clearStatusMessageAfter(2 * time.Second)
+					}
+				}
 				return m, nil
 
 			case key.Matches(msg, m.keys.Clear):
@@ -1087,24 +1253,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.connectToDaemon(), m.clearStatusMessageAfter(2*time.Second))
 
 			case key.Matches(msg, m.keys.ComponentSummary):
-				counts := make(map[string]int)
-				for _, item := range m.items {
-					if item.component != "" {
-						counts[item.component]++
-					}
-				}
-				summary := map[string]any{
-					"_info":        "Components detected in the current buffer",
-					"total_events": len(m.items),
-					"components":   counts,
-				}
-				m.jsonTree = jsontree.New(summary)
-				listHeight := m.height / 2
-				viewportHeight := m.height - listHeight - 3
-				m.jsonTree.SetSize(m.width-4, viewportHeight)
-				m.jsonView = true
-				m.focus = viewportPane
-				m.statusMessage = "Component Summary (esc to return)"
+				m.openComponentPicker()
 				return m, nil
 
 			case key.Matches(msg, m.keys.ViewJSON):
@@ -1306,6 +1455,10 @@ func (m *Model) View() string {
 		return m.help.View()
 	}
 
+	if m.showComponentPicker {
+		return m.componentPickerView()
+	}
+
 	if !m.ready {
 		return "Initializing..."
 	}
@@ -1323,7 +1476,10 @@ func (m *Model) View() string {
 	}
 
 	filteredCountIndicator := ""
-	if m.filteredCount > 0 {
+	hiddenCompCount := len(m.hiddenComponents)
+	if hiddenCompCount > 0 {
+		filteredCountIndicator = fmt.Sprintf(" [hiding: %d components]", hiddenCompCount)
+	} else if m.filteredCount > 0 {
 		filteredCountIndicator = fmt.Sprintf(" [%d hidden]", m.filteredCount)
 	}
 
@@ -1364,10 +1520,7 @@ func (m *Model) View() string {
 		systemIndicator = " [+System]"
 	}
 
-	levelIndicator := ""
-	if m.minLevel > 0 {
-		levelIndicator = fmt.Sprintf(" [Level: %s+]", levelLabels[m.minLevel])
-	}
+	levelIndicator := fmt.Sprintf(" [Level: %s+]", levelLabels[m.minLevel])
 
 	modeIndicator := ""
 	if m.jsonView {
