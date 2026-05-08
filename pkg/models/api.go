@@ -161,7 +161,8 @@ type ChannelCleanupResponse struct {
 
 // SessionChannelsRequest represents a request to update session channels.
 type SessionChannelsRequest struct {
-	Channels []string `json:"channels"`
+	Channels     []string `json:"channels"`
+	SignalTarget string   `json:"signal_target,omitempty"`
 }
 
 // SessionAutonomousRequest represents a request to update session autonomous config.

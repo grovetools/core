@@ -330,7 +330,7 @@ func (c *LocalClient) UnregisterProxyRoutes(ctx context.Context, worktree string
 
 // --- Channel & Autonomous stubs (require daemon) ---
 
-func (c *LocalClient) UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error {
+func (c *LocalClient) UpdateSessionChannels(ctx context.Context, jobID string, req models.SessionChannelsRequest) error {
 	return errors.New("channel management requires the grove daemon")
 }
 

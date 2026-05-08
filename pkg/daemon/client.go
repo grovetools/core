@@ -23,9 +23,10 @@ type SessionIntent struct {
 	WorkDir     string `json:"work_dir"`
 
 	// Channel & Autonomous support (optional, set when job has claw features)
-	Channels   []string                 `json:"channels,omitempty"`
-	Autonomous *models.AutonomousConfig `json:"autonomous,omitempty"`
-	TmuxTarget string                   `json:"tmux_target,omitempty"`
+	Channels     []string                 `json:"channels,omitempty"`
+	SignalTarget string                   `json:"signal_target,omitempty"`
+	Autonomous   *models.AutonomousConfig `json:"autonomous,omitempty"`
+	TmuxTarget   string                   `json:"tmux_target,omitempty"`
 
 	// Mux identifies which multiplexer backs the session ("treemux", "tmux",
 	// "none"). Populated by the provider at launch time so the daemon can
@@ -160,8 +161,8 @@ type Client interface {
 
 	// --- Channel & Autonomous Management ---
 
-	// UpdateSessionChannels updates the active channels for a session.
-	UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error
+	// UpdateSessionChannels updates the active channels and optional signal target for a session.
+	UpdateSessionChannels(ctx context.Context, jobID string, req models.SessionChannelsRequest) error
 
 	// UpdateSessionAutonomous updates the autonomous config for a session.
 	UpdateSessionAutonomous(ctx context.Context, jobID string, config *models.AutonomousConfig) error

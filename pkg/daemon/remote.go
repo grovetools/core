@@ -1131,20 +1131,19 @@ func (c *RemoteClient) UnregisterProxyRoutes(ctx context.Context, worktree strin
 // --- Channel & Autonomous Management ---
 
 // UpdateSessionChannels updates the active channels for a session.
-func (c *RemoteClient) UpdateSessionChannels(ctx context.Context, jobID string, channels []string) error {
-	payload := models.SessionChannelsRequest{Channels: channels}
-	body, err := json.Marshal(payload)
+func (c *RemoteClient) UpdateSessionChannels(ctx context.Context, jobID string, req models.SessionChannelsRequest) error {
+	body, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal channels request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/sessions/%s/channels", baseURL, jobID), bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/sessions/%s/channels", baseURL, jobID), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}

@@ -53,6 +53,7 @@ type Session struct {
 	LastIdlePingAt  *time.Time        `json:"last_idle_ping_at,omitempty" db:"-"`
 	LastSender      string            `json:"last_sender,omitempty" db:"-"`
 	LastSenderGroup string            `json:"last_sender_group,omitempty" db:"-"`
+	SignalTarget    string            `json:"signal_target,omitempty" db:"-"`
 
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`
