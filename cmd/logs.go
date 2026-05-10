@@ -25,51 +25,72 @@ func NewLogsCmd() *cobra.Command {
 		Use:   "logs",
 		Short: "Aggregate and display logs from Grove workspaces",
 		Long: `Streams logs from one or more workspaces. By default, shows logs from the
-current workspace only. Use --ecosystem to show logs from all workspaces.
+current workspace only.
 
 Examples:
-  # Follow logs from current workspace
+  # Stream current workspace logs
   core logs -f
 
-  # Show logs from all workspaces in ecosystem
-  core logs --ecosystem -f
+  # Stream all ecosystem workspaces
+  core logs --scope ecosystem -f
 
-  # Get the last 100 log lines in JSON format
-  core logs --tail 100 --json
+  # Stream ecosystem + system logs
+  core logs --scope ecosystem --system -f
 
-  # Follow logs from specific workspaces
-  core logs -f -w my-project,another-project
+  # System logs only
+  core logs --scope system
 
-  # Show only the pretty CLI output (styled)
-  core logs --format=pretty
+  # Live daemon event stream
+  core logs --scope daemon -f
 
-  # Show only the pretty CLI output (plain text, no ANSI)
-  core logs --format=pretty-text
+  # Include debug entries
+  core logs --level debug -f
 
-  # Show full details with pretty output indented below each line
-  core logs --format=full
+  # Last 50 errors
+  core logs --level error --tail 50
+
+  # Filter to a single component
+  core logs --component groved.server -f
+
+  # Specific workspaces
+  core logs -w api,worker -f
+
+  # Styled output, last 100 lines
+  core logs --format pretty --tail 100
 `,
 		RunE: runLogsE,
 	}
 
-	cmd.Flags().Bool("json", false, "Output logs in JSON Lines format (shorthand for --format=json)")
-	cmd.Flags().String("format", "text", "Output format: text, json, full, rich, pretty, pretty-text")
-	cmd.Flags().Bool("compact", false, "Disable spacing between log entries (for pretty/full/rich formats)")
-	cmd.Flags().BoolP("tui", "i", false, "Launch the interactive TUI")
-	cmd.Flags().Bool("ecosystem", false, "Show logs from all workspaces in the ecosystem")
-	cmd.Flags().StringSliceP("workspaces", "w", []string{}, "Filter by specific workspace names (comma-separated)")
+	// Scope
+	cmd.Flags().String("scope", "workspace", "Log scope: workspace, ecosystem, all, system, daemon")
+	cmd.Flags().StringSliceP("workspace", "w", []string{}, "Filter to specific workspace names (comma-separated)")
+	cmd.Flags().Bool("system", false, "Include system logs alongside workspace scope")
+
+	// Filtering
+	cmd.Flags().String("level", "", "Minimum log level: debug, info, warn, error")
+	cmd.Flags().StringSlice("component", []string{}, "Show only these components (comma-separated whitelist)")
+	cmd.Flags().Bool("show-all", false, "Ignore all configured hide/show rules")
+
+	// Output
 	cmd.Flags().BoolP("follow", "f", false, "Follow log output")
 	cmd.Flags().Int("tail", -1, "Number of lines to show from the end of the logs (default: all)")
+	cmd.Flags().String("format", "text", "Output format: text, json, full, rich, pretty, pretty-text")
+	cmd.Flags().Bool("json", false, "Shorthand for --format=json")
+	cmd.Flags().Bool("compact", false, "Disable spacing between entries (pretty/full/rich)")
 
-	cmd.Flags().Bool("show-all", false, "Show all logs, ignoring any configured show/hide rules")
-	cmd.Flags().StringSlice("component", []string{}, "Show logs only from these components (acts as a strict whitelist)")
-	cmd.Flags().StringSlice("also-show", []string{}, "Temporarily show components/groups, overriding hide rules")
-	cmd.Flags().StringSlice("ignore-hide", []string{}, "Temporarily show components/groups that would be hidden by config")
-
-	cmd.Flags().Bool("system", false, "Only show global system logs (ignores workspace logs)")
-	cmd.Flags().Bool("include-system", false, "Include global system events that have no specific workspace context")
+	// Mode
+	cmd.Flags().BoolP("tui", "i", false, "Launch the interactive TUI")
 
 	return cmd
+}
+
+// validLevels maps level name to its severity rank for threshold filtering.
+var validLevels = map[string]int{
+	"debug":   0,
+	"info":    1,
+	"warn":    2,
+	"warning": 2,
+	"error":   3,
 }
 
 // filterStats holds counters for logging statistics.
@@ -85,45 +106,68 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	logger := cli.GetLogger(cmd)
 	opts := cli.GetOptions(cmd)
 
-	// Load logging config for component filtering, starting with defaults
+	// Load logging config for component filtering
 	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
 	}
 
-	// --- Filter Overrides & Statistics ---
+	// --- Parse flags ---
+	scope, _ := cmd.Flags().GetString("scope")
+	wsFilter, _ := cmd.Flags().GetStringSlice("workspace")
+	includeSystem, _ := cmd.Flags().GetBool("system")
+	level, _ := cmd.Flags().GetString("level")
 	showAll, _ := cmd.Flags().GetBool("show-all")
 	showOnly, _ := cmd.Flags().GetStringSlice("component")
-	alsoShow, _ := cmd.Flags().GetStringSlice("also-show")
-	ignoreHide, _ := cmd.Flags().GetStringSlice("ignore-hide")
+	follow, _ := cmd.Flags().GetBool("follow")
+	tuiMode, _ := cmd.Flags().GetBool("tui")
+
+	// Validate scope
+	switch scope {
+	case "workspace", "ecosystem", "all", "system", "daemon":
+	default:
+		return fmt.Errorf("invalid --scope %q: must be workspace, ecosystem, all, system, or daemon", scope)
+	}
+
+	// Validate level
+	var minLevelRank int = -1
+	if level != "" {
+		level = strings.ToLower(level)
+		rank, ok := validLevels[level]
+		if !ok {
+			return fmt.Errorf("invalid --level %q: must be debug, info, warn, or error", level)
+		}
+		minLevelRank = rank
+	}
+
+	// -w implies ecosystem scope for workspace discovery
+	if len(wsFilter) > 0 && !cmd.Flags().Changed("scope") {
+		scope = "ecosystem"
+	}
+
+	systemOnly := scope == "system"
 
 	overrideOpts := &logging.OverrideOptions{
-		ShowAll:    showAll,
-		ShowOnly:   showOnly,
-		AlsoShow:   alsoShow,
-		IgnoreHide: ignoreHide,
+		ShowAll:  showAll,
+		ShowOnly: showOnly,
 	}
 	stats := &filterStats{}
 
-	ecosystem, _ := cmd.Flags().GetBool("ecosystem")
-	wsFilter, _ := cmd.Flags().GetStringSlice("workspaces")
-	systemOnly, _ := cmd.Flags().GetBool("system")
-	includeSystem, _ := cmd.Flags().GetBool("include-system")
-
 	var workspaces []*workspace.WorkspaceNode
+
+	if scope == "daemon" {
+		return fmt.Errorf("--scope daemon is not yet supported in CLI mode; use the TUI (core logs -i --scope daemon)")
+	}
 
 	// Determine which workspaces to show
 	if systemOnly {
-		// Skip workspace discovery entirely - only show system logs
 		workspaces = []*workspace.WorkspaceNode{}
-	} else if ecosystem || len(wsFilter) > 0 {
-		// 1. Discover all workspaces in ecosystem
+	} else if scope == "ecosystem" || scope == "all" || len(wsFilter) > 0 {
 		allWorkspaces, err := workspace.GetProjects(logger)
 		if err != nil {
 			return fmt.Errorf("failed to discover workspaces: %w", err)
 		}
 
-		// 2. Filter workspaces if requested
 		if len(wsFilter) > 0 {
 			filterMap := make(map[string]bool)
 			for _, w := range wsFilter {
@@ -138,21 +182,17 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 			workspaces = allWorkspaces
 		}
 	} else {
-		// Default: show current workspace only
+		// Default: current workspace
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get current directory: %w", err)
 		}
 
-		// Try to get workspace name from grove.yml, fall back to directory basename
 		wsName := filepath.Base(cwd)
 		if cfg, err := config.LoadFrom(cwd); err == nil && cfg.Name != "" {
 			wsName = cfg.Name
 		}
 
-		// Create a WorkspaceNode for the current workspace
-		// Note: We don't require grove.yml to exist here - findLogFileForWorkspace
-		// handles missing configs gracefully by falling back to .grove/logs/
 		workspaces = []*workspace.WorkspaceNode{
 			{
 				Path: cwd,
@@ -166,27 +206,16 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Check if TUI mode should be used
-	tuiMode, _ := cmd.Flags().GetBool("tui")
-	follow, _ := cmd.Flags().GetBool("follow")
-
 	if tuiMode {
-		return runLogsTUI(workspaces, follow, overrideOpts, systemOnly, includeSystem, ecosystem)
+		return runLogsTUI(workspaces, follow, overrideOpts, scope, includeSystem, level)
 	}
 
-	// 3. Find log files and start tailing
+	// --- Non-TUI file tailing mode ---
 	lineChan := make(chan logutil.TailedLine, 100)
 	var wg sync.WaitGroup
 
 	tail, _ := cmd.Flags().GetInt("tail")
-	// When following without an explicit `--tail` value, default to 0
-	// (stream only new lines) instead of the historical -1 (full
-	// replay). Dumping an entire day's log — or, with stale rotated
-	// files left over in `.grove/logs/`, an entire multi-month backlog
-	// — on every `-f` invocation is jarring and sometimes gigabytes of
-	// output. Users who want the old behavior can pass `--tail=-1`
-	// explicitly; users who want a bounded replay can pass a positive
-	// count.
+	// When following without explicit --tail, default to 0 (stream new only)
 	if follow && !cmd.Flags().Changed("tail") {
 		tail = 0
 	}
@@ -194,7 +223,6 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	compact, _ := cmd.Flags().GetBool("compact")
 
-	// --json is shorthand for --format=json
 	if jsonOutput {
 		format = "json"
 	}
@@ -202,8 +230,6 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	for _, ws := range workspaces {
 		logFile, logsDir, err := logutil.FindLogFileForWorkspace(ws)
 		if err != nil {
-			// If following and we have a logs directory path, use tailDirectory
-			// to wait for files to appear
 			if follow && logsDir != "" {
 				logger.WithFields(logrus.Fields{
 					"workspace": ws.Name,
@@ -224,7 +250,6 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}).Debug("Tailing log file")
 
 		wg.Add(1)
-		// Use TailDirectory to handle file rotation/switching
 		if follow {
 			go logutil.TailDirectory(cmd.Context(), ws.Name, ws.Path, logsDir, lineChan, &wg, follow, tail)
 		} else {
@@ -232,7 +257,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Also tail the central system log directory for daemon/system events
+	// Also tail system logs when scope includes them
 	systemLogsDir := filepath.Join(paths.StateDir(), "logs")
 	if _, err := os.Stat(systemLogsDir); err == nil {
 		wg.Add(1)
@@ -250,31 +275,27 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Close channel when all tailing goroutines are done
 	go func() {
 		wg.Wait()
 		close(lineChan)
 	}()
 
-	// Build a set of workspace names for filtering system log entries
 	wsNameSet := make(map[string]bool, len(workspaces))
 	for _, w := range workspaces {
 		wsNameSet[w.Name] = true
 	}
 
-	// 4. Process and print logs from the channel
 	for tailedLine := range lineChan {
 		stats.total++
 
 		var logMap map[string]interface{}
 		if err := json.Unmarshal([]byte(tailedLine.Line), &logMap); err != nil {
-			// Non-JSON line, print raw
 			stats.shown++
 			fmt.Println(tailedLine.Line)
 			continue
 		}
 
-		// Handle system log filtering
+		// System log filtering
 		if tailedLine.Workspace == "system" {
 			wsContext, _ := logMap["workspace"].(string)
 			if !systemOnly {
@@ -282,7 +303,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 					if !wsNameSet[wsContext] {
 						continue
 					}
-				} else if !includeSystem && !ecosystem {
+				} else if !includeSystem && scope != "ecosystem" && scope != "all" {
 					continue
 				}
 			}
@@ -290,7 +311,17 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Filter based on component visibility config
+		// Level filtering
+		if minLevelRank >= 0 {
+			if entryLevel, ok := logMap["level"].(string); ok {
+				entryRank, known := validLevels[strings.ToLower(entryLevel)]
+				if known && entryRank < minLevelRank {
+					continue
+				}
+			}
+		}
+
+		// Component visibility filtering
 		if component, ok := logMap["component"].(string); ok {
 			result := logging.GetComponentVisibility(component, &logCfg, overrideOpts)
 			if !result.Visible {
@@ -302,7 +333,6 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		}
 		stats.shown++
 
-		// Handle global JSON output option
 		outputFormat := format
 		if opts.JSONOutput {
 			outputFormat = "json"
@@ -311,7 +341,6 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		fmt.Print(logutil.FormatLogLine(logMap, tailedLine.Workspace, outputFormat, compact))
 	}
 
-	// For non-follow commands, print filter statistics at the end.
 	if !follow && stats.hidden > 0 {
 		reasonStr := strings.ReplaceAll(string(stats.lastReason), "_", " ")
 		ruleStr := strings.Join(stats.lastRule, ", ")

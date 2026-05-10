@@ -65,6 +65,9 @@ type Config struct {
 	// Compact suppresses the detail split pane and focus-switching keys,
 	// rendering only the streaming log list.
 	Compact bool
+	// InitialLevel sets the starting minimum log level (e.g. "debug", "info", "warn", "error").
+	// Empty string defaults to "info".
+	InitialLevel string
 }
 
 // paneFocus tracks which pane has focus.
@@ -484,7 +487,7 @@ func New(ctx context.Context, cfg Config) *Model {
 		overrideOpts:        cfg.OverrideOpts,
 		includeSystem:       cfg.IncludeSystem,
 		workspaceColorMap:   make(map[string]lipgloss.Style),
-		minLevel:            1, // default to INFO
+		minLevel:            parseLevelConfig(cfg.InitialLevel),
 		hiddenComponents:    make(map[string]bool),
 		compact:             cfg.Compact,
 	}
@@ -544,6 +547,23 @@ type (
 	clearStatusMsg struct{}
 	streamErrMsg   struct{ err error }
 )
+
+// parseLevelConfig converts a level string from Config.InitialLevel to the
+// numeric minLevel value. Returns 1 (INFO) for empty or unrecognized input.
+func parseLevelConfig(s string) int {
+	switch strings.ToLower(s) {
+	case "debug":
+		return 0
+	case "info":
+		return 1
+	case "warn", "warning":
+		return 2
+	case "error":
+		return 3
+	default:
+		return 1
+	}
+}
 
 // levelToParam converts the numeric minLevel to the daemon API string.
 func levelToParam(minLevel int) string {

@@ -41,40 +41,30 @@ func (s standaloneLogs) View() string { return s.inner.View() }
 // runLogsTUI launches the interactive logs TUI as a standalone
 // bubbletea program. It connects to the daemon's aggregated log
 // stream instead of doing local file tailing.
-func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, systemOnly, includeSystem, ecosystem bool) error {
+func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, scope string, includeSystem bool, level string) error {
 	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
 	}
 
-	// Resolve the initial workspace path from the workspace list.
 	var initialPath string
 	if len(workspaces) > 0 && workspaces[0] != nil {
 		initialPath = workspaces[0].Path
 	}
 
-	// Resolve scope from CLI flags.
-	initialScope := "workspace"
-	switch {
-	case systemOnly:
-		initialScope = "system"
-	case ecosystem:
-		initialScope = "ecosystem"
-	}
-
-	// Connect to the daemon (or auto-start it).
 	cwd, _ := os.Getwd()
 	daemonClient := daemon.NewWithAutoStart(cwd)
 
 	cfg := logs.Config{
 		DaemonClient:         daemonClient,
-		InitialScope:         initialScope,
+		InitialScope:         scope,
 		IncludeSystem:        includeSystem,
 		LogConfig:            &logCfg,
 		OverrideOpts:         overrideOpts,
 		Follow:               follow,
 		InitialWorkspacePath: initialPath,
 		Replay:               500,
+		InitialLevel:         level,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
