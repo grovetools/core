@@ -119,6 +119,7 @@ type AutonomousConfig struct {
 
 // ChannelSendRequest represents a request to send a message via a channel.
 type ChannelSendRequest struct {
+	Channel   string `json:"channel,omitempty"` // Target channel: "signal" (default), "ha"
 	JobID     string `json:"job_id"`
 	JobTitle  string `json:"job_title,omitempty"` // Explicit title for cross-daemon tagging
 	Recipient string `json:"recipient,omitempty"` // Empty = use LastSender or broadcast
