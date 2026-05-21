@@ -35,6 +35,8 @@ type WebSocketBackend struct {
 	readMu     sync.Mutex
 	currentMsg io.Reader
 
+	writeMu sync.Mutex // serializes websocket writes (gorilla forbids concurrent writes)
+
 	closed        chan struct{}
 	closeErr      error
 	sessionExited bool
@@ -141,6 +143,9 @@ func (b *WebSocketBackend) Read(p []byte) (int, error) {
 }
 
 func (b *WebSocketBackend) Write(p []byte) (int, error) {
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+
 	b.mu.Lock()
 	conn := b.conn
 	b.mu.Unlock()
@@ -180,6 +185,9 @@ func (b *WebSocketBackend) Resize(rows, cols uint16) error {
 	if err != nil {
 		return err
 	}
+
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
 
 	b.mu.Lock()
 	conn := b.conn

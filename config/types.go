@@ -324,6 +324,17 @@ type TUIConfig struct {
 	DrawerExpanded bool `yaml:"drawer_expanded,omitempty" toml:"drawer_expanded,omitempty" jsonschema:"description=Start active sessions drawer expanded,default=false" jsonschema_extras:"x-layer=global,x-priority=63"`
 
 	ExperimentalPages []string `yaml:"experimental_pages,omitempty" toml:"experimental_pages,omitempty" json:"experimental_pages,omitempty" jsonschema:"description=List of experimental pages to enable (env,memory,keymap,config)" jsonschema_extras:"x-layer=global,x-priority=64"`
+
+	// JobDetail configures keybinds for the job detail tab wrapper.
+	JobDetail *JobDetailConfig `yaml:"job_detail,omitempty" toml:"job_detail,omitempty" json:"job_detail,omitempty" jsonschema:"description=Job detail pane tab keybindings" jsonschema_extras:"x-layer=global,x-priority=65"`
+}
+
+// JobDetailConfig configures direct keybinds for the job detail tab wrapper.
+// These only activate when the wrapper's active tab is NOT a PTY.
+type JobDetailConfig struct {
+	Editor string `yaml:"editor,omitempty" toml:"editor,omitempty" json:"editor,omitempty" jsonschema:"description=Key to jump to the editor tab,default=e"`
+	Rules  string `yaml:"rules,omitempty" toml:"rules,omitempty" json:"rules,omitempty" jsonschema:"description=Key to jump to the cx rules tab,default=r"`
+	Logs   string `yaml:"logs,omitempty" toml:"logs,omitempty" json:"logs,omitempty" jsonschema:"description=Key to jump to the logs tab,default=l"`
 }
 
 // FocusConfig controls how the focused BSP pane is visually distinguished.
