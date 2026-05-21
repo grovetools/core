@@ -322,6 +322,8 @@ type TUIConfig struct {
 	// expanded (showing full list) or collapsed (mini icons only).
 	// Default: false (collapsed).
 	DrawerExpanded bool `yaml:"drawer_expanded,omitempty" toml:"drawer_expanded,omitempty" jsonschema:"description=Start active sessions drawer expanded,default=false" jsonschema_extras:"x-layer=global,x-priority=63"`
+
+	ExperimentalPages []string `yaml:"experimental_pages,omitempty" toml:"experimental_pages,omitempty" json:"experimental_pages,omitempty" jsonschema:"description=List of experimental pages to enable (env,memory,keymap,config)" jsonschema_extras:"x-layer=global,x-priority=64"`
 }
 
 // FocusConfig controls how the focused BSP pane is visually distinguished.
