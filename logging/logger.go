@@ -404,6 +404,7 @@ func NewLogger(component string) *logrus.Entry {
 
 	// Determine if we should write structured logs to stderr
 	shouldLogToStderr := false
+	suppressDualEmit := false
 	stderrMode := "auto"
 	if logCfg.Format.StructuredToStderr != "" {
 		stderrMode = logCfg.Format.StructuredToStderr
@@ -420,6 +421,13 @@ func NewLogger(component string) *logrus.Entry {
 		if isDebug || !isInteractive {
 			shouldLogToStderr = true
 		}
+		// Piped/redirected human-facing output (non-TTY, not debugging):
+		// unified log entries already print a pretty line to the same
+		// stream, so skip the raw structured duplicate on the console.
+		// File sinks (FileHook) are unaffected and still capture
+		// everything; StructuredOnly entries are not marked and still
+		// reach the console.
+		suppressDualEmit = !isDebug && !isInteractive
 	}
 
 	// Check component visibility based on show/hide configuration
@@ -428,6 +436,9 @@ func NewLogger(component string) *logrus.Entry {
 	// Use the global writer instead of os.Stderr to support TUI redirection
 	if shouldLogToStderr && isVisible {
 		logger.SetOutput(GetGlobalOutput())
+		if suppressDualEmit {
+			logger.SetFormatter(&dualEmitSuppressingFormatter{inner: logger.Formatter})
+		}
 	} else {
 		logger.SetOutput(io.Discard)
 	}
@@ -476,6 +487,24 @@ func NewLogger(component string) *logrus.Entry {
 	entry := logger.WithField("component", component)
 	loggers[component] = entry
 	return entry
+}
+
+// dualEmitSuppressingFormatter wraps a formatter and emits nothing for
+// entries already rendered via the unified pretty path (see dualEmitKey in
+// unified.go). It is installed only on the console output of loggers running
+// in "auto" stderr mode with a non-interactive stderr, where the pretty line
+// and the raw structured line would otherwise both land on the same stream.
+// File sinks use their own formatter via FileHook and are not affected.
+type dualEmitSuppressingFormatter struct {
+	inner logrus.Formatter
+}
+
+// Format implements logrus.Formatter.
+func (f *dualEmitSuppressingFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	if isDualEmit(entry) {
+		return nil, nil
+	}
+	return f.inner.Format(entry)
 }
 
 // FileHook is a logrus hook for writing logs to a file with a specific formatter.

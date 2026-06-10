@@ -268,7 +268,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		return result, nil // Not a fatal error, just means no paths to scan.
 	}
 	if layeredCfg.Global == nil {
-		s.logger.Warn("No global grove.yml found. No 'groves' to scan.")
+		s.logger.Debug("no global grove config found; workspace scan skipped")
 		return result, nil
 	}
 
