@@ -130,6 +130,11 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		return nil, fmt.Errorf("path does not exist or is not a directory: %s", absPath)
 	}
 
+	// Keep the original-case path for user-facing messages: normalization
+	// below may lowercase it (case-insensitive filesystems), and printing
+	// the lowercased form makes users think the path itself is wrong.
+	displayPath := absPath
+
 	// Normalize path for case-insensitive filesystems and resolve symlinks
 	absPath, err = pathutil.NormalizeForLookup(absPath)
 	if err != nil {
@@ -139,6 +144,7 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	// If we were given a file, start from its directory
 	if !info.IsDir() {
 		absPath = filepath.Dir(absPath)
+		displayPath = filepath.Dir(displayPath)
 	}
 
 	// Perform upward traversal to find the containing workspace root
@@ -166,8 +172,9 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		// Move up one directory
 		parent := filepath.Dir(current)
 		if parent == current {
-			// Reached filesystem root without finding a workspace
-			return nil, fmt.Errorf("no workspace found containing path: %s", absPath)
+			// Reached filesystem root without finding a workspace.
+			// Report the original-case path, not the normalized one.
+			return nil, fmt.Errorf("no workspace found containing path: %s", displayPath)
 		}
 		current = parent
 	}
@@ -416,5 +423,6 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		return nodes[0], nil
 	}
 
-	return nil, fmt.Errorf("no workspace found containing path: %s", absPath)
+	// Report the original-case path, not the normalized one.
+	return nil, fmt.Errorf("no workspace found containing path: %s", displayPath)
 }
