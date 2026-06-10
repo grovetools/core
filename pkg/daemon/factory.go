@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -327,6 +328,20 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 	if readyW != nil {
 		readyW.Close()
 	}
+
+	// One-line spawn notice, written to stderr directly (not the logger)
+	// so it survives any logging configuration. This fires only on a real
+	// spawn — connecting to an already-running daemon never reaches here.
+	scopeDesc := "global"
+	if scope != "" {
+		scopeDesc = fmt.Sprintf("scope %q", scope)
+	}
+	notice := fmt.Sprintf("grove: started background daemon groved (pid %d, %s)", cmd.Process.Pid, scopeDesc)
+	if scope != "" {
+		// Scoped daemons are spawned with --auto-shutdown (see args above).
+		notice += "; exits after 2m idle"
+	}
+	fmt.Fprintln(os.Stderr, notice)
 
 	// Don't wait for the process - let it run in background
 	go func() {
