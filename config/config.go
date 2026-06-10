@@ -240,9 +240,9 @@ func Load(path string) (*Config, error) {
 }
 
 // LoadDefault finds and loads the configuration with hierarchical merging:
-// 1. Global config (~/.config/grove/grove.yml) - base layer
-// 2. Project config (grove.yml) - overrides global
-// 3. Local override (grove.override.yml) - overrides all
+// 1. Global config (~/.config/grove/grove.toml) - base layer
+// 2. Project config (grove.toml) - overrides global
+// 3. Local override (grove.override.toml) - overrides all
 func LoadDefault() (*Config, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -717,18 +717,21 @@ func LoadFromTOMLBytes(data []byte) (*Config, error) {
 // FindConfigFile searches for grove configuration files with the following precedence:
 // 1. Current directory up to filesystem root
 // 2. Git repository root (if in a git repo)
-// 3. XDG config directory (~/.config/grove/grove.yml)
+// 3. XDG config directory (~/.config/grove/grove.toml)
+//
+// Within each directory, TOML is preferred over YAML (read compatibility for
+// grove.yml/grove.yaml is preserved).
 func FindConfigFile(startDir string) (string, error) {
 	configNames := []string{
+		"grove.toml",
 		"grove.yml",
 		"grove.yaml",
-		"grove.toml",
+		".grove.toml",
 		".grove.yml",
 		".grove.yaml",
-		".grove.toml",
+		"docker-compose.grove.toml",
 		"docker-compose.grove.yml",
 		"docker-compose.grove.yaml",
-		"docker-compose.grove.toml",
 	}
 
 	// 1. Search from current directory up to filesystem root
@@ -840,32 +843,33 @@ func getXDGConfigPath() string {
 		return ""
 	}
 
-	// Check YAML first
-	yamlPath := filepath.Join(configDir, "grove.yml")
-	if _, err := os.Stat(yamlPath); err == nil {
-		return yamlPath
-	}
-
-	// Check TOML second
+	// Check TOML first (preferred format)
 	tomlPath := filepath.Join(configDir, "grove.toml")
 	if _, err := os.Stat(tomlPath); err == nil {
 		return tomlPath
 	}
 
-	// Default to YAML if neither exists (for callers that might create it)
-	return yamlPath
+	// Check YAML second (read compatibility)
+	yamlPath := filepath.Join(configDir, "grove.yml")
+	if _, err := os.Stat(yamlPath); err == nil {
+		return yamlPath
+	}
+
+	// Default to TOML if neither exists (for callers that might create it)
+	return tomlPath
 }
 
-// FindEcosystemConfig searches upward from the given directory for a grove.yml
-// that has a 'workspaces' field (indicating it's an ecosystem config)
+// FindEcosystemConfig searches upward from the given directory for a grove
+// config that has a 'workspaces' field (indicating it's an ecosystem config).
+// TOML is preferred over YAML when both exist with workspaces.
 func FindEcosystemConfig(startDir string) string {
 	configNames := []string{
+		"grove.toml",
 		"grove.yml",
 		"grove.yaml",
-		"grove.toml",
+		".grove.toml",
 		".grove.yml",
 		".grove.yaml",
-		".grove.toml",
 	}
 
 	dir := startDir // Start from the given directory itself
