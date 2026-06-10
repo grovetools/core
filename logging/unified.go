@@ -210,6 +210,26 @@ func (e *LogEntry) Emit() {
 	e.Log(context.Background())
 }
 
+// dualEmitKey marks logrus entries whose message was already rendered as
+// pretty output on the console writer. The console formatter installed by
+// NewLogger in non-interactive (piped) mode uses it to suppress the raw
+// structured line, so humans see a single line while file sinks (FileHook)
+// still receive the full structured entry.
+type dualEmitKey struct{}
+
+// dualEmitCtx is the shared marker context attached to dual-emitted entries.
+var dualEmitCtx = context.WithValue(context.Background(), dualEmitKey{}, true)
+
+// isDualEmit reports whether a logrus entry was marked as already emitted
+// via the pretty output path.
+func isDualEmit(entry *logrus.Entry) bool {
+	if entry.Context == nil {
+		return false
+	}
+	emitted, _ := entry.Context.Value(dualEmitKey{}).(bool)
+	return emitted
+}
+
 // Log executes the log entry, writing to both outputs based on configuration.
 // This is the terminal method that must be called for the log to be written.
 func (e *LogEntry) Log(ctx context.Context) {
@@ -218,14 +238,15 @@ func (e *LogEntry) Log(ctx context.Context) {
 
 	// Pretty output (to context writer -> CLI + job.log)
 	// Add extra newline for visual spacing between log entries in TUI
-	if !e.structOnly {
+	emittedPretty := !e.structOnly
+	if emittedPretty {
 		writer := GetWriter(ctx)
 		fmt.Fprintf(writer, "%s\n\n", prettyOutput)
 	}
 
 	// Structured output (to workspace log + core logs)
 	if !e.prettyOnly {
-		e.logStructured(prettyOutput)
+		e.logStructured(prettyOutput, emittedPretty)
 	}
 }
 
@@ -276,8 +297,11 @@ func (e *LogEntry) computePrettyOutput() string {
 	return output
 }
 
-// logStructured writes the structured log entry to logrus.
-func (e *LogEntry) logStructured(prettyOutput string) {
+// logStructured writes the structured log entry to logrus. emittedPretty
+// indicates the message was already written to the console via the pretty
+// path; such entries are marked so the console output can skip the raw
+// duplicate when stderr is piped (file sinks always receive them).
+func (e *LogEntry) logStructured(prettyOutput string, emittedPretty bool) {
 	// Capture the actual caller (skip: 0=logStructured, 1=Log, 2=actual call site)
 	// Since we disabled ReportCaller in NewUnifiedLogger, we can use "file" and "func"
 	// directly without collision - same fields as regular log calls use.
@@ -298,6 +322,9 @@ func (e *LogEntry) logStructured(prettyOutput string) {
 	e.fields["pretty_text"] = ansiRegex.ReplaceAllString(prettyOutput, "")
 
 	entry := e.logger.structured.WithFields(e.fields)
+	if emittedPretty {
+		entry = entry.WithContext(dualEmitCtx)
+	}
 	entry.Log(e.level, e.msg) // Always uses clean msg, never prettyMsg
 }
 

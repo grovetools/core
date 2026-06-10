@@ -92,15 +92,24 @@ func TestLaunchSinglePane(t *testing.T) {
 		t.Fatalf("Launch failed: %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
-	content, err := client.CapturePane(ctx, sessionName)
-	if err != nil {
-		t.Fatalf("Failed to capture pane: %v", err)
-	}
-
-	if !strings.Contains(content, "Only pane") {
-		t.Errorf("Expected captured content to contain 'Only pane', got: %s", content)
+	// The pane runs the command through the user's shell; slow-starting
+	// shells (fish with prompt frameworks, etc.) may not have executed it
+	// yet when we capture. Poll instead of relying on a single fixed sleep.
+	var content string
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		content, err = client.CapturePane(ctx, sessionName)
+		if err != nil {
+			t.Fatalf("Failed to capture pane: %v", err)
+		}
+		if strings.Contains(content, "Only pane") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("Expected captured content to contain 'Only pane' within %s, got: %s", 5*time.Second, content)
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	t.Cleanup(func() {
