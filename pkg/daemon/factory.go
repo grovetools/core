@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"syscall"
@@ -248,12 +249,17 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 	// Look for groved binary
 	grovedPath, err := exec.LookPath("groved")
 	if err != nil {
-		// Try common locations
+		// Try common locations: the real Grove install dir first, then
+		// system-wide, then the legacy ~/.grove/bin as a last resort.
 		homeDir, _ := os.UserHomeDir()
-		candidates := []string{
-			homeDir + "/.grove/bin/groved",
-			"/usr/local/bin/groved",
+		var candidates []string
+		if binDir := paths.BinDir(); binDir != "" {
+			candidates = append(candidates, filepath.Join(binDir, "groved"))
 		}
+		candidates = append(candidates,
+			"/usr/local/bin/groved",
+			filepath.Join(homeDir, ".grove", "bin", "groved"), // legacy fallback
+		)
 		for _, path := range candidates {
 			if _, err := os.Stat(path); err == nil {
 				grovedPath = path
