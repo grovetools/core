@@ -33,7 +33,7 @@ func TestNotebookLocator_CustomTemplates(t *testing.T) {
 	// Create a test workspace node
 	node := &WorkspaceNode{
 		Name:         "grove-core",
-		Path:         "/Users/solom4/code/grove-core",
+		Path:         "/home/user/code/grove-core",
 		Kind:         KindStandaloneProject,
 		NotebookName: "nb",
 	}
@@ -41,7 +41,7 @@ func TestNotebookLocator_CustomTemplates(t *testing.T) {
 	// Test Plans Path
 	plansDir, err := locator.GetPlansDir(node)
 	require.NoError(t, err)
-	// Should expand to something like /Users/solom4/Code/nb/repos/grove-core/main/plans
+	// Should expand to something like /home/user/Code/nb/repos/grove-core/main/plans
 	assert.Contains(t, plansDir, filepath.Join("Code", "nb", "repos", "grove-core", "main", "plans"))
 
 	// Test Chats Path
@@ -103,9 +103,9 @@ func TestNotebookLocator_WorktreeHandling(t *testing.T) {
 	// Create a worktree node
 	worktreeNode := &WorkspaceNode{
 		Name:              "grove-core",
-		Path:              "/Users/solom4/code/grove-core/.grove-worktrees/my-feature",
+		Path:              "/home/user/code/grove-core/.grove-worktrees/my-feature",
 		Kind:              KindStandaloneProjectWorktree,
-		ParentProjectPath: "/Users/solom4/code/grove-core",
+		ParentProjectPath: "/home/user/code/grove-core",
 		NotebookName:      "nb",
 	}
 

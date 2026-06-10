@@ -119,8 +119,10 @@ notebooks:
 					}
 
 					// Verify user's real notebook paths are NOT present
-					if err := assert.NotContains(output, "/Users/solom4/notebooks", "user's real notebooks path should NOT be present"); err != nil {
-						return err
+					if realHome, err := os.UserHomeDir(); err == nil {
+						if err := assert.NotContains(output, filepath.Join(realHome, "notebooks"), "user's real notebooks path should NOT be present"); err != nil {
+							return err
+						}
 					}
 
 					return nil
