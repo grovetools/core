@@ -62,6 +62,9 @@ type MemoryStatusResponse struct {
 	Documents   int            `json:"documents"`
 	ChunksVec   int            `json:"chunks_vec"`
 	DocTypes    map[string]int `json:"doc_types,omitempty"`
+	// SemanticSearchAvailable is false when the daemon has no embedding
+	// provider configured and serves FTS-only results.
+	SemanticSearchAvailable bool `json:"semantic_search_available"`
 }
 
 // DocumentPathInfo carries path/workspace/timestamp tuples used by daemon
