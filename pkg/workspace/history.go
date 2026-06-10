@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // ProjectAccess tracks when a project was last accessed
@@ -20,8 +22,19 @@ type AccessHistory struct {
 	Projects map[string]*ProjectAccess `json:"projects"`
 }
 
-// GetAccessHistoryPath returns the path to the access history file
+// GetAccessHistoryPath returns the path to the access history file.
+// Access history is runtime state, not configuration, so it lives under the
+// state directory. The configDir argument is kept for the legacy fallback
+// location used by older installs.
 func GetAccessHistoryPath(configDir string) string {
+	if stateDir := paths.StateDir(); stateDir != "" {
+		return filepath.Join(stateDir, "gmux", "access-history.json")
+	}
+	return legacyAccessHistoryPath(configDir)
+}
+
+// legacyAccessHistoryPath is the pre-StateDir location under the config dir.
+func legacyAccessHistoryPath(configDir string) string {
 	return filepath.Join(configDir, "gmux", "access-history.json")
 }
 
@@ -30,6 +43,13 @@ func LoadAccessHistory(configDir string) (*AccessHistory, error) {
 	historyFile := GetAccessHistoryPath(configDir)
 
 	data, err := os.ReadFile(historyFile)
+	if err != nil && os.IsNotExist(err) {
+		// Migrate-on-read: fall back to the legacy config-dir location; the
+		// next Save writes to the state dir.
+		if legacy := legacyAccessHistoryPath(configDir); legacy != historyFile {
+			data, err = os.ReadFile(legacy)
+		}
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Return empty history if file doesn't exist
@@ -61,12 +81,10 @@ func LoadAccessHistory(configDir string) (*AccessHistory, error) {
 
 // Save saves the access history to disk
 func (h *AccessHistory) Save(configDir string) error {
-	historyDir := filepath.Join(configDir, "gmux")
-	if err := os.MkdirAll(historyDir, 0o755); err != nil {
+	historyFile := GetAccessHistoryPath(configDir)
+	if err := os.MkdirAll(filepath.Dir(historyFile), 0o755); err != nil {
 		return err
 	}
-
-	historyFile := GetAccessHistoryPath(configDir)
 
 	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
