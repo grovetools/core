@@ -403,11 +403,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	// Load global override if it exists
 	if globalPath != "" {
 		globalDir := filepath.Dir(globalPath)
-		overrideFiles := []string{
-			filepath.Join(globalDir, "grove.override.yml"),
-			filepath.Join(globalDir, "grove.override.yaml"),
-			filepath.Join(globalDir, "grove.override.toml"),
-		}
+		overrideFiles := globalOverrideFiles(globalDir)
 
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
@@ -564,14 +560,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 
 		// 3. Load and merge override files if they exist (optional)
 		projectDir := filepath.Dir(projectPath)
-		overrideFiles := []string{
-			filepath.Join(projectDir, "grove.override.yml"),
-			filepath.Join(projectDir, "grove.override.yaml"),
-			filepath.Join(projectDir, "grove.override.toml"),
-			filepath.Join(projectDir, ".grove.override.yml"),
-			filepath.Join(projectDir, ".grove.override.yaml"),
-			filepath.Join(projectDir, ".grove.override.toml"),
-		}
+		overrideFiles := projectOverrideFiles(projectDir)
 
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
@@ -771,6 +760,42 @@ func FindConfigFile(startDir string) (string, error) {
 	}
 
 	return "", errors.ConfigNotFound(startDir).WithDetail("searchPath", startDir)
+}
+
+// projectOverrideFiles returns the override file paths recognized next to a
+// project config, in merge order (every existing file is merged, later
+// entries win). This is the single source of truth shared by
+// LoadFromWithLogger, LoadLayered and LoadWithOverrides so they all read the
+// same set of files. The .grove-work.* names are legacy spellings kept for
+// read compatibility.
+func projectOverrideFiles(projectDir string) []string {
+	names := []string{
+		"grove.override.yml",
+		"grove.override.yaml",
+		"grove.override.toml",
+		".grove.override.yml",
+		".grove.override.yaml",
+		".grove.override.toml",
+		// Legacy names (previously .grove-work.*), still read for compat.
+		".grove-work.yml",
+		".grove-work.yaml",
+		".grove-work.toml",
+	}
+	paths := make([]string, len(names))
+	for i, name := range names {
+		paths[i] = filepath.Join(projectDir, name)
+	}
+	return paths
+}
+
+// globalOverrideFiles returns the override file paths recognized next to the
+// global config, in lookup order (only the first existing file is loaded).
+func globalOverrideFiles(globalDir string) []string {
+	return []string{
+		filepath.Join(globalDir, "grove.override.yml"),
+		filepath.Join(globalDir, "grove.override.yaml"),
+		filepath.Join(globalDir, "grove.override.toml"),
+	}
 }
 
 // expandPath expands ~ to home directory and environment variables in a path
@@ -1121,11 +1146,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	// 2.5. Load Global Override layer (optional)
 	if globalPath != "" {
 		globalDir := filepath.Dir(globalPath)
-		overrideFiles := []string{
-			filepath.Join(globalDir, "grove.override.yml"),
-			filepath.Join(globalDir, "grove.override.yaml"),
-			filepath.Join(globalDir, "grove.override.toml"),
-		}
+		overrideFiles := globalOverrideFiles(globalDir)
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
 				overrideData, err := os.ReadFile(overridePath)
@@ -1258,18 +1279,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	// 4. Load Override layers (optional)
 	if projectPath != "" {
 		projectDir := filepath.Dir(projectPath)
-		overrideFiles := []string{
-			filepath.Join(projectDir, "grove.override.yml"),
-			filepath.Join(projectDir, "grove.override.yaml"),
-			filepath.Join(projectDir, "grove.override.toml"),
-			filepath.Join(projectDir, ".grove.override.yml"),
-			filepath.Join(projectDir, ".grove.override.yaml"),
-			filepath.Join(projectDir, ".grove.override.toml"),
-			// This also includes the previously named .grove-work.yml/.yaml/.toml
-			filepath.Join(projectDir, ".grove-work.yml"),
-			filepath.Join(projectDir, ".grove-work.yaml"),
-			filepath.Join(projectDir, ".grove-work.toml"),
-		}
+		overrideFiles := projectOverrideFiles(projectDir)
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
 				overrideData, err := os.ReadFile(overridePath)

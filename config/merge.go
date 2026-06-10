@@ -17,14 +17,7 @@ func LoadWithOverrides(baseFile string) (*Config, error) {
 
 	// Look for override files
 	dir := filepath.Dir(baseFile)
-	overrides := []string{
-		filepath.Join(dir, "grove.override.yml"),
-		filepath.Join(dir, "grove.override.yaml"),
-		filepath.Join(dir, "grove.override.toml"),
-		filepath.Join(dir, ".grove.override.yml"),
-		filepath.Join(dir, ".grove.override.yaml"),
-		filepath.Join(dir, ".grove.override.toml"),
-	}
+	overrides := projectOverrideFiles(dir)
 
 	for _, overrideFile := range overrides {
 		if _, err := os.Stat(overrideFile); err == nil {
