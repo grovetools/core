@@ -129,6 +129,14 @@ type Client interface {
 	// consumers fall back to file-based workflow monitoring).
 	PublishWorkflowEvent(ctx context.Context, event models.WorkflowEvent) error
 
+	// GetWorkflowSnapshot returns the daemon's aggregated workflow run state
+	// (GET /api/workflows): runs keyed by run ID plus run-less ad-hoc
+	// subagents. Consumers reconcile against this snapshot before consuming
+	// the lossy workflow_* SSE deltas. LocalClient returns
+	// ErrWorkflowSnapshotUnavailable — daemonless consumers fall back to
+	// file-based workflow monitoring.
+	GetWorkflowSnapshot(ctx context.Context) (*models.WorkflowSnapshot, error)
+
 	// --- Session Lifecycle Management ---
 	// These methods enable race-free session tracking by allowing:
 	// 1. Pre-registration of intent before agent launch (flow)

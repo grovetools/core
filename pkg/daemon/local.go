@@ -308,6 +308,18 @@ func (c *LocalClient) PublishWorkflowEvent(ctx context.Context, event models.Wor
 	return nil
 }
 
+// ErrWorkflowSnapshotUnavailable is returned by LocalClient.GetWorkflowSnapshot:
+// workflow aggregation lives in the daemon, so daemonless consumers must fall
+// back to file-based workflow monitoring (journal tailing). Typed so callers
+// can errors.Is the fallback decision.
+var ErrWorkflowSnapshotUnavailable = errors.New("workflow snapshot requires the grove daemon; falling back to file-based workflow monitoring")
+
+// GetWorkflowSnapshot returns ErrWorkflowSnapshotUnavailable since workflow
+// aggregation is daemon-only.
+func (c *LocalClient) GetWorkflowSnapshot(ctx context.Context) (*models.WorkflowSnapshot, error) {
+	return nil, ErrWorkflowSnapshotUnavailable
+}
+
 // EnvUp returns an error since built-in environment providers require the daemon.
 func (c *LocalClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
 	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")

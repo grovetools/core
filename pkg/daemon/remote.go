@@ -1003,6 +1003,33 @@ func (c *RemoteClient) PublishWorkflowEvent(ctx context.Context, event models.Wo
 	return nil
 }
 
+// GetWorkflowSnapshot fetches the daemon's aggregated workflow run state
+// from GET /api/workflows. A 404 from an older daemon that predates the
+// endpoint surfaces as an error — callers fall back to file-based
+// workflow monitoring.
+func (c *RemoteClient) GetWorkflowSnapshot(ctx context.Context) (*models.WorkflowSnapshot, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/workflows", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workflow snapshot from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var snapshot models.WorkflowSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		return nil, fmt.Errorf("failed to decode workflow snapshot: %w", err)
+	}
+	return &snapshot, nil
+}
+
 // EnvUp requests the daemon to spin up an environment.
 // Uses a 10-minute timeout to accommodate slow operations like docker builds.
 func (c *RemoteClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
