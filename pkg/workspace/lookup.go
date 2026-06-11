@@ -199,21 +199,31 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		// by checking both: (1) .git is a file, and (2) path is a worktree location
 		isWorktree := isGitWorktree(foundRootPath) && IsWorktreePath(foundRootPath)
 
-		// Find the true root ecosystem and parent ecosystem
-		rootEcosystemPath := findRootEcosystemPath(foundRootPath)
+		// For worktrees, resolve the owning repository once — the worktree
+		// may live outside the ecosystem tree (XDG layout), where upward
+		// filesystem walks from the worktree cannot see the owner.
+		var ownerPath string
+		if isWorktree {
+			ownerPath, _ = WorktreeOwner(foundRootPath)
+		}
+
+		// Find the true root ecosystem; for worktrees start the upward walk
+		// at the owner so XDG-located worktrees resolve the real root.
+		rootSearchStart := foundRootPath
+		if ownerPath != "" {
+			rootSearchStart = ownerPath
+		}
+		rootEcosystemPath := findRootEcosystemPath(rootSearchStart)
 		if rootEcosystemPath == "" {
 			rootEcosystemPath = foundRootPath
 		}
 
 		// Find immediate parent ecosystem if this is a worktree
 		var parentEcosystemPath string
-		if isWorktree {
-			// The parent should be found by looking for parent grove.yml
-			if checkDir, ok := WorktreeOwner(foundRootPath); ok {
-				_, cfg, err := findGroveConfig(checkDir)
-				if err == nil && len(cfg.Workspaces) > 0 {
-					parentEcosystemPath = checkDir
-				}
+		if ownerPath != "" {
+			_, cfg, err := findGroveConfig(ownerPath)
+			if err == nil && len(cfg.Workspaces) > 0 {
+				parentEcosystemPath = ownerPath
 			}
 		}
 
@@ -288,23 +298,52 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 			projectName = filepath.Base(foundRootPath)
 		}
 
-		// Determine if this project is inside an ecosystem
-		parentEcosystemPath := ""
-		// Check if we're inside an ecosystem by looking for a grove.yml with workspaces in parents
-		checkDir := filepath.Dir(foundRootPath)
-		for checkDir != filepath.Dir(checkDir) {
-			_, cfg, err := findGroveConfig(checkDir)
-			if err == nil && len(cfg.Workspaces) > 0 {
-				parentEcosystemPath = checkDir
-				break
+		// Determine if this project is inside an ecosystem by walking up
+		// from its location looking for a grove.yml with workspaces.
+		findEnclosingEcosystem := func(startDir string) string {
+			checkDir := startDir
+			for checkDir != filepath.Dir(checkDir) {
+				_, cfg, err := findGroveConfig(checkDir)
+				if err == nil && len(cfg.Workspaces) > 0 {
+					return checkDir
+				}
+				checkDir = filepath.Dir(checkDir)
 			}
-			checkDir = filepath.Dir(checkDir)
+			return ""
+		}
+		parentEcosystemPath := findEnclosingEcosystem(filepath.Dir(foundRootPath))
+
+		// A worktree may live outside the ecosystem tree (XDG layout): when
+		// the spatial walk finds nothing, derive the ecosystem context from
+		// the OWNING repository's location instead.
+		if parentEcosystemPath == "" && projectIsWorktree && IsWorktreePath(foundRootPath) {
+			if owner, ok := WorktreeOwner(foundRootPath); ok {
+				parentEcosystemPath = findEnclosingEcosystem(owner)
+			}
 		}
 
 		// Find the root ecosystem path
 		rootEcosystemPath := ""
 		if parentEcosystemPath != "" {
 			rootEcosystemPath = findRootEcosystemPath(foundRootPath)
+			// The upward walk tops out at the containing ecosystem worktree
+			// when that worktree lives outside the ecosystem tree (XDG
+			// layout) — resolve the true root via the worktree's owner.
+			if (rootEcosystemPath == "" || rootEcosystemPath == parentEcosystemPath) &&
+				IsWorktreePath(parentEcosystemPath) {
+				if owner, ok := WorktreeOwner(parentEcosystemPath); ok {
+					if r := findRootEcosystemPath(owner); r != "" {
+						rootEcosystemPath = r
+					}
+				}
+			}
+			if rootEcosystemPath == "" {
+				if r := findRootEcosystemPath(parentEcosystemPath); r != "" {
+					rootEcosystemPath = r
+				} else {
+					rootEcosystemPath = parentEcosystemPath
+				}
+			}
 		}
 
 		// Determine the kind for the primary workspace

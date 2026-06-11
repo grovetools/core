@@ -54,6 +54,15 @@ type Project struct {
 	ParentEcosystemPath string                `json:"parent_ecosystem_path,omitempty"`
 	Workspaces          []DiscoveredWorkspace `json:"workspaces"`
 
+	// Worktree provenance — set during discovery ONLY for projects that ARE
+	// ecosystem worktrees, recording which worktree base they were
+	// enumerated from and which repository owns them. This is the
+	// layout-independent replacement for path-shape heuristics
+	// (filepath.Base(filepath.Dir(path)) == ".grove-worktrees"), which
+	// cannot fire for XDG-located worktrees.
+	WorktreeSourceBase string `json:"worktree_source_base,omitempty"`
+	WorktreeOwnerPath  string `json:"worktree_owner_path,omitempty"`
+
 	// Cloned repository-specific fields (populated by discovery for cx repo managed repos)
 	Version       string `json:"version,omitempty"`
 	Commit        string `json:"commit,omitempty"`
@@ -285,20 +294,17 @@ func (w *WorkspaceNode) GetWorktreeName() string {
 		}
 	}
 
-	// For standalone project worktrees, extract from ParentProjectPath relative to this path
+	// For project worktrees, extract the first path component of Path
+	// relative to one of the parent project's worktree bases
+	// (<parent>/.grove-worktrees/NAME or WorktreesDir()/<id>/NAME).
 	if w.ParentProjectPath != "" {
-		rel, err := filepath.Rel(w.ParentProjectPath, w.Path)
-		if err == nil && rel != "." {
-			// The relative path will be like .grove-worktrees/WORKTREE_NAME
-			parts := filepath.SplitList(rel)
-			if len(parts) >= 2 {
-				return parts[1]
+		for _, base := range WorktreeBases(w.ParentProjectPath) {
+			rel, err := filepath.Rel(base, w.Path)
+			if err != nil || rel == "." || rel == ".." ||
+				strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				continue
 			}
-			// Fallback: try splitting by separator
-			pathParts := strings.Split(rel, string(filepath.Separator))
-			if len(pathParts) >= 2 && pathParts[0] == legacyWorktreeDirName {
-				return pathParts[1]
-			}
+			return strings.Split(rel, string(filepath.Separator))[0]
 		}
 	}
 
