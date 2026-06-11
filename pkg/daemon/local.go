@@ -301,6 +301,13 @@ func (c *LocalClient) NotifyNoteEvent(ctx context.Context, event models.NoteEven
 	return nil
 }
 
+// PublishWorkflowEvent is a no-op for LocalClient since there's no daemon to
+// aggregate workflow state — daemonless consumers fall back to file-based
+// workflow monitoring (journal tailing).
+func (c *LocalClient) PublishWorkflowEvent(ctx context.Context, event models.WorkflowEvent) error {
+	return nil
+}
+
 // EnvUp returns an error since built-in environment providers require the daemon.
 func (c *LocalClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
 	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")

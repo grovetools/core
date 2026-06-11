@@ -122,6 +122,13 @@ type Client interface {
 	// This is fire-and-forget from the caller's perspective.
 	NotifyNoteEvent(ctx context.Context, event models.NoteEvent) error
 
+	// PublishWorkflowEvent sends a subagent/workflow lifecycle event to the
+	// daemon for aggregation into workflow run state. Fire-and-forget from
+	// the caller's perspective: a 404 from an older daemon that lacks the
+	// endpoint is treated as success, and LocalClient is a no-op (daemonless
+	// consumers fall back to file-based workflow monitoring).
+	PublishWorkflowEvent(ctx context.Context, event models.WorkflowEvent) error
+
 	// --- Session Lifecycle Management ---
 	// These methods enable race-free session tracking by allowing:
 	// 1. Pre-registration of intent before agent launch (flow)
