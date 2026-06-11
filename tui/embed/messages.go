@@ -43,6 +43,12 @@ type (
 	SplitAgentRequestMsg         = tuimux_embed.SplitAgentRequestMsg
 )
 
+// SwitchWorkspaceRequestMsg is emitted by embedded TUIs to request a workspace switch.
+type SwitchWorkspaceRequestMsg struct {
+	Path       string
+	FocusPanel string
+}
+
 const (
 	AgentSplitOpen  = tuimux_embed.AgentSplitOpen
 	AgentSplitClose = tuimux_embed.AgentSplitClose
