@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -632,11 +633,18 @@ func (c *RemoteClient) SubmitJob(ctx context.Context, req models.JobSubmitReques
 		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
 
-	var info models.JobInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+	// Try to decode as JobSubmitResponse to extract warnings
+	var respBody models.JobSubmitResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
 		return nil, fmt.Errorf("failed to decode job info: %w", err)
 	}
-	return &info, nil
+
+	// Print warnings to stderr if any
+	for _, warning := range respBody.Warnings {
+		fmt.Fprintf(os.Stderr, "[WARN] daemon: %s\n", warning)
+	}
+
+	return respBody.JobInfo, nil
 }
 
 // CancelJob cancels a running or queued job.

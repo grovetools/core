@@ -192,6 +192,13 @@ type JobSubmitRequest struct {
 	AgentTarget string            `json:"agent_target,omitempty"` // "native" or "tmux" — resolved by caller
 }
 
+// JobSubmitResponse represents the response to a job submission.
+// It includes the JobInfo plus any warnings about unknown/unsupported fields.
+type JobSubmitResponse struct {
+	*JobInfo  `json:",inline"`
+	Warnings  []string `json:"warnings,omitempty"` // Warnings about ignored fields or unsupported features
+}
+
 // JobFilter represents query parameters for listing jobs.
 type JobFilter struct {
 	Status string `json:"status,omitempty"`
@@ -262,6 +269,13 @@ type JobStreamEvent struct {
 	Line   *LogLine `json:"line,omitempty"`   // Present when Event == "log"
 	Status string   `json:"status,omitempty"` // Present when Event == "status"
 	Error  string   `json:"error,omitempty"`  // Present when Event == "status" and job failed
+}
+
+// SystemInfo represents the daemon's system information (version, commit, build date).
+type SystemInfo struct {
+	Version   string `json:"version"`    // e.g., "main-abc123def" or "v1.2.3"
+	Commit    string `json:"commit"`     // Git commit hash (short SHA)
+	BuildDate string `json:"build_date"` // ISO 8601 timestamp (e.g., "2026-06-11T15:20:30Z")
 }
 
 // Helper method to parse time strings from API requests
