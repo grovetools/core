@@ -970,6 +970,39 @@ func (c *RemoteClient) NotifyNoteEvent(ctx context.Context, event models.NoteEve
 	return nil
 }
 
+// PublishWorkflowEvent sends a subagent/workflow lifecycle event to the
+// daemon. Modeled on NotifyNoteEvent: fire-and-forget from the caller's
+// perspective. A 404 means the running groved binary predates the
+// /api/workflows/event endpoint — treated as success so producers (hooks)
+// degrade silently against older daemons.
+func (c *RemoteClient) PublishWorkflowEvent(ctx context.Context, event models.WorkflowEvent) error {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal workflow event: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/workflows/event", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send workflow event: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Older daemon without the workflows endpoint; tolerate silently.
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // EnvUp requests the daemon to spin up an environment.
 // Uses a 10-minute timeout to accommodate slow operations like docker builds.
 func (c *RemoteClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {

@@ -42,6 +42,10 @@ type Session struct {
 	ClaudeSessionID string `json:"claude_session_id,omitempty" db:"claude_session_id"`
 	Provider        string `json:"provider,omitempty" db:"provider"`
 
+	// TranscriptPath is the agent's main transcript file, reported by hooks
+	// at session confirmation (daemon.SessionConfirmation.TranscriptPath).
+	TranscriptPath string `json:"transcript_path,omitempty" db:"transcript_path"`
+
 	// Daemon PTY session ID for agent processes owned by groved.
 	PtyID string `json:"pty_id,omitempty" db:"pty_id"`
 
