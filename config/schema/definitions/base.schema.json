@@ -391,6 +391,7 @@
           "x-important": true
         },
         "sync": {
+          "$ref": "#/$defs/SyncConfig",
           "description": "Synchronization configuration for this notebook"
         },
         "syncthing": {
@@ -551,6 +552,9 @@
         "enabled"
       ],
       "type": "object"
+    },
+    "SyncConfig": {
+      "description": "Sync configuration: typed object (server/token/workspaces) or legacy provider list"
     },
     "SyncthingConfig": {
       "additionalProperties": false,
