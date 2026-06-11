@@ -111,6 +111,39 @@ func RecoverSessions() ([]*models.Session, error) {
 	return sessions, nil
 }
 
+// ResolveClaudeSessionDirs returns every directory under ~/.claude/projects/*/
+// named after the given Claude session ID. Session artifacts can fragment
+// across multiple project-slug directories when the shell cwd changes
+// mid-session (e.g. a workflow's runs land under the worktree slug while its
+// scripts land under a submodule slug), so callers must consider all matches
+// rather than constructing a single path.
+func ResolveClaudeSessionDirs(claudeSessionID string) ([]string, error) {
+	if claudeSessionID == "" {
+		return nil, fmt.Errorf("claude session ID is empty")
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve home directory: %w", err)
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", claudeSessionID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to glob claude session dirs: %w", err)
+	}
+
+	var dirs []string
+	for _, match := range matches {
+		info, err := os.Stat(match)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		dirs = append(dirs, match)
+	}
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
 // DiscoverAll returns sessions recovered from the filesystem crash-recovery registry.
 // This is used by LocalClient as a fallback when the daemon is not available.
 // The daemon is the single source of truth for live session state; this only returns
