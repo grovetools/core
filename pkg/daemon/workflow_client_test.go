@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -104,6 +105,82 @@ func TestRemoteClientPublishWorkflowEvent(t *testing.T) {
 			t.Error("expected error on 500 response, got nil")
 		}
 	})
+}
+
+func TestRemoteClientGetWorkflowSnapshot(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		var gotPath, gotMethod string
+		socketPath := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath, gotMethod = r.URL.Path, r.Method
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"runs": {
+					"wf_abc": {
+						"run_id": "wf_abc",
+						"job_id": "job-1",
+						"claude_session_id": "sess-1",
+						"name": "p3-impl",
+						"phases": ["Phase 1"],
+						"agents": {"a1": {"id": "a1", "status": "completed"}},
+						"started_count": 2,
+						"completed_count": 1,
+						"stale": false
+					}
+				},
+				"adhoc": {"job-2": {"a2": {"id": "a2", "status": "running"}}}
+			}`))
+		}))
+
+		c, err := NewRemoteClient(socketPath)
+		if err != nil {
+			t.Fatalf("NewRemoteClient: %v", err)
+		}
+		snap, err := c.GetWorkflowSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetWorkflowSnapshot: %v", err)
+		}
+		if gotMethod != "GET" || gotPath != "/api/workflows" {
+			t.Errorf("got %s %s, want GET /api/workflows", gotMethod, gotPath)
+		}
+		run, ok := snap.Runs["wf_abc"]
+		if !ok {
+			t.Fatalf("missing run wf_abc in snapshot: %+v", snap)
+		}
+		if run.Name != "p3-impl" || run.JobID != "job-1" || run.StartedCount != 2 || run.CompletedCount != 1 {
+			t.Errorf("run decoded wrong: %+v", run)
+		}
+		if run.Agents["a1"] == nil || run.Agents["a1"].Status != "completed" {
+			t.Errorf("agent a1 decoded wrong: %+v", run.Agents)
+		}
+		if snap.Adhoc["job-2"]["a2"] == nil || snap.Adhoc["job-2"]["a2"].Status != "running" {
+			t.Errorf("adhoc decoded wrong: %+v", snap.Adhoc)
+		}
+	})
+
+	t.Run("404 from older daemon surfaces as error", func(t *testing.T) {
+		socketPath := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		}))
+
+		c, err := NewRemoteClient(socketPath)
+		if err != nil {
+			t.Fatalf("NewRemoteClient: %v", err)
+		}
+		if _, err := c.GetWorkflowSnapshot(context.Background()); err == nil {
+			t.Error("expected error on 404 response, got nil")
+		}
+	})
+}
+
+func TestLocalClientGetWorkflowSnapshotTypedError(t *testing.T) {
+	c := NewLocalClient()
+	snap, err := c.GetWorkflowSnapshot(context.Background())
+	if snap != nil {
+		t.Errorf("expected nil snapshot, got %+v", snap)
+	}
+	if !errors.Is(err, ErrWorkflowSnapshotUnavailable) {
+		t.Errorf("expected ErrWorkflowSnapshotUnavailable, got: %v", err)
+	}
 }
 
 func TestLocalClientPublishWorkflowEventNoOp(t *testing.T) {

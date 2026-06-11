@@ -85,6 +85,9 @@ type WorkflowEvent struct {
 	Prompt string `json:"prompt,omitempty"`
 	// Phase is the workflow phase title (journal enrichment only).
 	Phase string `json:"phase,omitempty"`
+	// WorkflowName is the workflow name (from background_tasks[].name at
+	// SubagentStop, or the journal's run header). Optional enrichment.
+	WorkflowName string `json:"workflow_name,omitempty"`
 	// ResultSummary is a short structured-result summary (journal enrichment).
 	ResultSummary string `json:"result_summary,omitempty"`
 	// LastMessage is the agent's final assistant text
@@ -118,4 +121,14 @@ type WorkflowRunState struct {
 	// past the staleness threshold (never decided by the PID reaper).
 	Stale     bool      `json:"stale"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// WorkflowSnapshot is the GET /api/workflows response: aggregated run state
+// keyed by run ID, plus run-less subagents (ad-hoc Agent-tool spawns and
+// not-yet-attributed workflow agents) keyed by session key (job ID when
+// stamped, else the claude session ID). Consumers reconcile against this
+// snapshot since the workflow_* SSE broadcast is lossy-by-design.
+type WorkflowSnapshot struct {
+	Runs  map[string]*WorkflowRunState    `json:"runs"`
+	Adhoc map[string]map[string]*Subagent `json:"adhoc,omitempty"`
 }
