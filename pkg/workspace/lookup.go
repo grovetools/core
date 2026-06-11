@@ -196,8 +196,8 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 
 	case typeEcosystem:
 		// Check if this ecosystem is itself a worktree
-		// by checking both: (1) .git is a file, and (2) path contains .grove-worktrees
-		isWorktree := isGitWorktree(foundRootPath) && strings.Contains(foundRootPath, ".grove-worktrees")
+		// by checking both: (1) .git is a file, and (2) path is a worktree location
+		isWorktree := isGitWorktree(foundRootPath) && IsWorktreePath(foundRootPath)
 
 		// Find the true root ecosystem and parent ecosystem
 		rootEcosystemPath := findRootEcosystemPath(foundRootPath)
@@ -209,10 +209,11 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		var parentEcosystemPath string
 		if isWorktree {
 			// The parent should be found by looking for parent grove.yml
-			checkDir := filepath.Dir(filepath.Dir(foundRootPath)) // Go up past .grove-worktrees
-			_, cfg, err := findGroveConfig(checkDir)
-			if err == nil && len(cfg.Workspaces) > 0 {
-				parentEcosystemPath = checkDir
+			if checkDir, ok := WorktreeOwner(foundRootPath); ok {
+				_, cfg, err := findGroveConfig(checkDir)
+				if err == nil && len(cfg.Workspaces) > 0 {
+					parentEcosystemPath = checkDir
+				}
 			}
 		}
 
@@ -245,8 +246,10 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 
 		// Only check for worktree subdirectories if this is not already a worktree
 		if !isWorktree {
-			worktreeBase := filepath.Join(foundRootPath, ".grove-worktrees")
-			if strings.HasPrefix(absPath, worktreeBase+string(filepath.Separator)) {
+			for _, worktreeBase := range WorktreeBases(foundRootPath) {
+				if !strings.HasPrefix(absPath, worktreeBase+string(filepath.Separator)) {
+					continue
+				}
 				// The path is inside a worktree
 				// Find the specific worktree
 				if entries, readErr := os.ReadDir(worktreeBase); readErr == nil {
@@ -281,7 +284,7 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		projectIsWorktree := isGitWorktree(foundRootPath)
 
 		// If this is a worktree, use the directory name instead of config name
-		if projectIsWorktree && strings.Contains(foundRootPath, ".grove-worktrees") {
+		if projectIsWorktree && IsWorktreePath(foundRootPath) {
 			projectName = filepath.Base(foundRootPath)
 		}
 
@@ -309,13 +312,13 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		var parentProjectPath string
 
 		// Check if this is a worktree of a standalone project (not in an ecosystem)
-		if parentEcosystemPath == "" && strings.Contains(foundRootPath, ".grove-worktrees") {
+		if parentEcosystemPath == "" && IsWorktreePath(foundRootPath) {
 			kind = KindStandaloneProjectWorktree
-			// Set parent project path by going up past .grove-worktrees
-			parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
+			// The owner project is derived from the worktree location
+			parentProjectPath, _ = WorktreeOwner(foundRootPath)
 		} else if parentEcosystemPath != "" {
 			// Check if the parent ecosystem is itself a worktree
-			parentIsWorktree := strings.Contains(parentEcosystemPath, ".grove-worktrees")
+			parentIsWorktree := IsWorktreePath(parentEcosystemPath)
 
 			// It's inside an ecosystem
 			if parentIsWorktree {
@@ -334,8 +337,13 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 				// Parent ecosystem is not a worktree, but the project might be
 				if projectIsWorktree {
 					kind = KindEcosystemSubProjectWorktree
-					// Set parent project path by going up past .grove-worktrees
-					parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
+					if owner, ok := WorktreeOwner(foundRootPath); ok {
+						parentProjectPath = owner
+					} else {
+						// Git worktree outside a recognized worktree base:
+						// preserve the historical grandparent inference.
+						parentProjectPath = filepath.Dir(filepath.Dir(foundRootPath))
+					}
 				} else {
 					kind = KindEcosystemSubProject
 				}
@@ -353,14 +361,17 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		nodes = append(nodes, primaryNode)
 
 		// Check for worktrees of this project
-		worktreeBase := filepath.Join(foundRootPath, ".grove-worktrees")
-		if entries, readErr := os.ReadDir(worktreeBase); readErr == nil {
+		for _, worktreeBase := range WorktreeBases(foundRootPath) {
+			entries, readErr := os.ReadDir(worktreeBase)
+			if readErr != nil {
+				continue
+			}
 			for _, entry := range entries {
 				if entry.IsDir() {
 					wtPath := filepath.Join(worktreeBase, entry.Name())
 					wtKind := KindStandaloneProjectWorktree
 					if parentEcosystemPath != "" {
-						if strings.Contains(foundRootPath, ".grove-worktrees") {
+						if IsWorktreePath(foundRootPath) {
 							wtKind = KindEcosystemWorktreeSubProjectWorktree
 						} else {
 							wtKind = KindEcosystemSubProjectWorktree

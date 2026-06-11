@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // Options carries prune runtime flags. Mirrors the CLI surface so
@@ -22,12 +24,28 @@ type Options struct {
 // git root for host detection, and the cloud config for gcloud shell-
 // outs. Zero-valued fields disable the relevant detectors.
 type Inputs struct {
-	GitRoot      string
-	Active       []string
-	Inactive     []string
-	Cloud        CloudConfig
-	DockerRunner Runner
-	GcloudRunner Runner
+	GitRoot string
+	// WorktreeBases optionally overrides the worktree base directories
+	// scanned for orphaned host worktree dirs (and allowed as deletion
+	// roots). When empty, the bases are derived from GitRoot via
+	// workspace.WorktreeBases.
+	WorktreeBases []string
+	Active        []string
+	Inactive      []string
+	Cloud         CloudConfig
+	DockerRunner  Runner
+	GcloudRunner  Runner
+}
+
+// worktreeBases resolves the effective worktree base directories for in.
+func (in Inputs) worktreeBases() []string {
+	if len(in.WorktreeBases) > 0 {
+		return in.WorktreeBases
+	}
+	if in.GitRoot == "" {
+		return nil
+	}
+	return workspace.WorktreeBases(in.GitRoot)
 }
 
 // Detect runs every enabled detector and returns a flat orphan slice
@@ -77,7 +95,7 @@ func Detect(in Inputs, opts Options) ([]Orphan, error) {
 		collect(DetectDockerImages(in.DockerRunner, idx))
 		collect(DetectDockerVolumes(in.DockerRunner, idx))
 	}
-	collect(DetectHostWorktreeDirs(in.GitRoot, idx))
+	collect(DetectHostWorktreeDirs(in.GitRoot, idx, in.worktreeBases()...))
 	collect(DetectHostVolumeDirs(in.GitRoot, idx))
 	if in.GcloudRunner != nil && opts.IncludeCloud {
 		collect(DetectCloudRun(in.GcloudRunner, in.Cloud, idx))
@@ -146,7 +164,12 @@ func deleteOrphan(in Inputs, o Orphan) error {
 		_, err := in.DockerRunner.Run("docker", "volume", "rm", "-f", o.Name)
 		return err
 	case CatHostWorktree, CatHostVolume:
-		return removeHostPath(o.Name, in.GitRoot)
+		allowedRoots := make([]string, 0, 1+len(in.WorktreeBases))
+		if in.GitRoot != "" {
+			allowedRoots = append(allowedRoots, in.GitRoot)
+		}
+		allowedRoots = append(allowedRoots, in.worktreeBases()...)
+		return removeHostPath(o.Name, allowedRoots)
 	case CatCloudRun:
 		_, err := in.GcloudRunner.Run("gcloud", "run", "services", "delete", o.Name,
 			"--project="+in.Cloud.Project, "--region="+in.Cloud.Region, "--quiet")
@@ -173,17 +196,28 @@ func deleteOrphan(in Inputs, o Orphan) error {
 }
 
 // removeHostPath deletes path after confirming it lives strictly under
-// gitRoot — guards against ever descending outside the ecosystem.
-func removeHostPath(path, gitRoot string) error {
-	if gitRoot == "" {
-		return fmt.Errorf("gitRoot empty; refusing to remove %s", path)
+// one of allowedRoots — guards against ever descending outside the
+// ecosystem or its worktree bases. The roots themselves are never
+// deletable, only strict children.
+func removeHostPath(path string, allowedRoots []string) error {
+	if len(allowedRoots) == 0 {
+		return fmt.Errorf("no allowed roots; refusing to remove %s", path)
 	}
 	clean := filepath.Clean(path)
-	rootClean := filepath.Clean(gitRoot) + string(filepath.Separator)
-	if !strings.HasPrefix(clean, rootClean) {
-		return fmt.Errorf("refusing to remove %s: outside git root %s", path, gitRoot)
+	for _, root := range allowedRoots {
+		if root == "" {
+			continue
+		}
+		rootClean := filepath.Clean(root)
+		if clean == rootClean {
+			// Never delete an allowed root itself.
+			continue
+		}
+		if strings.HasPrefix(clean, rootClean+string(filepath.Separator)) {
+			return os.RemoveAll(clean)
+		}
 	}
-	return os.RemoveAll(clean)
+	return fmt.Errorf("refusing to remove %s: outside git root and worktree bases %v", path, allowedRoots)
 }
 
 func containsString(xs []string, want string) bool {

@@ -133,9 +133,18 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 	// Case 1: If base is a subproject, look for its worktree
 	// e.g., grove-mcp/.grove-worktrees/1986
 	if !baseProjectNode.IsEcosystem() {
-		targetPath := filepath.Join(baseProjectNode.Path, ".grove-worktrees", worktreeName)
-		if node := p.FindByPath(targetPath); node != nil && node.Path == targetPath {
-			return node
+		// Prefer the discovered node index: it is layout-independent.
+		for _, node := range p.nodes {
+			if node.IsWorktree() && node.Name == worktreeName && node.ParentProjectPath == baseProjectNode.Path {
+				return node
+			}
+		}
+		// Fallback: probe candidate paths under each worktree base.
+		for _, base := range WorktreeBases(baseProjectNode.Path) {
+			targetPath := filepath.Join(base, worktreeName)
+			if node := p.FindByPath(targetPath); node != nil && node.Path == targetPath {
+				return node
+			}
 		}
 	}
 
@@ -153,9 +162,23 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 	// Case 3: Look for ecosystem worktree subproject
 	// e.g., /ecosystem/.grove-worktrees/test444/grove-core
 	if !baseProjectNode.IsEcosystem() {
-		targetPath := filepath.Join(ecosystemPath, ".grove-worktrees", worktreeName, baseProjectNode.Name)
-		if node := p.FindByPath(targetPath); node != nil && node.Path == targetPath {
-			return node
+		// Prefer the discovered node index: find the ecosystem worktree by
+		// name, then the matching subproject inside it.
+		for _, node := range p.nodes {
+			if node.Kind == KindEcosystemWorktree && node.Name == worktreeName &&
+				(node.RootEcosystemPath == ecosystemPath || node.ParentEcosystemPath == ecosystemPath) {
+				targetPath := filepath.Join(node.Path, baseProjectNode.Name)
+				if sub := p.FindByPath(targetPath); sub != nil && sub.Path == targetPath {
+					return sub
+				}
+			}
+		}
+		// Fallback: probe candidate paths under each worktree base.
+		for _, base := range WorktreeBases(ecosystemPath) {
+			targetPath := filepath.Join(base, worktreeName, baseProjectNode.Name)
+			if node := p.FindByPath(targetPath); node != nil && node.Path == targetPath {
+				return node
+			}
 		}
 	}
 

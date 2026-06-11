@@ -76,8 +76,34 @@ func TestRun_ScopedToWorktree(t *testing.T) {
 }
 
 func TestRemoveHostPath_RefusesOutsideRoot(t *testing.T) {
-	err := removeHostPath("/etc/passwd", "/home/safe")
+	err := removeHostPath("/etc/passwd", []string{"/home/safe"})
 	if err == nil || !strings.Contains(err.Error(), "outside git root") {
 		t.Fatalf("expected outside-root refusal, got %v", err)
+	}
+}
+
+func TestRemoveHostPath_AllowedRoots(t *testing.T) {
+	tmp := t.TempDir()
+	gitRoot := filepath.Join(tmp, "eco")
+	base := filepath.Join(gitRoot, ".grove-worktrees")
+	dead := filepath.Join(base, "dead")
+	if err := os.MkdirAll(dead, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Refuses with no allowed roots at all.
+	if err := removeHostPath(dead, nil); err == nil {
+		t.Fatal("expected refusal with empty allowed roots")
+	}
+	// Refuses to delete an allowed root itself.
+	if err := removeHostPath(tmp, []string{tmp}); err == nil {
+		t.Fatal("expected refusal deleting an allowed root itself")
+	}
+	// Deletes a strict child of an allowed base.
+	if err := removeHostPath(dead, []string{gitRoot, base}); err != nil {
+		t.Fatalf("expected deletion of %s, got %v", dead, err)
+	}
+	if _, err := os.Stat(dead); !os.IsNotExist(err) {
+		t.Fatalf("expected %s removed, stat err=%v", dead, err)
 	}
 }
