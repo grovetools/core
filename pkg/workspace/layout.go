@@ -148,10 +148,12 @@ func ResolveNewWorktreePath(gitRoot, name string, useXDG bool) string {
 //  1. The worktree's .git FILE: "gitdir: <owner>/.git/worktrees/<name>"
 //     (or "<bare>/worktrees/<name>" for bare owners) names the owner
 //     directly in any layout.
-//  2. Legacy-shaped paths fall back to the historical Dir(Dir()) grandparent
-//     inference, so zombie worktrees (deleted .git file) still resolve. The
-//     .grove/workspace marker carries no owner path, so an XDG worktree
-//     whose gitdir pointer is unreadable cannot be resolved (ok=false).
+//  2. The .grove/workspace marker's owner: key (written at creation since
+//     Phase 4), so zombie worktrees (deleted .git file) in any layout still
+//     resolve.
+//  3. Legacy-shaped paths fall back to the historical Dir(Dir()) grandparent
+//     inference. An XDG worktree without a gitdir pointer or a marker
+//     cannot be resolved (ok=false).
 func WorktreeOwner(worktreePath string) (string, bool) {
 	if !IsWorktreePath(worktreePath) {
 		return "", false
@@ -163,8 +165,34 @@ func WorktreeOwner(worktreePath string) (string, bool) {
 	if owner, ok := ownerFromGitdir(root); ok {
 		return owner, true
 	}
+	if owner, ok := ownerFromMarker(root); ok {
+		return owner, true
+	}
 	if hasPathComponent(filepath.Clean(worktreePath), legacyWorktreeDirName) {
 		return filepath.Dir(filepath.Dir(worktreePath)), true
+	}
+	return "", false
+}
+
+// ownerFromMarker reads the owner: key from the worktree's .grove/workspace
+// marker. The key is additive (written at creation since Phase 4); markers
+// from older worktrees simply miss.
+func ownerFromMarker(worktreeRoot string) (string, bool) {
+	content, err := os.ReadFile(filepath.Join(worktreeRoot, ".grove", "workspace"))
+	if err != nil {
+		return "", false
+	}
+	const prefix = "owner:"
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		owner := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if owner != "" && filepath.IsAbs(owner) {
+			return filepath.Clean(owner), true
+		}
+		return "", false
 	}
 	return "", false
 }

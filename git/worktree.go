@@ -192,26 +192,53 @@ func (m *WorktreeManager) GetWorktreeRoot(ctx context.Context, path string) (str
 	return "", fmt.Errorf("could not determine worktree root")
 }
 
-// GetOrPrepareWorktree gets an existing worktree or creates a new one
+// GetOrPrepareWorktree gets an existing worktree or creates a new one at the
+// standardized legacy location (<basePath>/.grove-worktrees/<name>).
 // This method is used by orchestration executors to ensure a consistent worktree setup
 // Returns the worktree path, a boolean indicating if it was newly created, and an error
 func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, worktreeName, branchName string) (string, bool, error) {
 	if worktreeName == "" {
 		return "", false, fmt.Errorf("worktree name cannot be empty")
 	}
+	// core/git cannot call workspace.ResolveNewWorktreePath (import cycle via
+	// util/pathutil), so it joins against the shared layout constant.
+	target := filepath.Join(basePath, paths.LegacyWorktreeDirName, worktreeName)
+	return m.GetOrPrepareWorktreeAt(ctx, basePath, target, branchName)
+}
 
-	// Standardized legacy worktree target. This is the only place core/git
-	// computes a worktree location; it cannot call
-	// workspace.ResolveNewWorktreePath (import cycle via util/pathutil), so
-	// it joins against the shared layout constant. A later phase replaces
-	// this with a GetOrPrepareWorktreeAt variant that receives the resolved
-	// target from the workspace layer.
-	worktreesBaseDir := filepath.Join(basePath, paths.LegacyWorktreeDirName)
-	worktreePath := filepath.Join(worktreesBaseDir, worktreeName)
+// GetOrPrepareWorktreeAt gets an existing worktree or creates a new one at
+// the resolved targetPath (legacy or XDG — the workspace layer computes it
+// via ResolveNewWorktreePath). Idempotency, in order:
+//
+//  1. An existing worktree whose branch matches is returned wherever it
+//     lives — legacy location preferred over XDG; never create a duplicate.
+//  2. An existing directory at either candidate path (legacy join or the
+//     requested target) is reused.
+//  3. Stale worktree entries (registered but directory gone) at either
+//     candidate path are cleaned up.
+//  4. The target's parent directory is created before `git worktree add`
+//     (callers like flow never run paths.EnsureDirs).
+//
+// Returns the worktree path, a boolean indicating if it was newly created,
+// and an error.
+func (m *WorktreeManager) GetOrPrepareWorktreeAt(ctx context.Context, basePath, targetPath, branchName string) (string, bool, error) {
+	if targetPath == "" {
+		return "", false, fmt.Errorf("worktree target path cannot be empty")
+	}
+	targetPath = filepath.Clean(targetPath)
+
+	worktreeName := worktreeNameForTarget(basePath, targetPath)
 
 	// If no branch name is provided, use the worktree name as the branch name
 	if branchName == "" {
 		branchName = worktreeName
+	}
+
+	// Both locations a worktree of this name could already occupy, legacy
+	// first. When targetPath IS the legacy join the two coincide.
+	candidates := []string{filepath.Join(basePath, paths.LegacyWorktreeDirName, worktreeName)}
+	if candidates[0] != targetPath {
+		candidates = append(candidates, targetPath)
 	}
 
 	// Need to find the git root for worktree operations
@@ -226,38 +253,58 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 		return "", false, fmt.Errorf("list worktrees: %w", err)
 	}
 
+	// Rule 1: the branch checked out anywhere wins, legacy candidate first.
+	var branchMatch string
 	for _, wt := range worktrees {
-		// Check if the branch is already checked out in any worktree
-		if wt.Branch == branchName {
-			// Verify the directory actually exists
-			if _, err := os.Stat(wt.Path); err == nil {
-				return wt.Path, false, nil // Branch already checked out in existing worktree
-			}
+		if wt.Branch != branchName {
+			continue
 		}
+		// Verify the directory actually exists
+		if _, err := os.Stat(wt.Path); err != nil {
+			continue
+		}
+		if wt.Path == candidates[0] {
+			return wt.Path, false, nil
+		}
+		if branchMatch == "" {
+			branchMatch = wt.Path
+		}
+	}
+	if branchMatch != "" {
+		return branchMatch, false, nil
+	}
 
-		if wt.Path == worktreePath {
-			// Verify the directory actually exists
-			if _, err := os.Stat(worktreePath); err == nil {
+	for _, candidate := range candidates {
+		for _, wt := range worktrees {
+			if wt.Path != candidate {
+				continue
+			}
+			if _, err := os.Stat(candidate); err == nil {
 				return wt.Path, false, nil // Worktree exists and directory is present
 			}
-			// Directory doesn't exist, need to remove stale worktree entry
-			if err := m.RemoveWorktree(ctx, gitRoot, worktreePath); err != nil {
+			// Rule 3: directory gone — remove the stale worktree entry.
+			if err := m.RemoveWorktree(ctx, gitRoot, candidate); err != nil {
 				// Log warning but continue
 				fmt.Printf("Warning: failed to remove stale worktree: %v\n", err)
 			}
 		}
+		// Rule 2: an unregistered directory at a candidate path is reused
+		// rather than shadowed by a duplicate.
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, false, nil
+		}
 	}
 
-	// Ensure the base directory exists
-	if err := os.MkdirAll(worktreesBaseDir, 0o755); err != nil {
+	// Rule 4: ensure the target's parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return "", false, fmt.Errorf("create worktrees base directory: %w", err)
 	}
 
 	// Create the worktree with a new branch
-	if err := m.CreateWorktree(ctx, gitRoot, worktreePath, branchName, true); err != nil {
+	if err := m.CreateWorktree(ctx, gitRoot, targetPath, branchName, true); err != nil {
 		// If branch already exists, try to create worktree using existing branch
 		if strings.Contains(err.Error(), "already exists") {
-			if err := m.CreateWorktree(ctx, gitRoot, worktreePath, branchName, false); err != nil {
+			if err := m.CreateWorktree(ctx, gitRoot, targetPath, branchName, false); err != nil {
 				return "", false, fmt.Errorf("create worktree with existing branch: %w", err)
 			}
 		} else {
@@ -265,5 +312,34 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 		}
 	}
 
-	return worktreePath, true, nil
+	return targetPath, true, nil
+}
+
+// worktreeNameForTarget derives the worktree name (possibly nested, e.g.
+// "fix/deep") from a resolved target path: relative to the legacy base when
+// the target is legacy-shaped, relative to the identifier dir when the
+// target is under paths.WorktreesDir(). Falls back to the basename.
+func worktreeNameForTarget(basePath, targetPath string) string {
+	if rel, ok := relPathUnder(filepath.Join(basePath, paths.LegacyWorktreeDirName), targetPath); ok {
+		return rel
+	}
+	if wtd := paths.WorktreesDir(); wtd != "" {
+		if rel, ok := relPathUnder(wtd, targetPath); ok {
+			parts := strings.Split(rel, string(filepath.Separator))
+			if len(parts) >= 2 {
+				return filepath.Join(parts[1:]...)
+			}
+		}
+	}
+	return filepath.Base(targetPath)
+}
+
+// relPathUnder returns path relative to base when path is strictly inside base.
+func relPathUnder(base, path string) (string, bool) {
+	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
+	if err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
 }

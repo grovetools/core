@@ -8,11 +8,16 @@ import (
 
 // PrepareOptions holds configuration for preparing a workspace.
 type PrepareOptions struct {
-	GitRoot      string
-	WorktreeName string
-	BranchName   string
-	PlanName     string   // Optional, for state management in grove-flow
-	Repos        []string // For ecosystem worktrees
+	GitRoot           string
+	WorktreeName      string
+	BranchName        string
+	PlanName          string   // Optional, for state management in grove-flow
+	SiblingWorkspaces []string // For ecosystem worktrees (persisted as the marker's repos: key)
+
+	// UseXDGWorktrees selects the XDG layout
+	// (paths.WorktreesDir()/<DirIdentifier>/<name>) for NEW worktrees.
+	// Existing worktrees are reused wherever they live, legacy first.
+	UseXDGWorktrees bool
 }
 
 // WorkspaceInfo represents a workspace from grove ws list --json

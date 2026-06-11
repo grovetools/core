@@ -215,6 +215,45 @@ func TestSetupSubmodules(t *testing.T) {
 		}
 	})
 
+	t.Run("xdg-shaped worktree path uses passed gitRoot", func(t *testing.T) {
+		sandboxXDG(t)
+
+		tempDir := t.TempDir()
+		superprojectDir := filepath.Join(tempDir, "superproject")
+		require.NoError(t, os.MkdirAll(superprojectDir, 0o755))
+		initGitRepo(t, superprojectDir)
+		require.NoError(t, os.WriteFile(filepath.Join(superprojectDir, "README.md"), []byte("superproject"), 0o644))
+		commitFiles(t, superprojectDir, "initial commit")
+
+		// Sibling repo as a DIRECT CHILD of the ecosystem root (untracked,
+		// like a gitignored private repo) — the direct-child filter must
+		// match it against the PASSED gitRoot, not the worktree location.
+		localSubmoduleDir := filepath.Join(superprojectDir, "local-sub")
+		require.NoError(t, os.MkdirAll(localSubmoduleDir, 0o755))
+		initGitRepo(t, localSubmoduleDir)
+		require.NoError(t, os.WriteFile(filepath.Join(localSubmoduleDir, "README.md"), []byte("local submodule"), 0o644))
+		commitFiles(t, localSubmoduleDir, "initial commit")
+
+		// Ecosystem worktree at the XDG location (outside the repo tree).
+		worktreePath := ResolveNewWorktreePath(superprojectDir, "wt1", true)
+		require.NoError(t, os.MkdirAll(filepath.Dir(worktreePath), 0o755))
+		createWorktree(t, superprojectDir, worktreePath, "feature-branch")
+
+		mockProvider := createMockProvider(map[string]string{
+			"local-sub": localSubmoduleDir,
+		})
+
+		err := SetupSubmodules(ctx, worktreePath, superprojectDir, "feature-branch", nil, mockProvider)
+		require.NoError(t, err)
+
+		// mainProjectPath resolved against gitRoot: local-sub is a real
+		// linked worktree (worktree .git pointer FILE), not a placeholder.
+		gitPointer := filepath.Join(worktreePath, "local-sub", ".git")
+		info, err := os.Stat(gitPointer)
+		require.NoError(t, err, "local-sub should be a linked worktree at the XDG location")
+		assert.False(t, info.IsDir(), "local-sub/.git should be a worktree pointer file")
+	})
+
 	t.Run("handle missing submodules", func(t *testing.T) {
 		// Create temporary directories
 		tempDir := t.TempDir()

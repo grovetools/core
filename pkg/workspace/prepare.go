@@ -19,8 +19,13 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		return "", fmt.Errorf("cannot create project worktree inside a notebook repository located at %s. Run this command from your project directory", opts.GitRoot)
 	}
 
+	if opts.WorktreeName == "" {
+		return "", fmt.Errorf("worktree name cannot be empty")
+	}
+
 	wm := git.NewWorktreeManager()
-	worktreePath, created, err := wm.GetOrPrepareWorktree(ctx, opts.GitRoot, opts.WorktreeName, opts.BranchName)
+	target := ResolveNewWorktreePath(opts.GitRoot, opts.WorktreeName, opts.UseXDGWorktrees)
+	worktreePath, created, err := wm.GetOrPrepareWorktreeAt(ctx, opts.GitRoot, target, opts.BranchName)
 	if err != nil {
 		return "", fmt.Errorf("failed to prepare worktree: %w", err)
 	}
@@ -44,7 +49,7 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 			provider = NewProvider(discoveryResult)
 		}
 
-		if err := SetupSubmodules(ctx, worktreePath, opts.GitRoot, opts.BranchName, opts.Repos, provider, setupHandlers...); err != nil {
+		if err := SetupSubmodules(ctx, worktreePath, opts.GitRoot, opts.BranchName, opts.SiblingWorkspaces, provider, setupHandlers...); err != nil {
 			fmt.Printf("Warning: failed to setup submodules for worktree '%s': %v\n", opts.WorktreeName, err)
 		}
 
@@ -61,15 +66,23 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		markerPath := filepath.Join(groveDir, "workspace")
 
 		// Determine if this is an ecosystem worktree
-		isEcosystem := len(opts.Repos) > 0
+		isEcosystem := len(opts.SiblingWorkspaces) > 0
 
-		markerContent := fmt.Sprintf("branch: %s\nplan: %s\ncreated_at: %s\necosystem: %t\n",
-			opts.BranchName, opts.PlanName, time.Now().UTC().Format(time.RFC3339), isEcosystem)
+		// The ecosystem:/repos: keys below are a frozen persisted format —
+		// keep them verbatim. owner: is an additive key recording the owning
+		// repository root so deleted (zombie) worktrees stay owner-resolvable
+		// after their .git file is gone (see WorktreeOwner).
+		ownerPath := opts.GitRoot
+		if abs, err := filepath.Abs(opts.GitRoot); err == nil {
+			ownerPath = abs
+		}
+		markerContent := fmt.Sprintf("branch: %s\nplan: %s\ncreated_at: %s\nowner: %s\necosystem: %t\n",
+			opts.BranchName, opts.PlanName, time.Now().UTC().Format(time.RFC3339), ownerPath, isEcosystem)
 
 		// Add repos list for ecosystem worktrees
 		if isEcosystem {
 			markerContent += "repos:\n"
-			for _, repo := range opts.Repos {
+			for _, repo := range opts.SiblingWorkspaces {
 				markerContent += fmt.Sprintf("  - %s\n", repo)
 			}
 		}
