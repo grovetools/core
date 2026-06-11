@@ -110,6 +110,18 @@ func CacheDir() string {
 	return filepath.Join(base, "grove")
 }
 
+// WorktreesDir returns the base directory for XDG-located grove worktrees
+// (DataDir()/worktrees). Honors GROVE_HOME then XDG_DATA_HOME via the data
+// home resolution. Callers that create worktrees must MkdirAll the target
+// themselves — not every binary calls EnsureDirs.
+func WorktreesDir() string {
+	data := DataDir()
+	if data == "" {
+		return ""
+	}
+	return filepath.Join(data, "worktrees")
+}
+
 // BinDir returns the Grove binary directory.
 // Resolution order:
 // 1. GROVE_BIN env var (explicit override for demos/testing)
@@ -184,6 +196,7 @@ func EnsureDirs() error {
 		CacheDir(),
 		BinDir(),
 		RuntimeDir(),
+		WorktreesDir(),
 	}
 
 	for _, dir := range dirs {

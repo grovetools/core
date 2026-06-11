@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/grovetools/core/pkg/workspace"
 )
 
 // Runner is the exec abstraction used by detection and deletion paths.
@@ -133,38 +135,45 @@ func DetectDockerVolumes(runner Runner, idx SlugIndex) ([]Orphan, error) {
 	return orphans, nil
 }
 
-// DetectHostWorktreeDirs lists <gitRoot>/.grove-worktrees/ and reports
-// every entry whose name is not in the active set. This is the
+// DetectHostWorktreeDirs lists every worktree base of gitRoot and reports
+// each entry whose name is not in the active set. This is the
 // filesystem analogue of "what worktrees does the ecosystem know
 // about". The caller is responsible for gating this behind --force /
 // known-dead checks — a stale directory might still hold uncommitted
 // work. Prune reports, `flow plan finish` owns actual removal.
-func DetectHostWorktreeDirs(gitRoot string, idx SlugIndex) ([]Orphan, error) {
-	if gitRoot == "" {
+//
+// bases optionally overrides the scanned worktree base directories; when
+// omitted they are derived via workspace.WorktreeBases(gitRoot).
+func DetectHostWorktreeDirs(gitRoot string, idx SlugIndex, bases ...string) ([]Orphan, error) {
+	if gitRoot == "" && len(bases) == 0 {
 		return nil, nil
 	}
-	base := filepath.Join(gitRoot, ".grove-worktrees")
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
+	if len(bases) == 0 {
+		bases = workspace.WorktreeBases(gitRoot)
 	}
 	var orphans []Orphan
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+	for _, base := range bases {
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
 		}
-		name := e.Name()
-		if _, ok := idx.Active[name]; ok {
-			continue
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if _, ok := idx.Active[name]; ok {
+				continue
+			}
+			orphans = append(orphans, Orphan{
+				Category: CatHostWorktree,
+				Name:     filepath.Join(base, name),
+				Worktree: name,
+			})
 		}
-		orphans = append(orphans, Orphan{
-			Category: CatHostWorktree,
-			Name:     filepath.Join(base, name),
-			Worktree: name,
-		})
 	}
 	return orphans, nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/grovetools/core/command"
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // WorktreeInfo contains information about a git worktree
@@ -199,8 +200,13 @@ func (m *WorktreeManager) GetOrPrepareWorktree(ctx context.Context, basePath, wo
 		return "", false, fmt.Errorf("worktree name cannot be empty")
 	}
 
-	// Define standardized paths
-	worktreesBaseDir := filepath.Join(basePath, ".grove-worktrees")
+	// Standardized legacy worktree target. This is the only place core/git
+	// computes a worktree location; it cannot call
+	// workspace.ResolveNewWorktreePath (import cycle via util/pathutil), so
+	// it joins against the shared layout constant. A later phase replaces
+	// this with a GetOrPrepareWorktreeAt variant that receives the resolved
+	// target from the workspace layer.
+	worktreesBaseDir := filepath.Join(basePath, paths.LegacyWorktreeDirName)
 	worktreePath := filepath.Join(worktreesBaseDir, worktreeName)
 
 	// If no branch name is provided, use the worktree name as the branch name

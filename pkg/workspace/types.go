@@ -296,7 +296,7 @@ func (w *WorkspaceNode) GetWorktreeName() string {
 			}
 			// Fallback: try splitting by separator
 			pathParts := strings.Split(rel, string(filepath.Separator))
-			if len(pathParts) >= 2 && pathParts[0] == ".grove-worktrees" {
+			if len(pathParts) >= 2 && pathParts[0] == legacyWorktreeDirName {
 				return pathParts[1]
 			}
 		}

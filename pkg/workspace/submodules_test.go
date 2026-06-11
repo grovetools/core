@@ -129,7 +129,7 @@ func TestSetupSubmodules(t *testing.T) {
 		})
 
 		// Test SetupSubmodules with all repos
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
+		err = SetupSubmodules(ctx, worktreePath, superprojectDir, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
 
 		// Verify local-sub exists as a directory (linked worktree)
@@ -191,7 +191,7 @@ func TestSetupSubmodules(t *testing.T) {
 		})
 
 		// Test SetupSubmodules with repos filter (only local-sub)
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{"local-sub"}, mockProvider)
+		err = SetupSubmodules(ctx, worktreePath, superprojectDir, "feature-branch", []string{"local-sub"}, mockProvider)
 		require.NoError(t, err)
 
 		// Verify local-sub exists
@@ -246,7 +246,7 @@ func TestSetupSubmodules(t *testing.T) {
 		mockProvider := createMockProvider(map[string]string{})
 
 		// Test SetupSubmodules - should handle missing submodule gracefully
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
+		err = SetupSubmodules(ctx, worktreePath, superprojectDir, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
 
 		// Verify missing-sub directory exists (created as placeholder)
@@ -304,7 +304,7 @@ func TestSetupSubmodules(t *testing.T) {
 		mockProvider := createMockProvider(map[string]string{})
 
 		// Test SetupSubmodules with complex gitmodules
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", nil, mockProvider)
+		err = SetupSubmodules(ctx, worktreePath, superprojectDir, "feature-branch", nil, mockProvider)
 		require.NoError(t, err)
 
 		// Verify all submodule directories are created
@@ -356,7 +356,7 @@ func TestSetupSubmodules(t *testing.T) {
 		mockProvider := createMockProvider(map[string]string{})
 
 		// Test with empty repos list (should setup all submodules)
-		err = SetupSubmodules(ctx, worktreePath, "feature-branch", []string{}, mockProvider)
+		err = SetupSubmodules(ctx, worktreePath, superprojectDir, "feature-branch", []string{}, mockProvider)
 		require.NoError(t, err)
 
 		// Verify submodule directory is created

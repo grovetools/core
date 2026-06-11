@@ -3,45 +3,27 @@ package workspace
 import (
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // IsZombieWorktree checks if the given path is inside a deleted git worktree.
-// A worktree is considered "zombie" if it's inside a .grove-worktrees directory
+// A worktree is considered "zombie" if it's inside a worktree base directory
 // but the .git file (which links to the main repo) is missing.
 //
 // This is used to prevent recreating files (like .grove/rules or logs) in deleted
 // worktrees, which would cause "zombie" directories to reappear after cleanup.
-//
-// This function uses the same detection logic as zombieAwareWriter in the logging
-// package, ensuring consistent behavior across the grove ecosystem.
 func IsZombieWorktree(path string) bool {
-	// Only check paths that are inside .grove-worktrees
-	if !strings.Contains(path, ".grove-worktrees") {
+	// Only check paths that are inside a worktree location
+	if !IsWorktreePath(path) {
 		return false
 	}
 
-	// Extract worktree root from the path
+	// Extract the worktree root from the path
 	// e.g., /path/to/repo/.grove-worktrees/my-feature/.grove/rules
 	//       -> /path/to/repo/.grove-worktrees/my-feature
-	parts := strings.Split(path, ".grove-worktrees")
-	if len(parts) < 2 {
+	worktreeRoot, ok := worktreeRootForPath(path)
+	if !ok {
 		return false
 	}
-
-	gitRoot := parts[0]
-	remaining := parts[1]
-
-	// Extract the worktree name (first path component after .grove-worktrees/)
-	remaining = strings.TrimPrefix(remaining, string(filepath.Separator))
-	worktreeNameParts := strings.SplitN(remaining, string(filepath.Separator), 2)
-	if len(worktreeNameParts) == 0 || worktreeNameParts[0] == "" {
-		return false
-	}
-	worktreeName := worktreeNameParts[0]
-
-	// Construct the worktree root path
-	worktreeRoot := filepath.Join(gitRoot, ".grove-worktrees", worktreeName)
 
 	// A valid worktree must have a .git FILE (not directory).
 	// The .git file contains a reference to the main repo's .git/worktrees/<name> directory.

@@ -29,9 +29,18 @@ func (p *WorkspaceNode) Identifier(delim string) string {
 	case KindEcosystemWorktreeSubProject:
 		// e.g., my-ecosystem_eco-feature_sub-project
 		worktreeName := s(filepath.Base(p.ParentEcosystemPath))
-		grandParentPath := filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
-		grandParentName := s(filepath.Base(grandParentPath))
-		return fmt.Sprintf("%s%s%s%s%s", grandParentName, delim, worktreeName, delim, s(p.Name))
+		rootEcoPath := p.RootEcosystemPath
+		if rootEcoPath == "" {
+			// Fallback for nodes without RootEcosystemPath: derive the owner
+			// of the containing ecosystem worktree from its location.
+			if owner, ok := WorktreeOwner(p.ParentEcosystemPath); ok {
+				rootEcoPath = owner
+			} else {
+				rootEcoPath = filepath.Dir(filepath.Dir(p.ParentEcosystemPath))
+			}
+		}
+		rootEcoName := s(filepath.Base(rootEcoPath))
+		return fmt.Sprintf("%s%s%s%s%s", rootEcoName, delim, worktreeName, delim, s(p.Name))
 
 	case KindEcosystemWorktreeSubProjectWorktree:
 		// e.g., my-ecosystem_eco-feature_sub-project

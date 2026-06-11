@@ -140,7 +140,7 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 		kind := KindStandaloneProject
 		if isSubProject {
 			// Check if it's inside an ecosystem worktree
-			if strings.Contains(proj.Path, ".grove-worktrees") {
+			if IsWorktreePath(proj.Path) {
 				// Check if this project is itself a git worktree by examining .git
 				gitPath := filepath.Join(proj.Path, ".git")
 				if stat, err := os.Stat(gitPath); err == nil && !stat.IsDir() {
@@ -172,10 +172,10 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 			if ws.Type == WorkspaceTypeWorktree {
 				wtKind := KindStandaloneProjectWorktree
 				if isSubProject {
-					if strings.Contains(ws.Path, ".grove-worktrees") {
+					if IsWorktreePath(ws.Path) {
 						// Check if this is a worktree within an ecosystem worktree
-						// by examining whether the parent project itself is in .grove-worktrees
-						if strings.Contains(proj.Path, ".grove-worktrees") {
+						// by examining whether the parent project itself is in a worktree location
+						if IsWorktreePath(proj.Path) {
 							wtKind = KindEcosystemWorktreeSubProjectWorktree
 						} else {
 							wtKind = KindEcosystemSubProjectWorktree

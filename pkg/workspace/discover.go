@@ -164,8 +164,11 @@ func processProject(path string, cfg *config.Config) Project {
 	})
 
 	// Scan for Worktree Workspaces
-	worktreeBase := filepath.Join(path, ".grove-worktrees")
-	if entries, readErr := os.ReadDir(worktreeBase); readErr == nil {
+	for _, worktreeBase := range WorktreeBases(path) {
+		entries, readErr := os.ReadDir(worktreeBase)
+		if readErr != nil {
+			continue
+		}
 		for _, entry := range entries {
 			if entry.IsDir() {
 				wtPath := filepath.Join(worktreeBase, entry.Name())
@@ -182,15 +185,19 @@ func processProject(path string, cfg *config.Config) Project {
 	return proj
 }
 
-// processEcosystemWorktreeDir handles the special case of .grove-worktrees directory
-// inside an ecosystem, treating each subdirectory as a project
-func processEcosystemWorktreeDir(path, parentEcoPath string) []Project {
+// processEcosystemWorktreeDir handles the special case of an ecosystem's
+// worktree base directories, treating each subdirectory as a project
+func processEcosystemWorktreeDir(parentEcoPath string) []Project {
 	var projects []Project
 
-	if entries, readErr := os.ReadDir(path); readErr == nil {
+	for _, base := range WorktreeBases(parentEcoPath) {
+		entries, readErr := os.ReadDir(base)
+		if readErr != nil {
+			continue
+		}
 		for _, entry := range entries {
 			if entry.IsDir() {
-				wtPath := filepath.Join(path, entry.Name())
+				wtPath := filepath.Join(base, entry.Name())
 				proj := Project{
 					Name:                entry.Name(),
 					Path:                wtPath,
@@ -457,7 +464,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 					// This is an ecosystem's .grove-worktrees directory
 					// Process each subdirectory as an ecosystem worktree project
 					parentPath := filepath.Dir(path)
-					projects := processEcosystemWorktreeDir(path, parentPath)
+					projects := processEcosystemWorktreeDir(parentPath)
 					groveRes.projects = append(groveRes.projects, projects...)
 					// Continue descending to discover repos/submodules within ecosystem worktrees
 					return nil
@@ -627,8 +634,11 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 			})
 
 			// Scan for Worktree Workspaces
-			worktreeBase := filepath.Join(absPath, ".grove-worktrees")
-			if entries, readErr := os.ReadDir(worktreeBase); readErr == nil {
+			for _, worktreeBase := range WorktreeBases(absPath) {
+				entries, readErr := os.ReadDir(worktreeBase)
+				if readErr != nil {
+					continue
+				}
 				for _, entry := range entries {
 					if entry.IsDir() {
 						wtPath := filepath.Join(worktreeBase, entry.Name())
@@ -824,9 +834,12 @@ func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
 			Version:             defaultBranch,
 		}
 
-		// Discover worktrees for this bare repo in .grove-worktrees
-		worktreesDir := filepath.Join(r.BarePath, ".grove-worktrees")
-		if entries, readErr := os.ReadDir(worktreesDir); readErr == nil {
+		// Discover worktrees for this bare repo in its worktree bases
+		for _, worktreesDir := range WorktreeBases(r.BarePath) {
+			entries, readErr := os.ReadDir(worktreesDir)
+			if readErr != nil {
+				continue
+			}
 			for _, entry := range entries {
 				if entry.IsDir() {
 					wtPath := filepath.Join(worktreesDir, entry.Name())

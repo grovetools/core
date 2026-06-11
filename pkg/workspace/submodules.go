@@ -16,7 +16,10 @@ import (
 // The workspace provider is the primary source of truth for what projects exist.
 // .gitmodules is only used as a fallback to initialize submodules that haven't
 // been cloned yet (and thus aren't discoverable by the provider).
-func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos []string, provider *Provider, setupHandlers ...func(worktreePath, gitRoot string) error) error {
+//
+// gitRoot is the root of the repository that owns worktreePath. It must be
+// passed explicitly: the worktree's location does not imply its owner.
+func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName string, repos []string, provider *Provider, setupHandlers ...func(worktreePath, gitRoot string) error) error {
 	// If no provider is given, create a temporary one
 	if provider == nil {
 		logger := logrus.New()
@@ -30,7 +33,6 @@ func SetupSubmodules(ctx context.Context, worktreePath, branchName string, repos
 		provider = NewProvider(result)
 	}
 
-	gitRoot := filepath.Dir(filepath.Dir(worktreePath))
 	localWorkspaces := provider.LocalWorkspaces()
 
 	repoFilter := make(map[string]bool)
