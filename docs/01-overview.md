@@ -11,7 +11,7 @@
 **Workspace Discovery**: The `DiscoveryService` scans directories defined in the `groves` configuration. It classifies filesystem locations into three types based on file markers:
 *   **Ecosystems**: Directories containing a `grove.yml` with a `workspaces` key.
 *   **Projects**: Directories containing a `grove.yml` or `.git`.
-*   **Worktrees**: Git worktrees located in `.grove-worktrees/` directories.
+*   **Worktrees**: Git worktrees in either supported layout. The legacy layout (default) nests them under `.grove-worktrees/` inside the repository. The XDG layout—used for sibling-workspace ecosystem worktrees—places them under the grove data dir at `~/.local/share/grove/worktrees/<repo>-<hash>/<name>` (honoring `$GROVE_HOME`/`$XDG_DATA_HOME`), outside any indexed repo.
 
 **Unified Logging**: The logging system writes two streams simultaneously:
 *   **Structured**: JSON-formatted logs written to `.grove/logs/` in the workspace root for machine analysis.

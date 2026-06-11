@@ -398,7 +398,7 @@ type PanelBindingConfig struct {
 
 // ContextConfig holds configuration for the grove-context (cx) tool.
 type ContextConfig struct {
-	ReposDir         *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty" jsonschema:"description=Directory where cx repo stores bare repositories (default: ~/.grove/cx)" jsonschema_extras:"x-layer=global,x-priority=80"`
+	ReposDir         *string `yaml:"repos_dir,omitempty" toml:"repos_dir,omitempty" jsonschema:"description=Directory where cx repo stores bare repositories (default: ~/.local/share/grove/cx)" jsonschema_extras:"x-layer=global,x-priority=80"`
 	DefaultRulesPath string  `yaml:"default_rules_path,omitempty" toml:"default_rules_path,omitempty" jsonschema:"description=Default rules file path for context filtering" jsonschema_extras:"x-layer=project,x-priority=81"`
 	DefaultRules     string  `yaml:"default_rules,omitempty" toml:"default_rules,omitempty" jsonschema:"description=Name of the default rules preset to use" jsonschema_extras:"x-layer=project,x-priority=82"`
 	// IncludedWorkspaces is a strict allowlist: if set, only these workspaces are scanned for context.

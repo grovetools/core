@@ -43,7 +43,7 @@
           "x-priority": "83"
         },
         "repos_dir": {
-          "description": "Directory where cx repo stores bare repositories (default: ~/.grove/cx)",
+          "description": "Directory where cx repo stores bare repositories (default: ~/.local/share/grove/cx)",
           "type": "string",
           "x-layer": "global",
           "x-priority": "80"
