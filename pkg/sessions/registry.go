@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/process"
 )
 
 // Registry defines the interface for managing live session tracking.
@@ -81,14 +82,7 @@ func (r *FileSystemRegistry) IsAlive(sessionID string) (bool, error) {
 	}
 
 	// Check if the process is running
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false, nil
-	}
-
-	// On Unix systems, sending signal 0 checks if the process exists
-	err = process.Signal(os.Signal(nil))
-	return err == nil, nil
+	return process.IsProcessAlive(pid), nil
 }
 
 // UpdateStatus updates the status field in the session's metadata.json file.
