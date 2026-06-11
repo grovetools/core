@@ -2083,6 +2083,34 @@ func (c *RemoteClient) ReportTestResults(ctx context.Context, workspace string, 
 	return nil
 }
 
+// GetSystemInfo returns the daemon's version and commit information.
+func (c *RemoteClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/system/info", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var info models.SystemInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("failed to decode system info: %w", err)
+	}
+	return &info, nil
+}
+
 // SocketPath returns the Unix socket path used by this client.
 // Used by the terminal to configure WebSocket dialers for PTY attach.
 func (c *RemoteClient) SocketPath() string {
