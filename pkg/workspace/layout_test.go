@@ -201,13 +201,29 @@ func TestWorktreeOwner_GitdirParse(t *testing.T) {
 		}
 	})
 
-	t.Run("xdg zombie has no owner", func(t *testing.T) {
+	t.Run("xdg zombie resolves via marker owner", func(t *testing.T) {
 		wt := ResolveNewWorktreePath(owner, "zombie", true)
+		if err := os.MkdirAll(filepath.Join(wt, ".grove"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// No .git file and no legacy shape: the .grove/workspace marker's
+		// owner: key (written at creation since Phase 4) names the owner.
+		marker := "branch: zombie\nplan: \nowner: " + owner + "\necosystem: true\nrepos:\n  - sub\n"
+		if err := os.WriteFile(filepath.Join(wt, ".grove", "workspace"), []byte(marker), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, ok := WorktreeOwner(wt)
+		if !ok || got != owner {
+			t.Errorf("WorktreeOwner(xdg zombie with marker) = %q, %v; want %q, true", got, ok, owner)
+		}
+	})
+
+	t.Run("xdg zombie without marker has no owner", func(t *testing.T) {
+		wt := ResolveNewWorktreePath(owner, "zombie-bare", true)
 		if err := os.MkdirAll(wt, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// No .git file and no legacy shape: the marker cannot name the
-		// owner, so resolution fails.
+		// No .git file, no marker, no legacy shape: resolution fails.
 		if got, ok := WorktreeOwner(wt); ok {
 			t.Errorf("WorktreeOwner(xdg zombie) = %q, true; want miss", got)
 		}

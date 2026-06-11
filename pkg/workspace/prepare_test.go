@@ -125,7 +125,7 @@ func TestPrepare(t *testing.T) {
 			GitRoot:      ecosystemDir,
 			WorktreeName: "eco-workspace",
 			BranchName:   "feature/ecosystem",
-			Repos:        []string{"repo1"}, // Only setup repo1
+			SiblingWorkspaces: []string{"repo1"}, // Only setup repo1
 		}
 
 		// Mock DiscoverLocalWorkspaces to avoid actual discovery
@@ -153,6 +153,50 @@ func TestPrepare(t *testing.T) {
 			require.NoError(t, err)
 			assert.Contains(t, string(content), "go 1.")
 		}
+	})
+
+	t.Run("xdg worktree with owner marker", func(t *testing.T) {
+		sandboxXDG(t)
+
+		tempDir := t.TempDir()
+		repoDir := filepath.Join(tempDir, "test-repo")
+		require.NoError(t, os.MkdirAll(repoDir, 0o755))
+		setupTestRepo(t, repoDir)
+
+		ctx := context.Background()
+		opts := PrepareOptions{
+			GitRoot:           repoDir,
+			WorktreeName:      "xdg-workspace",
+			BranchName:        "feature/xdg",
+			SiblingWorkspaces: []string{"repo1"},
+			UseXDGWorktrees:   true,
+		}
+
+		worktreePath, err := Prepare(ctx, opts)
+		require.NoError(t, err)
+
+		// Lands at the XDG location, not under <repo>/.grove-worktrees.
+		expectedPath := ResolveNewWorktreePath(repoDir, "xdg-workspace", true)
+		assert.Equal(t, expectedPath, worktreePath)
+		_, err = os.Stat(filepath.Join(repoDir, ".grove-worktrees", "xdg-workspace"))
+		assert.True(t, os.IsNotExist(err))
+
+		// Marker keeps the frozen ecosystem:/repos: keys and gains owner:.
+		marker, err := os.ReadFile(filepath.Join(worktreePath, ".grove", "workspace"))
+		require.NoError(t, err)
+		absRepo, err := filepath.Abs(repoDir)
+		require.NoError(t, err)
+		assert.Contains(t, string(marker), "owner: "+absRepo+"\n")
+		assert.Contains(t, string(marker), "ecosystem: true\n")
+		assert.Contains(t, string(marker), "repos:\n  - repo1\n")
+
+		// Re-preparing reuses the XDG worktree. Normalize to handle the
+		// /var vs /private/var symlink on macOS (git reports realpaths).
+		again, err := Prepare(ctx, opts)
+		require.NoError(t, err)
+		resolvedFirst, _ := filepath.EvalSymlinks(worktreePath)
+		resolvedAgain, _ := filepath.EvalSymlinks(again)
+		assert.Equal(t, resolvedFirst, resolvedAgain)
 	})
 
 	t.Run("error cases", func(t *testing.T) {
