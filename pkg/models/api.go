@@ -230,6 +230,7 @@ type JobInfo struct {
 	CompletedAt *time.Time        `json:"completed_at,omitempty"`
 	Error       string            `json:"error,omitempty"`
 	LogFilePath string            `json:"log_file_path,omitempty"`
+	PID         int               `json:"pid,omitempty"` // PHASE 2: Process ID for adoption on daemon restart
 }
 
 // PlanRunOptions represents options for running an entire plan.
