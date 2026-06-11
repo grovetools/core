@@ -59,6 +59,9 @@
       },
       "type": "object"
     },
+    "SyncConfig": {
+      "description": "Sync configuration: typed object (server/token/workspaces) or legacy provider list"
+    },
     "SyncthingConfig": {
       "properties": {
         "devices": {
@@ -130,6 +133,7 @@
       "description": "Map of note type name to configuration"
     },
     "sync": {
+      "$ref": "#/$defs/SyncConfig",
       "description": "Synchronization configuration for this notebook"
     },
     "syncthing": {

@@ -533,9 +533,12 @@ type Notebook struct {
 	PromptsPathTemplate    string                     `yaml:"prompts_path_template,omitempty" toml:"prompts_path_template,omitempty" jsonschema:"description=Path template for prompts directory"`
 	ContextPathTemplate    string                     `yaml:"context_path_template,omitempty" toml:"context_path_template,omitempty" jsonschema:"description=Path template for context directory"`
 	Types                  map[string]*NoteTypeConfig `yaml:"types,omitempty" toml:"types,omitempty" jsonschema:"description=Map of note type name to configuration"`
-	Sync                   interface{}                `yaml:"sync,omitempty" toml:"sync,omitempty" jsonschema:"description=Synchronization configuration for this notebook"`
-	Syncthing              *SyncthingConfig           `yaml:"syncthing,omitempty" toml:"syncthing,omitempty" jsonschema:"description=Syncthing automated setup configuration"`
-	Obsidian               *ObsidianConfig            `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
+	// Sync is tagged toml:"-" because the key accepts two shapes (the typed
+	// SyncConfig table and the legacy provider list); TOML decoding happens
+	// in postProcessTOMLNotebookSync, YAML via SyncConfig.UnmarshalYAML.
+	Sync      *SyncConfig      `yaml:"sync,omitempty" toml:"-" jsonschema:"description=Synchronization configuration for this notebook"`
+	Syncthing *SyncthingConfig `yaml:"syncthing,omitempty" toml:"syncthing,omitempty" jsonschema:"description=Syncthing automated setup configuration"`
+	Obsidian  *ObsidianConfig  `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
 }
 
 // TestScopeConfig defines a smart test triggering scope

@@ -134,6 +134,8 @@ func unmarshalConfig(path string, data []byte) (*Config, error) {
 		}
 		// Post-process TOML keybindings to handle simplified path format
 		postProcessTOMLKeybindings(&cfg, data)
+		// Post-process notebook sync configs (the field is toml:"-")
+		postProcessTOMLNotebookSync(&cfg, data)
 	} else {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return nil, err
@@ -317,8 +319,9 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 			var fragments []configFragment
 			for _, file := range files {
 				baseName := filepath.Base(file)
-				// Skip main config and override files
-				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" {
+				// Skip main config, override files, and the dedicated sync
+				// client config (parsed separately via LoadSyncConfig)
+				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" || baseName == "sync.toml" {
 					continue
 				}
 
@@ -686,6 +689,9 @@ func LoadFromTOMLBytes(data []byte) (*Config, error) {
 			config.Extensions = extensions
 		}
 	}
+
+	// Post-process notebook sync configs (the field is toml:"-")
+	postProcessTOMLNotebookSync(&config, []byte(expanded))
 
 	// Validate against schema
 	validator, err := NewSchemaValidator()
@@ -1104,8 +1110,9 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			var fragments []configFragment
 			for _, file := range files {
 				baseName := filepath.Base(file)
-				// Skip main config and override files
-				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" {
+				// Skip main config, override files, and the dedicated sync
+				// client config (parsed separately via LoadSyncConfig)
+				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" || baseName == "sync.toml" {
 					continue
 				}
 
