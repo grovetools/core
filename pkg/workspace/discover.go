@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/repo"
 	"github.com/grovetools/core/util/pathutil"
 )
@@ -186,37 +187,47 @@ func processProject(path string, cfg *config.Config) Project {
 }
 
 // processEcosystemWorktreeDir handles the special case of an ecosystem's
-// worktree base directories, treating each subdirectory as a project
+// LEGACY worktree base directory, treating each subdirectory as a project.
+// The XDG base is enumerated separately for every discovered ecosystem by
+// discoverXDGEcosystemWorktrees — scanning only the legacy base here keeps
+// the two enumeration paths from producing duplicates.
 func processEcosystemWorktreeDir(parentEcoPath string) []Project {
 	var projects []Project
 
-	for _, base := range WorktreeBases(parentEcoPath) {
-		entries, readErr := os.ReadDir(base)
-		if readErr != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				wtPath := filepath.Join(base, entry.Name())
-				proj := Project{
-					Name:                entry.Name(),
-					Path:                wtPath,
-					ParentEcosystemPath: parentEcoPath,
-					Workspaces: []DiscoveredWorkspace{
-						{
-							Name:              entry.Name(),
-							Path:              wtPath,
-							Type:              WorkspaceTypePrimary,
-							ParentProjectPath: wtPath,
-						},
-					},
-				}
-				projects = append(projects, proj)
-			}
+	base := filepath.Join(parentEcoPath, legacyWorktreeDirName)
+	entries, readErr := os.ReadDir(base)
+	if readErr != nil {
+		return nil
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			projects = append(projects,
+				makeEcosystemWorktreeProject(parentEcoPath, base, entry.Name()))
 		}
 	}
 
 	return projects
+}
+
+// makeEcosystemWorktreeProject builds the Project record for an ecosystem
+// worktree enumerated from base, with explicit worktree provenance.
+func makeEcosystemWorktreeProject(parentEcoPath, base, name string) Project {
+	wtPath := filepath.Join(base, name)
+	return Project{
+		Name:                name,
+		Path:                wtPath,
+		ParentEcosystemPath: parentEcoPath,
+		WorktreeSourceBase:  base,
+		WorktreeOwnerPath:   parentEcoPath,
+		Workspaces: []DiscoveredWorkspace{
+			{
+				Name:              name,
+				Path:              wtPath,
+				Type:              WorkspaceTypePrimary,
+				ParentProjectPath: wtPath,
+			},
+		},
+	}
 }
 
 // processNonGroveRepo records a non-Grove git repository
@@ -657,7 +668,22 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		}
 	}
 
-	// 5. Final pass to link Projects to their parent Ecosystems.
+	// 5. XDG worktree enumeration. Ecosystem worktrees in the XDG layout
+	// live OUTSIDE the walked groves (paths.WorktreesDir()/<identifier>/),
+	// so the directory walk above can never encounter them — scan each
+	// discovered ecosystem's XDG base explicitly. Worktrees of plain
+	// projects need no dedicated pass: processProject already probes every
+	// WorktreeBases entry.
+	for _, proj := range s.discoverXDGEcosystemWorktrees(result.Ecosystems) {
+		projKey := normalizeKey(proj.Path)
+		if seenProjects[projKey] {
+			continue
+		}
+		result.Projects = append(result.Projects, proj)
+		seenProjects[projKey] = true
+	}
+
+	// 6. Final pass to link Projects to their parent Ecosystems.
 	// First build a list of all potential ecosystem paths (ecosystems + ecosystem worktrees)
 	ecosystemPaths := make(map[string]bool)
 	for _, eco := range result.Ecosystems {
@@ -665,9 +691,11 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	for _, proj := range result.Projects {
-		// A project is an ecosystem worktree if it's a direct child of a .grove-worktrees directory.
-		// The discovery process ensures that .grove-worktrees is only processed when it's inside an ecosystem.
-		if filepath.Base(filepath.Dir(proj.Path)) == ".grove-worktrees" {
+		// A project is an ecosystem worktree if discovery recorded worktree
+		// provenance for it, or — for results without provenance — if it is
+		// a direct child of a .grove-worktrees directory (the walker only
+		// processes that directory when it's inside an ecosystem).
+		if proj.WorktreeOwnerPath != "" || filepath.Base(filepath.Dir(proj.Path)) == ".grove-worktrees" {
 			ecosystemPaths[proj.Path] = true
 		}
 	}
@@ -773,6 +801,85 @@ func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
 	}
 	nodes := TransformToWorkspaceNodes(result, cfg)
 	return BuildTree(nodes), nil
+}
+
+// discoverXDGEcosystemWorktrees enumerates the XDG worktree base
+// (paths.WorktreesDir()/<DirIdentifier(eco)>) of every discovered ecosystem
+// and returns each entry as an ecosystem-worktree Project with explicit
+// provenance. It also enumerates each worktree's direct children as
+// sub-projects — the walker does that for legacy worktrees by descending
+// into them, which is impossible for XDG worktrees outside the walked tree.
+func (s *DiscoveryService) discoverXDGEcosystemWorktrees(ecosystems []Ecosystem) []Project {
+	wtd := paths.WorktreesDir()
+	if wtd == "" {
+		return nil
+	}
+
+	var projects []Project
+	for _, eco := range ecosystems {
+		base := filepath.Join(wtd, DirIdentifier(eco.Path))
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			projects = append(projects,
+				makeEcosystemWorktreeProject(eco.Path, base, entry.Name()))
+			projects = append(projects,
+				s.discoverWorktreeSubProjects(filepath.Join(base, entry.Name()))...)
+		}
+	}
+	return projects
+}
+
+// discoverWorktreeSubProjects enumerates the direct children of an
+// ecosystem worktree and classifies each as a project, mirroring the
+// walker's behavior inside legacy ecosystem worktrees. Children without a
+// grove marker are promoted when the worktree's config enumerates them in
+// `workspaces` (parity with the walker's promotion rule for zero-footprint
+// child repos).
+func (s *DiscoveryService) discoverWorktreeSubProjects(wtPath string) []Project {
+	entries, err := os.ReadDir(wtPath)
+	if err != nil {
+		return nil
+	}
+	_, wtCfg, _ := findGroveConfig(wtPath)
+
+	var projects []Project
+	for _, entry := range entries {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		childPath := filepath.Join(wtPath, entry.Name())
+		dirType, childCfg, classifyErr := classifyWorkspaceRoot(childPath)
+		if classifyErr != nil {
+			s.logger.Warnf("Error classifying directory %s: %v", childPath, classifyErr)
+			continue
+		}
+		switch dirType {
+		case typeProject, typeEcosystem:
+			projects = append(projects, processProject(childPath, childCfg))
+		case typeNonGroveRepo:
+			if wtCfg != nil && workspacesListContains(wtCfg.Workspaces, entry.Name()) {
+				projects = append(projects, processProject(childPath, nil))
+			}
+		}
+	}
+	return projects
+}
+
+// workspacesListContains reports whether an ecosystem config's `workspaces`
+// field enumerates childName (exact entry or path whose basename matches).
+func workspacesListContains(workspaces []string, childName string) bool {
+	for _, ws := range workspaces {
+		if ws == childName || filepath.Base(ws) == childName {
+			return true
+		}
+	}
+	return false
 }
 
 // discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
