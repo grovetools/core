@@ -372,6 +372,11 @@ type Client interface {
 
 	// ReportTestResults reports structured test results (per-scenario breakdown) to the daemon.
 	ReportTestResults(ctx context.Context, workspace string, report *models.TestReport) error
+
+	// --- System Information ---
+
+	// GetSystemInfo returns the daemon's version and commit information.
+	GetSystemInfo(ctx context.Context) (*models.SystemInfo, error)
 }
 
 // SpawnAgentRequest contains the parameters for spawning a native agent pane.

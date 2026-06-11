@@ -615,5 +615,10 @@ func (c *LocalClient) ReportTestResults(ctx context.Context, workspace string, r
 	return nil // No daemon to report to
 }
 
+// GetSystemInfo returns an error since system info requires the daemon.
+func (c *LocalClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, error) {
+	return nil, errors.New("system info requires the grove daemon; use daemon.NewWithAutoStart()")
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)
