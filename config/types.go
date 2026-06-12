@@ -327,6 +327,28 @@ type TUIConfig struct {
 
 	// JobDetail configures keybinds for the job detail tab wrapper.
 	JobDetail *JobDetailConfig `yaml:"job_detail,omitempty" toml:"job_detail,omitempty" json:"job_detail,omitempty" jsonschema:"description=Job detail pane tab keybindings" jsonschema_extras:"x-layer=global,x-priority=65"`
+
+	// Agent configures native agent pane hosting (TERM override,
+	// automatic repaint nudges for renderer corruption healing).
+	Agent *AgentPaneConfig `yaml:"agent,omitempty" toml:"agent,omitempty" json:"agent,omitempty" jsonschema:"description=Native agent pane behavior" jsonschema_extras:"x-layer=global,x-priority=66"`
+}
+
+// AgentPaneConfig controls how treemux hosts agent CLI panes (claude etc.).
+// Added as a mitigation for Claude Code's stale-screen-model rendering bug:
+// its renderer occasionally emits cell-merged frames, corrupting the pane.
+// A SIGWINCH (full Ink repaint) heals the live region, so treemux can nudge
+// the agent PTY automatically after output bursts and on pane focus.
+type AgentPaneConfig struct {
+	// Term overrides TERM for treemux-spawned agent PTYs (default
+	// xterm-256color). Setting e.g. screen-256color makes renderers like
+	// Ink take their conservative tmux render path (fuller line redraws),
+	// which can avoid the stale-model frame merging at the source.
+	Term string `yaml:"term,omitempty" toml:"term,omitempty" json:"term,omitempty" jsonschema:"description=TERM value for agent pane PTYs (e.g. screen-256color for the conservative tmux render path),default=xterm-256color"`
+
+	// RepaintNudge enables automatic PTY winsize jiggles (SIGWINCH →
+	// full repaint) after agent output bursts settle and on pane focus,
+	// healing renderer corruption in the live region. Default: true.
+	RepaintNudge *bool `yaml:"repaint_nudge,omitempty" toml:"repaint_nudge,omitempty" json:"repaint_nudge,omitempty" jsonschema:"description=Automatically SIGWINCH-nudge agent panes after output bursts to heal rendering corruption,default=true"`
 }
 
 // JobDetailConfig configures direct keybinds for the job detail tab wrapper.
