@@ -9,18 +9,21 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
-
-	"github.com/grovetools/core/pkg/paths"
 )
 
 // UpgradeRunning signals the running daemon to enter drain mode, waits for the socket
 // to be unlinked, and starts a new daemon binary.
+//
+// The caller selects the target daemon and passes its exact pidfile path, socket
+// path, and resolved scope string (empty for the unscoped/global daemon). Deriving
+// these from a scope label here is wrong: the daemon's socket/pidfile hash the full
+// resolved scope, not its label, so a label-derived path would not match.
+//
 // PHASE 2: Implements zero-downtime upgrade by signaling SIGUSR1 to the old daemon,
 // which unlinks the socket and continues serving in-flight requests. The new daemon
 // then binds to the freed socket and adopts running detached agents by PID.
-func UpgradeRunning(ctx context.Context, scope string) error {
+func UpgradeRunning(ctx context.Context, pidFilePath, socketPath, scope string) error {
 	// Find the running daemon's PID
-	pidFilePath := paths.PidFilePath(scope)
 	pidData, err := os.ReadFile(pidFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to read pidfile: %w", err)
@@ -39,7 +42,6 @@ func UpgradeRunning(ctx context.Context, scope string) error {
 	fmt.Printf("Sent SIGUSR1 to daemon (PID %d) - entering drain mode\n", oldPID)
 
 	// Wait for the socket to be unlinked (indicating drain mode is active)
-	socketPath := paths.SocketPath(scope)
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -65,7 +67,11 @@ socketUnlinked:
 
 	args := []string{"start", "--socket", socketPath, "--pidfile", pidFilePath}
 	if scope != "" {
-		args = append(args, "--scope", scope)
+		// --scope-verbatim: the scope is already resolved (it came from the
+		// predecessor's .scope sidecar). start must use it as-is so the
+		// successor's GROVE_SCOPE — and the socket its child clients reconnect
+		// to — is byte-identical to the daemon we are replacing.
+		args = append(args, "--scope", scope, "--scope-verbatim")
 	}
 
 	// Detach into its own session so the new daemon survives this terminal's
