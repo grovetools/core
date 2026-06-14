@@ -113,6 +113,7 @@ func (b *WebSocketBackend) Read(p []byte) (int, error) {
 
 		if conn == nil {
 			if err := b.reconnect(); err != nil {
+				grovelogging.NewUnifiedLogger("ptybackend.read").Warn("Read returning terminal error (nil-conn reconnect failed)").Field("pty_id", b.sessionID).Field("err", err.Error()).Field("session_exited", b.sessionExited).StructuredOnly().Log(context.Background())
 				return 0, err
 			}
 			continue
@@ -120,7 +121,9 @@ func (b *WebSocketBackend) Read(p []byte) (int, error) {
 
 		msgType, reader, err := conn.NextReader()
 		if err != nil {
+			grovelogging.NewUnifiedLogger("ptybackend.read").Debug("NextReader error -> reconnecting").Field("pty_id", b.sessionID).Field("err", err.Error()).StructuredOnly().Log(context.Background())
 			if reconnErr := b.reconnect(); reconnErr != nil {
+				grovelogging.NewUnifiedLogger("ptybackend.read").Warn("Read returning terminal error (reconnect failed)").Field("pty_id", b.sessionID).Field("err", reconnErr.Error()).Field("session_exited", b.sessionExited).StructuredOnly().Log(context.Background())
 				return 0, reconnErr
 			}
 			continue
@@ -135,6 +138,7 @@ func (b *WebSocketBackend) Read(p []byte) (int, error) {
 			if decErr := json.NewDecoder(reader).Decode(&ctrl); decErr == nil && ctrl.Type == "exit" {
 				b.sessionExited = true
 				b.exitCode = ctrl.Code
+				grovelogging.NewUnifiedLogger("ptybackend.read").Debug("Read got genuine exit control msg").Field("pty_id", b.sessionID).Field("code", ctrl.Code).StructuredOnly().Log(context.Background())
 				return 0, io.EOF
 			}
 			continue
@@ -160,6 +164,7 @@ func (b *WebSocketBackend) Write(p []byte) (int, error) {
 }
 
 func (b *WebSocketBackend) Close() error {
+	grovelogging.NewUnifiedLogger("ptybackend.close").Warn("Backend Close() called").Field("pty_id", b.sessionID).Field("session_exited", b.sessionExited).StructuredOnly().Log(context.Background())
 	select {
 	case <-b.closed:
 		return b.closeErr
@@ -234,6 +239,10 @@ func (b *WebSocketBackend) SessionID() string   { return b.sessionID }
 func (b *WebSocketBackend) PtyID() string       { return b.sessionID }
 
 func (b *WebSocketBackend) reconnect() error {
+	ulog := grovelogging.NewUnifiedLogger("ptybackend.reconnect")
+	ctx := context.Background()
+	ulog.Debug("PTY reconnect started").Field("pty_id", b.sessionID).StructuredOnly().Log(ctx)
+
 	b.mu.Lock()
 	if b.conn != nil {
 		b.conn.Close()
@@ -244,9 +253,18 @@ func (b *WebSocketBackend) reconnect() error {
 	backoff := 100 * time.Millisecond
 	maxBackoff := 5 * time.Second
 
-	for i := 0; i < 20; i++ {
+	// Retry indefinitely. A slow groved upgrade can take longer than the old
+	// 20-attempt (~80s) budget to rebind; exhausting it surfaced a terminal
+	// error to the read pump and tore down a still-live agent pane. The only
+	// legitimate exits are an explicit Close (b.closed) or — handled before
+	// reconnect is ever entered — a genuine session exit (sets sessionExited,
+	// returns io.EOF). The exponential backoff is capped at maxBackoff, so this
+	// just polls until the successor daemon answers. A periodic Warn keeps a
+	// genuinely-stuck rebind visible in the workspace log.
+	for i := 0; ; i++ {
 		select {
 		case <-b.closed:
+			ulog.Debug("PTY reconnect aborted (backend closed)").Field("pty_id", b.sessionID).Field("attempt", i+1).StructuredOnly().Log(ctx)
 			return io.EOF
 		default:
 		}
@@ -254,7 +272,14 @@ func (b *WebSocketBackend) reconnect() error {
 		time.Sleep(backoff)
 
 		if err := b.dial(); err == nil {
+			ulog.Debug("PTY reconnect SUCCEEDED").Field("pty_id", b.sessionID).Field("attempt", i+1).StructuredOnly().Log(ctx)
 			return nil
+		} else {
+			ulog.Debug("PTY reconnect dial failed").Field("pty_id", b.sessionID).Field("attempt", i+1).Field("err", err.Error()).StructuredOnly().Log(ctx)
+		}
+
+		if i > 0 && (i+1)%20 == 0 {
+			ulog.Warn("PTY reconnect still retrying (slow daemon rebind?)").Field("pty_id", b.sessionID).Field("attempts", i+1).StructuredOnly().Log(ctx)
 		}
 
 		backoff *= 2
@@ -262,5 +287,4 @@ func (b *WebSocketBackend) reconnect() error {
 			backoff = maxBackoff
 		}
 	}
-	return fmt.Errorf("failed to reconnect to daemon PTY %s after retries", b.sessionID)
 }
