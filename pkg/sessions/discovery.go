@@ -103,6 +103,7 @@ func RecoverSessions() ([]*models.Session, error) {
 			PlanName:         metadata.PlanName,
 			JobFilePath:      metadata.JobFilePath,
 			Provider:         metadata.Provider,
+			PtyID:            metadata.PtyID,
 		}
 
 		sessions = append(sessions, session)
