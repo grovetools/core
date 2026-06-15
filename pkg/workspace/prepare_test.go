@@ -163,6 +163,13 @@ func TestPrepare(t *testing.T) {
 		require.NoError(t, os.MkdirAll(repoDir, 0o755))
 		setupTestRepo(t, repoDir)
 
+		// repo1 is a real direct-child repo so the (now authoritative) sibling
+		// setup can create a linked worktree for it. An explicitly-requested
+		// repo that exists nowhere is a hard error under the new contract.
+		repo1Dir := filepath.Join(repoDir, "repo1")
+		require.NoError(t, os.MkdirAll(repo1Dir, 0o755))
+		setupTestRepo(t, repo1Dir)
+
 		ctx := context.Background()
 		opts := PrepareOptions{
 			GitRoot:           repoDir,
