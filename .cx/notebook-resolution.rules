@@ -1,0 +1,10 @@
+# Notebook / workspace resolution rules
+# Scopes the source that decides which notebook a workspace node resolves to,
+# including the XDG-worktree origin-grove inheritance path. Changes here should
+# trigger the xdg-worktree-notebook-inheritance E2E scenario.
+
+pkg/workspace/lookup.go
+pkg/workspace/notebook_locator.go
+pkg/workspace/transform.go
+pkg/workspace/types.go
+tests/e2e/scenarios_xdg_worktrees.go

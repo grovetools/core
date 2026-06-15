@@ -187,6 +187,174 @@ context:
 	}
 }
 
+// XDGWorktreeNotebookInheritanceScenario reproduces the bug class where a project
+// checked out in an XDG worktree
+// (~/.local/share/grove/worktrees/<eco>-<hash>/<repo>) resolved to the WRONG
+// notebook — the global default ("nb") — instead of its ORIGIN grove's notebook.
+//
+// Setup: grove "proj" (path ~/work) maps to notebook "projnb"; the default
+// notebook is "nb". A repo lives under the grove, and an XDG-located worktree is
+// created from it. Because the worktree's own Path is outside every grove path,
+// the old assignNotebookName (which matched ONLY node.Path) fell through to the
+// default "nb". The fix falls back to the worktree's ORIGIN repo via
+// GetGroupingKey(), so the worktree inherits "projnb".
+//
+// Assertion: the worktree node's notebook_name (from `core ws --json` and
+// `core ws cwd --json` run from the worktree) is "projnb", NOT "nb". This FAILS
+// against the old behavior and PASSES with the fix.
+func XDGWorktreeNotebookInheritanceScenario() *harness.Scenario {
+	var projDir, xdgWtPath string
+
+	return &harness.Scenario{
+		Name:        "xdg-worktree-notebook-inheritance",
+		Description: "An XDG-located worktree inherits its origin grove's notebook (projnb), not the global default (nb).",
+		Tags:        []string{"core", "workspace", "notebooks", "xdg", "regression"},
+		Steps: []harness.Step{
+			{
+				Name: "Setup grove mapped to a non-default notebook + XDG worktree",
+				Func: func(ctx *harness.Context) error {
+					homeDir := ctx.HomeDir()
+					workDir := filepath.Join(homeDir, "work")
+					if err := fs.CreateDir(workDir); err != nil {
+						return err
+					}
+
+					// Grove "proj" (~/work) -> notebook "projnb". Default notebook
+					// is "nb". The notebook DEFINITIONS exist so the resolved name
+					// is meaningful, and cx repo discovery is disabled so the scan
+					// stays inside the sandbox.
+					groveYML := `groves:
+  proj:
+    path: ~/work
+    enabled: true
+    notebook: projnb
+notebooks:
+  rules:
+    default: nb
+  definitions:
+    nb:
+      root_dir: ~/notebooks/nb
+    projnb:
+      root_dir: ~/notebooks/projnb
+context:
+  repos_dir: ""
+`
+					if err := fs.WriteString(filepath.Join(homeDir, ".config", "grove", "grove.yml"), groveYML); err != nil {
+						return err
+					}
+
+					// The origin repo (main checkout) lives UNDER the grove path.
+					projDir = filepath.Join(workDir, "proj-repo")
+					if err := fs.WriteString(filepath.Join(projDir, "grove.yml"),
+						"version: '1.0'\nname: proj-repo\n"); err != nil {
+						return err
+					}
+					repo, err := git.SetupTestRepo(projDir)
+					if err != nil {
+						return err
+					}
+					if err := repo.AddCommit("initial commit"); err != nil {
+						return err
+					}
+
+					// XDG worktree under the sandboxed data dir — its Path lives
+					// OUTSIDE every grove path, which is what triggered the bug.
+					id := workspace.DirIdentifier(projDir)
+					xdgWtPath = filepath.Join(ctx.DataDir(), "grove", "worktrees", id, "feature-x")
+					if err := repo.CreateWorktree(xdgWtPath, "feature-x"); err != nil {
+						return fmt.Errorf("creating XDG worktree: %w", err)
+					}
+					return nil
+				},
+			},
+			{
+				Name: "Origin checkout resolves to its grove notebook (projnb)",
+				Func: func(ctx *harness.Context) error {
+					cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(projDir)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core ws cwd` failed in origin: %w\nstderr: %s", result.Error, result.Stderr)
+					}
+					var node workspace.WorkspaceNode
+					if err := json.Unmarshal([]byte(result.Stdout), &node); err != nil {
+						return fmt.Errorf("failed to unmarshal origin node: %w\nstdout: %s", err, result.Stdout)
+					}
+					if node.NotebookName != "projnb" {
+						return fmt.Errorf("origin checkout notebook_name = %q, want %q", node.NotebookName, "projnb")
+					}
+					return nil
+				},
+			},
+			{
+				Name: "XDG worktree inherits origin grove notebook (projnb), not default (nb)",
+				Func: func(ctx *harness.Context) error {
+					// Resolve from the worktree context, mirroring how the daemon/TUI
+					// resolves a node for a checked-out worktree.
+					cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(xdgWtPath)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core ws cwd` failed in XDG worktree: %w\nstderr: %s", result.Error, result.Stderr)
+					}
+
+					var node workspace.WorkspaceNode
+					if err := json.Unmarshal([]byte(result.Stdout), &node); err != nil {
+						return fmt.Errorf("failed to unmarshal worktree node: %w\nstdout: %s", err, result.Stdout)
+					}
+
+					// The crux of the regression: the worktree must inherit its
+					// origin grove's notebook, NOT fall back to the default.
+					if node.NotebookName == "nb" {
+						return fmt.Errorf("XDG worktree fell back to the DEFAULT notebook %q; want origin grove notebook %q (this is the regressed behavior)", "nb", "projnb")
+					}
+					if node.NotebookName != "projnb" {
+						return fmt.Errorf("XDG worktree notebook_name = %q, want %q", node.NotebookName, "projnb")
+					}
+
+					// Sanity: confirm we actually resolved the worktree node and its
+					// origin link points back at the checkout under the grove.
+					if !samePath(node.ParentProjectPath, projDir) {
+						return fmt.Errorf("XDG worktree ParentProjectPath = %q, want origin checkout %q", node.ParentProjectPath, projDir)
+					}
+					return nil
+				},
+			},
+			{
+				Name: "Full discovery also tags the worktree with projnb",
+				Func: func(ctx *harness.Context) error {
+					cmd := ctx.Command("core", "ws", "--json")
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("discovery failed: %w\nstderr: %s", result.Error, result.Stderr)
+					}
+
+					var nodes []*workspace.WorkspaceNode
+					if err := json.Unmarshal([]byte(result.Stdout), &nodes); err != nil {
+						return fmt.Errorf("failed to unmarshal nodes: %w\nstdout: %s", err, result.Stdout)
+					}
+
+					var wtNode *workspace.WorkspaceNode
+					for _, n := range nodes {
+						if n.Kind == workspace.KindStandaloneProjectWorktree && samePath(n.Path, xdgWtPath) {
+							wtNode = n
+							break
+						}
+					}
+					if wtNode == nil {
+						return fmt.Errorf("XDG worktree feature-x not discovered\nnodes: %s", result.Stdout)
+					}
+					if wtNode.NotebookName != "projnb" {
+						return fmt.Errorf("discovered XDG worktree notebook_name = %q, want %q\nnodes: %s", wtNode.NotebookName, "projnb", result.Stdout)
+					}
+					return nil
+				},
+			},
+		},
+	}
+}
+
 // XDGZombieWorktreeScenario is the XDG variant of the legacy zombie-worktree
 // log scenario: a long-running logger initialized inside an XDG worktree must
 // (a) route logs to the XDG state dir (never recreate worktree-local logs), and
