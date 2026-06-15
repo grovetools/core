@@ -178,8 +178,17 @@ func scopedPath(dir, base, ext string, scope []string) string {
 		return filepath.Join(dir, base+ext)
 	}
 	sum := sha256.Sum256([]byte(scope[0]))
+	// The basename is purely cosmetic (the 8-char hash guarantees
+	// uniqueness and nothing parses the name back). Clamp it so a long
+	// scope path — e.g. an XDG worktree under a deep base — can't push the
+	// socket path past the ~104-char UNIX sun_path limit and break the
+	// daemon listener.
+	name := filepath.Base(scope[0])
+	if len(name) > 20 {
+		name = name[:20]
+	}
 	return filepath.Join(dir, fmt.Sprintf("%s-%s-%s%s",
-		base, filepath.Base(scope[0]), hex.EncodeToString(sum[:])[:8], ext))
+		base, name, hex.EncodeToString(sum[:])[:8], ext))
 }
 
 // SSHHostKeyPath returns the default path for the SSH host key.
