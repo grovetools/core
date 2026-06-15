@@ -60,6 +60,7 @@ func main() {
 		ZombieWorktreeLogRecreationScenario(),
 		// XDG worktree scenarios
 		XDGWorktreeDiscoveryScenario(),
+		XDGWorktreeNotebookInheritanceScenario(),
 		XDGZombieWorktreeScenario(),
 		// Nvim component scenarios
 		// NvimDemoScenario(),
