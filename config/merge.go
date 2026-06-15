@@ -213,6 +213,16 @@ func mergeConfigs(base, override *Config) *Config {
 		result.ExplicitProjects = override.ExplicitProjects
 	}
 
+	// Merge worktree configuration
+	if override.Worktree != nil {
+		if result.Worktree == nil {
+			result.Worktree = &WorktreeConfig{}
+		}
+		if override.Worktree.Layout != "" {
+			result.Worktree.Layout = override.Worktree.Layout
+		}
+	}
+
 	// Merge TUI configuration
 	if override.TUI != nil {
 		if result.TUI == nil {

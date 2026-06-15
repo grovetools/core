@@ -541,6 +541,13 @@ type Notebook struct {
 	Obsidian  *ObsidianConfig  `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
 }
 
+// WorktreeConfig holds settings for git worktrees.
+type WorktreeConfig struct {
+	// Layout selects where new worktrees are created: "xdg" (under the XDG
+	// data dir) or "legacy" (in-repo under .grove-worktrees/).
+	Layout string `yaml:"layout,omitempty" toml:"layout,omitempty" jsonschema:"description=Worktree layout: xdg (XDG data dir) or legacy (in-repo .grove-worktrees),enum=xdg,enum=legacy"`
+}
+
 // TestScopeConfig defines a smart test triggering scope
 type TestScopeConfig struct {
 	Name      string   `yaml:"name" toml:"name" jsonschema:"description=Name of the test scope"`
@@ -571,6 +578,8 @@ type Config struct {
 	Commands   map[string]string `yaml:"commands,omitempty" toml:"commands,omitempty" jsonschema:"description=Command overrides per verb"`
 	TestScopes []TestScopeConfig `yaml:"test_scopes,omitempty" toml:"test_scopes,omitempty" jsonschema:"description=Smart test triggering scopes"`
 
+	Worktree *WorktreeConfig `yaml:"worktree,omitempty" toml:"worktree,omitempty" jsonschema:"description=Git worktree settings (layout)"`
+
 	// Extensions captures all other top-level keys for extensibility.
 	Extensions map[string]interface{} `yaml:",inline" toml:"-" jsonschema:"-"`
 }
@@ -595,6 +604,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty"`
 		Commands         map[string]string             `yaml:"commands,omitempty"`
 		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty"`
+		Worktree         *WorktreeConfig               `yaml:"worktree,omitempty"`
 		Extensions       map[string]interface{}        `yaml:",inline"`
 
 		// --- Legacy Fields for Backward Compatibility ---
@@ -624,6 +634,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.ExplicitProjects = raw.ExplicitProjects
 	c.Commands = raw.Commands
 	c.TestScopes = raw.TestScopes
+	c.Worktree = raw.Worktree
 	c.Extensions = raw.Extensions
 
 	// Handle backward compatibility for `search_paths` -> `groves`
