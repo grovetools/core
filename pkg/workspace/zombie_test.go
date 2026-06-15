@@ -87,6 +87,56 @@ func TestIsZombieWorktree_XDG(t *testing.T) {
 	}
 }
 
+func TestIsZombieWorktree_XDGContainer(t *testing.T) {
+	sandboxXDG(t)
+
+	repo := t.TempDir()
+
+	// Unified-container worktree: the container (<base>/<identifier>/<name>)
+	// holds repo checkouts as <container>/<repo>/ subdirs and carries a
+	// synthetic grove.toml but NO .git of its own. The .git reference lives in
+	// each child repo.
+	container := ResolveNewWorktreePath(repo, "live", true)
+	child := filepath.Join(container, "myrepo")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(container, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitFile := "gitdir: " + filepath.Join(repo, ".git", "worktrees", "live")
+	if err := os.WriteFile(filepath.Join(child, ".git"), []byte(gitFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Neither the container nor the live child repo is a zombie.
+	if IsZombieWorktree(container) {
+		t.Error("live XDG container flagged as zombie")
+	}
+	if IsZombieWorktree(child) {
+		t.Error("live XDG container child repo flagged as zombie")
+	}
+	// A deep path inside the live child must also resolve as non-zombie so
+	// default context rules can be written into <child>/.grove/rules.
+	if IsZombieWorktree(filepath.Join(child, ".grove", "rules")) {
+		t.Error("path inside live XDG container child flagged as zombie")
+	}
+
+	// Deleted container: child repos exist as bare dirs but their .git
+	// references are gone → zombie.
+	dead := ResolveNewWorktreePath(repo, "dead", true)
+	deadChild := filepath.Join(dead, "myrepo", ".grove")
+	if err := os.MkdirAll(deadChild, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !IsZombieWorktree(dead) {
+		t.Error("deleted XDG container not flagged as zombie")
+	}
+	if !IsZombieWorktree(filepath.Join(dead, "myrepo")) {
+		t.Error("child of deleted XDG container not flagged as zombie")
+	}
+}
+
 func TestIsZombieWorktree_CxCarveOut(t *testing.T) {
 	sandboxXDG(t)
 
