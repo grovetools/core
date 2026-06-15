@@ -70,6 +70,15 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 	// "empty == all discovered projects" semantics (see the early return below).
 	if len(repos) > 0 {
 		for _, repo := range repos {
+			// Unified-container case: the standalone repo IS the source root
+			// (gitRoot itself), not a child of it. Map its source location to
+			// gitRoot so the child worktree below is created from the right
+			// place (worktree add of gitRoot INTO worktreePath/<repo>).
+			if repo == filepath.Base(gitRoot) {
+				projects[repo] = repo
+				localWorkspaces[repo] = gitRoot
+				continue
+			}
 			if _, alreadyPresent := projects[repo]; !alreadyPresent {
 				projects[repo] = repo
 			}

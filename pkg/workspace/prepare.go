@@ -23,11 +23,40 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		return "", fmt.Errorf("worktree name cannot be empty")
 	}
 
-	wm := git.NewWorktreeManager()
+	// Determine whether the source root is an ecosystem. This forks how the
+	// container is created: an ecosystem worktree's container IS a git worktree
+	// of the ecosystem root, whereas a standalone repo's container is a plain
+	// synthetic directory holding the repo as a subdir (the child's git worktree
+	// is created INTO it by SetupSubmodules). The synthetic root grove.toml with
+	// `workspaces = ["*"]` is what makes discovery classify the container as an
+	// ecosystem worktree (see classifyWorkspaceRoot in discover.go).
+	isEcosystem := false
+	if node, _ := GetProjectByPath(opts.GitRoot); node != nil {
+		isEcosystem = node.IsEcosystem()
+	}
+
 	target := ResolveNewWorktreePath(opts.GitRoot, opts.WorktreeName, opts.UseXDGWorktrees)
-	worktreePath, created, err := wm.GetOrPrepareWorktreeAt(ctx, opts.GitRoot, target, opts.BranchName)
-	if err != nil {
-		return "", fmt.Errorf("failed to prepare worktree: %w", err)
+
+	var worktreePath string
+	var created bool
+	if isEcosystem {
+		wm := git.NewWorktreeManager()
+		var err error
+		worktreePath, created, err = wm.GetOrPrepareWorktreeAt(ctx, opts.GitRoot, target, opts.BranchName)
+		if err != nil {
+			return "", fmt.Errorf("failed to prepare worktree: %w", err)
+		}
+	} else {
+		worktreePath = target
+		if _, statErr := os.Stat(worktreePath); os.IsNotExist(statErr) {
+			if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+				return "", fmt.Errorf("failed to create worktree container: %w", err)
+			}
+			if err := os.WriteFile(filepath.Join(worktreePath, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644); err != nil { //nolint:gosec // synthetic container config is not sensitive
+				return "", fmt.Errorf("failed to write synthetic grove.toml: %w", err)
+			}
+			created = true
+		}
 	}
 
 	// Only run setup logic for newly created worktrees
@@ -70,9 +99,12 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		_ = os.MkdirAll(groveDir, 0o755)
 		markerPath := filepath.Join(groveDir, "workspace")
 
-		// Determine if this is an ecosystem worktree
-		isEcosystem := len(opts.SiblingWorkspaces) > 0
-
+		// Every worktree is now a unified container holding 1..N repos as
+		// subdirs, so the marker always records the repos: list and is always
+		// ecosystem: true. opts.SiblingWorkspaces is non-empty here (the caller
+		// seeds it with the standalone repo's own name when no siblings are
+		// requested) and is already resolved (no __ALL__ sentinel).
+		//
 		// The ecosystem:/repos: keys below are a frozen persisted format —
 		// keep them verbatim. owner: is an additive key recording the owning
 		// repository root so deleted (zombie) worktrees stay owner-resolvable
@@ -81,15 +113,12 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		if abs, err := filepath.Abs(opts.GitRoot); err == nil {
 			ownerPath = abs
 		}
-		markerContent := fmt.Sprintf("branch: %s\nplan: %s\ncreated_at: %s\nowner: %s\necosystem: %t\n",
-			opts.BranchName, opts.PlanName, time.Now().UTC().Format(time.RFC3339), ownerPath, isEcosystem)
+		markerContent := fmt.Sprintf("branch: %s\nplan: %s\ncreated_at: %s\nowner: %s\necosystem: true\n",
+			opts.BranchName, opts.PlanName, time.Now().UTC().Format(time.RFC3339), ownerPath)
 
-		// Add repos list for ecosystem worktrees
-		if isEcosystem {
-			markerContent += "repos:\n"
-			for _, repo := range opts.SiblingWorkspaces {
-				markerContent += fmt.Sprintf("  - %s\n", repo)
-			}
+		markerContent += "repos:\n"
+		for _, repo := range opts.SiblingWorkspaces {
+			markerContent += fmt.Sprintf("  - %s\n", repo)
 		}
 
 		_ = os.WriteFile(markerPath, []byte(markerContent), 0o644) //nolint:gosec // workspace marker is not sensitive
