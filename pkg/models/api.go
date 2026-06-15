@@ -277,6 +277,14 @@ type SystemInfo struct {
 	Version   string `json:"version"`    // e.g., "main-abc123def" or "v1.2.3"
 	Commit    string `json:"commit"`     // Git commit hash (short SHA)
 	BuildDate string `json:"build_date"` // ISO 8601 timestamp (e.g., "2026-06-11T15:20:30Z")
+	// UpgradeAvailable is true when the daemon's on-disk binary has changed
+	// since this process started — i.e. a rebuild is waiting and `groved
+	// upgrade` would swap to it. Clients (e.g. the treemux HUD) surface this
+	// as a staleness marker. It compares the running daemon against its own
+	// executable on disk, NOT against the client's commit (daemon and client
+	// are separate repos with unrelated commit hashes, so a commit comparison
+	// is always "stale").
+	UpgradeAvailable bool `json:"upgrade_available"`
 }
 
 // Helper method to parse time strings from API requests
