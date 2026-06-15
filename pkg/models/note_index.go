@@ -12,6 +12,7 @@ type NoteIndexEntry struct {
 	Tags       []string  `json:"tags,omitempty"`
 	ID         string    `json:"id,omitempty"`
 	PlanRef    string    `json:"plan_ref,omitempty"`
+	Priority   string    `json:"priority,omitempty"` // p0 (most critical) .. p3, empty = none
 	Created    time.Time `json:"created,omitempty"`
 	ModTime    time.Time `json:"mod_time"`
 	Type       string    `json:"type"`  // "note", "plan", "artifact", "generic"

@@ -21,6 +21,7 @@ type DocMetadata struct {
 	Tags      []string  `json:"tags,omitempty"`
 	Channels  []string  `json:"channels,omitempty"`
 	PlanRef   string    `json:"plan_ref,omitempty"`
+	Priority  string    `json:"priority,omitempty"` // p0 (most critical) .. p3, empty = none
 	Created   time.Time `json:"created,omitempty"`
 	Modified  time.Time `json:"modified,omitempty"`
 }
@@ -101,6 +102,8 @@ func Parse(r io.Reader) (DocMetadata, error) {
 			meta.Worktree = value
 		case "plan_ref":
 			meta.PlanRef = value
+		case "priority":
+			meta.Priority = value
 		case "tags":
 			if value == "" {
 				collectingTags = true
