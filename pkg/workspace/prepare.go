@@ -50,7 +50,12 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		}
 
 		if err := SetupSubmodules(ctx, worktreePath, opts.GitRoot, opts.BranchName, opts.SiblingWorkspaces, provider, setupHandlers...); err != nil {
-			fmt.Printf("Warning: failed to setup submodules for worktree '%s': %v\n", opts.WorktreeName, err)
+			// Propagate hard: an explicitly-requested sibling repo that can't be
+			// set up means the resulting worktree would be silently incomplete
+			// (a non-ecosystem or missing-repo worktree). Fail loudly so the
+			// caller (flow plan init) exits non-zero rather than producing a
+			// half-wired worktree.
+			return "", fmt.Errorf("failed to setup submodules for worktree '%s': %w", opts.WorktreeName, err)
 		}
 
 		// Run any provided post-setup handlers

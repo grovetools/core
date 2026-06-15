@@ -59,11 +59,30 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		}
 	}
 
+	// When specific repos are explicitly requested, treat that list as
+	// authoritative: pre-populate the project map with any requested repo not
+	// already discovered. This covers sibling/direct-child repos that lack a
+	// grove.toml (and thus aren't in localWorkspaces) and aren't .gitmodules
+	// entries either — e.g. a `workspaces=["*"]` ecosystem of independent repos.
+	// For direct-child repos the relative path equals the repo name.
+	//
+	// This is gated on len(repos) > 0 so the empty case keeps its existing
+	// "empty == all discovered projects" semantics (see the early return below).
+	if len(repos) > 0 {
+		for _, repo := range repos {
+			if _, alreadyPresent := projects[repo]; !alreadyPresent {
+				projects[repo] = repo
+			}
+		}
+	}
+
 	// Parse .gitmodules to find uninitialized submodules not yet discovered
 	// by the workspace provider (no grove.toml on disk yet).
 	gitmodulesPath := filepath.Join(worktreePath, ".gitmodules")
+	gitmoduleNames := make(map[string]bool)
 	if submodulePaths, err := parseGitmodules(gitmodulesPath); err == nil {
 		for name, path := range submodulePaths {
+			gitmoduleNames[name] = true
 			if _, alreadyDiscovered := projects[name]; !alreadyDiscovered {
 				projects[name] = path
 			}
@@ -122,6 +141,16 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 				}
 			}
 			continue
+		}
+
+		// Not found locally. If this repo was EXPLICITLY requested and is also
+		// not a real .gitmodules entry, it can't be an uninitialized submodule
+		// either — it's a typo or a missing repo. Hard-error rather than
+		// silently `git submodule update`-ing nothing and leaving an empty dir.
+		// A legitimate-but-uninitialized submodule (present in .gitmodules) still
+		// falls through to the submodule-update path below.
+		if repoFilter[projectName] && !gitmoduleNames[projectName] {
+			return fmt.Errorf("requested repo %q not found at %s or in local workspaces", projectName, filepath.Join(gitRoot, projectPath))
 		}
 
 		// Not found locally — must be an uninitialized submodule

@@ -443,7 +443,14 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 								// Accept either an exact basename match or a path
 								// whose basename matches (so entries like "pkgs/foo"
 								// also work for a child at <eco>/pkgs/foo).
-								if ws == childName || filepath.Base(ws) == childName {
+								//
+								// Also accept a glob match so a `workspaces=["*"]`
+								// ecosystem promotes every direct-child git repo that
+								// lacks its own grove.toml. filepath.Match preserves
+								// exact-name behavior; only entries containing glob
+								// metacharacters (*, ?, [...]) actually expand.
+								matched, _ := filepath.Match(ws, childName)
+								if ws == childName || filepath.Base(ws) == childName || matched {
 									shouldPromote = true
 									break
 								}
