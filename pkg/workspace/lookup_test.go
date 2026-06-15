@@ -182,6 +182,85 @@ func TestGetProjectByPath(t *testing.T) {
 	})
 }
 
+// TestAssignNotebookName_WorktreeInheritsOriginGrove verifies that a worktree
+// node whose Path lives OUTSIDE every configured grove (the XDG worktree layout,
+// ~/.local/share/grove/worktrees/<eco>-<hash>/<plan>/<repo>) inherits the
+// notebook of its ORIGIN grove — the grove that owns the repo it was made from —
+// rather than falling back to the global default.
+//
+// Regression: previously assignNotebookName matched ONLY node.Path against the
+// grove paths; an XDG worktree matched nothing and fell through to the default
+// notebook ("nb"), so the TUI resolved the wrong notebook for it.
+func TestAssignNotebookName_WorktreeInheritsOriginGrove(t *testing.T) {
+	groveDir := t.TempDir()
+	// The origin repo (main checkout) lives under the configured grove.
+	// Create it on disk so path normalization (EvalSymlinks) resolves it the
+	// same way it resolves the grove path on case-insensitive/symlinked FSes.
+	originRepo := filepath.Join(groveDir, "grovetools")
+	require.NoError(t, os.MkdirAll(originRepo, 0o755))
+
+	// The worktree lives in the XDG worktree tree, OUTSIDE every grove path.
+	xdgRoot := t.TempDir()
+	worktreePath := filepath.Join(xdgRoot, "grovetools-0bd46c64", "rolling", "grovetools")
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+
+	cfg := &config.Config{
+		Groves: map[string]config.GroveSourceConfig{
+			"grovetools": {
+				Path:     groveDir,
+				Notebook: "grovetools",
+			},
+		},
+		Notebooks: &config.NotebooksConfig{
+			Rules: &config.NotebookRules{
+				Default: "nb",
+			},
+		},
+	}
+
+	t.Run("XDG worktree inherits origin grove notebook", func(t *testing.T) {
+		// A standalone-project worktree: Path is the XDG location, and
+		// ParentProjectPath (its origin) is the main checkout under the grove.
+		node := &WorkspaceNode{
+			Name:              "rolling",
+			Path:              worktreePath,
+			Kind:              KindStandaloneProjectWorktree,
+			ParentProjectPath: originRepo,
+		}
+
+		assignNotebookName(node, cfg)
+
+		// Without the fix this would be "nb" (the default); with the fix it
+		// inherits the origin grove's notebook.
+		assert.Equal(t, "grovetools", node.NotebookName,
+			"XDG worktree should inherit its origin grove's notebook, not the default")
+	})
+
+	t.Run("main checkout under grove still resolves directly", func(t *testing.T) {
+		node := &WorkspaceNode{
+			Name: "grovetools",
+			Path: originRepo,
+			Kind: KindStandaloneProject,
+		}
+
+		assignNotebookName(node, cfg)
+		assert.Equal(t, "grovetools", node.NotebookName)
+	})
+
+	t.Run("node outside every grove with no origin falls back to default", func(t *testing.T) {
+		elsewhere := filepath.Join(xdgRoot, "elsewhere")
+		require.NoError(t, os.MkdirAll(elsewhere, 0o755))
+		node := &WorkspaceNode{
+			Name: "elsewhere",
+			Path: elsewhere,
+			Kind: KindStandaloneProject,
+		}
+
+		assignNotebookName(node, cfg)
+		assert.Equal(t, "nb", node.NotebookName)
+	})
+}
+
 // TestGetProjectByPath_WithEcosystemWorktrees tests the worktree scenarios
 // where cwd command should correctly identify workspace kinds and root ecosystem paths.
 func TestGetProjectByPath_WithEcosystemWorktrees(t *testing.T) {
