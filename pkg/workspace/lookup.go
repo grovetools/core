@@ -25,16 +25,41 @@ func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
 		defaultNotebook = cfg.Notebooks.Rules.Default
 	}
 
+	// Match the node's own path against the configured groves first.
+	bestMatchNotebook := matchGroveNotebook(node.Path, cfg)
+
+	// A worktree may live outside every configured grove path (XDG layout:
+	// ~/.local/share/grove/worktrees/<ecosystem>-<hash>/<plan>/<repo>). In that
+	// case the spatial match above finds nothing, so fall back to the worktree's
+	// ORIGIN repository — the repo it was created from — which IS under a grove.
+	// This makes a worktree inherit its origin grove's notebook instead of the
+	// global default. GetGroupingKey() returns the owning project path for
+	// project worktrees, mirroring how notebook_locator.go resolves worktrees.
+	if bestMatchNotebook == "" {
+		if originPath := node.GetGroupingKey(); originPath != "" && originPath != node.Path {
+			bestMatchNotebook = matchGroveNotebook(originPath, cfg)
+		}
+	}
+
+	if bestMatchNotebook != "" {
+		node.NotebookName = bestMatchNotebook
+	} else {
+		node.NotebookName = defaultNotebook
+	}
+}
+
+// matchGroveNotebook returns the notebook of the most specific (longest path
+// match) configured grove that contains targetPath, or "" if none match.
+func matchGroveNotebook(targetPath string, cfg *config.Config) string {
+	// Normalize the target path for comparison
+	normalizedTargetPath, err := pathutil.NormalizeForLookup(targetPath)
+	if err != nil {
+		normalizedTargetPath = targetPath
+	}
+
 	var bestMatchGrove string
 	var bestMatchNotebook string
 
-	// Normalize the node path for comparison
-	normalizedNodePath, err := pathutil.NormalizeForLookup(node.Path)
-	if err != nil {
-		normalizedNodePath = node.Path
-	}
-
-	// Find the grove that this node's path falls under
 	for _, groveCfg := range cfg.Groves {
 		// Normalize paths for comparison
 		expandedPath := expandPath(groveCfg.Path)
@@ -49,8 +74,8 @@ func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
 			normalizedGrovePath = grovePath
 		}
 
-		// Check if node path is under this grove path (exact match or subdirectory)
-		if normalizedNodePath == normalizedGrovePath || strings.HasPrefix(normalizedNodePath, normalizedGrovePath+string(filepath.Separator)) {
+		// Check if target path is under this grove path (exact match or subdirectory)
+		if normalizedTargetPath == normalizedGrovePath || strings.HasPrefix(normalizedTargetPath, normalizedGrovePath+string(filepath.Separator)) {
 			// Use the longest matching grove (most specific)
 			if len(normalizedGrovePath) > len(bestMatchGrove) {
 				bestMatchGrove = normalizedGrovePath
@@ -59,11 +84,7 @@ func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
 		}
 	}
 
-	if bestMatchNotebook != "" {
-		node.NotebookName = bestMatchNotebook
-	} else {
-		node.NotebookName = defaultNotebook
-	}
+	return bestMatchNotebook
 }
 
 // findRootEcosystemPath finds the top-most ecosystem containing a given directory.
