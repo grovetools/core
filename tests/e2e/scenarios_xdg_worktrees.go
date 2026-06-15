@@ -270,7 +270,11 @@ context:
 			{
 				Name: "Origin checkout resolves to its grove notebook (projnb)",
 				Func: func(ctx *harness.Context) error {
-					cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(projDir)
+					coreBinary, err := FindProjectBinary()
+					if err != nil {
+						return err
+					}
+					cmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(projDir)
 					result := cmd.Run()
 					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
 					if result.Error != nil {
@@ -291,7 +295,11 @@ context:
 				Func: func(ctx *harness.Context) error {
 					// Resolve from the worktree context, mirroring how the daemon/TUI
 					// resolves a node for a checked-out worktree.
-					cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(xdgWtPath)
+					coreBinary, err := FindProjectBinary()
+					if err != nil {
+						return err
+					}
+					cmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(xdgWtPath)
 					result := cmd.Run()
 					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
 					if result.Error != nil {
@@ -323,7 +331,11 @@ context:
 			{
 				Name: "Full discovery also tags the worktree with projnb",
 				Func: func(ctx *harness.Context) error {
-					cmd := ctx.Command("core", "ws", "--json")
+					coreBinary, err := FindProjectBinary()
+					if err != nil {
+						return err
+					}
+					cmd := ctx.Command(coreBinary, "ws", "--json")
 					result := cmd.Run()
 					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
 					if result.Error != nil {
