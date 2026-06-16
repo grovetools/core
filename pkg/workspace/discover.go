@@ -173,6 +173,13 @@ func processProject(path string, cfg *config.Config) Project {
 		for _, entry := range entries {
 			if entry.IsDir() {
 				wtPath := filepath.Join(worktreeBase, entry.Name())
+				// Skip unified containers (workspaces=["*"]) — the XDG enumeration
+				// pass will discover them as EcosystemWorktree projects with full
+				// provenance. Adding them here as raw WorkspaceTypeWorktree leaves
+				// would cause misclassification and duplicates.
+				if _, cfg, cfgErr := findGroveConfig(wtPath); cfgErr == nil && cfg != nil && len(cfg.Workspaces) > 0 {
+					continue
+				}
 				proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
 					Name:              entry.Name(),
 					Path:              wtPath,
@@ -681,7 +688,7 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	// discovered ecosystem's XDG base explicitly. Worktrees of plain
 	// projects need no dedicated pass: processProject already probes every
 	// WorktreeBases entry.
-	for _, proj := range s.discoverXDGEcosystemWorktrees(result.Ecosystems) {
+	for _, proj := range s.discoverXDGEcosystemWorktrees(result.Ecosystems, result.Projects) {
 		projKey := normalizeKey(proj.Path)
 		if seenProjects[projKey] {
 			continue
@@ -811,20 +818,51 @@ func GetWorkspaceTree(logger *logrus.Logger) ([]*WorkspaceTree, error) {
 }
 
 // discoverXDGEcosystemWorktrees enumerates the XDG worktree base
-// (paths.WorktreesDir()/<DirIdentifier(eco)>) of every discovered ecosystem
-// and returns each entry as an ecosystem-worktree Project with explicit
-// provenance. It also enumerates each worktree's direct children as
-// sub-projects — the walker does that for legacy worktrees by descending
-// into them, which is impossible for XDG worktrees outside the walked tree.
-func (s *DiscoveryService) discoverXDGEcosystemWorktrees(ecosystems []Ecosystem) []Project {
+// (paths.WorktreesDir()/<DirIdentifier(path)>) of every discovered ecosystem
+// and project, returning each entry as an ecosystem-worktree Project with
+// explicit provenance (owner = the path whose XDG base contained the entry).
+// It also enumerates each worktree's direct children as sub-projects —
+// the walker does that for legacy worktrees by descending into them, which
+// is impossible for XDG worktrees outside the walked tree.
+//
+// Including projects (not just ecosystems) supports the anchored-worktree
+// case where a unified container is placed under a sub-project's XDG base
+// via `flow plan init --anchor <sub-project>`.
+func (s *DiscoveryService) discoverXDGEcosystemWorktrees(ecosystems []Ecosystem, projects []Project) []Project {
 	wtd := paths.WorktreesDir()
 	if wtd == "" {
 		return nil
 	}
 
-	var projects []Project
+	// Build a set of ecosystem paths for per-owner classification below.
+	ecoSet := make(map[string]bool, len(ecosystems))
 	for _, eco := range ecosystems {
-		base := filepath.Join(wtd, DirIdentifier(eco.Path))
+		ecoSet[eco.Path] = true
+	}
+
+	// Deduplicate owner paths so an ecosystem root isn't scanned twice if it
+	// also appears in the projects list.
+	seen := make(map[string]bool)
+	type ownerEntry struct{ path string }
+	var owners []ownerEntry
+
+	for _, eco := range ecosystems {
+		if !seen[eco.Path] {
+			seen[eco.Path] = true
+			owners = append(owners, ownerEntry{eco.Path})
+		}
+	}
+	for _, proj := range projects {
+		if !seen[proj.Path] {
+			seen[proj.Path] = true
+			owners = append(owners, ownerEntry{proj.Path})
+		}
+	}
+
+	var result []Project
+	for _, owner := range owners {
+		isEco := ecoSet[owner.path]
+		base := filepath.Join(wtd, DirIdentifier(owner.path))
 		entries, err := os.ReadDir(base)
 		if err != nil {
 			continue
@@ -833,13 +871,23 @@ func (s *DiscoveryService) discoverXDGEcosystemWorktrees(ecosystems []Ecosystem)
 			if !entry.IsDir() {
 				continue
 			}
-			projects = append(projects,
-				makeEcosystemWorktreeProject(eco.Path, base, entry.Name()))
-			projects = append(projects,
-				s.discoverWorktreeSubProjects(filepath.Join(base, entry.Name()))...)
+			entryPath := filepath.Join(base, entry.Name())
+			// For project owners (non-ecosystem), only emit entries that are
+			// unified containers (workspaces=["*"]). Plain project worktrees
+			// already appear via processProject → WorktreeBases probing.
+			if !isEco {
+				_, cfg, cfgErr := findGroveConfig(entryPath)
+				if cfgErr != nil || cfg == nil || len(cfg.Workspaces) == 0 {
+					continue
+				}
+			}
+			result = append(result,
+				makeEcosystemWorktreeProject(owner.path, base, entry.Name()))
+			result = append(result,
+				s.discoverWorktreeSubProjects(entryPath)...)
 		}
 	}
-	return projects
+	return result
 }
 
 // discoverWorktreeSubProjects enumerates the direct children of an

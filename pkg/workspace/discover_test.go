@@ -218,3 +218,73 @@ func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
 		assert.Equal(t, ecoDir, kcore.ParentEcosystemPath)
 	}
 }
+
+// TestDiscoverAll_NestedEcosystem_NoMisattribution is a regression guard for
+// the anchored-worktree discovery change: a sub-project that is ITSELF an
+// ecosystem (with its own .grove-worktrees/) must NOT have its worktrees
+// misattributed or misclassified when the XDG enumeration pass also scans
+// project XDG bases.
+func TestDiscoverAll_NestedEcosystem_NoMisattribution(t *testing.T) {
+	rootDir := t.TempDir()
+
+	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
+	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
+	emptyStr := ""
+	globalCfg := config.Config{
+		SearchPaths: map[string]config.SearchPathConfig{
+			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		},
+		Context: &config.ContextConfig{ReposDir: &emptyStr},
+	}
+	globalBytes, _ := yaml.Marshal(globalCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
+
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))
+	t.Setenv("HOME", filepath.Join(rootDir, "home"))
+	t.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(globalConfigDir, "grove.yml"))
+
+	// Outer ecosystem.
+	outerEco := filepath.Join(rootDir, "work", "outer-eco")
+	outerCfg := config.Config{Name: "outer-eco", Workspaces: []string{"*"}}
+	outerBytes, _ := yaml.Marshal(outerCfg)
+	require.NoError(t, os.MkdirAll(outerEco, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(outerEco, "grove.yml"), outerBytes, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(outerEco, ".git"), 0o755))
+
+	// Inner sub-project that is ITSELF an ecosystem (has workspaces).
+	innerEco := filepath.Join(outerEco, "inner-eco")
+	innerCfg := config.Config{Name: "inner-eco", Workspaces: []string{"*"}}
+	innerBytes, _ := yaml.Marshal(innerCfg)
+	require.NoError(t, os.MkdirAll(innerEco, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(innerEco, "grove.yml"), innerBytes, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(innerEco, ".git"), 0o755))
+
+	// Legacy worktree of the inner ecosystem.
+	innerWt := filepath.Join(innerEco, ".grove-worktrees", "inner-wt")
+	require.NoError(t, os.MkdirAll(innerWt, 0o755))
+	innerWtCfg := config.Config{Name: "inner-eco", Workspaces: []string{"*"}}
+	innerWtBytes, _ := yaml.Marshal(innerWtCfg)
+	require.NoError(t, os.WriteFile(filepath.Join(innerWt, "grove.yml"), innerWtBytes, 0o644))
+	// .git file marks it as a worktree
+	require.NoError(t, os.WriteFile(filepath.Join(innerWt, ".git"), []byte("gitdir: ../../.git/worktrees/inner-wt\n"), 0o644))
+
+	logger := logrus.New()
+	logger.SetLevel(logrus.WarnLevel)
+	result, err := NewDiscoveryService(logger).DiscoverAll()
+	require.NoError(t, err)
+
+	projectsByPath := make(map[string]Project)
+	for _, p := range result.Projects {
+		projectsByPath[p.Path] = p
+	}
+
+	// The inner worktree must be discovered.
+	innerWtProj, ok := projectsByPath[innerWt]
+	require.True(t, ok, "inner ecosystem worktree must be discovered; got projects: %v", result.Projects)
+
+	// Its owner must be the inner ecosystem, not the outer one.
+	assert.Equal(t, innerEco, innerWtProj.WorktreeOwnerPath,
+		"inner worktree must be owned by the inner ecosystem, not outer")
+	assert.NotEqual(t, outerEco, innerWtProj.WorktreeOwnerPath,
+		"worktree must NOT be misattributed to the outer ecosystem")
+}

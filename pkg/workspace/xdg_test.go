@@ -444,3 +444,115 @@ func TestResolveScope_XDGEcosystemWorktree(t *testing.T) {
 	assert.Equal(t, normalizePath(t, f.ecoWtPath), normalizePath(t, scope),
 		"XDG ecosystem worktree should be its own scope")
 }
+
+// TestResolveScope_AnchorInvariant asserts that anchoring a container to a
+// sub-project does not change the scope boundary: the container is still its
+// own daemon scope, regardless of where it nests in the hierarchy.
+func TestResolveScope_AnchorInvariant(t *testing.T) {
+	sandboxXDG(t)
+
+	subProjectPath := "/p/my-eco/sub-a"
+	containerPath := ResolveNewWorktreePath(subProjectPath, "anchored-wt", true)
+
+	result := &DiscoveryResult{
+		Ecosystems: []Ecosystem{{Name: "my-eco", Path: "/p/my-eco", Type: "User"}},
+		Projects: []Project{
+			{
+				Name:                "anchored-wt",
+				Path:                containerPath,
+				ParentEcosystemPath: "/p/my-eco",
+				WorktreeSourceBase:  filepath.Dir(containerPath),
+				WorktreeOwnerPath:   subProjectPath,
+				Workspaces: []DiscoveredWorkspace{
+					{Name: "anchored-wt", Path: containerPath, Type: WorkspaceTypePrimary, ParentProjectPath: containerPath},
+				},
+			},
+		},
+	}
+
+	nodes := TransformToWorkspaceNodes(result, nil)
+	nodeMap := make(map[string]*WorkspaceNode)
+	for _, n := range nodes {
+		nodeMap[n.Path] = n
+	}
+
+	containerNode := nodeMap[containerPath]
+	require.NotNil(t, containerNode, "anchored container must appear as a node")
+	assert.Equal(t, KindEcosystemWorktree, containerNode.Kind)
+	assert.Equal(t, subProjectPath, containerNode.ParentProjectPath,
+		"parent must be the anchor sub-project, not the ecosystem root")
+
+	// Scope must return the container itself — anchoring changes nesting, not isolation.
+	// Use the node directly (no live FS): scope.go's GetProjectByPath will fall back to
+	// git.GetGitRoot if discovery cannot classify containerPath, so we verify the
+	// invariant via the node's Kind instead.
+	assert.True(t, containerNode.IsEcosystem(),
+		"EcosystemWorktree is its own scope boundary regardless of anchor")
+}
+
+// TestDiscoverAll_AnchoredContainer verifies that a unified container placed
+// under a sub-project's XDG base (via --anchor) is discovered as an
+// EcosystemWorktree owned by that sub-project, not as a raw worktree leaf.
+func TestDiscoverAll_AnchoredContainer(t *testing.T) {
+	sandboxXDG(t)
+
+	rootDir := t.TempDir()
+
+	// Global config.
+	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
+	emptyStr := ""
+	writeGroveYML(t, globalConfigDir, "grove.yml", config.Config{
+		SearchPaths: map[string]config.SearchPathConfig{
+			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		},
+		Context: &config.ContextConfig{ReposDir: &emptyStr},
+	})
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))
+	t.Setenv("HOME", filepath.Join(rootDir, "home"))
+	t.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(globalConfigDir, "grove.yml"))
+
+	// Ecosystem root.
+	ecoDir := filepath.Join(rootDir, "work", "my-eco")
+	writeGroveYML(t, ecoDir, "grove.yml", config.Config{Name: "my-eco", Workspaces: []string{"*"}})
+	require.NoError(t, os.MkdirAll(filepath.Join(ecoDir, ".git"), 0o755))
+
+	// Sub-project inside the ecosystem.
+	subDir := filepath.Join(ecoDir, "sub-a")
+	writeGroveYML(t, subDir, "grove.yml", config.Config{Name: "sub-a"})
+	require.NoError(t, os.MkdirAll(filepath.Join(subDir, ".git"), 0o755))
+
+	// Unified container anchored to sub-a: placed in sub-a's XDG base.
+	anchoredWt := ResolveNewWorktreePath(subDir, "anchored-feature", true)
+	writeWorktreeGitFile(t, anchoredWt, filepath.Join(ecoDir, ".git", "worktrees", "anchored-feature"))
+	writeGroveYML(t, anchoredWt, "grove.yml", config.Config{Name: "my-eco", Workspaces: []string{"*"}})
+
+	logger := logrus.New()
+	logger.SetLevel(logrus.WarnLevel)
+	result, err := NewDiscoveryService(logger).DiscoverAll()
+	require.NoError(t, err)
+
+	projectsByPath := make(map[string]Project)
+	for _, p := range result.Projects {
+		projectsByPath[p.Path] = p
+	}
+
+	wt, ok := projectsByPath[anchoredWt]
+	require.True(t, ok, "anchored container must be discovered; projects: %v", result.Projects)
+	assert.Equal(t, subDir, wt.WorktreeOwnerPath,
+		"owner must be the anchor sub-project")
+
+	// Transformation: the container must appear as KindEcosystemWorktree with
+	// ParentProjectPath pointing at the sub-project.
+	nodes := TransformToWorkspaceNodes(result, nil)
+	nodeMap := make(map[string]*WorkspaceNode)
+	for _, n := range nodes {
+		nodeMap[n.Path] = n
+	}
+
+	wtNode := nodeMap[anchoredWt]
+	require.NotNil(t, wtNode, "anchored container must produce a node")
+	assert.Equal(t, KindEcosystemWorktree, wtNode.Kind)
+	assert.Equal(t, subDir, wtNode.ParentProjectPath,
+		"container must nest under the anchor sub-project, not the ecosystem root")
+	require.NoError(t, wtNode.Validate())
+}
