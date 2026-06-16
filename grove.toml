@@ -32,7 +32,7 @@ scenarios = ["xdg-worktree-notebook-inheritance", "xdg-anchored-container-classi
 [[test_scopes]]
 name = "worktree-create-robustness"
 rules = ".cx/worktree-create-robustness.rules"
-scenarios = ["worktree-create-stale-prune"]
+scenarios = ["worktree-create-stale-prune", "anchored-member-canonical-resolution"]
 
 [[hooks.post_tool_use]]
 name = "concept-reminder"
