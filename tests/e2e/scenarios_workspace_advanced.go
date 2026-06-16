@@ -77,6 +77,11 @@ func setupAdvancedEnvironment(ctx *harness.Context) error {
 
 // testDuplicateWorkspaceNames verifies behavior when multiple workspaces have the same name.
 func testDuplicateWorkspaceNames(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	workDir := ctx.GetString("workDir")
 	playDir := ctx.GetString("playDir")
 
@@ -117,7 +122,7 @@ func testDuplicateWorkspaceNames(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -152,7 +157,7 @@ func testDuplicateWorkspaceNames(ctx *harness.Context) error {
 	}
 
 	// Test lookup behavior from work/my-app (should find the correct one)
-	cwdCmd := ctx.Command("core", "ws", "cwd", "--json").Dir(workMyAppPath)
+	cwdCmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(workMyAppPath)
 	cwdResult := cwdCmd.Run()
 	if cwdResult.Error != nil {
 		return fmt.Errorf("ws cwd failed: %w", cwdResult.Error)
@@ -175,7 +180,7 @@ func testDuplicateWorkspaceNames(ctx *harness.Context) error {
 	}
 
 	// Test lookup from play/my-app (should find the standalone one)
-	cwdCmd2 := ctx.Command("core", "ws", "cwd", "--json").Dir(playMyAppPath)
+	cwdCmd2 := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(playMyAppPath)
 	cwdResult2 := cwdCmd2.Run()
 	if cwdResult2.Error != nil {
 		return fmt.Errorf("ws cwd failed: %w", cwdResult2.Error)
@@ -200,6 +205,11 @@ func testDuplicateWorkspaceNames(ctx *harness.Context) error {
 
 // testOrphanedWorktrees verifies handling of worktrees whose parent project has been deleted.
 func testOrphanedWorktrees(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	playDir := ctx.GetString("playDir")
 
 	// Create a project with a worktree
@@ -223,7 +233,7 @@ func testOrphanedWorktrees(ctx *harness.Context) error {
 	}
 
 	// Verify both are discovered
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("initial discovery failed: %w", result.Error)
@@ -260,7 +270,7 @@ func testOrphanedWorktrees(ctx *harness.Context) error {
 	}
 
 	// Run discovery again
-	cmd2 := ctx.Command("core", "ws", "--json")
+	cmd2 := ctx.Command(coreBinary, "ws", "--json")
 	result2 := cmd2.Run()
 
 	// Discovery should succeed (not crash) even with orphaned worktree
@@ -299,6 +309,11 @@ func testOrphanedWorktrees(ctx *harness.Context) error {
 
 // testEcosystemWorkspaceValidation verifies handling of invalid workspace declarations in ecosystems.
 func testEcosystemWorkspaceValidation(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	workDir := ctx.GetString("workDir")
 
 	// Create ecosystem with various invalid workspace declarations
@@ -333,7 +348,7 @@ workspaces:
 	}
 
 	// Run discovery - should handle invalid declarations gracefully
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 
 	// Discovery should succeed (not crash)
@@ -379,6 +394,11 @@ workspaces:
 
 // testGrovePathOverlaps verifies behavior when grove paths overlap/nest.
 func testGrovePathOverlaps(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	codeDir := ctx.GetString("codeDir")
 	codeWorkDir := ctx.GetString("codeWorkDir")
 
@@ -403,7 +423,7 @@ func testGrovePathOverlaps(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -448,7 +468,7 @@ func testGrovePathOverlaps(ctx *harness.Context) error {
 	}
 
 	// Verify lookup works correctly from both locations
-	parentCwdCmd := ctx.Command("core", "ws", "cwd", "--json").Dir(parentWorkspacePath)
+	parentCwdCmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(parentWorkspacePath)
 	parentResult := parentCwdCmd.Run()
 	if parentResult.Error != nil {
 		return fmt.Errorf("ws cwd failed for parent: %w", parentResult.Error)
@@ -463,7 +483,7 @@ func testGrovePathOverlaps(ctx *harness.Context) error {
 		return fmt.Errorf("expected parent-workspace, got %s", parentNode.Name)
 	}
 
-	childCwdCmd := ctx.Command("core", "ws", "cwd", "--json").Dir(childWorkspacePath)
+	childCwdCmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(childWorkspacePath)
 	childResult := childCwdCmd.Run()
 	if childResult.Error != nil {
 		return fmt.Errorf("ws cwd failed for child: %w", childResult.Error)
