@@ -1,10 +1,16 @@
 # Worktree-create robustness rules
 # Scopes the source that creates per-member linked worktrees during container
 # preparation, including the pre-create `git worktree prune` of stale/dangling
-# registrations and the fail-loud aggregation of per-member add failures.
-# Changes here should trigger the worktree-create-stale-prune E2E scenario.
+# registrations, the fail-loud aggregation of per-member add failures, and the
+# CANONICAL member-source resolution that snapshots each member at the ecosystem
+# root's commit (anchored creates must not pull from arbitrary other checkouts).
+# Changes here should trigger the worktree-create-stale-prune and
+# anchored-member-canonical-resolution E2E scenarios.
 
 pkg/workspace/submodules.go
 pkg/workspace/prepare.go
+pkg/workspace/provider.go
+pkg/workspace/lookup.go
 git/worktree.go
 tests/e2e/scenarios_worktree_stale_prune.go
+tests/e2e/scenarios_anchored_member_resolution.go

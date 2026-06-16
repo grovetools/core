@@ -65,6 +65,7 @@ func main() {
 		XDGZombieWorktreeScenario(),
 		// Worktree create robustness scenarios
 		WorktreeStalePruneScenario(),
+		AnchoredMemberResolutionScenario(),
 		// Nvim component scenarios
 		// NvimDemoScenario(),
 		// NvimDemoFileBrowserScenario(),

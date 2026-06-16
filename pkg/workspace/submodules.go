@@ -33,7 +33,39 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		provider = NewProvider(result)
 	}
 
-	localWorkspaces := provider.LocalWorkspaces()
+	// Resolve the CANONICAL ecosystem root that owns gitRoot. Member source
+	// checkouts MUST be resolved against this root's repos so the new worktree
+	// snapshots the CURRENT STATE OF THE ECOSYSTEM (each member at the commit the
+	// ecosystem root currently has it at), regardless of how many other checkouts
+	// of a repo exist on disk.
+	//
+	// Two cases:
+	//   - gitRoot IS the ecosystem root (non-anchored ecosystem-root create): the
+	//     root is gitRoot itself.
+	//   - gitRoot is a SUB-REPO (anchored create, `--anchor <sub-repo>`): walk up
+	//     to the owning ecosystem root via findRootEcosystemPath. `--anchor` only
+	//     changes base-dir placement (already handled by the caller); it must NEVER
+	//     change which commit each member starts from.
+	//
+	// Without this, member sources were resolved via the collision-prone
+	// LocalWorkspaces() map, which returns an ARBITRARY checkout per repo name when
+	// several exist (the normal case) — producing a Frankenstein mix of commits
+	// from unrelated branches/efforts that does not build.
+	rootEcosystemPath := gitRoot
+	if rootEco := findRootEcosystemPath(gitRoot); rootEco != "" {
+		rootEcosystemPath = rootEco
+	}
+
+	// localWorkspaces is the per-repo source-checkout map used to resolve where a
+	// member's `git worktree add` runs from. Prefer the ecosystem-scoped map keyed
+	// to the canonical root so name collisions across ecosystems/worktrees cannot
+	// select a non-canonical checkout. Fall back to the (deprecated) global map
+	// only for the no-provider / nothing-scoped case so existing behavior for
+	// standalone roots is preserved.
+	localWorkspaces := provider.LocalWorkspacesInEcosystem(rootEcosystemPath)
+	if len(localWorkspaces) == 0 {
+		localWorkspaces = provider.LocalWorkspaces()
+	}
 
 	repoFilter := make(map[string]bool)
 	if len(repos) > 0 {
@@ -47,11 +79,14 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 	// repos that are gitignored but present locally).
 	projects := make(map[string]string) // name -> relative path within ecosystem
 	for name, localPath := range localWorkspaces {
-		// Only include projects that are direct children of this ecosystem root.
+		// Only include projects that are direct children of the canonical
+		// ecosystem root. For a non-anchored ecosystem-root create this is gitRoot;
+		// for an anchored create (gitRoot is a sub-repo) it is the owning ecosystem
+		// root, so members are still discovered.
 		// Use case-insensitive comparison for macOS where /Users/x/Code and
 		// /Users/x/code refer to the same directory but have different cases
 		// depending on how the path was resolved.
-		if strings.EqualFold(filepath.Dir(localPath), gitRoot) {
+		if strings.EqualFold(filepath.Dir(localPath), rootEcosystemPath) {
 			// Use filepath.Base instead of filepath.Rel since we already know
 			// it's a direct child. filepath.Rel fails when paths differ only
 			// in case (common on macOS case-insensitive filesystems).
@@ -147,14 +182,32 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		}
 
 		targetPath := filepath.Join(worktreePath, projectPath)
-		mainProjectPath := filepath.Join(gitRoot, projectPath)
+
+		// Resolve the CANONICAL source checkout for this member: the repo directly
+		// under the ecosystem root. This is what makes the new worktree snapshot
+		// the ecosystem's CURRENT state (the root's submodule pointer for each
+		// member), rather than an arbitrary checkout among many on disk.
+		//
+		// Resolution order, all rooted at the canonical ecosystem root:
+		//   1. The member directly under the ecosystem root: <rootEcosystemPath>/<projectPath>.
+		//      This is the parent/main checkout and the authoritative source.
+		//   2. provider.FindSubProjectByName — provider-aware canonical resolution
+		//      (handles spelling/symlink differences; never returns a worktree copy
+		//      or a copy living inside an ecosystem worktree).
+		//   3. The ecosystem-scoped localWorkspaces map (already filtered to the
+		//      canonical root above), as a final fallback.
+		// NOTE: filepath.Join(gitRoot, projectPath) is deliberately NOT used as the
+		// primary source: when gitRoot is an anchor sub-repo it points at a sibling
+		// dir that does not exist, and historically fell through to an arbitrary
+		// checkout — the root cause of the Frankenstein-mix bug.
+		mainProjectPath := filepath.Join(rootEcosystemPath, projectPath)
 
 		// Skip if worktree already exists at target
 		if _, err := os.Stat(filepath.Join(targetPath, ".git")); err == nil {
 			continue
 		}
 
-		// Try to create a linked worktree from the main checkout
+		// 1. Canonical member directly under the ecosystem root.
 		if _, err := os.Stat(filepath.Join(mainProjectPath, ".git")); err == nil {
 			fmt.Printf("%s: creating linked worktree\n", projectName)
 			if err := addWorktree(mainProjectPath, targetPath); err != nil {
@@ -164,7 +217,26 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 			continue
 		}
 
-		// Try via provider lookup (project may be elsewhere on disk)
+		// 2. Provider-aware canonical resolution (handles the anchor sub-repo,
+		//    which is gitRoot itself and may not sit at <rootEcosystemPath>/<name>
+		//    spelling-for-spelling, plus any spelling/symlink variance).
+		if provider != nil {
+			if node := provider.FindSubProjectByName(projectName, rootEcosystemPath); node != nil {
+				if _, err := os.Stat(filepath.Join(node.Path, ".git")); err == nil {
+					fmt.Printf("%s: creating linked worktree\n", projectName)
+					if err := addWorktree(node.Path, targetPath); err != nil {
+						fmt.Printf("    Error: failed to create worktree for %s: %v\n", projectName, err)
+						failedMembers = append(failedMembers, projectName)
+					}
+					continue
+				}
+			}
+		}
+
+		// 3. Ecosystem-scoped localWorkspaces fallback (already filtered to the
+		//    canonical root). Covers the unified-container anchor mapping and any
+		//    member whose on-disk location differs from <root>/<name> but is still
+		//    within the canonical ecosystem.
 		if localRepoPath, hasLocal := localWorkspaces[projectName]; hasLocal {
 			fmt.Printf("%s: creating linked worktree\n", projectName)
 			if err := addWorktree(localRepoPath, targetPath); err != nil {
@@ -181,7 +253,7 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		// A legitimate-but-uninitialized submodule (present in .gitmodules) still
 		// falls through to the submodule-update path below.
 		if repoFilter[projectName] && !gitmoduleNames[projectName] {
-			return fmt.Errorf("requested repo %q not found at %s or in local workspaces", projectName, filepath.Join(gitRoot, projectPath))
+			return fmt.Errorf("requested repo %q not found at %s or in local workspaces", projectName, filepath.Join(rootEcosystemPath, projectPath))
 		}
 
 		// Not found locally — must be an uninitialized submodule
