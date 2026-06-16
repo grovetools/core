@@ -372,6 +372,160 @@ context:
 	}
 }
 
+// XDGAnchoredContainerScenario reproduces the anchored-container bug class:
+// `flow plan init <name> --worktree --anchor <sub-repo>` writes a unified
+// ecosystem container (grove.toml workspaces=["*"], NO top-level .git) under the
+// SUB-REPO's XDG worktree base (paths.WorktreesDir()/DirIdentifier(sub-repo)/<name>),
+// with a .grove/workspace marker recording owner=<sub-repo>, ecosystem: true.
+//
+// The direct-path classifier (`core ws cwd`) used to see the workspaces=["*"]
+// grove.toml and report KindEcosystemRoot with root_ecosystem_path=itself and
+// notebook_name=<default> — misclassifying the container as its own brand-new
+// ecosystem. It must instead classify as KindEcosystemWorktree owned by the
+// anchor sub-repo, rooted at the sub-repo's ORIGIN ecosystem, so it inherits the
+// origin grove's notebook (NOT the default).
+func XDGAnchoredContainerScenario() *harness.Scenario {
+	var ecoDir, subADir, containerPath string
+
+	return &harness.Scenario{
+		Name:        "xdg-anchored-container-classification",
+		Description: "An anchored unified container under a sub-repo's XDG base classifies as EcosystemWorktree owned by the sub-repo, inheriting the origin grove's notebook.",
+		Tags:        []string{"core", "workspace", "xdg", "anchor", "notebooks", "regression"},
+		Steps: []harness.Step{
+			{
+				Name: "Setup grove (notebook ecnb) + ecosystem + sub-repo + anchored container",
+				Func: func(ctx *harness.Context) error {
+					homeDir := ctx.HomeDir()
+					workDir := filepath.Join(homeDir, "work")
+					if err := fs.CreateDir(workDir); err != nil {
+						return err
+					}
+
+					// Grove "eco" (~/work) -> notebook "ecnb"; default is "nb".
+					// Definitions exist so the resolved name is meaningful; cx repo
+					// discovery is disabled to keep the scan inside the sandbox.
+					groveYML := `groves:
+  eco:
+    path: ~/work
+    enabled: true
+    notebook: ecnb
+notebooks:
+  rules:
+    default: nb
+  definitions:
+    nb:
+      root_dir: ~/notebooks/nb
+    ecnb:
+      root_dir: ~/notebooks/ecnb
+context:
+  repos_dir: ""
+`
+					if err := fs.WriteString(filepath.Join(homeDir, ".config", "grove", "grove.yml"), groveYML); err != nil {
+						return err
+					}
+
+					// Origin ecosystem root (under the grove path).
+					ecoDir = filepath.Join(workDir, "my-eco")
+					if err := fs.WriteString(filepath.Join(ecoDir, "grove.yml"),
+						"version: '1.0'\nname: my-eco\nworkspaces: ['*']\n"); err != nil {
+						return err
+					}
+					ecoRepo, err := git.SetupTestRepo(ecoDir)
+					if err != nil {
+						return err
+					}
+					if err := ecoRepo.AddCommit("initial commit"); err != nil {
+						return err
+					}
+
+					// Sub-repo (the --anchor target). A plain project, NOT an
+					// ecosystem (no workspaces key).
+					subADir = filepath.Join(ecoDir, "sub-a")
+					if err := fs.WriteString(filepath.Join(subADir, "grove.yml"),
+						"version: '1.0'\nname: sub-a\n"); err != nil {
+						return err
+					}
+					subARepo, err := git.SetupTestRepo(subADir)
+					if err != nil {
+						return err
+					}
+					if err := subARepo.AddCommit("initial commit"); err != nil {
+						return err
+					}
+
+					// Anchored unified container under the SUB-REPO's XDG base.
+					// This is what `flow plan init --anchor sub-a` produces: a
+					// system-written grove.toml (workspaces=["*"]) with NO
+					// top-level .git, plus a .grove/workspace marker whose owner:
+					// key names the anchor sub-repo. The identifier is computed
+					// from the sub-repo, so the container lives under sub-a's base.
+					id := workspace.DirIdentifier(subADir)
+					containerPath = filepath.Join(ctx.DataDir(), "grove", "worktrees", id, "anchored1")
+					if err := fs.WriteString(filepath.Join(containerPath, "grove.toml"),
+						"workspaces = [\"*\"]\n"); err != nil {
+						return err
+					}
+					ownerAbs, err := filepath.Abs(subADir)
+					if err != nil {
+						return err
+					}
+					marker := fmt.Sprintf(
+						"branch: anchored1\nplan: \ncreated_at: %s\nowner: %s\necosystem: true\nrepos:\n  - sub-a\n",
+						time.Now().UTC().Format(time.RFC3339), ownerAbs)
+					if err := fs.WriteString(filepath.Join(containerPath, ".grove", "workspace"), marker); err != nil {
+						return err
+					}
+					return nil
+				},
+			},
+			{
+				Name: "core ws cwd classifies the anchored container as EcosystemWorktree owned by sub-a",
+				Func: func(ctx *harness.Context) error {
+					coreBinary, err := FindProjectBinary()
+					if err != nil {
+						return err
+					}
+					cmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(containerPath)
+					result := cmd.Run()
+					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
+					if result.Error != nil {
+						return fmt.Errorf("`core ws cwd` failed in anchored container: %w\nstderr: %s", result.Error, result.Stderr)
+					}
+
+					var node workspace.WorkspaceNode
+					if err := json.Unmarshal([]byte(result.Stdout), &node); err != nil {
+						return fmt.Errorf("failed to unmarshal container node: %w\nstdout: %s", err, result.Stdout)
+					}
+
+					// Crux 1: the container must NOT be its own ecosystem root.
+					if node.Kind != workspace.KindEcosystemWorktree {
+						return fmt.Errorf("anchored container kind = %q, want %q (was misclassified as its own ecosystem)", node.Kind, workspace.KindEcosystemWorktree)
+					}
+
+					// Crux 2: owner is the canonical anchor sub-repo, NOT the container itself.
+					if !samePath(node.ParentProjectPath, subADir) {
+						return fmt.Errorf("anchored container ParentProjectPath = %q, want anchor sub-repo %q", node.ParentProjectPath, subADir)
+					}
+
+					// Crux 3: rooted at the ORIGIN ecosystem, not itself.
+					if !samePath(node.RootEcosystemPath, ecoDir) {
+						return fmt.Errorf("anchored container RootEcosystemPath = %q, want origin ecosystem %q (was itself)", node.RootEcosystemPath, ecoDir)
+					}
+
+					// Crux 4: notebook is the origin grove's notebook, NOT the default.
+					if node.NotebookName == "nb" {
+						return fmt.Errorf("anchored container fell back to the DEFAULT notebook %q; want origin grove notebook %q (this is the regressed behavior)", "nb", "ecnb")
+					}
+					if node.NotebookName != "ecnb" {
+						return fmt.Errorf("anchored container notebook_name = %q, want %q", node.NotebookName, "ecnb")
+					}
+					return nil
+				},
+			},
+		},
+	}
+}
+
 // XDGZombieWorktreeScenario is the XDG variant of the legacy zombie-worktree
 // log scenario: a long-running logger initialized inside an XDG worktree must
 // (a) route logs to the XDG state dir (never recreate worktree-local logs), and

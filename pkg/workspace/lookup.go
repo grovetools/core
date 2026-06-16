@@ -41,6 +41,21 @@ func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
 		}
 	}
 
+	// Ecosystem worktrees (including anchored containers) have GetGroupingKey()
+	// == their own path, so the project-worktree fallback above can't see their
+	// origin grove. Resolve via the worktree's identity instead: the owning
+	// project (the anchor repo / ecosystem root) and the origin ecosystem root,
+	// both of which live UNDER a configured grove. This yields the origin grove's
+	// notebook (e.g. grovetools) rather than the global default.
+	if bestMatchNotebook == "" && node.IsEcosystem() && node.IsWorktree() {
+		if node.ParentProjectPath != "" {
+			bestMatchNotebook = matchGroveNotebook(node.ParentProjectPath, cfg)
+		}
+		if bestMatchNotebook == "" && node.RootEcosystemPath != "" && node.RootEcosystemPath != node.Path {
+			bestMatchNotebook = matchGroveNotebook(node.RootEcosystemPath, cfg)
+		}
+	}
+
 	if bestMatchNotebook != "" {
 		node.NotebookName = bestMatchNotebook
 	} else {
@@ -216,17 +231,39 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		}
 
 	case typeEcosystem:
-		// Check if this ecosystem is itself a worktree
-		// by checking both: (1) .git is a file, and (2) path is a worktree location
-		isWorktree := isGitWorktree(foundRootPath) && IsWorktreePath(foundRootPath)
-
-		// For worktrees, resolve the owning repository once — the worktree
+		// Check if this ecosystem is itself a worktree.
+		//
+		// Two shapes count as an ecosystem worktree:
+		//
+		//  1. A linked git worktree of an ecosystem root: .git is a FILE and
+		//     the path is a worktree location (legacy or XDG).
+		//  2. An ANCHORED unified container: a system-written grove.toml with
+		//     workspaces=["*"] placed under a sub-repo's XDG worktree base
+		//     (paths.WorktreesDir()/DirIdentifier(X)/<name>) via
+		//     `flow plan init --anchor X`. The container has NO top-level .git
+		//     (it aggregates sub-repos), so isGitWorktree() is false — but it
+		//     IS a worktree location with a resolvable owner (from the
+		//     .grove/workspace marker's owner: key). Treating it as an
+		//     EcosystemRoot misclassifies it (root=itself, notebook=default);
+		//     it must be an EcosystemWorktree owned by the anchor repo, rooted
+		//     at the anchor's ORIGIN ecosystem.
+		//
+		// Resolve the owning repository once regardless of shape — the worktree
 		// may live outside the ecosystem tree (XDG layout), where upward
 		// filesystem walks from the worktree cannot see the owner.
 		var ownerPath string
-		if isWorktree {
+		isLinkedWorktree := isGitWorktree(foundRootPath) && IsWorktreePath(foundRootPath)
+		if isLinkedWorktree {
 			ownerPath, _ = WorktreeOwner(foundRootPath)
 		}
+		isAnchoredContainer := false
+		if !isLinkedWorktree && IsWorktreePath(foundRootPath) {
+			if owner, ok := WorktreeOwner(foundRootPath); ok && owner != "" {
+				ownerPath = owner
+				isAnchoredContainer = true
+			}
+		}
+		isWorktree := isLinkedWorktree || isAnchoredContainer
 
 		// Find the true root ecosystem; for worktrees start the upward walk
 		// at the owner so XDG-located worktrees resolve the real root.
@@ -239,12 +276,32 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 			rootEcosystemPath = foundRootPath
 		}
 
-		// Find immediate parent ecosystem if this is a worktree
+		// Find immediate parent ecosystem if this is a worktree.
+		//
+		// Linked ecosystem worktree: the owner IS the ecosystem root (its
+		// grove.toml has workspaces), so it is both parent ecosystem and
+		// parent project.
+		//
+		// Anchored container: the owner is a SUB-REPO (no workspaces of its
+		// own). Its ecosystem context is the owner's ORIGIN ecosystem root
+		// (rootEcosystemPath, e.g. the main grovetools checkout). The owner
+		// sub-repo becomes the parent PROJECT (the canonical repo that owns
+		// the container).
 		var parentEcosystemPath string
+		var parentProjectPath string
 		if ownerPath != "" {
 			_, cfg, err := findGroveConfig(ownerPath)
 			if err == nil && len(cfg.Workspaces) > 0 {
+				// Owner is itself an ecosystem root (linked worktree).
 				parentEcosystemPath = ownerPath
+				parentProjectPath = ownerPath
+			} else if isAnchoredContainer {
+				// Owner is a sub-repo; anchor the container to the origin
+				// ecosystem and record the sub-repo as the canonical owner.
+				if rootEcosystemPath != "" && rootEcosystemPath != foundRootPath {
+					parentEcosystemPath = rootEcosystemPath
+				}
+				parentProjectPath = ownerPath
 			}
 		}
 
@@ -269,7 +326,7 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 			Name:                nodeName,
 			Path:                foundRootPath,
 			Kind:                kind,
-			ParentProjectPath:   parentEcosystemPath,
+			ParentProjectPath:   parentProjectPath,
 			ParentEcosystemPath: parentEcosystemPath,
 			RootEcosystemPath:   rootEcosystemPath,
 		}
