@@ -119,7 +119,12 @@ context:
 			{
 				Name: "Discover and verify XDG worktree kinds + parent links",
 				Func: func(ctx *harness.Context) error {
-					cmd := ctx.Command("core", "ws", "--json")
+					coreBinary, err := FindProjectBinary()
+					if err != nil {
+						return err
+					}
+
+					cmd := ctx.Command(coreBinary, "ws", "--json")
 					result := cmd.Run()
 					ctx.ShowCommandOutput(cmd.String(), result.Stdout, result.Stderr)
 					if result.Error != nil {

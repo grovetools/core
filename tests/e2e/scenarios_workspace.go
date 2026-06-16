@@ -130,7 +130,12 @@ func createWorkspaceFilesystemStructure(ctx *harness.Context) error {
 
 // runDiscoveryAndVerifyStructure runs `core ws --json` and validates the output.
 func runDiscoveryAndVerifyStructure(ctx *harness.Context) error {
-	cmd := ctx.Command("core", "ws", "--json")
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("`core ws --json` failed: %w\nOutput:\n%s", result.Error, result.Stdout)
@@ -166,6 +171,11 @@ func runDiscoveryAndVerifyStructure(ctx *harness.Context) error {
 
 // verifyLookupsByPath runs `core ws cwd --json` from various paths and validates the output.
 func verifyLookupsByPath(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	// Create a test subdirectory for nested path testing
 	someDirPath := filepath.Join(ctx.GetString("subProj1Path"), "some-dir")
 	if err := fs.CreateDir(someDirPath); err != nil {
@@ -186,7 +196,7 @@ func verifyLookupsByPath(ctx *harness.Context) error {
 	}
 
 	for _, tc := range testCases {
-		cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(tc.path)
+		cmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(tc.path)
 		result := cmd.Run()
 		if result.Error != nil {
 			return fmt.Errorf("`core ws cwd` failed in dir %s: %w", tc.path, result.Error)

@@ -85,10 +85,15 @@ func setupEdgeCasesEnvironment(ctx *harness.Context) error {
 
 // testCwdOutsideWorkspace verifies that ws cwd fails gracefully when run outside any workspace.
 func testCwdOutsideWorkspace(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	outsideDir := ctx.GetString("outsideDir")
 
 	// Run ws cwd from outside any workspace
-	cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(outsideDir)
+	cmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(outsideDir)
 	result := cmd.Run()
 
 	// Should fail gracefully (non-zero exit but no panic)
@@ -101,6 +106,11 @@ func testCwdOutsideWorkspace(ctx *harness.Context) error {
 
 // testMalformedGroveConfig verifies handling of malformed grove.yml files.
 func testMalformedGroveConfig(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	workDir := ctx.GetString("workDir")
 
 	// Create workspace with invalid YAML
@@ -115,7 +125,7 @@ func testMalformedGroveConfig(ctx *harness.Context) error {
 	}
 
 	// Run discovery - should handle malformed configs gracefully (not crash)
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 
 	// Discovery should succeed (not crash) even with invalid YAML
@@ -138,6 +148,11 @@ func testMalformedGroveConfig(ctx *harness.Context) error {
 
 // testWorkspaceWithoutGit verifies handling of workspaces without git repositories.
 func testWorkspaceWithoutGit(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	workDir := ctx.GetString("workDir")
 
 	// Create workspace with grove.yml but no git repo
@@ -147,7 +162,7 @@ func testWorkspaceWithoutGit(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -166,6 +181,11 @@ func testWorkspaceWithoutGit(ctx *harness.Context) error {
 
 // testDisabledGroves verifies that workspaces in disabled groves are not discovered.
 func testDisabledGroves(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	homeDir := ctx.GetString("homeDir")
 
 	// Create directory for disabled grove
@@ -184,7 +204,7 @@ func testDisabledGroves(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -207,6 +227,11 @@ func testDisabledGroves(ctx *harness.Context) error {
 
 // testMultipleWorktreesSameProject verifies discovery of multiple worktrees from the same project.
 func testMultipleWorktreesSameProject(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	playDir := ctx.GetString("playDir")
 
 	// Create a project
@@ -233,7 +258,7 @@ func testMultipleWorktreesSameProject(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -269,6 +294,11 @@ func testMultipleWorktreesSameProject(ctx *harness.Context) error {
 
 // testComplexEcosystemMultipleSubProjects verifies ecosystems with multiple sub-projects.
 func testComplexEcosystemMultipleSubProjects(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	workDir := ctx.GetString("workDir")
 
 	// Create ecosystem with multiple sub-projects
@@ -312,7 +342,7 @@ func testComplexEcosystemMultipleSubProjects(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -357,6 +387,11 @@ func testComplexEcosystemMultipleSubProjects(ctx *harness.Context) error {
 
 // testSubProjectWithWorktrees verifies sub-projects that have their own worktrees.
 func testSubProjectWithWorktrees(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	workDir := ctx.GetString("workDir")
 
 	// Create ecosystem
@@ -394,7 +429,7 @@ func testSubProjectWithWorktrees(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -436,6 +471,11 @@ func testSubProjectWithWorktrees(ctx *harness.Context) error {
 
 // testWorkspacesOutsideGrovePaths verifies that workspaces outside configured groves are not discovered.
 func testWorkspacesOutsideGrovePaths(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	outsideDir := ctx.GetString("outsideDir")
 
 	// Create workspace outside any grove path
@@ -449,7 +489,7 @@ func testWorkspacesOutsideGrovePaths(ctx *harness.Context) error {
 	}
 
 	// Run discovery
-	cmd := ctx.Command("core", "ws", "--json")
+	cmd := ctx.Command(coreBinary, "ws", "--json")
 	result := cmd.Run()
 	if result.Error != nil {
 		return fmt.Errorf("discovery failed: %w", result.Error)
@@ -472,6 +512,11 @@ func testWorkspacesOutsideGrovePaths(ctx *harness.Context) error {
 
 // testSymlinkedPaths verifies that symlinked paths are handled correctly.
 func testSymlinkedPaths(ctx *harness.Context) error {
+	coreBinary, err := FindProjectBinary()
+	if err != nil {
+		return err
+	}
+
 	playDir := ctx.GetString("playDir")
 	homeDir := ctx.GetString("homeDir")
 
@@ -492,7 +537,7 @@ func testSymlinkedPaths(ctx *harness.Context) error {
 	}
 
 	// Run ws cwd from symlinked path
-	cmd := ctx.Command("core", "ws", "cwd", "--json").Dir(symlinkPath)
+	cmd := ctx.Command(coreBinary, "ws", "cwd", "--json").Dir(symlinkPath)
 	result := cmd.Run()
 	if result.Error != nil {
 		// Symlink handling may vary - this is more of an informational test
