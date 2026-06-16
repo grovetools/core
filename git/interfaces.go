@@ -9,6 +9,7 @@ type WorktreeProvider interface {
 	GetCurrentWorktree(ctx context.Context, path string) (*WorktreeInfo, error)
 	CreateWorktree(ctx context.Context, basePath, worktreePath, branch string, createBranch bool) error
 	RemoveWorktree(ctx context.Context, basePath, worktreePath string) error
+	PruneWorktrees(ctx context.Context, repoPath string) error
 	GetWorktreeRoot(ctx context.Context, path string) (string, error)
 }
 

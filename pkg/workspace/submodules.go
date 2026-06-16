@@ -104,6 +104,42 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 
 	var uninitializedSubmodules []string
 
+	// addWorktree creates a linked worktree of memberRoot into targetPath. It
+	// prunes stale/dangling worktree registrations in memberRoot BEFORE the add
+	// so a leftover entry (e.g. one left by an `rm -rf` cleanup that never ran
+	// `git worktree prune`, reported as "gitdir file points to non-existent
+	// location") doesn't block a clean create. It returns the `git worktree add`
+	// error so the caller can collect it — a swallowed add error here is exactly
+	// what silently produced incomplete, non-hermetic containers.
+	addWorktree := func(memberRoot, targetPath string) error {
+		_ = os.MkdirAll(filepath.Dir(targetPath), 0o755)
+		os.RemoveAll(targetPath)
+		// Prune stale registrations in the member repo before adding. Best-effort:
+		// a prune failure shouldn't block the add (the add error below is the
+		// authoritative signal), but log it so the cause is visible.
+		cmdPrune := exec.CommandContext(ctx, "git", "worktree", "prune")
+		cmdPrune.Dir = memberRoot
+		if out, err := cmdPrune.CombinedOutput(); err != nil {
+			fmt.Printf("    Warning: failed to prune stale worktrees in %s: %v: %s\n", memberRoot, err, strings.TrimSpace(string(out)))
+		}
+		cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
+		cmdWorktree.Dir = memberRoot
+		if out, err := cmdWorktree.CombinedOutput(); err != nil {
+			return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		}
+		for _, handler := range setupHandlers {
+			if err := handler(targetPath, memberRoot); err != nil {
+				fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
+			}
+		}
+		return nil
+	}
+
+	// failedMembers collects repos whose linked-worktree creation failed so we
+	// can fail loud at the end rather than silently returning an incomplete,
+	// non-hermetic container (the original bug: a missing repo was swallowed).
+	var failedMembers []string
+
 	for projectName, projectPath := range projects {
 		if len(repoFilter) > 0 && !repoFilter[projectName] {
 			fmt.Printf("%s: skipping (not in repos filter)\n", projectName)
@@ -121,16 +157,9 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		// Try to create a linked worktree from the main checkout
 		if _, err := os.Stat(filepath.Join(mainProjectPath, ".git")); err == nil {
 			fmt.Printf("%s: creating linked worktree\n", projectName)
-			_ = os.MkdirAll(filepath.Dir(targetPath), 0o755)
-			os.RemoveAll(targetPath)
-			cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
-			cmdWorktree.Dir = mainProjectPath
-			if err := cmdWorktree.Run(); err == nil {
-				for _, handler := range setupHandlers {
-					if err := handler(targetPath, mainProjectPath); err != nil {
-						fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
-					}
-				}
+			if err := addWorktree(mainProjectPath, targetPath); err != nil {
+				fmt.Printf("    Error: failed to create worktree for %s: %v\n", projectName, err)
+				failedMembers = append(failedMembers, projectName)
 			}
 			continue
 		}
@@ -138,16 +167,9 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		// Try via provider lookup (project may be elsewhere on disk)
 		if localRepoPath, hasLocal := localWorkspaces[projectName]; hasLocal {
 			fmt.Printf("%s: creating linked worktree\n", projectName)
-			_ = os.MkdirAll(filepath.Dir(targetPath), 0o755)
-			os.RemoveAll(targetPath)
-			cmdWorktree := exec.CommandContext(ctx, "git", "worktree", "add", targetPath, "-B", branchName)
-			cmdWorktree.Dir = localRepoPath
-			if err := cmdWorktree.Run(); err == nil {
-				for _, handler := range setupHandlers {
-					if err := handler(targetPath, localRepoPath); err != nil {
-						fmt.Printf("    Warning: setup handler failed for worktree %s: %v\n", targetPath, err)
-					}
-				}
+			if err := addWorktree(localRepoPath, targetPath); err != nil {
+				fmt.Printf("    Error: failed to create worktree for %s: %v\n", projectName, err)
+				failedMembers = append(failedMembers, projectName)
 			}
 			continue
 		}
@@ -175,6 +197,18 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 			_ = os.MkdirAll(targetPath, 0o755)
 		}
 	}
+
+	// Fail loud: if any member repo's linked worktree could not be created, the
+	// resulting container is incomplete and non-hermetic (it won't build). The
+	// original bug silently swallowed these failures and returned a partial
+	// container with no signal. Return an error naming exactly which repos were
+	// dropped so the caller (e.g. flow plan init) exits non-zero and the user
+	// sees what's missing.
+	if len(failedMembers) > 0 {
+		return fmt.Errorf("incomplete worktree: failed to create linked worktree(s) for %d repo(s): %s",
+			len(failedMembers), strings.Join(failedMembers, ", "))
+	}
+
 	return nil
 }
 

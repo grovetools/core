@@ -63,6 +63,8 @@ func main() {
 		XDGWorktreeNotebookInheritanceScenario(),
 		XDGAnchoredContainerScenario(),
 		XDGZombieWorktreeScenario(),
+		// Worktree create robustness scenarios
+		WorktreeStalePruneScenario(),
 		// Nvim component scenarios
 		// NvimDemoScenario(),
 		// NvimDemoFileBrowserScenario(),
