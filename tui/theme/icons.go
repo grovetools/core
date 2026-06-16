@@ -12,6 +12,7 @@ const (
 	nerdIconProject           = "" // cod-project (U+EB30)
 	nerdIconRepo              = "" // cod-repo (U+EA62)
 	nerdIconWorktree          = "" // oct-workflow (U+F52E)
+	nerdIconEcosystemWorktree = "󰐆" // md-pine_tree_box (U+F0406)
 	nerdIconEcosystem         = "" // fa-folder_tree (U+EF81)
 	nerdIconGitBranch         = "" // dev-git_branch (U+E725)
 	nerdIconSuccess           = "󰄬" // md-check (U+F012C)
@@ -175,6 +176,7 @@ const (
 	asciiIconProject           = "◆"
 	asciiIconRepo              = "●"
 	asciiIconWorktree          = "⑂"
+	asciiIconEcosystemWorktree = "[EW]" // Ecosystem worktree (tree-in-box)
 	asciiIconEcosystem         = "◆"
 	asciiIconGitBranch         = "⎇"
 	asciiIconSuccess           = "*"
@@ -338,6 +340,7 @@ var (
 	IconProject           string
 	IconRepo              string
 	IconWorktree          string
+	IconEcosystemWorktree string
 	IconEcosystem         string
 	IconGitBranch         string
 	IconSuccess           string
@@ -516,6 +519,7 @@ func init() {
 		IconProject = asciiIconProject
 		IconRepo = asciiIconRepo
 		IconWorktree = asciiIconWorktree
+		IconEcosystemWorktree = asciiIconEcosystemWorktree
 		IconEcosystem = asciiIconEcosystem
 		IconGitBranch = asciiIconGitBranch
 		IconSuccess = asciiIconSuccess
@@ -669,6 +673,7 @@ func init() {
 		IconProject = nerdIconProject
 		IconRepo = nerdIconRepo
 		IconWorktree = nerdIconWorktree
+		IconEcosystemWorktree = nerdIconEcosystemWorktree
 		IconEcosystem = nerdIconEcosystem
 		IconGitBranch = nerdIconGitBranch
 		IconSuccess = nerdIconSuccess
