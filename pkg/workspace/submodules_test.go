@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -403,6 +404,124 @@ func TestSetupSubmodules(t *testing.T) {
 		info, err := os.Stat(sub1Path)
 		assert.NoError(t, err, "sub1 should exist")
 		assert.True(t, info.IsDir(), "sub1 should be a directory")
+	})
+}
+
+// hasStaleWorktreeRegistration reports whether `git worktree prune --dry-run`
+// in repoDir would remove anything — i.e. a dangling/stale registration exists.
+func hasStaleWorktreeRegistration(t *testing.T, repoDir string) bool {
+	t.Helper()
+	cmd := exec.Command("git", "worktree", "prune", "--dry-run", "-v")
+	cmd.Dir = repoDir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "prune --dry-run failed: %s", out)
+	return len(strings.TrimSpace(string(out))) > 0
+}
+
+// TestSetupSubmodulesStaleWorktreeRegistration is the regression test for the
+// inbox bug "worktree create silently yields incomplete ecosystem on stale
+// git-worktree state". A member repo carries a stale/dangling git-worktree
+// registration left by an `rm -rf` cleanup that never ran `git worktree prune`
+// (reported by git as "gitdir file points to non-existent location"). Before
+// the fix, `git worktree add` for that member failed, the failure was swallowed,
+// and the member was silently dropped from the container — yielding an
+// incomplete, non-hermetic worktree with NO error. The fix prunes stale
+// registrations before add (so the create succeeds) AND collects any genuine
+// add failures so SetupSubmodules fails loud instead of returning silently
+// incomplete.
+func TestSetupSubmodulesStaleWorktreeRegistration(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+	ctx := context.Background()
+
+	t.Run("pre-create prune clears stale entry; container is complete", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Ecosystem-of-repos layout: the ecosystem root holds member repos as
+		// direct-child dirs (the real `flow plan init --worktree` case).
+		ecoRoot := filepath.Join(tempDir, "eco")
+		require.NoError(t, os.MkdirAll(ecoRoot, 0o755))
+		initGitRepo(t, ecoRoot)
+		require.NoError(t, os.WriteFile(filepath.Join(ecoRoot, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644))
+		commitFiles(t, ecoRoot, "ecosystem root")
+
+		// Member repo as a direct child of the ecosystem root.
+		memberDir := filepath.Join(ecoRoot, "member")
+		require.NoError(t, os.MkdirAll(memberDir, 0o755))
+		initGitRepo(t, memberDir)
+		require.NoError(t, os.WriteFile(filepath.Join(memberDir, "README.md"), []byte("member"), 0o644))
+		commitFiles(t, memberDir, "member initial")
+
+		// SEED a stale/dangling git-worktree registration in the member, exactly
+		// as a prior `rm -rf` cleanup would leave it: create a worktree, then
+		// remove its directory WITHOUT `git worktree remove`/`prune`.
+		staleWtDir := filepath.Join(tempDir, "stale-member-wt")
+		createWorktree(t, memberDir, staleWtDir, "leftover-branch")
+		require.NoError(t, os.RemoveAll(staleWtDir))
+		require.True(t, hasStaleWorktreeRegistration(t, memberDir),
+			"precondition: member should carry a stale worktree registration after rm -rf")
+
+		// The container worktree of the ecosystem root.
+		worktreePath := filepath.Join(tempDir, "container")
+		createWorktree(t, ecoRoot, worktreePath, "feature-branch")
+
+		// Provider discovers the member as a local workspace under the ecosystem.
+		mockProvider := createMockProvider(map[string]string{
+			"member": memberDir,
+		})
+
+		err := SetupSubmodules(ctx, worktreePath, ecoRoot, "feature-branch", []string{"member"}, mockProvider)
+		// Fail-before: without the pre-create prune, the member's `git worktree
+		// add` fails on the stale entry and (pre-fix) is swallowed -> no error
+		// but missing member. Pass-after: prune clears the entry, add succeeds.
+		require.NoError(t, err, "stale registration should have been pruned, allowing a complete container")
+
+		// Assert the container is COMPLETE: the member's linked worktree exists.
+		memberWt := filepath.Join(worktreePath, "member")
+		info, statErr := os.Stat(filepath.Join(memberWt, ".git"))
+		require.NoError(t, statErr, "member worktree must be present in the container (complete, hermetic)")
+		_ = info
+		// And the stale entry is gone.
+		assert.False(t, hasStaleWorktreeRegistration(t, memberDir),
+			"pre-create prune should have cleared the stale registration")
+	})
+
+	t.Run("genuine add failure fails loud and names the repo", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		ecoRoot := filepath.Join(tempDir, "eco")
+		require.NoError(t, os.MkdirAll(ecoRoot, 0o755))
+		initGitRepo(t, ecoRoot)
+		require.NoError(t, os.WriteFile(filepath.Join(ecoRoot, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644))
+		commitFiles(t, ecoRoot, "ecosystem root")
+
+		memberDir := filepath.Join(ecoRoot, "member")
+		require.NoError(t, os.MkdirAll(memberDir, 0o755))
+		initGitRepo(t, memberDir)
+		require.NoError(t, os.WriteFile(filepath.Join(memberDir, "README.md"), []byte("member"), 0o644))
+		commitFiles(t, memberDir, "member initial")
+
+		// Make the add genuinely impossible: the target branch is ALREADY checked
+		// out in a separate live worktree of the member. `git worktree add -B
+		// feature-branch` then refuses ("already used by worktree at ..."), and a
+		// prune cannot clear a live worktree. This is the "member truly cannot be
+		// added" path — it must surface a clear error naming the repo, never a
+		// silently-incomplete container.
+		liveWtDir := filepath.Join(tempDir, "live-feature-branch")
+		createWorktree(t, memberDir, liveWtDir, "feature-branch")
+
+		worktreePath := filepath.Join(tempDir, "container")
+		createWorktree(t, ecoRoot, worktreePath, "feature-branch")
+
+		mockProvider := createMockProvider(map[string]string{
+			"member": memberDir,
+		})
+
+		err := SetupSubmodules(ctx, worktreePath, ecoRoot, "feature-branch", []string{"member"}, mockProvider)
+		require.Error(t, err, "a member that cannot be added must produce a loud error, not a silent incomplete container")
+		assert.Contains(t, err.Error(), "member", "the error must name the dropped repo")
+		assert.Contains(t, err.Error(), "incomplete", "the error must flag the container as incomplete")
 	})
 }
 

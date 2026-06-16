@@ -1,0 +1,10 @@
+# Worktree-create robustness rules
+# Scopes the source that creates per-member linked worktrees during container
+# preparation, including the pre-create `git worktree prune` of stale/dangling
+# registrations and the fail-loud aggregation of per-member add failures.
+# Changes here should trigger the worktree-create-stale-prune E2E scenario.
+
+pkg/workspace/submodules.go
+pkg/workspace/prepare.go
+git/worktree.go
+tests/e2e/scenarios_worktree_stale_prune.go

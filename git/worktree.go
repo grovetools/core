@@ -109,6 +109,28 @@ func (m *WorktreeManager) CreateWorktree(ctx context.Context, basePath, worktree
 	return nil
 }
 
+// PruneWorktrees runs `git worktree prune` in repoPath, clearing stale/dangling
+// worktree registrations (entries whose backing directory was removed with
+// `rm -rf` instead of `git worktree remove`, leaving a "gitdir file points to
+// non-existent location" entry). Such stale entries can cause a subsequent
+// `git worktree add` to fail, so callers prune before adding to keep creation
+// robust. Errors are returned so callers can decide whether to proceed.
+func (m *WorktreeManager) PruneWorktrees(ctx context.Context, repoPath string) error {
+	cmd, err := m.cmdBuilder.Build(ctx, "git", "worktree", "prune")
+	if err != nil {
+		return fmt.Errorf("failed to build command: %w", err)
+	}
+
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+
+	if output, err := execCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("prune worktrees: %s", output)
+	}
+
+	return nil
+}
+
 // RemoveWorktree removes a worktree
 func (m *WorktreeManager) RemoveWorktree(ctx context.Context, basePath, worktreePath string) error {
 	cmd, err := m.cmdBuilder.Build(ctx, "git", "worktree", "remove", worktreePath)
