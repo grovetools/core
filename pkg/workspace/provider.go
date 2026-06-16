@@ -77,6 +77,85 @@ func (p *Provider) FindByName(name string) *WorkspaceNode {
 	return nil
 }
 
+// FindSubProjectByName returns the CANONICAL sub-project named name within the
+// ecosystem rooted at ecosystemRoot. "Canonical" means the real, main checkout
+// directly under the ecosystem root (a KindEcosystemSubProject / EcosystemRoot
+// child) — NEVER a worktree copy and NEVER a node belonging to a different
+// ecosystem.
+//
+// This exists because FindByName returns the FIRST node matching a name with no
+// preference, so for a name that appears both as the ecosystem's sub-project AND
+// inside some other worktree it can return the worktree copy (or a foreign
+// ecosystem's node). Callers that must place artifacts under the canonical repo
+// (e.g. `flow plan init --anchor <name>`) require this stricter resolution.
+//
+// What "canonical" excludes — and why RootEcosystemPath alone is insufficient:
+// a sub-project living INSIDE an ecosystem worktree (e.g.
+// <eco>/.grove-worktrees/<plan>/<name>, kind KindEcosystemWorktreeSubProject)
+// can be discovered with IsWorktree()==false AND RootEcosystemPath==ecosystemRoot
+// (its root traverses up past the worktree to the real ecosystem). Matching on
+// the root alone would therefore return that copy. The discriminator that
+// actually separates the canonical repo from a copy-inside-a-worktree is being
+// a DIRECT child of the ecosystem root: ParentEcosystemPath == ecosystemRoot
+// (a worktree-resident copy's ParentEcosystemPath is the worktree, not root).
+//
+// Selection rules, in order:
+//  1. Exact path match: a non-worktree node whose Path == ecosystemRoot/name.
+//     This is the strongest signal and handles the common direct-child case.
+//  2. Otherwise, a non-worktree node named name that is a DIRECT child of the
+//     ecosystem root (ParentEcosystemPath == ecosystemRoot).
+//
+// Returns nil when ecosystemRoot is empty or no canonical match exists.
+func (p *Provider) FindSubProjectByName(name, ecosystemRoot string) *WorkspaceNode {
+	if ecosystemRoot == "" {
+		return nil
+	}
+
+	// A node is canonical-eligible only when it is not a worktree and does not
+	// live inside an ecosystem worktree container.
+	canonical := func(node *WorkspaceNode) bool {
+		if node.Name != name || node.IsWorktree() {
+			return false
+		}
+		switch node.Kind {
+		case KindEcosystemWorktreeSubProject, KindEcosystemWorktreeSubProjectWorktree:
+			// A sub-project inside an ecosystem worktree is a copy, never canonical.
+			return false
+		}
+		return true
+	}
+
+	// Rule 1: prefer the node whose path is exactly ecosystemRoot/name. Compare
+	// via normalized paths so symlink/case spellings agree with discovery.
+	wantPath := filepath.Join(ecosystemRoot, name)
+	normalizedWant, werr := pathutil.NormalizeForLookup(wantPath)
+	for _, node := range p.nodes {
+		if !canonical(node) {
+			continue
+		}
+		if node.Path == wantPath {
+			return node
+		}
+		if werr == nil {
+			if normalizedNode, nerr := pathutil.NormalizeForLookup(node.Path); nerr == nil && normalizedNode == normalizedWant {
+				return node
+			}
+		}
+	}
+
+	// Rule 2: any canonical-eligible direct child of this ecosystem root.
+	for _, node := range p.nodes {
+		if !canonical(node) {
+			continue
+		}
+		if node.ParentEcosystemPath == ecosystemRoot {
+			return node
+		}
+	}
+
+	return nil
+}
+
 // FindByPath returns the WorkspaceNode for a given absolute path.
 // It performs a fast lookup using an internal map.
 func (p *Provider) FindByPath(path string) *WorkspaceNode {

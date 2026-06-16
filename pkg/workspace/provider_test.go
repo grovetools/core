@@ -346,3 +346,61 @@ func TestProvider_FindByIdentifier_EcosystemWorktreeRoot(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, "/path/to/my-ecosystem/.grove-worktrees/feature-branch/project-beta", result.Path)
 }
+
+// TestProvider_FindSubProjectByName_PrefersCanonicalOverWorktreeCopy is the
+// core-side regression for the flow --anchor bug: a sub-project name present
+// BOTH as the ecosystem's direct child AND as a copy inside another ecosystem
+// worktree must resolve to the canonical direct child, never the worktree copy.
+func TestProvider_FindSubProjectByName_PrefersCanonicalOverWorktreeCopy(t *testing.T) {
+	ecoRoot := "/Code/grovetools"
+	canonical := ecoRoot + "/project-tmpl-go"
+	worktreeContainer := ecoRoot + "/.grove-worktrees/daemon-upgrade"
+	worktreeCopy := worktreeContainer + "/project-tmpl-go"
+
+	nodes := []*WorkspaceNode{
+		{Name: "grovetools", Path: ecoRoot, Kind: KindEcosystemRoot, RootEcosystemPath: ecoRoot},
+		// Decoy copy inside another worktree. Discovered as a non-worktree
+		// sub-project whose root traverses up to the real ecosystem — exactly
+		// the shape that fooled FindByName. Listed FIRST.
+		{
+			Name:                "project-tmpl-go",
+			Path:                worktreeCopy,
+			Kind:                KindEcosystemWorktreeSubProject,
+			ParentEcosystemPath: worktreeContainer,
+			RootEcosystemPath:   ecoRoot,
+		},
+		// The canonical direct child.
+		{
+			Name:                "project-tmpl-go",
+			Path:                canonical,
+			Kind:                KindEcosystemSubProject,
+			ParentEcosystemPath: ecoRoot,
+			RootEcosystemPath:   ecoRoot,
+		},
+	}
+	provider := NewProviderFromNodes(nodes)
+
+	got := provider.FindSubProjectByName("project-tmpl-go", ecoRoot)
+	assert.NotNil(t, got)
+	assert.Equal(t, canonical, got.Path, "must resolve to the canonical direct child, not the worktree copy")
+}
+
+// TestProvider_FindSubProjectByName_NoCrossEcosystem ensures a same-named
+// sub-project in a DIFFERENT ecosystem does not resolve.
+func TestProvider_FindSubProjectByName_NoCrossEcosystem(t *testing.T) {
+	curEco := "/Code/grovetools"
+	otherEco := "/Code/otherproj"
+	nodes := []*WorkspaceNode{
+		{Name: "grovetools", Path: curEco, Kind: KindEcosystemRoot, RootEcosystemPath: curEco},
+		{
+			Name:                "shared",
+			Path:                otherEco + "/shared",
+			Kind:                KindEcosystemSubProject,
+			ParentEcosystemPath: otherEco,
+			RootEcosystemPath:   otherEco,
+		},
+	}
+	provider := NewProviderFromNodes(nodes)
+	assert.Nil(t, provider.FindSubProjectByName("shared", curEco))
+	assert.Nil(t, provider.FindSubProjectByName("anything", ""))
+}
