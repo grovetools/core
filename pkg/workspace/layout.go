@@ -113,6 +113,126 @@ func FindWorktreePath(gitRoot, name string) (string, bool) {
 	return "", false
 }
 
+// ResolveWorktreePathByName resolves the absolute path of an EXISTING worktree
+// named name, using the per-worktree registry as the primary source of truth
+// and the on-disk layout bases as a fallback. It is the single helper every
+// consumer should use to answer "where does the worktree called <name> live?"
+// so that anchored worktrees (created with `--anchor <sub-repo>`, which live
+// under the ANCHOR repo's XDG base rather than gitRoot's) resolve everywhere.
+//
+// Resolution order:
+//
+//  1. Registry-first. Scan worktreeregistry.ListAll() for an entry whose
+//     AbsPath basename == name and whose directory still exists on disk. When
+//     acceptOwners is non-empty, the entry's Owner must (after abs/symlink
+//     normalization) match one of acceptOwners — this keeps the match scoped
+//     and unambiguous in a multi-ecosystem registry. When acceptOwners is nil,
+//     any owner is accepted (gitRoot is still implicitly acceptable).
+//  2. gitRoot's own bases. Probe WorktreeBases(gitRoot) (legacy + XDG) — the
+//     pre-anchor default location for an ecosystem worktree.
+//  3. Owner bases. Probe WorktreeBases(owner) for each acceptOwner — covers an
+//     anchored worktree whose registry entry is missing/corrupt but whose
+//     directory still exists under the anchor's XDG base.
+//
+// Returns ("", false) when nothing resolves.
+func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (string, bool) {
+	// Normalize the accepted owner set once for comparison.
+	ownerSet := map[string]struct{}{}
+	addOwner := func(p string) {
+		if p == "" {
+			return
+		}
+		abs := p
+		if a, err := filepath.Abs(p); err == nil {
+			abs = a
+		}
+		if r, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = r
+		}
+		ownerSet[filepath.Clean(abs)] = struct{}{}
+	}
+	for _, o := range acceptOwners {
+		addOwner(o)
+	}
+	// gitRoot is always an acceptable owner (an ecosystem worktree's owner IS
+	// the ecosystem root).
+	addOwner(gitRoot)
+
+	// gitRootCanon is the normalized ecosystem root, used to accept any owner
+	// that lives strictly UNDER it (every sub-repo of the ecosystem is a child
+	// of gitRoot on disk, so an `--anchor <sub-repo>` owner is always under it).
+	// This makes owner-scoping independent of provider spelling/discovery: we
+	// don't need the caller to enumerate every sub-repo path exactly.
+	gitRootCanon := func() string {
+		abs := gitRoot
+		if a, err := filepath.Abs(gitRoot); err == nil {
+			abs = a
+		}
+		if r, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = r
+		}
+		return filepath.Clean(abs)
+	}()
+
+	ownerAccepted := func(owner string) bool {
+		// An empty caller-supplied acceptOwners means "accept any owner"; the
+		// set still contains gitRoot, so size 1 (just gitRoot) is the
+		// any-owner-but-prefer-scoped case only when the caller passed extra
+		// owners. We treat len(acceptOwners)==0 as accept-any.
+		if len(acceptOwners) == 0 {
+			return true
+		}
+		abs := owner
+		if a, err := filepath.Abs(owner); err == nil {
+			abs = a
+		}
+		if r, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = r
+		}
+		abs = filepath.Clean(abs)
+		if _, ok := ownerSet[abs]; ok {
+			return true
+		}
+		// Accept any owner under the ecosystem root (sub-repos / anchor targets).
+		if gitRootCanon != "" && strings.HasPrefix(abs, gitRootCanon+string(filepath.Separator)) {
+			return true
+		}
+		return false
+	}
+
+	// 1. Registry-first.
+	if entries, err := worktreeregistry.ListAll(); err == nil {
+		for _, e := range entries {
+			if e == nil || e.AbsPath == "" || filepath.Base(e.AbsPath) != name {
+				continue
+			}
+			if !ownerAccepted(e.Owner) {
+				continue
+			}
+			if _, statErr := os.Stat(e.AbsPath); statErr == nil {
+				return e.AbsPath, true
+			}
+		}
+	}
+
+	// 2. gitRoot's own bases (legacy + XDG).
+	if dir, ok := FindWorktreePath(gitRoot, name); ok {
+		return dir, true
+	}
+
+	// 3. Owner bases (covers anchored worktrees with a missing registry entry).
+	for owner := range ownerSet {
+		if owner == filepath.Clean(gitRoot) {
+			continue // already probed in step 2
+		}
+		if dir, ok := FindWorktreePath(owner, name); ok {
+			return dir, true
+		}
+	}
+
+	return "", false
+}
+
 // ResolveNewWorktreePath returns the target path for a NEW worktree named
 // name of the repository rooted at gitRoot.
 //

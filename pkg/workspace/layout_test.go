@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/worktreeregistry"
 )
 
 // sandboxXDG isolates a test from the host grove data dir. GROVE_HOME must
@@ -476,5 +477,96 @@ func TestGetWorktreeName_XDG(t *testing.T) {
 	}
 	if got := eco.GetWorktreeName(); got != "eco" {
 		t.Errorf("GetWorktreeName(xdg eco wt) = %q, want %q", got, "eco")
+	}
+}
+
+// sandboxGroveHome points all XDG roots (data/state/cache/config) at a single
+// temp dir via GROVE_HOME, so paths.WorktreesDir() and the worktreeregistry's
+// StateDir() agree inside one test.
+func sandboxGroveHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("GROVE_HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	return home
+}
+
+// TestResolveWorktreePathByName_AnchoredViaRegistry pins the core fix: an
+// anchored worktree (one whose registry Owner is a sub-repo, NOT the ecosystem
+// gitRoot, and which lives under the anchor's XDG base) resolves by name even
+// though FindWorktreePath(gitRoot, ...) alone would miss it.
+func TestResolveWorktreePathByName_AnchoredViaRegistry(t *testing.T) {
+	sandboxGroveHome(t)
+
+	gitRoot := "/code/my-eco"
+	anchor := "/code/my-eco/svc-a"
+
+	// The anchored worktree lives under the ANCHOR's XDG base, not gitRoot's.
+	anchoredPath := ResolveNewWorktreePath(anchor, "anchored", true /* XDG */)
+	if err := os.MkdirAll(anchoredPath, 0o755); err != nil {
+		t.Fatalf("mkdir anchored worktree: %v", err)
+	}
+
+	// Register it with owner == anchor (what `--anchor svc-a` records).
+	if err := worktreeregistry.Save(&worktreeregistry.Entry{
+		AbsPath: anchoredPath,
+		Owner:   anchor,
+		Repos:   []string{"svc-a"},
+	}); err != nil {
+		t.Fatalf("save registry entry: %v", err)
+	}
+
+	// FindWorktreePath(gitRoot, ...) — the ecosystem-scoped lookup — misses it.
+	if _, ok := FindWorktreePath(gitRoot, "anchored"); ok {
+		t.Fatalf("FindWorktreePath unexpectedly found the anchored worktree under gitRoot")
+	}
+
+	// The registry-aware resolver finds it when the anchor is an accepted owner.
+	got, ok := ResolveWorktreePathByName(gitRoot, "anchored", []string{anchor})
+	if !ok {
+		t.Fatalf("ResolveWorktreePathByName missed the anchored worktree")
+	}
+	if got != anchoredPath {
+		t.Errorf("ResolveWorktreePathByName = %q, want %q", got, anchoredPath)
+	}
+
+	// With acceptOwners=nil (accept-any), it also resolves.
+	if got, ok := ResolveWorktreePathByName(gitRoot, "anchored", nil); !ok || got != anchoredPath {
+		t.Errorf("ResolveWorktreePathByName(nil owners) = %q,%v want %q,true", got, ok, anchoredPath)
+	}
+
+	// Owner-scoping rejects an entry owned OUTSIDE the queried ecosystem. A
+	// DIFFERENT ecosystem root whose tree does not contain the anchor must not
+	// match this registry entry (the anchor lives under /code/my-eco, so it is
+	// neither in acceptOwners nor under /code/other-eco).
+	if got, ok := ResolveWorktreePathByName("/code/other-eco", "anchored", []string{"/code/other-eco"}); ok {
+		t.Errorf("ResolveWorktreePathByName matched an entry from a foreign ecosystem: got %q", got)
+	}
+
+	// Owner-scoping accepts a sub-repo owner that is UNDER the queried gitRoot
+	// even when the caller did not enumerate that sub-repo explicitly (the
+	// provider-spelling-independent under-gitRoot rule). Here the anchor is a
+	// child of gitRoot, so passing only gitRoot's siblings still resolves it via
+	// the under-gitRoot acceptance.
+	if got, ok := ResolveWorktreePathByName(gitRoot, "anchored", []string{gitRoot}); !ok || got != anchoredPath {
+		t.Errorf("ResolveWorktreePathByName(under-gitRoot owner) = %q,%v want %q,true", got, ok, anchoredPath)
+	}
+}
+
+// TestResolveWorktreePathByName_EcosystemBase pins the non-anchored path: a
+// plain ecosystem worktree under gitRoot's own XDG base resolves with no
+// registry entry at all (on-disk fallback).
+func TestResolveWorktreePathByName_EcosystemBase(t *testing.T) {
+	sandboxGroveHome(t)
+
+	gitRoot := "/code/plain-eco"
+	wtPath := ResolveNewWorktreePath(gitRoot, "feature", true)
+	if err := os.MkdirAll(wtPath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	got, ok := ResolveWorktreePathByName(gitRoot, "feature", nil)
+	if !ok || got != wtPath {
+		t.Errorf("ResolveWorktreePathByName = %q,%v want %q,true", got, ok, wtPath)
 	}
 }
