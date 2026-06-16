@@ -17,15 +17,13 @@
 package workspace
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/worktreeregistry"
 	"github.com/grovetools/core/util/pathutil"
-	"github.com/grovetools/core/util/sanitize"
 )
 
 // legacyWorktreeDirName mirrors paths.LegacyWorktreeDirName for use inside
@@ -43,16 +41,7 @@ const legacyWorktreeDirName = paths.LegacyWorktreeDirName
 // identifiers), and deliberately short to respect sandbox socket-path
 // limits.
 func DirIdentifier(gitRoot string) string {
-	abs, err := filepath.Abs(gitRoot)
-	if err != nil {
-		abs = gitRoot
-	}
-	normalized, err := pathutil.NormalizeForLookup(abs)
-	if err != nil {
-		normalized = abs
-	}
-	sum := sha256.Sum256([]byte(normalized))
-	return sanitize.SanitizeForTmuxSession(filepath.Base(abs)) + "-" + hex.EncodeToString(sum[:])[:8]
+	return pathutil.WorktreeID(gitRoot)
 }
 
 // WorktreeBases returns the ordered, legacy-first list of identifier-level
@@ -165,6 +154,9 @@ func WorktreeOwner(worktreePath string) (string, bool) {
 	if owner, ok := ownerFromGitdir(root); ok {
 		return owner, true
 	}
+	if entry, err := worktreeregistry.Load(pathutil.WorktreeID(root)); err == nil && entry.Owner != "" {
+		return entry.Owner, true
+	}
 	if owner, ok := ownerFromMarker(root); ok {
 		return owner, true
 	}
@@ -233,6 +225,13 @@ func ownerFromGitdir(worktreeRoot string) (string, bool) {
 		return gitdir[:i], true
 	}
 	return "", false
+}
+
+// WorktreeRootForPath extracts the worktree root (<base>/<name>) containing
+// path, in either layout. The returned root preserves the spelling of the
+// input path. Returns ("", false) when path is not inside a grove worktree.
+func WorktreeRootForPath(path string) (string, bool) {
+	return worktreeRootForPath(path)
 }
 
 // worktreeRootForPath extracts the worktree root (<base>/<name>) containing

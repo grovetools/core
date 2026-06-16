@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/grovetools/core/git"
+	"github.com/grovetools/core/pkg/worktreeregistry"
 )
 
 // Prepare creates or gets a fully configured worktree.
@@ -122,6 +123,22 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		}
 
 		_ = os.WriteFile(markerPath, []byte(markerContent), 0o644) //nolint:gosec // workspace marker is not sensitive
+
+		// Upsert registry entry for this new worktree.
+		absWorktreePath := worktreePath
+		if abs, absErr := filepath.Abs(worktreePath); absErr == nil {
+			absWorktreePath = abs
+		}
+		regEntry := &worktreeregistry.Entry{
+			AbsPath:   absWorktreePath,
+			Owner:     ownerPath,
+			Repos:     opts.SiblingWorkspaces,
+			Plan:      opts.PlanName,
+			CreatedAt: time.Now().UTC(),
+		}
+		if saveErr := worktreeregistry.Save(regEntry); saveErr != nil {
+			fmt.Printf("Warning: failed to write registry entry for worktree '%s': %v\n", opts.WorktreeName, saveErr)
+		}
 	}
 
 	return worktreePath, nil

@@ -8,6 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/pkg/worktreeregistry"
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // State represents the local Grove state as a generic map of key-value pairs.
@@ -53,7 +55,23 @@ func stateFilePath() (string, error) {
 
 // Load loads the state from the state file.
 // Returns an empty state if the file doesn't exist.
+//
+// Registry-primary: when the CWD is inside a grove worktree, the registry
+// entry's SessionState is returned if non-empty. Falls back to the
+// .grove/state.yml file for missing/empty registry entries.
 func Load() (State, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("get current directory: %w", err)
+	}
+
+	if root, ok := workspace.WorktreeRootForPath(cwd); ok {
+		id := pathutil.WorktreeID(root)
+		if entry, rerr := worktreeregistry.Load(id); rerr == nil && len(entry.SessionState) > 0 {
+			return State(entry.SessionState), nil
+		}
+	}
+
 	path, err := stateFilePath()
 	if err != nil {
 		return nil, err
@@ -81,13 +99,31 @@ func Load() (State, error) {
 }
 
 // Save saves the state to the state file.
+//
+// Dual-write: when the CWD is inside a grove worktree the session state is
+// also persisted to the registry entry. The .grove/state.yml write is
+// retained during the deprecation window so older tooling still works.
 func Save(state State) error {
+	// Enforce notebook guard and resolve path first.
 	path, err := stateFilePath()
 	if err != nil {
 		return err
 	}
 
-	// Ensure .grove directory exists
+	// Registry dual-write: best-effort, non-fatal.
+	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+		if root, ok := workspace.WorktreeRootForPath(cwd); ok {
+			id := pathutil.WorktreeID(root)
+			entry, _ := worktreeregistry.Load(id)
+			if entry == nil {
+				entry = &worktreeregistry.Entry{AbsPath: root}
+			}
+			entry.SessionState = map[string]interface{}(state)
+			_ = worktreeregistry.Save(entry)
+		}
+	}
+
+	// .grove/state.yml write (deprecation-window dual-write).
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create state directory: %w", err)
