@@ -27,7 +27,7 @@ timeout = 300
 [[test_scopes]]
 name = "notebook-resolution"
 rules = ".cx/notebook-resolution.rules"
-scenarios = ["xdg-worktree-notebook-inheritance"]
+scenarios = ["xdg-worktree-notebook-inheritance", "xdg-anchored-container-classification"]
 
 [[hooks.post_tool_use]]
 name = "concept-reminder"

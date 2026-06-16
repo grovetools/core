@@ -61,6 +61,7 @@ func main() {
 		// XDG worktree scenarios
 		XDGWorktreeDiscoveryScenario(),
 		XDGWorktreeNotebookInheritanceScenario(),
+		XDGAnchoredContainerScenario(),
 		XDGZombieWorktreeScenario(),
 		// Nvim component scenarios
 		// NvimDemoScenario(),
