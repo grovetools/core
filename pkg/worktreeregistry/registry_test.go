@@ -160,6 +160,39 @@ func TestReconcile_AdoptsUnregisteredLiveDir(t *testing.T) {
 	assert.Equal(t, wtDir, loaded.AbsPath)
 }
 
+func TestPlanForPath(t *testing.T) {
+	setStateDir(t)
+
+	t.Run("returns plan when entry records one", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, worktreeregistry.Save(&worktreeregistry.Entry{
+			AbsPath: dir,
+			Plan:    "my-plan",
+		}))
+
+		plan, ok := worktreeregistry.PlanForPath(dir)
+		assert.True(t, ok)
+		assert.Equal(t, "my-plan", plan)
+	})
+
+	t.Run("not ok when entry records no plan", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, worktreeregistry.Save(&worktreeregistry.Entry{
+			AbsPath: dir,
+		}))
+
+		plan, ok := worktreeregistry.PlanForPath(dir)
+		assert.False(t, ok)
+		assert.Empty(t, plan)
+	})
+
+	t.Run("not ok when no entry exists", func(t *testing.T) {
+		plan, ok := worktreeregistry.PlanForPath(t.TempDir())
+		assert.False(t, ok)
+		assert.Empty(t, plan)
+	})
+}
+
 func TestResolve_ReturnsNilForMissingEntry(t *testing.T) {
 	setStateDir(t)
 	dir := t.TempDir()

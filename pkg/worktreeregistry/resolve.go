@@ -33,6 +33,17 @@ func Resolve(absPath string, liveRepos []string) (*Entry, error) {
 	return entry, nil
 }
 
+// PlanForPath returns the grove-flow plan recorded for the worktree whose
+// absolute path is absPath (the worktree container root). ok is false when no
+// registry entry exists or it records no plan.
+func PlanForPath(absPath string) (plan string, ok bool) {
+	entry, err := Load(pathutil.WorktreeID(absPath))
+	if err != nil || entry == nil {
+		return "", false
+	}
+	return entry.Plan, entry.Plan != ""
+}
+
 func reposContain(repos []string, name string) bool {
 	for _, r := range repos {
 		if r == name {
