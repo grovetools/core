@@ -10,6 +10,7 @@ import (
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/pkg/worktreeregistry"
 	"github.com/grovetools/core/state"
 )
 
@@ -40,6 +41,19 @@ func ActivePlan(workDir string) string {
 
 	// 2. Fall back to state (for main-branch plans with explicit flow set)
 	return activePlanFromState()
+}
+
+// ActivePlanForPath resolves the active plan for an arbitrary path, preferring
+// the XDG worktree registry (the canonical store) over branch/state heuristics.
+// It walks path up to its owning worktree container and reads the registry
+// Plan; if that yields nothing it falls back to the existing ActivePlan logic.
+func ActivePlanForPath(path string) string {
+	if root, ok := workspace.WorktreeRootForPath(path); ok {
+		if plan, ok := worktreeregistry.PlanForPath(root); ok {
+			return plan
+		}
+	}
+	return ActivePlan(path)
 }
 
 // activePlanFromState reads the active plan from state, handling legacy key migration.
