@@ -78,7 +78,10 @@ type ToolHookData struct {
 
 // Subagent tracks subagent completions
 type Subagent struct {
-	ID              string         `json:"id" db:"id"`
+	ID string `json:"id" db:"id"`
+	// Name is the descriptive agent name (from meta.json "description" or
+	// workflow script "label:"). Best-effort enrichment; may be empty.
+	Name            string         `json:"name,omitempty" db:"name"`
 	ParentSessionID string         `json:"parent_session_id" db:"parent_session_id"`
 	TaskDescription string         `json:"task_description" db:"task_description"`
 	TaskType        string         `json:"task_type" db:"task_type"` // search|implementation|debugging|analysis

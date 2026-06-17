@@ -77,6 +77,10 @@ type WorkflowEvent struct {
 	// workflow-spawned agents, or the subagent type name (e.g. "Explore")
 	// for Agent-tool spawns. Optional on older CC payload variants.
 	AgentType string `json:"agent_type,omitempty"`
+	// Name is the descriptive agent name, populated from agent-<id>.meta.json
+	// "description" field for simple/ad-hoc subagents, or from the static
+	// script "label:" for workflow subagents. Best-effort enrichment.
+	Name string `json:"name,omitempty"`
 	// TranscriptPath is the per-agent transcript jsonl path
 	// (agent_transcript_path; only available at SubagentStop).
 	TranscriptPath string `json:"transcript_path,omitempty"`
