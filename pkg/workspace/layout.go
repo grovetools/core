@@ -149,7 +149,11 @@ func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (str
 		if r, err := filepath.EvalSymlinks(abs); err == nil {
 			abs = r
 		}
-		ownerSet[filepath.Clean(abs)] = struct{}{}
+		// Lowercase the key: owner paths come from heterogeneous sources (the
+		// workspace provider can return a case-folded path while the registry
+		// stores real on-disk casing), and macOS/Windows filesystems are
+		// case-insensitive. EvalSymlinks does NOT correct case, so compare folded.
+		ownerSet[strings.ToLower(filepath.Clean(abs))] = struct{}{}
 	}
 	for _, o := range acceptOwners {
 		addOwner(o)
@@ -171,7 +175,7 @@ func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (str
 		if r, err := filepath.EvalSymlinks(abs); err == nil {
 			abs = r
 		}
-		return filepath.Clean(abs)
+		return strings.ToLower(filepath.Clean(abs))
 	}()
 
 	ownerAccepted := func(owner string) bool {
@@ -182,6 +186,12 @@ func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (str
 		if len(acceptOwners) == 0 {
 			return true
 		}
+		// A scoped lookup cannot accept an entry with no owner (malformed/partial
+		// registry rows): there is nothing to scope-check, so reject it rather
+		// than letting it match on a cwd-derived empty path.
+		if owner == "" {
+			return false
+		}
 		abs := owner
 		if a, err := filepath.Abs(owner); err == nil {
 			abs = a
@@ -189,7 +199,8 @@ func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (str
 		if r, err := filepath.EvalSymlinks(abs); err == nil {
 			abs = r
 		}
-		abs = filepath.Clean(abs)
+		// Compare folded: see addOwner — case-insensitive FS + provider casing.
+		abs = strings.ToLower(filepath.Clean(abs))
 		if _, ok := ownerSet[abs]; ok {
 			return true
 		}
