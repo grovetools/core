@@ -9,6 +9,7 @@
 
 pkg/workspace/submodules.go
 pkg/workspace/prepare.go
+pkg/claudetrust/seeder.go
 pkg/workspace/provider.go
 pkg/workspace/lookup.go
 git/worktree.go

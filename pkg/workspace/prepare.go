@@ -10,7 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/grovetools/core/git"
+	"github.com/grovetools/core/pkg/claudetrust"
 	"github.com/grovetools/core/pkg/worktreeregistry"
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // Prepare creates or gets a fully configured worktree.
@@ -138,6 +140,33 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		}
 		if saveErr := worktreeregistry.Save(regEntry); saveErr != nil {
 			fmt.Printf("Warning: failed to write registry entry for worktree '%s': %v\n", opts.WorktreeName, saveErr)
+		}
+
+		// Pre-seed Claude Code folder-trust so agents launched inside this
+		// worktree don't stall at the interactive trust prompt. Trust is
+		// per-exact-path, and flow scopes an agent's cwd to either the
+		// container or a <worktree>/<repo> subdir, so seed both. Every key MUST
+		// be canonicalized with pathutil.CanonicalPath: flow runs each cwd
+		// through CanonicalPath before handing it to Claude (macOS case +
+		// symlinks), so an un-canonicalized key would silently miss. The dirs
+		// exist on disk here (SetupSubmodules already ran), so canonicalization
+		// resolves real case/symlinks. Never abort worktree creation on failure.
+		trustPaths := make([]string, 0, 1+len(opts.SiblingWorkspaces))
+		trustPaths = append(trustPaths, absWorktreePath)
+		for _, repo := range opts.SiblingWorkspaces {
+			trustPaths = append(trustPaths, filepath.Join(absWorktreePath, repo))
+		}
+		canonicalPaths := make([]string, 0, len(trustPaths))
+		for _, p := range trustPaths {
+			canonical, canonErr := pathutil.CanonicalPath(p)
+			if canonErr != nil {
+				fmt.Printf("Warning: failed to canonicalize path for Claude trust pre-seed (%s): %v\n", p, canonErr)
+				continue
+			}
+			canonicalPaths = append(canonicalPaths, canonical)
+		}
+		if seedErr := claudetrust.SeedTrust(canonicalPaths...); seedErr != nil {
+			fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
 		}
 	}
 
