@@ -15,7 +15,7 @@ import (
 
 func normalizePath(t *testing.T, p string) string {
 	t.Helper()
-	n, err := pathutil.NormalizeForLookup(p)
+	n, err := pathutil.CanonicalPath(p)
 	require.NoError(t, err)
 	return n
 }

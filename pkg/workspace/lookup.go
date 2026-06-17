@@ -171,10 +171,15 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	// the lowercased form makes users think the path itself is wrong.
 	displayPath := absPath
 
-	// Normalize path for case-insensitive filesystems and resolve symlinks
-	absPath, err = pathutil.NormalizeForLookup(absPath)
+	// Canonicalize the path (resolve symlinks, correct filesystem case).
+	// CanonicalPath preserves real casing so that paths stored in
+	// WorkspaceNode fields match what users and external tools see.
+	// NormalizeForLookup would lowercase on macOS, breaking downstream
+	// consumers that compare the stored path literally (e.g. nb promote's
+	// worktree-base lookup).
+	absPath, err = pathutil.CanonicalPath(absPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to normalize path: %w", err)
+		return nil, fmt.Errorf("failed to canonicalize path: %w", err)
 	}
 
 	// If we were given a file, start from its directory
