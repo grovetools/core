@@ -69,7 +69,21 @@ func LoadAccessHistory(configDir string) (*AccessHistory, error) {
 
 	var history AccessHistory
 	if err := json.Unmarshal(data, &history); err != nil {
-		return nil, err
+		// State file is corrupt (e.g., partial or double write) — fall back to
+		// the legacy config-dir path so the user doesn't lose their history.
+		if legacy := legacyAccessHistoryPath(configDir); legacy != historyFile {
+			if legacyData, legacyErr := os.ReadFile(legacy); legacyErr == nil && len(legacyData) > 0 {
+				var legacyHistory AccessHistory
+				if jsonErr := json.Unmarshal(legacyData, &legacyHistory); jsonErr == nil {
+					if legacyHistory.Projects == nil {
+						legacyHistory.Projects = make(map[string]*ProjectAccess)
+					}
+					return &legacyHistory, nil
+				}
+			}
+		}
+		// Both paths unreadable — treat as empty rather than surfacing an error.
+		return &AccessHistory{Projects: make(map[string]*ProjectAccess)}, nil
 	}
 
 	if history.Projects == nil {
