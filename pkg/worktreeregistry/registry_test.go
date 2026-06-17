@@ -193,6 +193,67 @@ func TestPlanForPath(t *testing.T) {
 	})
 }
 
+func TestFindByRef(t *testing.T) {
+	t.Run("absolute container path", func(t *testing.T) {
+		setStateDir(t)
+		dir := t.TempDir()
+		require.NoError(t, worktreeregistry.Save(&worktreeregistry.Entry{
+			AbsPath: dir,
+			Plan:    "plan-a",
+		}))
+
+		entry, err := worktreeregistry.FindByRef(dir)
+		require.NoError(t, err)
+		require.NotNil(t, entry)
+		assert.Equal(t, dir, entry.AbsPath)
+		assert.Equal(t, "plan-a", entry.Plan)
+	})
+
+	t.Run("bare plan name unique match", func(t *testing.T) {
+		setStateDir(t)
+		dir := t.TempDir()
+		require.NoError(t, worktreeregistry.Save(&worktreeregistry.Entry{
+			AbsPath: dir,
+			Plan:    "uniq-plan",
+		}))
+
+		entry, err := worktreeregistry.FindByRef("uniq-plan")
+		require.NoError(t, err)
+		require.NotNil(t, entry)
+		assert.Equal(t, dir, entry.AbsPath)
+	})
+
+	t.Run("bare plan name no match", func(t *testing.T) {
+		setStateDir(t)
+		_, err := worktreeregistry.FindByRef("does-not-exist")
+		require.Error(t, err)
+	})
+
+	t.Run("bare plan name multiple matches is ambiguous", func(t *testing.T) {
+		setStateDir(t)
+		d1 := t.TempDir()
+		d2 := t.TempDir()
+		require.NoError(t, worktreeregistry.Save(&worktreeregistry.Entry{AbsPath: d1, Plan: "dup"}))
+		require.NoError(t, worktreeregistry.Save(&worktreeregistry.Entry{AbsPath: d2, Plan: "dup"}))
+
+		_, err := worktreeregistry.FindByRef("dup")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "multiple worktrees found")
+	})
+
+	t.Run("empty ref errors", func(t *testing.T) {
+		setStateDir(t)
+		_, err := worktreeregistry.FindByRef("  ")
+		require.Error(t, err)
+	})
+
+	t.Run("absolute path with no entry errors", func(t *testing.T) {
+		setStateDir(t)
+		_, err := worktreeregistry.FindByRef(t.TempDir())
+		require.Error(t, err)
+	})
+}
+
 func TestResolve_ReturnsNilForMissingEntry(t *testing.T) {
 	setStateDir(t)
 	dir := t.TempDir()

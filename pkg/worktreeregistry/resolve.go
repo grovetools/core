@@ -1,6 +1,12 @@
 package worktreeregistry
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/util/pathutil"
 )
 
@@ -42,6 +48,72 @@ func PlanForPath(absPath string) (plan string, ok bool) {
 		return "", false
 	}
 	return entry.Plan, entry.Plan != ""
+}
+
+// FindByRef resolves a user-supplied reference to a registry Entry. ref may be:
+//
+//  1. An absolute container path → Load(WorktreeID(ref)).
+//  2. A "<container-id>/<name>" pair → joined under paths.WorktreesDir() and
+//     loaded as an absolute container path.
+//  3. A bare plan name → ListAll() filtered by Entry.Plan == ref. A unique
+//     match wins; multiple matches produce a clear error mirroring the flow
+//     "multiple plans found named '%s'" phrasing.
+//
+// Returns a non-nil error when nothing matches or when the reference is
+// ambiguous. This is the reverse of PlanForPath: name|id → entry.
+func FindByRef(ref string) (*Entry, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("empty target reference")
+	}
+
+	// 1. Absolute container path.
+	if filepath.IsAbs(ref) {
+		entry, err := Load(pathutil.WorktreeID(ref))
+		if err != nil {
+			return nil, fmt.Errorf("no worktree registered at %q: %w", ref, err)
+		}
+		return entry, nil
+	}
+
+	// 2. "<container-id>/<name>" relative reference, joined under the XDG
+	//    worktrees base. Only attempt this when the joined path exists on disk
+	//    so a slash-bearing plan name (e.g. a branch-style plan) still falls
+	//    through to the plan-name scan below.
+	if strings.Contains(ref, string(filepath.Separator)) {
+		if base := paths.WorktreesDir(); base != "" {
+			candidate := filepath.Join(base, ref)
+			if _, statErr := os.Stat(candidate); statErr == nil {
+				if entry, err := Load(pathutil.WorktreeID(candidate)); err == nil {
+					return entry, nil
+				}
+			}
+		}
+	}
+
+	// 3. Bare plan name → scan ListAll() for Entry.Plan == ref.
+	all, err := ListAll()
+	if err != nil {
+		return nil, fmt.Errorf("list registry: %w", err)
+	}
+	var matches []*Entry
+	for _, e := range all {
+		if e != nil && e.Plan == ref {
+			matches = append(matches, e)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("no worktree found for target %q", ref)
+	case 1:
+		return matches[0], nil
+	default:
+		absPaths := make([]string, 0, len(matches))
+		for _, m := range matches {
+			absPaths = append(absPaths, m.AbsPath)
+		}
+		return nil, fmt.Errorf("multiple worktrees found for plan %q: %s", ref, strings.Join(absPaths, ", "))
+	}
 }
 
 func reposContain(repos []string, name string) bool {
