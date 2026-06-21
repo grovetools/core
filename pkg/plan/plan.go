@@ -39,8 +39,10 @@ func ActivePlan(workDir string) string {
 		return name
 	}
 
-	// 2. Fall back to state (for main-branch plans with explicit flow set)
-	return activePlanFromState()
+	// 2. Fall back to state (for main-branch plans with explicit flow set).
+	//    Scope the state read to workDir's ecosystem so a process whose CWD is
+	//    elsewhere (e.g. $HOME) can't leak another ecosystem's active plan.
+	return activePlanFromState(workDir)
 }
 
 // ActivePlanForPath resolves the active plan for an arbitrary path, preferring
@@ -56,19 +58,21 @@ func ActivePlanForPath(path string) string {
 	return ActivePlan(path)
 }
 
-// activePlanFromState reads the active plan from state, handling legacy key migration.
-func activePlanFromState() string {
-	plan, _ := state.GetString(StateKey)
+// activePlanFromState reads the active plan from state for workDir's ecosystem,
+// handling legacy key migration. A workDir outside any ecosystem (e.g. $HOME)
+// reads empty state and returns "" (no error, no leak).
+func activePlanFromState(workDir string) string {
+	plan, _ := state.GetString(workDir, StateKey)
 	if plan != "" {
 		return plan
 	}
 
 	// Check legacy key and migrate
-	oldPlan, _ := state.GetString(LegacyStateKey)
+	oldPlan, _ := state.GetString(workDir, LegacyStateKey)
 	if oldPlan != "" {
 		// Migrate: set new key and delete old key
-		_ = state.Set(StateKey, oldPlan)
-		_ = state.Delete(LegacyStateKey)
+		_ = state.Set(workDir, StateKey, oldPlan)
+		_ = state.Delete(workDir, LegacyStateKey)
 		return oldPlan
 	}
 
