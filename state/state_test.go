@@ -14,19 +14,20 @@ func TestStateOperations(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Change to temp directory
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get working directory: %v", err)
+	// Resolve symlinks so paths match what Abs/Clean produce internally
+	// (macOS /var -> /private/var).
+	if resolved, rerr := filepath.EvalSymlinks(tmpDir); rerr == nil {
+		tmpDir = resolved
 	}
-	defer func() { _ = os.Chdir(oldWd) }()
 
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change directory: %v", err)
+	// Seed an ecosystem-root marker so tmpDir resolves as an ecosystem root.
+	// Without this, state resolution refuses writes (no home-global fallback).
+	if err := os.WriteFile(filepath.Join(tmpDir, "grove.toml"), []byte("# test ecosystem\n"), 0o644); err != nil {
+		t.Fatalf("failed to seed grove.toml: %v", err)
 	}
 
 	t.Run("Load empty state", func(t *testing.T) {
-		state, err := Load()
+		state, err := Load(tmpDir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -42,11 +43,11 @@ func TestStateOperations(t *testing.T) {
 		key := "test.key"
 		value := "test-value"
 
-		if err := Set(key, value); err != nil {
+		if err := Set(tmpDir, key, value); err != nil {
 			t.Fatalf("Set() error = %v", err)
 		}
 
-		got, err := GetString(key)
+		got, err := GetString(tmpDir, key)
 		if err != nil {
 			t.Fatalf("GetString() error = %v", err)
 		}
@@ -59,11 +60,11 @@ func TestStateOperations(t *testing.T) {
 		key := "test.another"
 		value := "another-value"
 
-		if err := Set(key, value); err != nil {
+		if err := Set(tmpDir, key, value); err != nil {
 			t.Fatalf("Set() error = %v", err)
 		}
 
-		got, ok, err := Get(key)
+		got, ok, err := Get(tmpDir, key)
 		if err != nil {
 			t.Fatalf("Get() error = %v", err)
 		}
@@ -76,7 +77,7 @@ func TestStateOperations(t *testing.T) {
 	})
 
 	t.Run("Get non-existent key", func(t *testing.T) {
-		got, ok, err := Get("non.existent")
+		got, ok, err := Get(tmpDir, "non.existent")
 		if err != nil {
 			t.Fatalf("Get() error = %v", err)
 		}
@@ -93,12 +94,12 @@ func TestStateOperations(t *testing.T) {
 		value := "to-be-deleted"
 
 		// Set a value
-		if err := Set(key, value); err != nil {
+		if err := Set(tmpDir, key, value); err != nil {
 			t.Fatalf("Set() error = %v", err)
 		}
 
 		// Verify it exists
-		_, ok, err := Get(key)
+		_, ok, err := Get(tmpDir, key)
 		if err != nil {
 			t.Fatalf("Get() error = %v", err)
 		}
@@ -107,12 +108,12 @@ func TestStateOperations(t *testing.T) {
 		}
 
 		// Delete it
-		if err := Delete(key); err != nil {
+		if err := Delete(tmpDir, key); err != nil {
 			t.Fatalf("Delete() error = %v", err)
 		}
 
 		// Verify it's gone
-		_, ok, err = Get(key)
+		_, ok, err = Get(tmpDir, key)
 		if err != nil {
 			t.Fatalf("Get() error = %v", err)
 		}
@@ -129,13 +130,13 @@ func TestStateOperations(t *testing.T) {
 		}
 
 		for k, v := range keys {
-			if err := Set(k, v); err != nil {
+			if err := Set(tmpDir, k, v); err != nil {
 				t.Fatalf("Set(%q, %v) error = %v", k, v, err)
 			}
 		}
 
 		// Verify all keys exist
-		state, err := Load()
+		state, err := Load(tmpDir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -154,7 +155,7 @@ func TestStateOperations(t *testing.T) {
 
 	t.Run("State file location", func(t *testing.T) {
 		// Set a value to ensure state file is created
-		if err := Set("test.location", "value"); err != nil {
+		if err := Set(tmpDir, "test.location", "value"); err != nil {
 			t.Fatalf("Set() error = %v", err)
 		}
 

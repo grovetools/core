@@ -130,8 +130,13 @@ format = " $output "
 
 func runStarshipStatus(cmd *cobra.Command, args []string) error {
 	// This command must be fast and should not print errors to stderr.
-	// Load the state
-	currentState, err := state.Load()
+	// Load the state anchored to the current directory. A $HOME prompt (no
+	// ecosystem root) yields empty state, so the starship segment shows nothing.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	currentState, err := state.Load(cwd)
 	if err != nil {
 		// Silently fail if we can't load state
 		return nil
