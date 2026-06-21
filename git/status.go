@@ -148,6 +148,99 @@ func fileStatusFromXY(xy, path string) FileStatus {
 	return fs
 }
 
+// localMainBranch returns "main" or "master" — whichever local branch exists
+// in the repo — or "" if neither is present. It is the single source of truth
+// for resolving the local main ref, shared by the divergence counters
+// (AheadMainCount/BehindMainCount) and the since-main change list.
+func localMainBranch(repoPath string) string {
+	cmdBuilder := command.NewSafeBuilder()
+	for _, branchName := range []string{"main", "master"} {
+		cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", "refs/heads/"+branchName)
+		if err != nil {
+			continue // Should not happen, but defensive
+		}
+		execCmd := cmd.Exec()
+		execCmd.Dir = repoPath
+		if execCmd.Run() == nil {
+			return branchName
+		}
+	}
+	return ""
+}
+
+// GetChangedFilesSinceMain returns the per-file change list between the local
+// main/master branch and the working tree — i.e. everything that differs from
+// main, including work already committed on the current branch. This mirrors
+// the "git status since local main" behavior used by neo-tree's <leader>gm.
+//
+// It runs `git diff --name-status -z <mainBranch>` (two-dot: main vs working
+// tree). The main ref is resolved identically to the AheadMainCount/
+// BehindMainCount counters via localMainBranch. If neither main nor master
+// exists locally there is nothing to compare against, so it returns nil,nil.
+func GetChangedFilesSinceMain(repoPath string) ([]FileStatus, error) {
+	mainBranch := localMainBranch(repoPath)
+	if mainBranch == "" {
+		return nil, nil
+	}
+
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--name-status", "-z", mainBranch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff against %s: %w, output: %s", mainBranch, err, string(output))
+	}
+
+	return parseDiffNameStatusZ(string(output)), nil
+}
+
+// parseDiffNameStatusZ parses NUL-delimited `git diff --name-status -z` output
+// into a flat list of FileStatus. Unlike porcelain status there is no separate
+// staged/working pair — diff emits a single status code per path — so Working
+// holds the code and Staged is set to '.' (the icon mapping in gitStatusIcon
+// keys off either column, so a single code renders correctly).
+//
+// Records are NUL-separated: ordinary changes emit "<status>\0<path>", while
+// renames/copies emit "<status>\0<oldpath>\0<newpath>" — both halves must be
+// consumed and the NEW path is kept. It is split out from GetChangedFilesSinceMain
+// so it can be unit-tested without invoking git.
+func parseDiffNameStatusZ(output string) []FileStatus {
+	records := strings.Split(output, "\x00")
+	var files []FileStatus
+
+	for i := 0; i < len(records); {
+		status := records[i]
+		if status == "" {
+			i++
+			continue
+		}
+		statusChar := status[0]
+
+		// Rename/copy: status token, then OLD path, then NEW path.
+		if statusChar == 'R' || statusChar == 'C' {
+			if i+2 >= len(records) {
+				break
+			}
+			files = append(files, FileStatus{Path: records[i+2], Working: rune(statusChar), Staged: '.'})
+			i += 3
+			continue
+		}
+
+		// Ordinary: status token, then path.
+		if i+1 >= len(records) {
+			break
+		}
+		files = append(files, FileStatus{Path: records[i+1], Working: rune(statusChar), Staged: '.'})
+		i += 2
+	}
+
+	return files
+}
+
 // GetStatus returns detailed git status information for the repository at the given path
 func GetStatus(path string) (*StatusInfo, error) {
 	cmdBuilder := command.NewSafeBuilder()
@@ -259,21 +352,8 @@ func GetStatus(path string) (*StatusInfo, error) {
 func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead, behind int) {
 	cmdBuilder := command.NewSafeBuilder()
 
-	// Determine if main or master exists
-	mainBranch := ""
-	for _, branchName := range []string{"main", "master"} {
-		cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", "refs/heads/"+branchName)
-		if err != nil {
-			continue // Should not happen, but defensive
-		}
-		execCmd := cmd.Exec()
-		execCmd.Dir = repoPath
-		if execCmd.Run() == nil {
-			mainBranch = branchName
-			break
-		}
-	}
-
+	// Determine if main or master exists (shared resolution).
+	mainBranch := localMainBranch(repoPath)
 	if mainBranch == "" || currentBranch == mainBranch {
 		return 0, 0
 	}

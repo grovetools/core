@@ -104,6 +104,72 @@ func TestParseChangedFiles(t *testing.T) {
 	}
 }
 
+func TestParseDiffNameStatusZ(t *testing.T) {
+	// `git diff --name-status -z` emits the status token and each path as
+	// SEPARATE NUL-delimited records. Ordinary changes are "<status>\0<path>";
+	// renames/copies are "<status>\0<oldpath>\0<newpath>" and keep the NEW path.
+	rec := func(parts ...string) string { return strings.Join(parts, "\x00") + "\x00" }
+
+	tests := []struct {
+		name string
+		in   string
+		want []FileStatus
+	}{
+		{
+			name: "modified",
+			in:   rec("M", "file.go"),
+			want: []FileStatus{{Path: "file.go", Staged: '.', Working: 'M'}},
+		},
+		{
+			name: "added",
+			in:   rec("A", "added.go"),
+			want: []FileStatus{{Path: "added.go", Staged: '.', Working: 'A'}},
+		},
+		{
+			name: "deleted",
+			in:   rec("D", "gone.go"),
+			want: []FileStatus{{Path: "gone.go", Staged: '.', Working: 'D'}},
+		},
+		{
+			name: "renamed keeps new path and consumes old",
+			in:   rec("R100", "old.go", "new.go"),
+			want: []FileStatus{{Path: "new.go", Staged: '.', Working: 'R'}},
+		},
+		{
+			name: "path with a space",
+			in:   rec("M", "dir/my file.go"),
+			want: []FileStatus{{Path: "dir/my file.go", Staged: '.', Working: 'M'}},
+		},
+		{
+			name: "mixed records",
+			in: rec(
+				"M", "modified.go",
+				"R100", "orig.go", "renamed.go",
+				"A", "added.go",
+				"D", "deleted.go",
+			),
+			want: []FileStatus{
+				{Path: "modified.go", Staged: '.', Working: 'M'},
+				{Path: "renamed.go", Staged: '.', Working: 'R'},
+				{Path: "added.go", Staged: '.', Working: 'A'},
+				{Path: "deleted.go", Staged: '.', Working: 'D'},
+			},
+		},
+		{
+			name: "empty output",
+			in:   "",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseDiffNameStatusZ(tt.in)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestGetChangedFiles(t *testing.T) {
 	tempDir := t.TempDir()
 	setupGitRepo(t, tempDir)
