@@ -28,6 +28,112 @@ func setupGitRepo(t *testing.T, dir string) {
 	runGitCommand(t, dir, "config", "user.name", "Test User")
 }
 
+func TestParseChangedFiles(t *testing.T) {
+	// Records are NUL-delimited, mirroring `git status --porcelain=v2 -z`.
+	// Rename (2) records are immediately followed by a NUL-delimited original
+	// path that must be consumed rather than parsed as its own record.
+	rec := func(parts ...string) string { return strings.Join(parts, "\x00") + "\x00" }
+
+	tests := []struct {
+		name string
+		in   string
+		want []FileStatus
+	}{
+		{
+			name: "modified working tree",
+			in:   rec("1 .M N... 100644 100644 100644 aaa bbb file.go"),
+			want: []FileStatus{{Path: "file.go", Staged: '.', Working: 'M'}},
+		},
+		{
+			name: "staged added",
+			in:   rec("1 A. N... 000000 100644 100644 000 ccc added.go"),
+			want: []FileStatus{{Path: "added.go", Staged: 'A', Working: '.'}},
+		},
+		{
+			name: "deleted working tree",
+			in:   rec("1 .D N... 100644 100644 000000 ddd ddd gone.go"),
+			want: []FileStatus{{Path: "gone.go", Staged: '.', Working: 'D'}},
+		},
+		{
+			name: "staged modified, working modified",
+			in:   rec("1 MM N... 100644 100644 100644 eee fff both.go"),
+			want: []FileStatus{{Path: "both.go", Staged: 'M', Working: 'M'}},
+		},
+		{
+			name: "untracked",
+			in:   rec("? newfile.go"),
+			want: []FileStatus{{Path: "newfile.go", Staged: '?', Working: '?'}},
+		},
+		{
+			name: "renamed consumes original path record",
+			in:   rec("2 R. N... 100644 100644 100644 ggg hhh R100 new.go", "old.go"),
+			want: []FileStatus{{Path: "new.go", Staged: 'R', Working: '.'}},
+		},
+		{
+			name: "path with a space",
+			in:   rec("1 .M N... 100644 100644 100644 iii jjj dir/my file.go"),
+			want: []FileStatus{{Path: "dir/my file.go", Staged: '.', Working: 'M'}},
+		},
+		{
+			name: "mixed records",
+			in: rec(
+				"1 .M N... 100644 100644 100644 a b modified.go",
+				"2 R. N... 100644 100644 100644 c d R100 renamed.go", "orig.go",
+				"? untracked.go",
+				"1 A. N... 000000 100644 100644 e f staged.go",
+			),
+			want: []FileStatus{
+				{Path: "modified.go", Staged: '.', Working: 'M'},
+				{Path: "renamed.go", Staged: 'R', Working: '.'},
+				{Path: "untracked.go", Staged: '?', Working: '?'},
+				{Path: "staged.go", Staged: 'A', Working: '.'},
+			},
+		},
+		{
+			name: "empty output",
+			in:   "",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseChangedFiles(tt.in)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestGetChangedFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	setupGitRepo(t, tempDir)
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("initial"), 0o644))
+	runGitCommand(t, tempDir, "add", "initial.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "initial commit")
+
+	// Modify tracked, stage a new file, leave one untracked.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("changed"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "staged.txt"), []byte("staged"), 0o644))
+	runGitCommand(t, tempDir, "add", "staged.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "untracked.txt"), []byte("untracked"), 0o644))
+
+	files, err := GetChangedFiles(tempDir)
+	require.NoError(t, err)
+
+	byPath := make(map[string]FileStatus)
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+
+	require.Contains(t, byPath, "initial.txt")
+	assert.Equal(t, 'M', byPath["initial.txt"].Working)
+	require.Contains(t, byPath, "staged.txt")
+	assert.Equal(t, 'A', byPath["staged.txt"].Staged)
+	require.Contains(t, byPath, "untracked.txt")
+	assert.Equal(t, '?', byPath["untracked.txt"].Working)
+}
+
 func TestGetStatus(t *testing.T) {
 	t.Run("invalid path", func(t *testing.T) {
 		_, err := GetStatus("/non/existent/path")
