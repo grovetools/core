@@ -42,6 +42,112 @@ type StatusInfo struct {
 	BehindMainCount int `json:"behind_main_count"`
 }
 
+// FileStatus describes a single changed path from `git status --porcelain=v2`.
+// Staged is the 'X' column (index/staged state) and Working is the 'Y' column
+// (working-tree state) from the porcelain v2 status code. For untracked entries
+// both are set to '?'.
+type FileStatus struct {
+	Path    string
+	Staged  rune // The 'X' column from porcelain v2 (e.g., 'M', 'A', 'D', 'R', '.')
+	Working rune // The 'Y' column from porcelain v2 (e.g., 'M', 'D', '?', '.')
+}
+
+// GetChangedFiles returns the per-file change list for the repository at the
+// given path. Unlike GetStatus (which only counts), this preserves each
+// changed path along with its X/Y status code so callers can render a
+// browsable change tree.
+//
+// It runs `git status --porcelain=v2 -z --ignore-submodules`. The -z flag
+// NUL-delimits records (and the two halves of a rename record), which makes
+// paths containing spaces unambiguous.
+func GetChangedFiles(path string) ([]FileStatus, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "status", "--porcelain=v2", "-z", "--ignore-submodules")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = path
+	output, err := execCmd.Output()
+	if err != nil {
+		outputStr := string(output)
+		if strings.Contains(outputStr, "not a git repository") {
+			return nil, fmt.Errorf("not a git repository: %s", path)
+		}
+		// A new repo before its first commit has no changes to enumerate.
+		if strings.Contains(outputStr, "No commits yet") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get git status: %w, output: %s", err, outputStr)
+	}
+
+	return parseChangedFiles(string(output)), nil
+}
+
+// parseChangedFiles parses NUL-delimited `git status --porcelain=v2 -z` output
+// into a flat list of FileStatus. It is split out from GetChangedFiles so it
+// can be unit-tested without invoking git.
+func parseChangedFiles(output string) []FileStatus {
+	records := strings.Split(output, "\x00")
+	var files []FileStatus
+
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+		if record == "" {
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(record, "1 "):
+			// Ordinary: "1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>"
+			parts := strings.SplitN(record, " ", 9)
+			if len(parts) < 9 {
+				continue
+			}
+			files = append(files, fileStatusFromXY(parts[1], parts[8]))
+
+		case strings.HasPrefix(record, "2 "):
+			// Rename/copy: "2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <Xscore> <path>"
+			// followed by a separate NUL-delimited record holding the ORIGINAL
+			// path, which must be consumed so it isn't parsed on its own.
+			parts := strings.SplitN(record, " ", 10)
+			if len(parts) < 10 {
+				continue
+			}
+			files = append(files, fileStatusFromXY(parts[1], parts[9]))
+			i++ // skip the original-path record
+
+		case strings.HasPrefix(record, "u "):
+			// Unmerged: "u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>"
+			parts := strings.SplitN(record, " ", 11)
+			if len(parts) < 11 {
+				continue
+			}
+			files = append(files, fileStatusFromXY(parts[1], parts[10]))
+
+		case strings.HasPrefix(record, "? "):
+			// Untracked: "? <path>" — the whole remainder is the path.
+			files = append(files, FileStatus{
+				Path:    record[2:],
+				Staged:  '?',
+				Working: '?',
+			})
+		}
+	}
+
+	return files
+}
+
+// fileStatusFromXY builds a FileStatus from a porcelain v2 "XY" code and path.
+func fileStatusFromXY(xy, path string) FileStatus {
+	fs := FileStatus{Path: path}
+	if len(xy) >= 2 {
+		fs.Staged = rune(xy[0])
+		fs.Working = rune(xy[1])
+	}
+	return fs
+}
+
 // GetStatus returns detailed git status information for the repository at the given path
 func GetStatus(path string) (*StatusInfo, error) {
 	cmdBuilder := command.NewSafeBuilder()
