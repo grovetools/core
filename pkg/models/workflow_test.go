@@ -83,6 +83,7 @@ func TestWorkflowEventJSONRoundTrip(t *testing.T) {
 			WorkflowAgentStarted:   "agent_started",
 			WorkflowAgentCompleted: "agent_completed",
 			WorkflowRunStale:       "run_stale",
+			WorkflowRunCompleted:   "run_completed",
 		}
 		for k, s := range want {
 			if string(k) != s {

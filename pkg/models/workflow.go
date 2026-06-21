@@ -49,6 +49,11 @@ const (
 	// WorkflowRunStale marks a run whose session died or whose journal went
 	// quiet past the staleness threshold.
 	WorkflowRunStale WorkflowKind = "run_stale"
+	// WorkflowRunCompleted marks a run that reached a clean terminal state:
+	// the owning session ended (the real terminal trigger) with every started
+	// agent having a recorded result. Distinct from RunStale, which is
+	// reserved for session-ended-with-stragglers.
+	WorkflowRunCompleted WorkflowKind = "run_completed"
 )
 
 // WorkflowEvent source values.
@@ -123,7 +128,11 @@ type WorkflowRunState struct {
 	CompletedCount int                  `json:"completed_count"`
 	// Stale is set when the owning session died or the journal went quiet
 	// past the staleness threshold (never decided by the PID reaper).
-	Stale     bool      `json:"stale"`
+	Stale bool `json:"stale"`
+	// Completed is set when the run reached a clean terminal state: the
+	// owning session ended with every started agent having a result. Distinct
+	// from Stale (session ended with stragglers).
+	Completed bool      `json:"completed"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
