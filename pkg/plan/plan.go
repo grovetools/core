@@ -4,6 +4,7 @@
 package plan
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -23,6 +24,15 @@ const (
 
 	// DefaultRulesFile is the filename for plan-scoped default rules.
 	DefaultRulesFile = "default.rules"
+
+	// RollingPlanName is the name of the auto-created "rolling" plan used when
+	// no plan is specified — a shared home for quick tasks. Materialized lazily
+	// (and self-healed) via EnsureRollingPlan.
+	RollingPlanName = "rolling"
+
+	// rollingPlanConfigBody is the contents of the rolling plan's
+	// .grove-plan.yml marker. Kept identical to flow's historical inline body.
+	rollingPlanConfigBody = "# Rolling plan - auto-created for quick tasks without a formal plan.\n"
 )
 
 // ActivePlan returns the name of the currently active flow plan.
@@ -173,4 +183,62 @@ func ResolvePlansDir(workDir string) string {
 		return ""
 	}
 	return plansDir
+}
+
+// RollingPlanDir returns the absolute path to the rolling plan directory for
+// the workspace containing workDir, or "" if the plans dir cannot be resolved.
+func RollingPlanDir(workDir string) string {
+	return ResolvePlanDir(workDir, RollingPlanName)
+}
+
+// EnsureRollingPlan materializes the rolling plan directory and its
+// .grove-plan.yml marker for the workspace containing workDir, creating them if
+// missing. It is the single shared materializer for the rolling plan, used both
+// by the write path (flow add/chat with no plan) and by the read paths that
+// self-heal a missing rolling dir.
+//
+// It returns the resolved directory, whether THIS call wrote the marker
+// (created), and any error. created is true only when this process performed the
+// write — concurrent first-touch losers see created=false.
+//
+// Because ResolvePlansDir returns "" (not an error) when workDir is outside any
+// resolvable workspace, EnsureRollingPlan converts that to an explicit error so
+// callers never create a stray "rolling/" in an unrelated directory. It does
+// NOT print to stderr — callers decide whether/how to notify the user.
+func EnsureRollingPlan(workDir string) (dir string, created bool, err error) {
+	plansDir := ResolvePlansDir(workDir)
+	if plansDir == "" {
+		return "", false, fmt.Errorf("no workspace found for %q: cannot resolve rolling plan directory", workDir)
+	}
+
+	dir = filepath.Join(plansDir, RollingPlanName)
+	if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+		return "", false, fmt.Errorf("creating rolling plan directory: %w", mkErr)
+	}
+
+	// Heal on the marker file specifically, not just the directory: a dir that
+	// exists but lost its .grove-plan.yml still needs the marker written.
+	configPath := filepath.Join(dir, ".grove-plan.yml")
+	if _, statErr := os.Stat(configPath); statErr == nil {
+		return dir, false, nil // marker already present — nothing to do
+	} else if !os.IsNotExist(statErr) {
+		return "", false, fmt.Errorf("checking rolling plan marker: %w", statErr)
+	}
+
+	// Write the marker with O_CREATE|O_EXCL so concurrent first-touch has a
+	// single winner; losers observe IsExist and treat it as already created.
+	f, openErr := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if openErr != nil {
+		if os.IsExist(openErr) {
+			return dir, false, nil
+		}
+		return "", false, fmt.Errorf("creating rolling plan .grove-plan.yml: %w", openErr)
+	}
+	defer f.Close()
+
+	if _, writeErr := f.WriteString(rollingPlanConfigBody); writeErr != nil {
+		return "", false, fmt.Errorf("writing rolling plan .grove-plan.yml: %w", writeErr)
+	}
+
+	return dir, true, nil
 }
