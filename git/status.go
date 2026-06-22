@@ -50,6 +50,12 @@ type FileStatus struct {
 	Path    string
 	Staged  rune // The 'X' column from porcelain v2 (e.g., 'M', 'A', 'D', 'R', '.')
 	Working rune // The 'Y' column from porcelain v2 (e.g., 'M', 'D', '?', '.')
+
+	// LinesAdded / LinesDeleted are the per-file numstat counts merged in by the
+	// Get* functions (the parsers leave them zero). Binary files and untracked
+	// paths, which `git diff --numstat` does not report, stay at zero.
+	LinesAdded   int
+	LinesDeleted int
 }
 
 // GetChangedFiles returns the per-file change list for the repository at the
@@ -81,7 +87,107 @@ func GetChangedFiles(path string) ([]FileStatus, error) {
 		return nil, fmt.Errorf("failed to get git status: %w, output: %s", err, outputStr)
 	}
 
-	return parseChangedFiles(string(output)), nil
+	files := parseChangedFiles(string(output))
+
+	// Merge per-file line counts. Working-tree changes span both the unstaged
+	// (`git diff`) and staged (`git diff --cached`) sets, summed per path so a
+	// file with both shows its combined churn — matching the aggregate the
+	// sessionizer CHANGES column computes in GetExtendedStatus.
+	stats := getNumstatZ(path)
+	addNumstat(stats, getNumstatZ(path, "--cached"))
+	applyNumstat(files, stats)
+
+	return files, nil
+}
+
+// getNumstatZ runs `git diff --numstat -z [args...]` in repoPath and returns a
+// map of repo-relative path -> {added, deleted}. It is best-effort: any failure
+// yields an empty map so callers degrade to zero line counts rather than error.
+func getNumstatZ(repoPath string, args ...string) map[string][2]int {
+	cmdBuilder := command.NewSafeBuilder()
+	full := append([]string{"diff", "--numstat", "-z"}, args...)
+	cmd, err := cmdBuilder.Build(context.Background(), "git", full...)
+	if err != nil {
+		return map[string][2]int{}
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return map[string][2]int{}
+	}
+	return parseNumstatZ(string(output))
+}
+
+// parseNumstatZ parses NUL-delimited `git diff --numstat -z` output into a map
+// of path -> {added, deleted}. Each ordinary record is "<add>\t<del>\t<path>";
+// a rename emits "<add>\t<del>\t" followed by two more NUL records (old path,
+// new path), and the new path is kept. Binary files report "-" for the counts,
+// which parse to zero. Split out from getNumstatZ for unit testing.
+func parseNumstatZ(output string) map[string][2]int {
+	result := make(map[string][2]int)
+	records := strings.Split(output, "\x00")
+
+	for i := 0; i < len(records); {
+		record := records[i]
+		if record == "" {
+			i++
+			continue
+		}
+		parts := strings.SplitN(record, "\t", 3)
+		if len(parts) < 3 {
+			i++
+			continue
+		}
+		added := numstatCount(parts[0])
+		deleted := numstatCount(parts[1])
+
+		path := parts[2]
+		if path == "" {
+			// Rename/copy: the two following records are old then new path.
+			if i+2 >= len(records) {
+				break
+			}
+			path = records[i+2]
+			i += 3
+		} else {
+			i++
+		}
+		result[path] = [2]int{added, deleted}
+	}
+
+	return result
+}
+
+// numstatCount parses a numstat count field, mapping the binary "-" sentinel to 0.
+func numstatCount(field string) int {
+	if field == "-" {
+		return 0
+	}
+	n, err := strconv.Atoi(field)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// addNumstat sums src into dst per path (used to combine staged + unstaged).
+func addNumstat(dst, src map[string][2]int) {
+	for path, c := range src {
+		cur := dst[path]
+		dst[path] = [2]int{cur[0] + c[0], cur[1] + c[1]}
+	}
+}
+
+// applyNumstat copies the merged per-path counts onto the matching FileStatus
+// entries (paths are repo-relative with forward slashes in both sources).
+func applyNumstat(files []FileStatus, stats map[string][2]int) {
+	for i := range files {
+		if c, ok := stats[files[i].Path]; ok {
+			files[i].LinesAdded = c[0]
+			files[i].LinesDeleted = c[1]
+		}
+	}
 }
 
 // parseChangedFiles parses NUL-delimited `git status --porcelain=v2 -z` output
@@ -195,7 +301,13 @@ func GetChangedFilesSinceMain(repoPath string) ([]FileStatus, error) {
 		return nil, fmt.Errorf("failed to diff against %s: %w, output: %s", mainBranch, err, string(output))
 	}
 
-	return parseDiffNameStatusZ(string(output)), nil
+	files := parseDiffNameStatusZ(string(output))
+
+	// Per-file churn for the since-main diff: a single numstat pass against the
+	// same base (committed + working-tree delta from main).
+	applyNumstat(files, getNumstatZ(repoPath, mainBranch))
+
+	return files, nil
 }
 
 // parseDiffNameStatusZ parses NUL-delimited `git diff --name-status -z` output

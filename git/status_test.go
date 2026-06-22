@@ -170,6 +170,47 @@ func TestParseDiffNameStatusZ(t *testing.T) {
 	}
 }
 
+func TestParseNumstatZ(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want map[string][2]int
+	}{
+		{
+			name: "single file",
+			in:   "12\t3\tfile.go\x00",
+			want: map[string][2]int{"file.go": {12, 3}},
+		},
+		{
+			name: "multiple files",
+			in:   "12\t3\ta.go\x005\t0\tb.go\x00",
+			want: map[string][2]int{"a.go": {12, 3}, "b.go": {5, 0}},
+		},
+		{
+			name: "binary file dashes",
+			in:   "-\t-\timg.png\x00",
+			want: map[string][2]int{"img.png": {0, 0}},
+		},
+		{
+			name: "rename keeps new path",
+			in:   "4\t2\t\x00old.go\x00new.go\x00",
+			want: map[string][2]int{"new.go": {4, 2}},
+		},
+		{
+			name: "empty",
+			in:   "",
+			want: map[string][2]int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseNumstatZ(tt.in)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestGetChangedFiles(t *testing.T) {
 	tempDir := t.TempDir()
 	setupGitRepo(t, tempDir)
