@@ -6,11 +6,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/util/pathutil"
 )
+
+// registryMu serializes read-modify-write cycles through Update so concurrent
+// in-process writers cannot clobber each other. Save writes the WHOLE Entry
+// atomically (tmp-file + os.Rename, no torn reads), but a bare
+// Load → mutate → Save from two goroutines is last-write-wins on the whole
+// Entry. Update holds this lock for the full cycle. The daemon only Reconciles
+// (reads/merges) the registry — it does not Save — so in-process
+// serialization is sufficient and no on-disk lock (flock) is warranted, which
+// also avoids adding a file-locking dependency the ecosystem does not
+// currently use.
+var registryMu sync.Mutex
 
 // registryDir returns the directory that holds per-worktree JSON files:
 //
@@ -71,6 +83,29 @@ func Save(entry *Entry) error {
 		return fmt.Errorf("rename registry entry %s: %w", id, err)
 	}
 	return nil
+}
+
+// Update performs a serialized read-modify-write on the registry entry for id.
+// It locks registryMu for the entire Load(id) → mutate(&entry) → Save(entry)
+// cycle, so concurrent callers see each other's changes instead of clobbering
+// the whole Entry. mutate receives the freshly loaded entry and should modify
+// it in place (e.g. set keys in SessionState).
+//
+// If the entry does not exist, Load's error is returned unchanged (callers can
+// test it with os.IsNotExist). Any error from mutate's resulting Save is
+// returned too. The id must be the registry id (the <id>.json filename, i.e.
+// pathutil.WorktreeID of the entry's AbsPath) so the post-mutate Save — which
+// re-derives the id from entry.AbsPath — writes back to the same file.
+func Update(id string, mutate func(*Entry)) error {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	entry, err := Load(id)
+	if err != nil {
+		return err
+	}
+	mutate(entry)
+	return Save(entry)
 }
 
 // Delete removes the registry entry for id. Returns nil when the file was
