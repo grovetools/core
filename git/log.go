@@ -15,11 +15,17 @@ import (
 // page. Date is the author date (parsed from strict ISO-8601); it is the zero
 // time.Time when the date field is missing or unparseable.
 type LogEntry struct {
-	Hash    string    `json:"hash"`
-	Author  string    `json:"author"`
-	Email   string    `json:"email"`
-	Date    time.Time `json:"date"`
-	Subject string    `json:"subject"`
+	Hash   string    `json:"hash"`
+	Author string    `json:"author"`
+	Email  string    `json:"email"`
+	Date   time.Time `json:"date"`
+	// Refs is the decoration ref list (git %D) for this commit, e.g.
+	// "HEAD -> main, origin/main, tag: v1" — empty when the commit has no refs.
+	Refs string `json:"refs"`
+	// RelativeDate is git's humanized author date (%ar), e.g. "76 minutes ago".
+	// Snapshotted at fetch time, matching the `git log` CLI.
+	RelativeDate string `json:"relative_date"`
+	Subject      string `json:"subject"`
 }
 
 // GetLog returns up to limit commits from HEAD of the repository at repoPath,
@@ -33,8 +39,9 @@ type LogEntry struct {
 func GetLog(repoPath string, limit int) ([]LogEntry, error) {
 	cmdBuilder := command.NewSafeBuilder()
 	// %H hash, %an author name, %ae author email, %aI author date (ISO-8601
-	// strict, RFC3339-parseable), %s subject — Unit-Separator delimited.
-	args := []string{"log", "-z", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s"}
+	// strict, RFC3339-parseable), %D ref decorations, %ar relative author date,
+	// %s subject — Unit-Separator delimited.
+	args := []string{"log", "-z", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%ar%x1f%s"}
 	if limit > 0 {
 		args = append(args, "-n", strconv.Itoa(limit))
 	}
@@ -67,7 +74,7 @@ func GetLog(repoPath string, limit int) ([]LogEntry, error) {
 
 // parseLog parses NUL-delimited, Unit-Separator-fielded `git log` output into
 // LogEntry values. It is split out from GetLog so it can be unit-tested without
-// invoking git. Records with fewer than five fields are skipped defensively.
+// invoking git. Records with fewer than seven fields are skipped defensively.
 func parseLog(output string) []LogEntry {
 	records := strings.Split(output, "\x00")
 	var entries []LogEntry
@@ -77,14 +84,16 @@ func parseLog(output string) []LogEntry {
 			continue
 		}
 		fields := strings.Split(record, "\x1f")
-		if len(fields) < 5 {
+		if len(fields) < 7 {
 			continue
 		}
 		entry := LogEntry{
-			Hash:    fields[0],
-			Author:  fields[1],
-			Email:   fields[2],
-			Subject: fields[4],
+			Hash:         fields[0],
+			Author:       fields[1],
+			Email:        fields[2],
+			Refs:         fields[4],
+			RelativeDate: fields[5],
+			Subject:      fields[6],
 		}
 		if t, err := time.Parse(time.RFC3339, fields[3]); err == nil {
 			entry.Date = t
