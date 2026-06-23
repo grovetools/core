@@ -25,7 +25,10 @@ type LogEntry struct {
 	// RelativeDate is git's humanized author date (%ar), e.g. "76 minutes ago".
 	// Snapshotted at fetch time, matching the `git log` CLI.
 	RelativeDate string `json:"relative_date"`
-	Subject      string `json:"subject"`
+	// Parents is the commit's parent hashes (git %P); a merge has >1, the root
+	// commit has 0. Drives the in-app commit-graph lane computation.
+	Parents []string `json:"parents"`
+	Subject string   `json:"subject"`
 }
 
 // GetLog returns up to limit commits from HEAD of the repository at repoPath,
@@ -40,8 +43,10 @@ func GetLog(repoPath string, limit int) ([]LogEntry, error) {
 	cmdBuilder := command.NewSafeBuilder()
 	// %H hash, %an author name, %ae author email, %aI author date (ISO-8601
 	// strict, RFC3339-parseable), %D ref decorations, %ar relative author date,
-	// %s subject — Unit-Separator delimited.
-	args := []string{"log", "-z", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%ar%x1f%s"}
+	// %P parent hashes (space-separated), %s subject — Unit-Separator delimited.
+	// %s is kept LAST so a subject containing a Unit-Separator can't shift the
+	// other fields.
+	args := []string{"log", "-z", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%ar%x1f%P%x1f%s"}
 	if limit > 0 {
 		args = append(args, "-n", strconv.Itoa(limit))
 	}
@@ -74,7 +79,7 @@ func GetLog(repoPath string, limit int) ([]LogEntry, error) {
 
 // parseLog parses NUL-delimited, Unit-Separator-fielded `git log` output into
 // LogEntry values. It is split out from GetLog so it can be unit-tested without
-// invoking git. Records with fewer than seven fields are skipped defensively.
+// invoking git. Records with fewer than eight fields are skipped defensively.
 func parseLog(output string) []LogEntry {
 	records := strings.Split(output, "\x00")
 	var entries []LogEntry
@@ -84,7 +89,7 @@ func parseLog(output string) []LogEntry {
 			continue
 		}
 		fields := strings.Split(record, "\x1f")
-		if len(fields) < 7 {
+		if len(fields) < 8 {
 			continue
 		}
 		entry := LogEntry{
@@ -93,7 +98,8 @@ func parseLog(output string) []LogEntry {
 			Email:        fields[2],
 			Refs:         fields[4],
 			RelativeDate: fields[5],
-			Subject:      fields[6],
+			Parents:      parseParents(fields[6]),
+			Subject:      fields[7],
 		}
 		if t, err := time.Parse(time.RFC3339, fields[3]); err == nil {
 			entry.Date = t
@@ -102,4 +108,15 @@ func parseLog(output string) []LogEntry {
 	}
 
 	return entries
+}
+
+// parseParents splits git's space-separated %P field into parent hashes. A
+// root commit yields no parents (empty field => nil), a normal commit one, a
+// merge several.
+func parseParents(field string) []string {
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return nil
+	}
+	return strings.Fields(field)
 }

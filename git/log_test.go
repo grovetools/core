@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseLog(t *testing.T) {
-	// Records: <hash>\x1f<author>\x1f<email>\x1f<date>\x1f<refs>\x1f<rel>\x1f<subject>, NUL-joined.
+	// Records: <hash>\x1f<author>\x1f<email>\x1f<date>\x1f<refs>\x1f<rel>\x1f<parents>\x1f<subject>, NUL-joined.
 	rec := func(fields ...string) string {
 		out := ""
 		for i, f := range fields {
@@ -22,8 +22,8 @@ func TestParseLog(t *testing.T) {
 		}
 		return out
 	}
-	output := rec("abc123", "Ada", "ada@example.com", "2026-06-23T10:00:00-07:00", "HEAD -> main, origin/main", "2 hours ago", "feat: first") + "\x00" +
-		rec("def456", "Bob", "bob@example.com", "2026-06-22T09:00:00-07:00", "", "1 day ago", "fix: second\nwith newline") + "\x00"
+	output := rec("abc123", "Ada", "ada@example.com", "2026-06-23T10:00:00-07:00", "HEAD -> main, origin/main", "2 hours ago", "def456 999aaa", "feat: first") + "\x00" +
+		rec("def456", "Bob", "bob@example.com", "2026-06-22T09:00:00-07:00", "", "1 day ago", "", "fix: second\nwith newline") + "\x00"
 
 	entries := parseLog(output)
 	require.Len(t, entries, 2)
@@ -35,24 +35,29 @@ func TestParseLog(t *testing.T) {
 	assert.Equal(t, "2 hours ago", entries[0].RelativeDate)
 	assert.Equal(t, "feat: first", entries[0].Subject)
 	assert.False(t, entries[0].Date.IsZero())
+	// A merge commit's two parents are split on whitespace.
+	assert.Equal(t, []string{"def456", "999aaa"}, entries[0].Parents)
 
 	// A commit with no refs decoration parses with an empty Refs field.
 	assert.Equal(t, "", entries[1].Refs)
+	// An empty parents field (root commit) yields no parents.
+	assert.Empty(t, entries[1].Parents)
 	// A subject containing a newline survives because records are NUL-delimited.
 	assert.Equal(t, "fix: second\nwith newline", entries[1].Subject)
 }
 
 func TestParseLogSkipsMalformed(t *testing.T) {
 	// Trailing empty record and a short (5-field) record are both skipped; only
-	// the well-formed 7-field record parses.
+	// the well-formed 8-field record parses.
 	output := "onlyhash\x00" +
 		"h2\x1fa\x1fe\x1f2026-06-23T10:00:00Z\x1fshort\x00" +
-		"h\x1fa\x1fe\x1f2026-06-23T10:00:00Z\x1f\x1f3 days ago\x1fsubject\x00"
+		"h\x1fa\x1fe\x1f2026-06-23T10:00:00Z\x1f\x1f3 days ago\x1fparent1\x1fsubject\x00"
 	entries := parseLog(output)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "h", entries[0].Hash)
 	assert.Equal(t, "subject", entries[0].Subject)
 	assert.Equal(t, "3 days ago", entries[0].RelativeDate)
+	assert.Equal(t, []string{"parent1"}, entries[0].Parents)
 }
 
 func TestGetLog(t *testing.T) {
@@ -81,6 +86,10 @@ func TestGetLog(t *testing.T) {
 	// The tip commit carries a HEAD ref decoration, and a humanized date.
 	assert.Contains(t, entries[0].Refs, "HEAD")
 	assert.NotEmpty(t, entries[0].RelativeDate)
+	// The tip commit's sole parent is the earlier commit; the root has none.
+	require.Len(t, entries[0].Parents, 1)
+	assert.Equal(t, entries[1].Hash, entries[0].Parents[0])
+	assert.Empty(t, entries[1].Parents)
 }
 
 func TestGetLogRespectsLimit(t *testing.T) {
