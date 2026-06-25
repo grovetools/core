@@ -168,6 +168,17 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		if seedErr := claudetrust.SeedTrust(canonicalPaths...); seedErr != nil {
 			fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
 		}
+
+		// Seed the worktree's .claude/settings.local.json with the union of
+		// every member repo's paired-notebook directory, so flow agents can
+		// READ (no prompt) and WRITE (under /sandbox) the out-of-tree notebooks
+		// where briefings/plans/concepts/.artifacts live. opts.SiblingWorkspaces
+		// is the linked member-repo set; the provider (discovered above) carries
+		// the anchored-worktree NotebookName mapping. Best-effort: never abort
+		// worktree creation on failure.
+		if seedErr := SeedNotebookDirsForWorktree(worktreePath, opts.SiblingWorkspaces, provider); seedErr != nil {
+			fmt.Printf("Warning: failed to seed notebook dirs into worktree settings: %v\n", seedErr)
+		}
 	}
 
 	return worktreePath, nil
