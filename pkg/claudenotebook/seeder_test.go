@@ -11,7 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/grovetools/core/pkg/claudenotebook"
+	"github.com/grovetools/core/util/pathutil"
 )
+
+// worktreeEditRule builds the canonical worktree Edit rule the seeder is
+// expected to emit (symlink/case-resolved, matching Claude's resolved cwd).
+func worktreeEditRule(t *testing.T, wt string) string {
+	t.Helper()
+	canon, err := pathutil.CanonicalPath(wt)
+	if err != nil {
+		canon = wt
+	}
+	return "Edit(//" + strings.TrimPrefix(canon, "/") + "/**)"
+}
 
 const settingsRel = ".claude/settings.local.json"
 
@@ -251,8 +263,27 @@ func TestSeedSettings_EditRuleDerivation(t *testing.T) {
 	rules := allowRules(t, root)
 	assert.Contains(t, rules, "Edit(//abs/nbA/**)")
 	assert.Contains(t, rules, "Edit(//abs/nbB/**)")
-	assert.Contains(t, rules, "Edit(//"+strings.TrimPrefix(wt, "/")+"/**)")
+	assert.Contains(t, rules, worktreeEditRule(t, wt))
 	assertNoTmpLeak(t, wt)
+}
+
+// (1b) The worktree Edit rule is CANONICALIZED (symlinks resolved) so it matches
+// the cwd Claude compares against. On macOS t.TempDir() is a /var/folders symlink
+// to /private/var/folders; the emitted rule must use the resolved form, never the
+// raw symlink form (which would silently miss).
+func TestSeedSettings_WorktreeEditRuleCanonicalized(t *testing.T) {
+	wt := t.TempDir()
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA"}))
+
+	rules := allowRules(t, readSettings(t, wt))
+	canon, err := pathutil.CanonicalPath(wt)
+	require.NoError(t, err)
+	assert.Contains(t, rules, "Edit(//"+strings.TrimPrefix(canon, "/")+"/**)")
+	if canon != wt {
+		// The raw (unresolved) form must NOT appear — that was the bug.
+		assert.NotContains(t, rules, "Edit(//"+strings.TrimPrefix(wt, "/")+"/**)")
+	}
 }
 
 // (2a) Edit rules ride the notebook-dir gate, NOT the settings gate:
@@ -266,7 +297,7 @@ func TestSeedSettings_EditRulesRideDirGate_SettingsGateOff(t *testing.T) {
 	root := readSettings(t, wt)
 	rules := allowRules(t, root)
 	assert.Contains(t, rules, "Edit(//abs/nbA/**)")
-	assert.Contains(t, rules, "Edit(//"+strings.TrimPrefix(wt, "/")+"/**)")
+	assert.Contains(t, rules, worktreeEditRule(t, wt))
 }
 
 // (2b) With the notebook-dir gate off and a nil cfg, nothing is written (no
