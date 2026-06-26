@@ -99,6 +99,193 @@ func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 	return out
 }
 
+// ExtensionMergePolicy controls how a single [extension] block merges across
+// the grove config cascade. By default extension blocks merge like any other
+// config (deepMergeMaps: array/scalar leaves whole-replace, maps recurse). A
+// policy with AccumulateArrays=true switches array leaves under that extension
+// to UNION (accumulate down the cascade) instead, with an opt-out keyed by
+// InheritKey: a block whose `<InheritKey> = false` resets accumulation beneath
+// it (clean slate).
+//
+// This reproduces ClaudeConfig.Merge's semantics (core/pkg/claudenotebook/
+// config.go) in raw-map form, because core/config must NOT import the leaf
+// claudenotebook package. The two impls are kept behaviorally in sync — see the
+// drift note on unionRawArrays below.
+type ExtensionMergePolicy struct {
+	// AccumulateArrays unions array leaves down the cascade instead of
+	// whole-replacing them.
+	AccumulateArrays bool
+	// InheritKey is the bool key (e.g. "inherit") read at the top of an
+	// extension block: when explicitly false, that layer's subtree replaces
+	// the accumulated-below subtree wholesale.
+	InheritKey string
+}
+
+// extensionMergePolicies maps an extension key to its merge policy. Keys absent
+// from this map use the default whole-replace deepMergeMaps semantics, so
+// existing extensions (skills, notify, settings, …) are unaffected.
+var extensionMergePolicies = map[string]ExtensionMergePolicy{
+	"claude": {AccumulateArrays: true, InheritKey: "inherit"},
+}
+
+// RegisterExtensionMergePolicy registers (or overrides) the merge policy for an
+// extension key. Intended for downstream packages that want accumulate-down
+// semantics for their own [extension] block.
+func RegisterExtensionMergePolicy(key string, p ExtensionMergePolicy) {
+	extensionMergePolicies[key] = p
+}
+
+// mergeExtensions merges the override Extensions map into dst, dispatching per
+// extension key: keys WITH an accumulate policy union their array leaves (and
+// honor the per-block inherit opt-out); keys WITHOUT a policy fall back to the
+// existing whole-replace deepMergeMaps semantics. This is the cascade analog of
+// ClaudeConfig.Merge for the raw-map (merge-then-decode) path.
+func mergeExtensions(dst, src map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{})
+	for k, v := range dst {
+		out[k] = v
+	}
+	for k, vSrc := range src {
+		// Delete sentinel parity with deepMergeMaps: `_delete = true` drops
+		// the key entirely.
+		if mapSrc, ok := vSrc.(map[string]interface{}); ok {
+			if del, _ := mapSrc["_delete"].(bool); del {
+				delete(out, k)
+				continue
+			}
+		}
+
+		policy, hasPolicy := extensionMergePolicies[k]
+		if hasPolicy && policy.AccumulateArrays {
+			if vDst, ok := out[k]; ok {
+				if mapDst, okDst := vDst.(map[string]interface{}); okDst {
+					if mapSrc, okSrc := vSrc.(map[string]interface{}); okSrc {
+						out[k] = deepMergeMapsUnionWithInherit(mapDst, mapSrc, policy)
+						continue
+					}
+				}
+			}
+			out[k] = vSrc
+			continue
+		}
+
+		// No accumulate policy: replicate deepMergeMaps' per-key behavior
+		// (maps recurse, everything else whole-replaces).
+		if vDst, ok := out[k]; ok {
+			if mapDst, okDst := vDst.(map[string]interface{}); okDst {
+				if mapSrc, okSrc := vSrc.(map[string]interface{}); okSrc {
+					out[k] = deepMergeMaps(mapDst, mapSrc)
+					continue
+				}
+			}
+		}
+		out[k] = vSrc
+	}
+	return out
+}
+
+// deepMergeMapsUnionWithInherit merges src into dst with array-union leaf
+// semantics, honoring the per-block inherit opt-out. It is invoked at the top
+// of an accumulating extension block (e.g. the `claude` map). If
+// src[policy.InheritKey] is the bool false, src REPLACES dst wholesale (clears
+// accumulation from lower cascade layers); if absent or true, array leaves of
+// dst and src are unioned. The inherit key governs only THIS layer's reset; it
+// does not propagate into nested recursion.
+func deepMergeMapsUnionWithInherit(dst, src map[string]interface{}, policy ExtensionMergePolicy) map[string]interface{} {
+	if policy.InheritKey != "" {
+		if inherit, ok := src[policy.InheritKey].(bool); ok && !inherit {
+			// Clean slate: src subtree replaces the accumulated-below subtree.
+			return deepMergeMapsUnion(map[string]interface{}{}, src)
+		}
+	}
+	return deepMergeMapsUnion(dst, src)
+}
+
+// deepMergeMapsUnion recursively merges src into dst like deepMergeMaps, except
+// that two array leaves at the same key are UNIONED (order-preserving, deduped)
+// instead of whole-replaced. Nested maps recurse; scalars and other non-array
+// leaves keep highest-wins. The `_delete = true` sentinel is preserved.
+func deepMergeMapsUnion(dst, src map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{})
+	for k, v := range dst {
+		out[k] = v
+	}
+	for k, vSrc := range src {
+		// Delete sentinel: `_delete = true` in src drops the key entirely.
+		if mapSrc, ok := vSrc.(map[string]interface{}); ok {
+			if del, _ := mapSrc["_delete"].(bool); del {
+				delete(out, k)
+				continue
+			}
+		}
+		if vDst, ok := out[k]; ok {
+			// Both maps: recurse.
+			if mapDst, okDst := vDst.(map[string]interface{}); okDst {
+				if mapSrc, okSrc := vSrc.(map[string]interface{}); okSrc {
+					out[k] = deepMergeMapsUnion(mapDst, mapSrc)
+					continue
+				}
+			}
+			// Both arrays: union.
+			if isRawArray(vDst) && isRawArray(vSrc) {
+				out[k] = unionRawArrays(vDst, vSrc)
+				continue
+			}
+		}
+		// Scalar / non-array leaf / type mismatch: highest-wins.
+		out[k] = vSrc
+	}
+	return out
+}
+
+// isRawArray reports whether v is a config array leaf. Raw cascade maps decoded
+// from YAML/TOML use []interface{}, but hand-built maps (and some test
+// fixtures) may use []string — both count.
+func isRawArray(v interface{}) bool {
+	switch v.(type) {
+	case []interface{}, []string:
+		return true
+	default:
+		return false
+	}
+}
+
+// unionRawArrays returns the order-preserving, deduped union of two raw config
+// array leaves (a's elements first, then b's new elements). It handles both
+// []interface{} and []string element containers, coercing each element to its
+// fmt "%v" form for the dedupe key.
+//
+// DRIFT NOTE: this is the raw-map analog of unionStrings in
+// core/pkg/claudenotebook/config.go. The two implement one semantics across a
+// package boundary that forbids sharing (core/config must not import the leaf
+// claudenotebook); keep them behaviorally in sync.
+func unionRawArrays(a, b interface{}) []interface{} {
+	seen := make(map[string]struct{})
+	out := make([]interface{}, 0)
+	add := func(arr interface{}) {
+		switch v := arr.(type) {
+		case []interface{}:
+			for _, e := range v {
+				key := fmt.Sprintf("%v", e)
+				if _, ok := seen[key]; !ok {
+					seen[key] = struct{}{}
+					out = append(out, e)
+				}
+			}
+		case []string:
+			for _, e := range v {
+				if _, ok := seen[e]; !ok {
+					seen[e] = struct{}{}
+					out = append(out, e)
+				}
+			}
+		}
+	}
+	add(a)
+	add(b)
+	return out
+}
+
 // deepMergeMapsWithProvenance mirrors deepMergeMaps but also records which
 // layer contributed each leaf value. `sourceLabel` identifies the current src
 // layer (e.g. "project (environments.hybrid-api)"). `prefix` is the dotted
@@ -510,12 +697,15 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
-	// Merge extensions with recursive deep merge
+	// Merge extensions with recursive deep merge. mergeExtensions dispatches
+	// per extension key: keys with an accumulate policy (e.g. "claude") union
+	// their array leaves down the cascade; all other keys keep the existing
+	// whole-replace deepMergeMaps semantics.
 	if override.Extensions != nil {
 		if result.Extensions == nil {
 			result.Extensions = make(map[string]interface{})
 		}
-		result.Extensions = deepMergeMaps(result.Extensions, override.Extensions)
+		result.Extensions = mergeExtensions(result.Extensions, override.Extensions)
 	}
 
 	return &result

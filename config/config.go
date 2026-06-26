@@ -832,7 +832,14 @@ func applyOverlay(base, overlay *Config) {
 		base.Notebooks.Definitions = overlay.Notebooks.Definitions
 	}
 	if len(overlay.Extensions) > 0 {
-		base.Extensions = overlay.Extensions
+		// Route through mergeExtensions (not a wholesale replace) so an
+		// accumulating extension (e.g. "claude") keeps the arrays it has
+		// already unioned from lower cascade layers — a global
+		// grove.override.toml must not wipe that accumulation.
+		if base.Extensions == nil {
+			base.Extensions = make(map[string]interface{})
+		}
+		base.Extensions = mergeExtensions(base.Extensions, overlay.Extensions)
 	}
 }
 
