@@ -31,10 +31,17 @@ import (
 	"sort"
 )
 
-// seedEnvVar gates seeding. When set to "0", "false", or "off" the seeder is a
-// no-op and leaves settings.local.json untouched. Default (unset or anything
-// else) is ON. Mirrors claudetrust's GROVE_PRESEED_CLAUDE_TRUST gate.
-const seedEnvVar = "GROVE_SEED_CLAUDE_NOTEBOOK_DIRS"
+// seedNotebookDirsEnvVar gates notebook directory seeding. When set to "0",
+// "false", or "off" the seeder is a no-op and leaves settings.local.json
+// untouched. Default (unset or anything else) is ON. Mirrors claudetrust's
+// GROVE_PRESEED_CLAUDE_TRUST gate.
+const seedNotebookDirsEnvVar = "GROVE_SEED_CLAUDE_NOTEBOOK_DIRS"
+
+// seedSettingsEnvVar gates ClaudeConfig seeding. When set to "0", "false", or
+// "off" the SeedSettings function is a no-op for ClaudeConfig fields (it still
+// seeds notebook dirs if that gate is open). Default (unset or anything else)
+// is ON.
+const seedSettingsEnvVar = "GROVE_SEED_CLAUDE_SETTINGS"
 
 // SeedNotebookDirs merges the given absolute notebook directories into the
 // worktree's .claude/settings.local.json under BOTH:
@@ -57,12 +64,40 @@ const seedEnvVar = "GROVE_SEED_CLAUDE_NOTEBOOK_DIRS"
 //     warns; we must never clobber an unparseable user-owned file).
 //   - Unknown top-level keys and unrelated nested fields are preserved verbatim.
 func SeedNotebookDirs(worktreePath string, dirs []string) error {
-	switch os.Getenv(seedEnvVar) {
+	switch os.Getenv(seedNotebookDirsEnvVar) {
 	case "0", "false", "off":
 		return nil
 	}
-	dirs = dedupeNonEmpty(dirs)
-	if len(dirs) == 0 {
+	// Delegate to SeedSettings with nil config (notebook dirs only).
+	return SeedSettings(worktreePath, nil, dirs)
+}
+
+// SeedSettings merges the given ClaudeConfig and notebook directories into the
+// worktree's .claude/settings.local.json. This is the generalized entry point
+// that handles both:
+//
+//   - Notebook directories (permissions.additionalDirectories + sandbox.filesystem.allowWrite)
+//   - ClaudeConfig fields (permissions.allow, sandbox.*, sandbox.network.allowedDomains)
+//
+// The merge is additive and non-destructive: existing keys (including
+// user-added entries and unrelated settings) are preserved verbatim.
+//
+// Behavior:
+//   - Gate off (GROVE_SEED_CLAUDE_SETTINGS in {0,false,off}) -> ClaudeConfig fields skipped.
+//   - No config and no dirs -> no-op, nil.
+//   - Missing .claude/ dir -> created (0755).
+//   - Missing settings.local.json -> created from an empty object.
+//   - Malformed JSON -> returns an error WITHOUT touching the file.
+//   - Unknown top-level keys and unrelated nested fields are preserved verbatim.
+func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string) error {
+	notebookDirs = dedupeNonEmpty(notebookDirs)
+
+	// Check if there's anything to do.
+	settingsGateOff := isGateOff(seedSettingsEnvVar)
+	hasConfig := cfg != nil && !cfg.IsEmpty() && !settingsGateOff
+	hasDirs := len(notebookDirs) > 0
+
+	if !hasConfig && !hasDirs {
 		return nil
 	}
 
@@ -97,8 +132,34 @@ func SeedNotebookDirs(worktreePath string, dirs []string) error {
 		return fmt.Errorf("read %s: %w", settingsPath, readErr)
 	}
 
-	mergeStringArray(root, []string{"permissions", "additionalDirectories"}, dirs)
-	mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, dirs)
+	// Merge notebook directories (always write to both keys).
+	if hasDirs {
+		mergeStringArray(root, []string{"permissions", "additionalDirectories"}, notebookDirs)
+		mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, notebookDirs)
+	}
+
+	// Merge ClaudeConfig fields (only if gate is open and config is non-empty).
+	if hasConfig {
+		// permissions.allow
+		if len(cfg.Permissions.Allow) > 0 {
+			mergeStringArray(root, []string{"permissions", "allow"}, cfg.Permissions.Allow)
+		}
+
+		// sandbox booleans (only write if non-nil)
+		mergeBool(root, []string{"sandbox", "enabled"}, cfg.Sandbox.Enabled)
+		mergeBool(root, []string{"sandbox", "failIfUnavailable"}, cfg.Sandbox.FailIfUnavailable)
+		mergeBool(root, []string{"sandbox", "autoAllowBashIfSandboxed"}, cfg.Sandbox.AutoAllowBashIfSandboxed)
+
+		// sandbox.filesystem.allowWrite (from config, merged with notebook dirs)
+		if len(cfg.Sandbox.Filesystem.AllowWrite) > 0 {
+			mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, cfg.Sandbox.Filesystem.AllowWrite)
+		}
+
+		// sandbox.network.allowedDomains
+		if len(cfg.Sandbox.Network.AllowedDomains) > 0 {
+			mergeStringArray(root, []string{"sandbox", "network", "allowedDomains"}, cfg.Sandbox.Network.AllowedDomains)
+		}
+	}
 
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -115,6 +176,36 @@ func SeedNotebookDirs(worktreePath string, dirs []string) error {
 		return fmt.Errorf("rename %s -> %s: %w", tmpPath, settingsPath, err)
 	}
 	return nil
+}
+
+// isGateOff returns true if the given env var is set to "0", "false", or "off".
+func isGateOff(envVar string) bool {
+	switch os.Getenv(envVar) {
+	case "0", "false", "off":
+		return true
+	}
+	return false
+}
+
+// mergeBool walks/creates the nested object path in root and sets the leaf key
+// to the given boolean value. Only writes if val is non-nil. If the path does
+// not exist, it is created. Unlike mergeStringArray, this OVERWRITES an existing
+// value (grove.toml booleans win over local settings when explicitly set).
+func mergeBool(root map[string]any, path []string, val *bool) {
+	if val == nil {
+		return
+	}
+	// Descend to the parent object of the leaf key, creating objects as needed.
+	parent := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := parent[key].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			parent[key] = child
+		}
+		parent = child
+	}
+	parent[path[len(path)-1]] = *val
 }
 
 // mergeStringArray walks/creates the nested object path in root and appends any
