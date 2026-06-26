@@ -30,6 +30,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // seedNotebookDirsEnvVar gates notebook directory seeding. When set to "0",
@@ -155,7 +157,16 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 		for _, d := range notebookDirs {
 			editRules = append(editRules, editRuleForAbsDir(d))
 		}
-		editRules = append(editRules, editRuleForAbsDir(worktreePath))
+		// Canonicalize the worktree path (resolve symlinks + macOS case) so the
+		// Edit rule matches the cwd Claude actually compares against. The notebook
+		// dirs above arrive pre-canonicalized from the resolver, and the trust
+		// seeder canonicalizes likewise (prepare.go); an un-canonicalized
+		// //var/... rule would silently miss a /private/var/... cwd on macOS.
+		wtForEdit := worktreePath
+		if canon, err := pathutil.CanonicalPath(worktreePath); err == nil {
+			wtForEdit = canon
+		}
+		editRules = append(editRules, editRuleForAbsDir(wtForEdit))
 		mergeStringArray(root, []string{"permissions", "allow"}, editRules)
 	}
 
