@@ -35,6 +35,20 @@ package claudenotebook
 type ClaudeConfig struct {
 	Permissions ClaudePermissions `yaml:"permissions" toml:"permissions" jsonschema:"description=Claude Code permissions configuration"`
 	Sandbox     ClaudeSandbox     `yaml:"sandbox" toml:"sandbox" jsonschema:"description=Claude Code sandbox configuration"`
+	// Inherit, when explicitly false, opts this [claude] block out of the
+	// default accumulate-down (union) behavior: instead of unioning its arrays
+	// with the receiver (lower cascade layers / ecosystem root), the block's
+	// arrays REPLACE them wholesale (clean slate). Absent/true keeps the union.
+	// Pointer distinguishes unset (nil) from explicit false, like the sandbox
+	// bools. Kept OUT of IsEmpty so a lone `inherit = false` does not force a
+	// settings write.
+	//
+	// DRIFT NOTE: this mirrors the raw-map cascade semantics in core/config
+	// (deepMergeMapsUnionWithInherit / unionRawArrays, core/config/merge.go).
+	// The typed Merge here (Axis B member-union) and that raw union (Axis A
+	// cascade) are two impls of one semantics across a package boundary that
+	// forbids sharing — keep them behaviorally in sync.
+	Inherit *bool `yaml:"inherit" toml:"inherit" jsonschema:"description=When false, this block's arrays replace (rather than union with) lower cascade layers"`
 }
 
 // ClaudePermissions holds the permissions.* settings.
@@ -87,9 +101,18 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	if other == nil {
 		return
 	}
-	c.Permissions.Allow = unionStrings(c.Permissions.Allow, other.Permissions.Allow)
-	c.Sandbox.Filesystem.AllowWrite = unionStrings(c.Sandbox.Filesystem.AllowWrite, other.Sandbox.Filesystem.AllowWrite)
-	c.Sandbox.Network.AllowedDomains = unionStrings(c.Sandbox.Network.AllowedDomains, other.Sandbox.Network.AllowedDomains)
+	if other.Inherit != nil && !*other.Inherit {
+		// inherit=false: the incoming layer opts out of accumulation, so its
+		// arrays replace the receiver's wholesale instead of unioning. Mirrors
+		// deepMergeMapsUnionWithInherit in core/config/merge.go.
+		c.Permissions.Allow = append([]string(nil), other.Permissions.Allow...)
+		c.Sandbox.Filesystem.AllowWrite = append([]string(nil), other.Sandbox.Filesystem.AllowWrite...)
+		c.Sandbox.Network.AllowedDomains = append([]string(nil), other.Sandbox.Network.AllowedDomains...)
+	} else {
+		c.Permissions.Allow = unionStrings(c.Permissions.Allow, other.Permissions.Allow)
+		c.Sandbox.Filesystem.AllowWrite = unionStrings(c.Sandbox.Filesystem.AllowWrite, other.Sandbox.Filesystem.AllowWrite)
+		c.Sandbox.Network.AllowedDomains = unionStrings(c.Sandbox.Network.AllowedDomains, other.Sandbox.Network.AllowedDomains)
+	}
 
 	// For booleans, other (member) fills in gaps only if c (root) is nil.
 	// This implements ecosystem-root-wins precedence.
