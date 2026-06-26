@@ -83,6 +83,38 @@ func TestInheritNotInIsEmpty(t *testing.T) {
 	}
 }
 
+// TestMerge_AllowGroveToolsGapFill confirms allowGroveTools is a root-wins-gap
+// scalar: a member fills a nil root slot, but cannot override an explicit root
+// value, and a set root value survives the merge.
+func TestMerge_AllowGroveToolsGapFill(t *testing.T) {
+	t.Run("root nil + member true -> true", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{AllowGroveTools: boolPtr(true)}
+		root.Merge(member)
+		if root.AllowGroveTools == nil || !*root.AllowGroveTools {
+			t.Errorf("expected member to fill nil root to true, got %v", root.AllowGroveTools)
+		}
+	})
+
+	t.Run("root false + member true -> stays false", func(t *testing.T) {
+		root := &ClaudeConfig{AllowGroveTools: boolPtr(false)}
+		member := &ClaudeConfig{AllowGroveTools: boolPtr(true)}
+		root.Merge(member)
+		if root.AllowGroveTools == nil || *root.AllowGroveTools {
+			t.Errorf("expected explicit root false to win, got %v", root.AllowGroveTools)
+		}
+	})
+
+	t.Run("root true survives merge with nil member", func(t *testing.T) {
+		root := &ClaudeConfig{AllowGroveTools: boolPtr(true)}
+		member := &ClaudeConfig{}
+		root.Merge(member)
+		if root.AllowGroveTools == nil || !*root.AllowGroveTools {
+			t.Errorf("expected root allowGroveTools=true to survive, got %v", root.AllowGroveTools)
+		}
+	})
+}
+
 // TestDecode_InheritRoundTrips confirms a raw map decodes `inherit` into the
 // *bool field (mirrors UnmarshalExtension's mapstructure/yaml-tag decode).
 func TestDecode_InheritRoundTrips(t *testing.T) {
