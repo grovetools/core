@@ -179,6 +179,14 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		if seedErr := SeedNotebookDirsForWorktree(worktreePath, opts.SiblingWorkspaces, provider); seedErr != nil {
 			fmt.Printf("Warning: failed to seed notebook dirs into worktree settings: %v\n", seedErr)
 		}
+
+		// Seed the [claude] grove.toml profile (permissions.allow + sandbox
+		// settings) into the same .claude/settings.local.json, unioning every
+		// member repo's [claude] block. Best-effort: never abort worktree
+		// creation on failure.
+		if seedErr := SeedClaudeSettingsForWorktree(worktreePath, opts.SiblingWorkspaces, provider); seedErr != nil {
+			fmt.Printf("Warning: failed to seed claude settings into worktree settings: %v\n", seedErr)
+		}
 	}
 
 	return worktreePath, nil
