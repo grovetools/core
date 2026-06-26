@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // seedNotebookDirsEnvVar gates notebook directory seeding. When set to "0",
@@ -94,7 +95,11 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 
 	// Check if there's anything to do.
 	settingsGateOff := isGateOff(seedSettingsEnvVar)
-	hasConfig := cfg != nil && !cfg.IsEmpty() && !settingsGateOff
+	// allowGroveTools is a content signal that lives OUTSIDE IsEmpty (a lone
+	// flag must not be treated as empty), so the gate is widened to honor it:
+	// a config whose only signal is allowGroveTools=true still writes.
+	allowGroveTools := cfg != nil && cfg.AllowGroveTools != nil && *cfg.AllowGroveTools
+	hasConfig := cfg != nil && (!cfg.IsEmpty() || allowGroveTools) && !settingsGateOff
 	hasDirs := len(notebookDirs) > 0
 
 	if !hasConfig && !hasDirs {
@@ -136,13 +141,35 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 	if hasDirs {
 		mergeStringArray(root, []string{"permissions", "additionalDirectories"}, notebookDirs)
 		mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, notebookDirs)
+
+		// Auto-derive Edit() allow rules: additionalDirectories grants no-prompt
+		// READ, but in default permission mode the Edit/Write tool still prompts
+		// on out-of-tree writes. An Edit(//<abs>/**) rule in permissions.allow is
+		// the scoped write-permission complement, so it rides this same
+		// notebook-dir gate (and emits even when cfg is nil). One rule per
+		// notebook dir plus a narrow rule for just this worktree.
+		//
+		// Note: in local (single-repo) mode a notebook dir can resolve in-tree;
+		// an in-tree Edit() rule is harmless and dedup-safe via mergeStringArray.
+		editRules := make([]string, 0, len(notebookDirs)+1)
+		for _, d := range notebookDirs {
+			editRules = append(editRules, editRuleForAbsDir(d))
+		}
+		editRules = append(editRules, editRuleForAbsDir(worktreePath))
+		mergeStringArray(root, []string{"permissions", "allow"}, editRules)
 	}
 
 	// Merge ClaudeConfig fields (only if gate is open and config is non-empty).
 	if hasConfig {
-		// permissions.allow
-		if len(cfg.Permissions.Allow) > 0 {
-			mergeStringArray(root, []string{"permissions", "allow"}, cfg.Permissions.Allow)
+		// permissions.allow (config rules plus, when allowGroveTools is set, the
+		// expanded canonical grove-tool Bash rules). Additive/dedup-safe via the
+		// same mergeStringArray.
+		allowRules := append([]string(nil), cfg.Permissions.Allow...)
+		if allowGroveTools {
+			allowRules = append(allowRules, groveToolBashRules()...)
+		}
+		if len(allowRules) > 0 {
+			mergeStringArray(root, []string{"permissions", "allow"}, allowRules)
 		}
 
 		// sandbox booleans (only write if non-nil)
@@ -176,6 +203,35 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 		return fmt.Errorf("rename %s -> %s: %w", tmpPath, settingsPath, err)
 	}
 	return nil
+}
+
+// editRuleForAbsDir returns the Claude Code permission rule that grants
+// no-prompt Edit/Write access to everything under the given absolute directory.
+// The leading "//" is the mandatory absolute anchor: ccsettings'
+// resolveReadEditAnchor (grove-anthropic/pkg/ccsettings/path.go) drops one
+// slash so "//Users/x" -> "/Users/x", whereas a single leading "/" would be
+// interpreted as project-root-relative (wrong).
+func editRuleForAbsDir(absDir string) string {
+	return "Edit(//" + strings.TrimPrefix(filepath.ToSlash(absDir), "/") + "/**)"
+}
+
+// groveToolBashRules returns a Bash(<name>:*) allow rule for each canonical
+// grove ecosystem CLI. These are the real [binary].name values from the
+// ecosystem's grove.toml files — several differ from their repo directory
+// names (e.g. aglogs, groved). This list is hardcoded because this is a LEAF
+// package that must not import core/config or core/pkg/workspace.
+func groveToolBashRules() []string {
+	tools := []string{
+		"grove", "flow", "cx", "nb", "tend", "groved",
+		"grove-anthropic", "grove-gemini", "memory", "nav", "docgen",
+		"skills", "aglogs", "grove-env-cloud", "grove-syncd",
+		"git-viewer", "treemux", "tuimux", "grove-nvim",
+	}
+	rules := make([]string, len(tools))
+	for i, t := range tools {
+		rules[i] = "Bash(" + t + ":*)"
+	}
+	return rules
 }
 
 // isGateOff returns true if the given env var is set to "0", "false", or "off".

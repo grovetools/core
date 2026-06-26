@@ -49,6 +49,15 @@ type ClaudeConfig struct {
 	// cascade) are two impls of one semantics across a package boundary that
 	// forbids sharing — keep them behaviorally in sync.
 	Inherit *bool `yaml:"inherit" toml:"inherit" jsonschema:"description=When false, this block's arrays replace (rather than union with) lower cascade layers"`
+	// AllowGroveTools, when true, expands at seed time into a Bash(<tool>:*)
+	// permission rule for every canonical grove ecosystem CLI (grove, flow, cx,
+	// nb, ...), so agents launched in the worktree can invoke the grove tools
+	// without a per-command permission prompt. The expansion lives in the seeder
+	// (groveToolBashRules); this is just the opt-in flag. Pointer distinguishes
+	// unset (nil) from explicit false, like the sandbox bools. Kept OUT of
+	// IsEmpty (a lone flag is handled by a dedicated predicate in SeedSettings),
+	// but unlike a no-op it DOES force a write — see SeedSettings' widened gate.
+	AllowGroveTools *bool `yaml:"allowGroveTools" toml:"allowGroveTools" jsonschema:"description=When true, allow all canonical grove ecosystem CLIs (grove, flow, cx, nb, ...) via Bash(<tool>:*) rules"`
 }
 
 // ClaudePermissions holds the permissions.* settings.
@@ -124,6 +133,14 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	}
 	if c.Sandbox.AutoAllowBashIfSandboxed == nil && other.Sandbox.AutoAllowBashIfSandboxed != nil {
 		c.Sandbox.AutoAllowBashIfSandboxed = other.Sandbox.AutoAllowBashIfSandboxed
+	}
+	// AllowGroveTools is a root-wins-gap scalar like the sandbox bools: a member
+	// fills the slot only when the root left it nil. Note this scalar lives
+	// outside the array branch above, so inherit=false (which only REPLACES
+	// arrays wholesale) does NOT un-inherit it — a member's allowGroveTools=true
+	// still flows up through this gap-fill regardless of the inherit flag.
+	if c.AllowGroveTools == nil && other.AllowGroveTools != nil {
+		c.AllowGroveTools = other.AllowGroveTools
 	}
 }
 
