@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,9 +114,9 @@ func TestSeedNotebookDirs_PreservesAndAppends(t *testing.T) {
 	// Unrelated keys survive.
 	assert.Equal(t, "claude-opus-4-8", root["model"])
 	assert.Equal(t, "keep-me", root["someUserField"])
-	// Unrelated nested field survives.
-	perms := root["permissions"].(map[string]any)
-	assert.Equal(t, []any{"Bash"}, perms["allow"])
+	// Unrelated nested field survives (the auto-derived Edit rules are appended
+	// additively alongside it).
+	assert.Contains(t, allowRules(t, root), "Bash")
 	// User entries preserved AND notebook dir appended in both arrays.
 	assert.ElementsMatch(t, []string{userRead, nb}, additionalDirs(t, root))
 	assert.ElementsMatch(t, []string{userWrite, nb}, allowWriteDirs(t, root))
@@ -215,6 +216,149 @@ func TestSeedNotebookDirs_Idempotent(t *testing.T) {
 	assert.Equal(t, []string{nb}, allowWriteDirs(t, root), "no duplicate on re-seed")
 }
 
+// allowRules returns the permissions.allow string array (or empty if absent).
+func allowRules(t *testing.T, root map[string]any) []string {
+	t.Helper()
+	perms, ok := root["permissions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := perms["allow"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// ============================================================================
+// Edit() auto-derivation tests (Task 1)
+// ============================================================================
+
+// (1) Edit-rule derivation: one Edit(//<dir>/**) per notebook dir + one for the
+// worktree, with the exact "//" absolute-anchor format.
+func TestSeedSettings_EditRuleDerivation(t *testing.T) {
+	wt := t.TempDir()
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA", "/abs/nbB"}))
+
+	root := readSettings(t, wt)
+	rules := allowRules(t, root)
+	assert.Contains(t, rules, "Edit(//abs/nbA/**)")
+	assert.Contains(t, rules, "Edit(//abs/nbB/**)")
+	assert.Contains(t, rules, "Edit(//"+strings.TrimPrefix(wt, "/")+"/**)")
+	assertNoTmpLeak(t, wt)
+}
+
+// (2a) Edit rules ride the notebook-dir gate, NOT the settings gate:
+// GROVE_SEED_CLAUDE_SETTINGS=off with dirs present still emits Edit rules.
+func TestSeedSettings_EditRulesRideDirGate_SettingsGateOff(t *testing.T) {
+	wt := t.TempDir()
+	t.Setenv("GROVE_SEED_CLAUDE_SETTINGS", "off")
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA"}))
+
+	root := readSettings(t, wt)
+	rules := allowRules(t, root)
+	assert.Contains(t, rules, "Edit(//abs/nbA/**)")
+	assert.Contains(t, rules, "Edit(//"+strings.TrimPrefix(wt, "/")+"/**)")
+}
+
+// (2b) With the notebook-dir gate off and a nil cfg, nothing is written (no
+// Edit rules, no file). The dir gate is enforced at the SeedNotebookDirs entry
+// point (the notebook-dir path), which the Edit rules ride.
+func TestSeedSettings_EditRulesRideDirGate_DirGateOff(t *testing.T) {
+	wt := t.TempDir()
+	t.Setenv("GROVE_SEED_CLAUDE_NOTEBOOK_DIRS", "off")
+
+	require.NoError(t, claudenotebook.SeedNotebookDirs(wt, []string{"/abs/nbA"}))
+
+	_, err := os.Stat(filepath.Join(wt, settingsRel))
+	assert.True(t, os.IsNotExist(err), "dir gate off + nil cfg must not create the file")
+}
+
+// (3) Re-seeding dedups Edit rules and preserves user-added allow rules.
+func TestSeedSettings_EditRuleDedupNoClobber(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	// Pre-seed one Edit rule (the one we'll re-derive) + a user rule.
+	preExisting := "Edit(//abs/nbA/**)"
+	userRule := "Bash(make:*)"
+	seed := map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{preExisting, userRule},
+		},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA"}))
+
+	rules := allowRules(t, readSettings(t, wt))
+	// No duplicate of the pre-existing Edit rule.
+	count := 0
+	for _, r := range rules {
+		if r == preExisting {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "pre-existing Edit rule must not be duplicated")
+	// User rule preserved.
+	assert.Contains(t, rules, userRule, "user-added rule must be preserved")
+}
+
+// ============================================================================
+// allowGroveTools expansion tests (Task 2)
+// ============================================================================
+
+// (4) allowGroveTools=true with empty Allow and nil dirs expands into
+// Bash(<tool>:*) rules AND writes the file (proves the widened hasConfig gate).
+func TestSeedSettings_AllowGroveToolsExpansion(t *testing.T) {
+	wt := t.TempDir()
+
+	cfg := &claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(true)}
+	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+
+	// The file is written even though the only signal is the flag.
+	_, statErr := os.Stat(filepath.Join(wt, settingsRel))
+	require.NoError(t, statErr, "lone allowGroveTools=true must write the file")
+
+	rules := allowRules(t, readSettings(t, wt))
+	for _, want := range []string{"Bash(grove:*)", "Bash(flow:*)", "Bash(groved:*)", "Bash(aglogs:*)", "Bash(nb:*)"} {
+		assert.Contains(t, rules, want)
+	}
+	assertNoTmpLeak(t, wt)
+}
+
+// (5) allowGroveTools nil or explicit false expands into nothing.
+func TestSeedSettings_AllowGroveToolsOffNoExpansion(t *testing.T) {
+	t.Run("nil flag", func(t *testing.T) {
+		wt := t.TempDir()
+		cfg := &claudenotebook.ClaudeConfig{
+			Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
+		}
+		require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+		assert.NotContains(t, allowRules(t, readSettings(t, wt)), "Bash(grove:*)")
+	})
+
+	t.Run("false flag", func(t *testing.T) {
+		wt := t.TempDir()
+		cfg := &claudenotebook.ClaudeConfig{
+			AllowGroveTools: boolPtr(false),
+			Permissions:     claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
+		}
+		require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+		assert.NotContains(t, allowRules(t, readSettings(t, wt)), "Bash(grove:*)")
+	})
+}
+
 // ============================================================================
 // SeedSettings tests — ClaudeConfig support
 // ============================================================================
@@ -280,9 +424,12 @@ func TestSeedSettings_WithClaudeConfig(t *testing.T) {
 
 	root := readSettings(t, wt)
 
-	// Check permissions.allow
-	allowRules := stringSliceAt(t, root, "permissions", "allow")
-	assert.ElementsMatch(t, []string{"Bash(git:*)", "Read(*.md)"}, allowRules)
+	// Check permissions.allow — config rules present (alongside the auto-derived
+	// Edit rules from the notebook dir + worktree, which ride the dir gate).
+	allow := stringSliceAt(t, root, "permissions", "allow")
+	assert.Contains(t, allow, "Bash(git:*)")
+	assert.Contains(t, allow, "Read(*.md)")
+	assert.Contains(t, allow, "Edit(//Users/dev/notebooks/core/**)")
 
 	// Check permissions.additionalDirectories (from notebook dirs)
 	assert.ElementsMatch(t, []string{"/Users/dev/notebooks/core"}, additionalDirs(t, root))
@@ -308,10 +455,10 @@ func TestSeedSettings_WithClaudeConfig(t *testing.T) {
 // written, false is written explicitly, and true is written.
 func TestSeedSettings_MergeBoolNilVsFalseVsTrue(t *testing.T) {
 	tests := []struct {
-		name            string
-		enabled         *bool
-		expectExists    bool
-		expectValue     bool
+		name         string
+		enabled      *bool
+		expectExists bool
+		expectValue  bool
 	}{
 		{
 			name:         "nil - should not write key",
@@ -431,11 +578,12 @@ func TestSeedSettings_GateOff(t *testing.T) {
 			assert.Contains(t, additionalDirs(t, root), "/Users/dev/notebooks/core")
 			assert.Contains(t, allowWriteDirs(t, root), "/Users/dev/notebooks/core")
 
-			// ClaudeConfig fields should NOT be seeded.
-			perms, ok := root["permissions"].(map[string]any)
-			require.True(t, ok)
-			_, hasAllow := perms["allow"]
-			assert.False(t, hasAllow, "permissions.allow should not be written when gate is off")
+			// ClaudeConfig allow rules should NOT be seeded when the settings
+			// gate is off. (The auto-derived Edit rules DO ride the dir gate, so
+			// permissions.allow may exist — but the config's "ShouldNotAppear"
+			// rule must be absent.)
+			assert.NotContains(t, allowRules(t, root), "ShouldNotAppear",
+				"config permissions.allow should not be written when gate is off")
 
 			sandbox, ok := root["sandbox"].(map[string]any)
 			require.True(t, ok)
