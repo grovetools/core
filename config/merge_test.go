@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -879,6 +880,288 @@ func TestDeepMergeMaps_DeleteSentinel(t *testing.T) {
 	}
 	if _, present := services["web"]; !present {
 		t.Errorf("expected services.web to be added from src")
+	}
+}
+
+// claudeAllow is a small helper extracting permissions.allow from a merged
+// Extensions["claude"] subtree as []string for assertions.
+func claudeAllow(t *testing.T, ext map[string]interface{}) []string {
+	t.Helper()
+	claude, ok := ext["claude"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected claude extension map, got %T", ext["claude"])
+	}
+	perms, ok := claude["permissions"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected claude.permissions map, got %T", claude["permissions"])
+	}
+	return rawToStrings(perms["allow"])
+}
+
+// rawToStrings coerces a raw config array leaf ([]interface{} or []string) to
+// []string for assertions.
+func rawToStrings(v interface{}) []string {
+	switch arr := v.(type) {
+	case []string:
+		return arr
+	case []interface{}:
+		out := make([]string, len(arr))
+		for i, e := range arr {
+			out[i] = fmt.Sprintf("%v", e)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func claudeBlock(allow []string, inherit *bool) map[string]interface{} {
+	perms := map[string]interface{}{"allow": allow}
+	claude := map[string]interface{}{"permissions": perms}
+	if inherit != nil {
+		claude["inherit"] = *inherit
+	}
+	return map[string]interface{}{"claude": claude}
+}
+
+// TestMergeExtensions_ClaudeArrayUnionAcrossLayers verifies that the [claude]
+// extension accumulates (unions) array leaves across three layered maps, with
+// order-preserving dedupe.
+func TestMergeExtensions_ClaudeArrayUnionAcrossLayers(t *testing.T) {
+	global := claudeBlock([]string{"GlobalOnly(g:*)", "Shared(x:*)"}, nil)
+	eco := claudeBlock([]string{"EcoWins(e:*)", "Shared(x:*)"}, nil)
+	proj := claudeBlock([]string{"ProjWins(p:*)"}, nil)
+
+	merged := mergeExtensions(mergeExtensions(global, eco), proj)
+	got := claudeAllow(t, merged)
+
+	want := []string{"GlobalOnly(g:*)", "Shared(x:*)", "EcoWins(e:*)", "ProjWins(p:*)"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order/dedupe mismatch: expected %v, got %v", want, got)
+		}
+	}
+}
+
+// TestMergeExtensions_ScalarAndBoolHighestWins verifies that scalar and bool
+// leaves under an accumulating extension still follow highest-wins (only array
+// leaves union).
+func TestMergeExtensions_ScalarAndBoolHighestWins(t *testing.T) {
+	low := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"sandbox": map[string]interface{}{
+				"enabled":           false,
+				"failIfUnavailable": false,
+			},
+		},
+	}
+	high := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"sandbox": map[string]interface{}{
+				"enabled": true,
+			},
+		},
+	}
+
+	merged := mergeExtensions(low, high)
+	sandbox := merged["claude"].(map[string]interface{})["sandbox"].(map[string]interface{})
+	if sandbox["enabled"] != true {
+		t.Errorf("expected enabled overridden to true (highest-wins), got %v", sandbox["enabled"])
+	}
+	if sandbox["failIfUnavailable"] != false {
+		t.Errorf("expected failIfUnavailable preserved as false, got %v", sandbox["failIfUnavailable"])
+	}
+}
+
+// TestMergeExtensions_NestedMapRecursion verifies that distinct sibling sandbox
+// sub-keys from different layers coexist (map recursion holds under the union
+// merger).
+func TestMergeExtensions_NestedMapRecursion(t *testing.T) {
+	global := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"sandbox": map[string]interface{}{
+				"network": map[string]interface{}{
+					"allowedDomains": []string{"global.example.com"},
+				},
+			},
+		},
+	}
+	eco := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"sandbox": map[string]interface{}{
+				"filesystem": map[string]interface{}{
+					"allowWrite": []string{"/eco-dir"},
+				},
+			},
+		},
+	}
+
+	merged := mergeExtensions(global, eco)
+	sandbox := merged["claude"].(map[string]interface{})["sandbox"].(map[string]interface{})
+	net, ok := sandbox["network"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected sandbox.network map to survive, got %T", sandbox["network"])
+	}
+	if dom := rawToStrings(net["allowedDomains"]); len(dom) != 1 || dom[0] != "global.example.com" {
+		t.Errorf("expected network.allowedDomains preserved, got %v", net["allowedDomains"])
+	}
+	fsys, ok := sandbox["filesystem"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected sandbox.filesystem map to survive, got %T", sandbox["filesystem"])
+	}
+	if w := rawToStrings(fsys["allowWrite"]); len(w) != 1 || w[0] != "/eco-dir" {
+		t.Errorf("expected filesystem.allowWrite preserved, got %v", fsys["allowWrite"])
+	}
+}
+
+// TestMergeExtensions_InheritFalseResetsAccumulation verifies that a src layer
+// with inherit=false discards the accumulated-below arrays (clean slate).
+func TestMergeExtensions_InheritFalseResetsAccumulation(t *testing.T) {
+	f := false
+	global := claudeBlock([]string{"GlobalOnly(g:*)"}, nil)
+	eco := claudeBlock([]string{"EcoWins(e:*)"}, nil)
+	proj := claudeBlock([]string{"SvcBOnly(b:*)"}, &f)
+
+	merged := mergeExtensions(mergeExtensions(global, eco), proj)
+	got := claudeAllow(t, merged)
+
+	if len(got) != 1 || got[0] != "SvcBOnly(b:*)" {
+		t.Fatalf("expected inherit=false to reset accumulation to [SvcBOnly(b:*)], got %v", got)
+	}
+}
+
+// TestMergeExtensions_InheritTrueStillUnions verifies that an explicit
+// inherit=true behaves like absent (union, not reset).
+func TestMergeExtensions_InheritTrueStillUnions(t *testing.T) {
+	tr := true
+	global := claudeBlock([]string{"GlobalOnly(g:*)"}, nil)
+	proj := claudeBlock([]string{"ProjWins(p:*)"}, &tr)
+
+	merged := mergeExtensions(global, proj)
+	got := claudeAllow(t, merged)
+	if len(got) != 2 {
+		t.Fatalf("expected inherit=true to union, got %v", got)
+	}
+}
+
+// TestMergeExtensions_DeleteSentinel verifies the `_delete = true` sentinel
+// still drops a key under the union merger.
+func TestMergeExtensions_DeleteSentinel(t *testing.T) {
+	low := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"permissions": map[string]interface{}{
+				"allow": []string{"Keep(k:*)"},
+			},
+			"sandbox": map[string]interface{}{
+				"network": map[string]interface{}{
+					"allowedDomains": []string{"drop.example.com"},
+				},
+			},
+		},
+	}
+	high := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"sandbox": map[string]interface{}{
+				"network": map[string]interface{}{"_delete": true},
+			},
+		},
+	}
+
+	merged := mergeExtensions(low, high)
+	sandbox := merged["claude"].(map[string]interface{})["sandbox"].(map[string]interface{})
+	if _, present := sandbox["network"]; present {
+		t.Errorf("expected sandbox.network deleted, still present: %v", sandbox["network"])
+	}
+	if got := claudeAllow(t, merged); len(got) != 1 || got[0] != "Keep(k:*)" {
+		t.Errorf("expected permissions.allow preserved, got %v", got)
+	}
+}
+
+// TestMergeExtensions_BackwardCompatNonPolicyKeyReplaces verifies that a claude
+// extension unions while a non-policy extension (skills) still whole-replaces
+// its array leaf.
+func TestMergeExtensions_BackwardCompatNonPolicyKeyReplaces(t *testing.T) {
+	low := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"permissions": map[string]interface{}{"allow": []string{"Low(l:*)"}},
+		},
+		"skills": map[string]interface{}{
+			"enabled": []string{"a", "b"},
+		},
+	}
+	high := map[string]interface{}{
+		"claude": map[string]interface{}{
+			"permissions": map[string]interface{}{"allow": []string{"High(h:*)"}},
+		},
+		"skills": map[string]interface{}{
+			"enabled": []string{"c"},
+		},
+	}
+
+	merged := mergeExtensions(low, high)
+
+	if got := claudeAllow(t, merged); len(got) != 2 {
+		t.Errorf("expected claude allow unioned to 2 entries, got %v", got)
+	}
+
+	skills := merged["skills"].(map[string]interface{})
+	enabled, ok := skills["enabled"].([]string)
+	if !ok {
+		t.Fatalf("expected skills.enabled []string (whole-replaced), got %T", skills["enabled"])
+	}
+	if len(enabled) != 1 || enabled[0] != "c" {
+		t.Errorf("expected skills.enabled whole-replaced to [c], got %v", enabled)
+	}
+}
+
+// TestApplyOverlay_DoesNotWipeClaudeAccumulation verifies the second merge path
+// (applyOverlay, used by grove.override.toml) routes through mergeExtensions so
+// it unions rather than wholesale-replacing accumulated claude arrays.
+func TestApplyOverlay_DoesNotWipeClaudeAccumulation(t *testing.T) {
+	base := &Config{
+		Extensions: claudeBlock([]string{"BaseAccumulated(a:*)"}, nil),
+	}
+	overlay := &Config{
+		Extensions: claudeBlock([]string{"OverrideAdded(o:*)"}, nil),
+	}
+
+	applyOverlay(base, overlay)
+	got := claudeAllow(t, base.Extensions)
+
+	if len(got) != 2 {
+		t.Fatalf("expected applyOverlay to union (keep accumulation), got %v", got)
+	}
+	foundBase, foundOverride := false, false
+	for _, s := range got {
+		if s == "BaseAccumulated(a:*)" {
+			foundBase = true
+		}
+		if s == "OverrideAdded(o:*)" {
+			foundOverride = true
+		}
+	}
+	if !foundBase || !foundOverride {
+		t.Errorf("expected both base-accumulated and overlay entries, got %v", got)
+	}
+}
+
+// TestUnionRawArrays_MixedElementTypes verifies the helper handles both
+// []interface{} and []string containers and dedupes by string coercion.
+func TestUnionRawArrays_MixedElementTypes(t *testing.T) {
+	a := []interface{}{"x", "y"}
+	b := []string{"y", "z"}
+	got := unionRawArrays(a, b)
+	want := []string{"x", "y", "z"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if fmt.Sprintf("%v", got[i]) != want[i] {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
 	}
 }
 
