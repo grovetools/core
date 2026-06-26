@@ -118,6 +118,61 @@ func SeedNotebookDirsForWorktree(worktreePath string, repos []string, provider *
 	return claudenotebook.SeedNotebookDirs(worktreePath, dirs)
 }
 
+// SeedClaudeSettingsForWorktree resolves the [claude] grove.toml extension from
+// each member repo linked into the worktree, unions their arrays, and seeds the
+// combined profile into the worktree's .claude/settings.local.json alongside
+// the paired notebook directories.
+//
+// This is the comprehensive seeder that handles both:
+//   - Notebook directories (for out-of-tree read/write access)
+//   - Claude Code permissions and sandbox settings from [claude] config
+//
+// For arrays (permissions.allow, sandbox.filesystem.allowWrite,
+// sandbox.network.allowedDomains), the values from all member repos are unioned.
+// For booleans (sandbox.enabled, failIfUnavailable, autoAllowBashIfSandboxed),
+// the ecosystem root's value wins; member repos fill gaps only if the root
+// leaves them nil.
+//
+// repos is the set of member-repo subdir names (e.g. ["core","nb"]) linked into
+// worktreePath. provider may be nil; resolution falls back to per-path
+// classification when it is.
+func SeedClaudeSettingsForWorktree(worktreePath string, repos []string, provider *Provider) error {
+	// Load the worktree's own config first (ecosystem root values take precedence).
+	rootCfg, _ := config.LoadFrom(worktreePath)
+	var rootClaudeCfg claudenotebook.ClaudeConfig
+	if rootCfg != nil {
+		_ = rootCfg.UnmarshalExtension("claude", &rootClaudeCfg)
+	}
+
+	// Union across all member repos.
+	for _, repo := range repos {
+		if repo == "" {
+			continue
+		}
+		repoPath := filepath.Join(worktreePath, repo)
+		repoCfg, err := config.LoadFrom(repoPath)
+		if err != nil || repoCfg == nil {
+			continue
+		}
+		var memberClaudeCfg claudenotebook.ClaudeConfig
+		if err := repoCfg.UnmarshalExtension("claude", &memberClaudeCfg); err != nil {
+			continue
+		}
+		// Merge member config into root (root wins for booleans, arrays union).
+		rootClaudeCfg.Merge(&memberClaudeCfg)
+	}
+
+	// Resolve notebook directories for all member repos.
+	dirs := resolveNotebookDirsForRepos(worktreePath, repos, provider)
+
+	// Pass to the leaf seeder (handles both config and notebook dirs).
+	var cfgPtr *claudenotebook.ClaudeConfig
+	if !rootClaudeCfg.IsEmpty() {
+		cfgPtr = &rootClaudeCfg
+	}
+	return claudenotebook.SeedSettings(worktreePath, cfgPtr, dirs)
+}
+
 // resolveNotebookDirsForRepos maps each member repo subdir to its paired
 // notebook root directory. The result is NOT deduped here (the seeder dedupes
 // and sorts), but unresolvable repos are silently dropped.
