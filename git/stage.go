@@ -58,6 +58,27 @@ func GetBlobHash(repoPath, filePath string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// GetBlobContent returns the raw bytes of the git blob object identified by
+// blobHash within repoPath, via `git cat-file blob <blobHash>`. It backs
+// git-viewer's since-review diff, which materializes the last-reviewed blob to a
+// temp file to diff against the working tree (fugitive's :Gvdiffsplit does not
+// accept a raw blob SHA, so the diff base must be a real file). The blob must
+// exist in the object database; an unknown hash errors.
+func GetBlobContent(repoPath, blobHash string) ([]byte, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "cat-file", "blob", blobHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file blob %s failed: %w", blobHash, err)
+	}
+	return output, nil
+}
+
 // runFileGitCommand validates filePath with the shared "fileName" validator
 // (rejecting traversal and shell metacharacters) and runs the given git
 // subcommand in repoPath. It centralizes the exec.Command wiring used by the
