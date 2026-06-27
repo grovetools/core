@@ -241,6 +241,39 @@ func TestGetChangedFiles(t *testing.T) {
 	assert.Equal(t, '?', byPath["untracked.txt"].Working)
 }
 
+// TestGetChangedFilesUntrackedNewDir guards the -uall behavior: a new file in a
+// directory that does not yet contain any tracked files must surface as the file
+// itself, not as a collapsed `dir/` record. Without --untracked-files=all git
+// reports only the directory, which the change tree renders as an empty folder.
+func TestGetChangedFilesUntrackedNewDir(t *testing.T) {
+	tempDir := t.TempDir()
+	setupGitRepo(t, tempDir)
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "initial.txt"), []byte("initial"), 0o644))
+	runGitCommand(t, tempDir, "add", "initial.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "initial commit")
+
+	// A brand-new directory with files, none of which the repo has ever tracked.
+	newDir := filepath.Join(tempDir, "newpkg")
+	require.NoError(t, os.MkdirAll(newDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(newDir, "a.go"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(newDir, "b.go"), []byte("b"), 0o644))
+
+	files, err := GetChangedFiles(tempDir)
+	require.NoError(t, err)
+
+	byPath := make(map[string]FileStatus)
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+
+	// Each file is listed individually; the collapsed directory record is not.
+	require.Contains(t, byPath, "newpkg/a.go")
+	require.Contains(t, byPath, "newpkg/b.go")
+	assert.Equal(t, '?', byPath["newpkg/a.go"].Working)
+	assert.NotContains(t, byPath, "newpkg/")
+}
+
 func TestGetStatus(t *testing.T) {
 	t.Run("invalid path", func(t *testing.T) {
 		_, err := GetStatus("/non/existent/path")

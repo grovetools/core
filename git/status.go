@@ -63,12 +63,16 @@ type FileStatus struct {
 // changed path along with its X/Y status code so callers can render a
 // browsable change tree.
 //
-// It runs `git status --porcelain=v2 -z --ignore-submodules`. The -z flag
+// It runs `git status --porcelain=v2 -z -uall --ignore-submodules`. The -z flag
 // NUL-delimits records (and the two halves of a rename record), which makes
-// paths containing spaces unambiguous.
+// paths containing spaces unambiguous. -uall (--untracked-files=all) lists each
+// untracked file individually rather than collapsing a brand-new directory into
+// a single `? dir/` record — without it a new file in an otherwise-empty
+// directory never reaches the change tree (it would surface only as a childless
+// directory node).
 func GetChangedFiles(path string) ([]FileStatus, error) {
 	cmdBuilder := command.NewSafeBuilder()
-	cmd, err := cmdBuilder.Build(context.Background(), "git", "status", "--porcelain=v2", "-z", "--ignore-submodules")
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "status", "--porcelain=v2", "-z", "-uall", "--ignore-submodules")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build command: %w", err)
 	}
