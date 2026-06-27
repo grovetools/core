@@ -65,6 +65,14 @@ type ClaudePermissions struct {
 	// Allow is a list of Claude Code permission rules (e.g. "Bash(git:*)")
 	// that are granted without prompting.
 	Allow []string `yaml:"allow" toml:"allow" jsonschema:"description=List of Claude Code permission rules to allow without prompting"`
+	// DefaultMode sets Claude Code's permissions.defaultMode — the
+	// settings.local.json equivalent of the --dangerously-skip-permissions flag.
+	// Valid values: default, acceptEdits, plan, bypassPermissions
+	// (bypassPermissions skips permission prompts). Empty string means unset: the
+	// key is not written, so an existing user value is never clobbered. Unlike
+	// Allow this is a scalar string — it is NOT unioned across layers; highest
+	// cascade layer wins with lower layers filling an empty gap (see Merge).
+	DefaultMode string `yaml:"defaultMode" toml:"defaultMode" jsonschema:"description=Claude Code default permission mode; one of default, acceptEdits, plan, bypassPermissions (bypassPermissions skips permission prompts); empty means unset"`
 }
 
 // ClaudeSandbox holds the sandbox.* settings.
@@ -96,6 +104,7 @@ type ClaudeSandboxNetwork struct {
 // IsEmpty returns true if no configuration is set.
 func (c *ClaudeConfig) IsEmpty() bool {
 	return len(c.Permissions.Allow) == 0 &&
+		c.Permissions.DefaultMode == "" &&
 		c.Sandbox.Enabled == nil &&
 		c.Sandbox.FailIfUnavailable == nil &&
 		c.Sandbox.AutoAllowBashIfSandboxed == nil &&
@@ -141,6 +150,14 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	// still flows up through this gap-fill regardless of the inherit flag.
 	if c.AllowGroveTools == nil && other.AllowGroveTools != nil {
 		c.AllowGroveTools = other.AllowGroveTools
+	}
+	// Permissions.DefaultMode is a root-wins-gap scalar string (empty = unset),
+	// mirroring the *bool gap-fills above: a member fills the slot only when the
+	// root left it empty, and an explicit root value survives. It is a scalar, so
+	// it is NOT unioned; it also lives outside the array branch above, so
+	// inherit=false (which only REPLACES arrays wholesale) does not clear it.
+	if c.Permissions.DefaultMode == "" && other.Permissions.DefaultMode != "" {
+		c.Permissions.DefaultMode = other.Permissions.DefaultMode
 	}
 }
 

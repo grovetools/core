@@ -976,6 +976,51 @@ func TestMergeExtensions_ScalarAndBoolHighestWins(t *testing.T) {
 	}
 }
 
+// TestMergeExtensions_DefaultModeHighestWins verifies that permissions.defaultMode
+// (a scalar string) follows highest-wins in the raw cascade — it is NOT unioned
+// like the array leaves, and a lower layer fills the slot only when absent above.
+func TestMergeExtensions_DefaultModeHighestWins(t *testing.T) {
+	t.Run("higher layer overrides lower", func(t *testing.T) {
+		low := map[string]interface{}{
+			"claude": map[string]interface{}{
+				"permissions": map[string]interface{}{"defaultMode": "acceptEdits"},
+			},
+		}
+		high := map[string]interface{}{
+			"claude": map[string]interface{}{
+				"permissions": map[string]interface{}{"defaultMode": "bypassPermissions"},
+			},
+		}
+		merged := mergeExtensions(low, high)
+		perms := merged["claude"].(map[string]interface{})["permissions"].(map[string]interface{})
+		if perms["defaultMode"] != "bypassPermissions" {
+			t.Errorf("expected defaultMode overridden to bypassPermissions (highest-wins), got %v", perms["defaultMode"])
+		}
+		// Confirm it stayed a scalar string, not coerced into an array.
+		if _, isArr := perms["defaultMode"].([]interface{}); isArr {
+			t.Errorf("expected defaultMode to remain a scalar, got an array")
+		}
+	})
+
+	t.Run("lower layer fills slot absent above", func(t *testing.T) {
+		low := map[string]interface{}{
+			"claude": map[string]interface{}{
+				"permissions": map[string]interface{}{"defaultMode": "plan"},
+			},
+		}
+		high := map[string]interface{}{
+			"claude": map[string]interface{}{
+				"permissions": map[string]interface{}{"allow": []string{"X(x:*)"}},
+			},
+		}
+		merged := mergeExtensions(low, high)
+		perms := merged["claude"].(map[string]interface{})["permissions"].(map[string]interface{})
+		if perms["defaultMode"] != "plan" {
+			t.Errorf("expected defaultMode preserved from lower layer, got %v", perms["defaultMode"])
+		}
+	})
+}
+
 // TestMergeExtensions_NestedMapRecursion verifies that distinct sibling sandbox
 // sub-keys from different layers coexist (map recursion holds under the union
 // merger).

@@ -724,6 +724,128 @@ func TestSeedSettings_BoolOverwritesExisting(t *testing.T) {
 	assert.False(t, boolAt(t, root, "sandbox", "failIfUnavailable"), "failIfUnavailable should be overwritten to false")
 }
 
+// optionalStringAt returns the string value at a nested path, or nil if the key
+// doesn't exist (or isn't a string).
+func optionalStringAt(root map[string]any, path ...string) *string {
+	cur := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := cur[key].(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = child
+	}
+	val, ok := cur[path[len(path)-1]].(string)
+	if !ok {
+		return nil
+	}
+	return &val
+}
+
+// TestSeedSettings_DefaultModeWritten confirms permissions.defaultMode is
+// written into settings.local.json when set on the config.
+func TestSeedSettings_DefaultModeWritten(t *testing.T) {
+	wt := t.TempDir()
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Permissions: claudenotebook.ClaudePermissions{
+			DefaultMode: "bypassPermissions",
+		},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+
+	root := readSettings(t, wt)
+	got := optionalStringAt(root, "permissions", "defaultMode")
+	require.NotNil(t, got, "expected permissions.defaultMode to be written")
+	assert.Equal(t, "bypassPermissions", *got)
+	assertNoTmpLeak(t, wt)
+}
+
+// TestSeedSettings_DefaultModeAbsentWhenUnset confirms the key is NOT written
+// when DefaultMode is empty (so we never introduce an empty value).
+func TestSeedSettings_DefaultModeAbsentWhenUnset(t *testing.T) {
+	wt := t.TempDir()
+
+	// A config with other content (so the file is written) but no defaultMode.
+	cfg := &claudenotebook.ClaudeConfig{
+		Permissions: claudenotebook.ClaudePermissions{
+			Allow: []string{"Bash(git:*)"},
+		},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+
+	root := readSettings(t, wt)
+	assert.Nil(t, optionalStringAt(root, "permissions", "defaultMode"),
+		"permissions.defaultMode must be absent when unset")
+}
+
+// TestSeedSettings_DefaultModeNoClobberWhenUnset confirms a pre-existing user
+// defaultMode is preserved (not overwritten with empty) when the config leaves
+// DefaultMode unset.
+func TestSeedSettings_DefaultModeNoClobberWhenUnset(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	seed := map[string]any{
+		"permissions": map[string]any{
+			"defaultMode": "acceptEdits", // user-set value
+		},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	// Config has content (forces a write) but no defaultMode.
+	cfg := &claudenotebook.ClaudeConfig{
+		Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+
+	root := readSettings(t, wt)
+	got := optionalStringAt(root, "permissions", "defaultMode")
+	require.NotNil(t, got, "pre-existing defaultMode must be preserved")
+	assert.Equal(t, "acceptEdits", *got, "unset config must not clobber user's defaultMode")
+}
+
+// TestSeedSettings_DefaultModeOverwritesExisting confirms an explicit config
+// defaultMode wins over an existing value (grove.toml wins, like the booleans).
+func TestSeedSettings_DefaultModeOverwritesExisting(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	seed := map[string]any{
+		"permissions": map[string]any{"defaultMode": "plan"},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Permissions: claudenotebook.ClaudePermissions{DefaultMode: "bypassPermissions"},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+
+	root := readSettings(t, wt)
+	got := optionalStringAt(root, "permissions", "defaultMode")
+	require.NotNil(t, got)
+	assert.Equal(t, "bypassPermissions", *got, "explicit config defaultMode should win")
+}
+
+// TestSeedSettings_DefaultModeGateOff confirms defaultMode is NOT written when
+// the settings gate is off (it rides the same gate as the other config fields).
+func TestSeedSettings_DefaultModeGateOff(t *testing.T) {
+	wt := t.TempDir()
+	t.Setenv("GROVE_SEED_CLAUDE_SETTINGS", "off")
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Permissions: claudenotebook.ClaudePermissions{DefaultMode: "bypassPermissions"},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+
+	_, err := os.Stat(filepath.Join(wt, settingsRel))
+	assert.True(t, os.IsNotExist(err), "gate off + lone defaultMode must not write the file")
+}
+
 // ============================================================================
 // ClaudeConfig.Merge tests
 // ============================================================================
