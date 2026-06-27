@@ -258,11 +258,11 @@ func fileStatusFromXY(xy, path string) FileStatus {
 	return fs
 }
 
-// localMainBranch returns "main" or "master" — whichever local branch exists
+// LocalMainBranch returns "main" or "master" — whichever local branch exists
 // in the repo — or "" if neither is present. It is the single source of truth
 // for resolving the local main ref, shared by the divergence counters
 // (AheadMainCount/BehindMainCount) and the since-main change list.
-func localMainBranch(repoPath string) string {
+func LocalMainBranch(repoPath string) string {
 	cmdBuilder := command.NewSafeBuilder()
 	for _, branchName := range []string{"main", "master"} {
 		cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", "refs/heads/"+branchName)
@@ -285,10 +285,10 @@ func localMainBranch(repoPath string) string {
 //
 // It runs `git diff --name-status -z <mainBranch>` (two-dot: main vs working
 // tree). The main ref is resolved identically to the AheadMainCount/
-// BehindMainCount counters via localMainBranch. If neither main nor master
+// BehindMainCount counters via LocalMainBranch. If neither main nor master
 // exists locally there is nothing to compare against, so it returns nil,nil.
 func GetChangedFilesSinceMain(repoPath string) ([]FileStatus, error) {
-	mainBranch := localMainBranch(repoPath)
+	mainBranch := LocalMainBranch(repoPath)
 	if mainBranch == "" {
 		return nil, nil
 	}
@@ -485,7 +485,7 @@ func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead, behind
 	cmdBuilder := command.NewSafeBuilder()
 
 	// Determine if main or master exists (shared resolution).
-	mainBranch := localMainBranch(repoPath)
+	mainBranch := LocalMainBranch(repoPath)
 	if mainBranch == "" || currentBranch == mainBranch {
 		return 0, 0
 	}
@@ -559,4 +559,35 @@ func GetCommitsDivergenceFromRemoteMain(repoPath, currentBranch string) (ahead, 
 	}
 
 	return ahead, behind
+}
+
+// GetCommitsDivergence returns how far targetRef is ahead of and behind baseRef.
+// Unlike GetCommitsDivergenceFromMain it takes both refs explicitly, so callers
+// can measure divergence against an arbitrary rebase target (the "onto" ref)
+// rather than the hardcoded local main/master.
+//
+// It runs `git rev-list --left-right --count <baseRef>...<targetRef>`, whose two
+// counts are "<base-only> <target-only>": base-only commits are how far target
+// is BEHIND base, target-only commits are how far it is AHEAD.
+func GetCommitsDivergence(repoPath, baseRef, targetRef string) (ahead, behind int, err error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-list", "--left-right", "--count", baseRef+"..."+targetRef)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to build command: %w", err)
+	}
+
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to compute divergence %s...%s: %w", baseRef, targetRef, err)
+	}
+
+	parts := strings.Fields(string(output))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected rev-list output: %q", strings.TrimSpace(string(output)))
+	}
+	behind, _ = strconv.Atoi(parts[0])
+	ahead, _ = strconv.Atoi(parts[1])
+	return ahead, behind, nil
 }
