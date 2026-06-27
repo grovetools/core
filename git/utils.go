@@ -156,3 +156,45 @@ func ResolveRef(dir, ref string) (string, error) {
 func GetHeadCommit(dir string) (string, error) {
 	return ResolveRef(dir, "HEAD")
 }
+
+// ResolveGitDirs returns the absolute paths to the gitdir (containing HEAD/index)
+// and the commondir (containing refs/heads) for a given repository path.
+//
+// For a primary checkout, both gitDir and commonDir are <repo>/.git.
+// For a linked worktree, gitDir is <owner>/.git/worktrees/<name> while commonDir
+// is the shared <owner>/.git.
+//
+// It shells out to `git rev-parse --absolute-git-dir --git-common-dir` so that
+// resolution matches git's own logic for every layout (primary, linked worktree,
+// alternate ref backends). Returns an error when repoPath is not a git repository.
+func ResolveGitDirs(ctx context.Context, repoPath string) (gitDir string, commonDir string, err error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(ctx, "git", "rev-parse", "--absolute-git-dir", "--git-common-dir")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("resolve git dirs for %s: %w", repoPath, err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) < 2 {
+		return "", "", fmt.Errorf("resolve git dirs for %s: unexpected output %q", repoPath, string(output))
+	}
+
+	gitDir = strings.TrimSpace(lines[0])
+	commonDir = strings.TrimSpace(lines[1])
+
+	// --absolute-git-dir always yields an absolute path. --git-common-dir may be
+	// relative; when it is, it is relative to the working directory the command
+	// ran in (repoPath), e.g. ".git" for a primary checkout. Resolve to absolute.
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(repoPath, commonDir)
+	}
+	commonDir = filepath.Clean(commonDir)
+
+	return gitDir, commonDir, nil
+}

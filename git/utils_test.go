@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,4 +111,70 @@ func TestIsGitRepo(t *testing.T) {
 	// Test with non-git directory
 	nonGitDir := t.TempDir()
 	assert.False(t, IsGitRepo(nonGitDir))
+}
+
+// gitInitWithCommit initializes a git repo in dir with one commit so that linked
+// worktrees can be created from it.
+func gitInitWithCommit(t *testing.T, dir string) {
+	t.Helper()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		require.NoError(t, cmd.Run(), "git %v", args)
+	}
+	run("init")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test User")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("test"), 0o644))
+	run("add", ".")
+	run("commit", "-m", "Initial commit")
+}
+
+func TestResolveGitDirs(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("primary checkout", func(t *testing.T) {
+		// EvalSymlinks normalizes macOS /var -> /private/var so we can compare
+		// against git's absolute output.
+		tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		gitInitWithCommit(t, tmpDir)
+
+		gitDir, commonDir, err := ResolveGitDirs(ctx, tmpDir)
+		require.NoError(t, err)
+
+		want := filepath.Join(tmpDir, ".git")
+		assert.Equal(t, want, gitDir)
+		assert.Equal(t, want, commonDir)
+	})
+
+	t.Run("linked worktree", func(t *testing.T) {
+		ownerDir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		gitInitWithCommit(t, ownerDir)
+
+		// Create a linked worktree in a sibling location.
+		wtParent, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		wtPath := filepath.Join(wtParent, "linked")
+
+		cmd := exec.Command("git", "worktree", "add", "-b", "feature", wtPath)
+		cmd.Dir = ownerDir
+		require.NoError(t, cmd.Run())
+
+		gitDir, commonDir, err := ResolveGitDirs(ctx, wtPath)
+		require.NoError(t, err)
+
+		// gitDir points under the owner's .git/worktrees/<name>; commonDir is the
+		// shared owner .git.
+		ownerGit := filepath.Join(ownerDir, ".git")
+		assert.Equal(t, filepath.Join(ownerGit, "worktrees", "linked"), gitDir)
+		assert.Equal(t, ownerGit, commonDir)
+	})
+
+	t.Run("non-repo dir", func(t *testing.T) {
+		nonGitDir := t.TempDir()
+		_, _, err := ResolveGitDirs(ctx, nonGitDir)
+		assert.Error(t, err)
+	})
 }
