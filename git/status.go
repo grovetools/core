@@ -163,6 +163,54 @@ func parseNumstatZ(output string) map[string][2]int {
 	return result
 }
 
+// GetBlobDiffNumstat returns the lines added/deleted between two git blob
+// hashes via `git diff --numstat <oldBlob> <newBlob>`. It backs the
+// "Δ +X -Y since review" indicator in git-viewer: oldBlob is the last-reviewed
+// content and newBlob the current content.
+//
+// Both blobs must exist in the object database (committed or staged content). A
+// hash produced by `git hash-object` on a never-staged working-tree edit is not
+// written to the store, so the diff errors; callers degrade to no delta. A
+// blob-vs-blob numstat emits a single record "<added>\t<deleted>\t<oldblob> =>
+// <newblob>": only the first two tab fields are parsed (the third column is the
+// blob pair, not a real path). A binary diff reports "-\t-", which maps to 0,0.
+func GetBlobDiffNumstat(repoPath, oldBlob, newBlob string) (added, deleted int, err error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--numstat", oldBlob, newBlob)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to diff blobs %s..%s: %w, output: %s", oldBlob, newBlob, err, string(output))
+	}
+	added, deleted = parseBlobNumstat(string(output))
+	return added, deleted, nil
+}
+
+// parseBlobNumstat parses the first non-empty record of a blob-vs-blob
+// `git diff --numstat` run, returning the added/deleted counts from the first
+// two tab-delimited fields (the binary "-" sentinel maps to 0). It deliberately
+// ignores the path column — a raw blob diff has no real path, only the
+// "<oldblob> => <newblob>" pair — so parsing is safe even when that column is
+// empty or missing. Split out from GetBlobDiffNumstat for unit testing.
+func parseBlobNumstat(output string) (added, deleted int) {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) < 2 {
+			continue
+		}
+		return numstatCount(fields[0]), numstatCount(fields[1])
+	}
+	return 0, 0
+}
+
 // numstatCount parses a numstat count field, mapping the binary "-" sentinel to 0.
 func numstatCount(field string) int {
 	if field == "-" {

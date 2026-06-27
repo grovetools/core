@@ -211,6 +211,89 @@ func TestParseNumstatZ(t *testing.T) {
 	}
 }
 
+func TestParseBlobNumstat(t *testing.T) {
+	tests := []struct {
+		name        string
+		in          string
+		wantAdded   int
+		wantDeleted int
+	}{
+		{
+			name:        "normal blob pair",
+			in:          "5\t2\tdeadbeef => cafef00d\n",
+			wantAdded:   5,
+			wantDeleted: 2,
+		},
+		{
+			name:        "binary sentinel",
+			in:          "-\t-\tdeadbeef => cafef00d\n",
+			wantAdded:   0,
+			wantDeleted: 0,
+		},
+		{
+			name:        "missing path column",
+			in:          "7\t3\n",
+			wantAdded:   7,
+			wantDeleted: 3,
+		},
+		{
+			name:        "no trailing newline",
+			in:          "1\t1",
+			wantAdded:   1,
+			wantDeleted: 1,
+		},
+		{
+			name:        "empty output",
+			in:          "",
+			wantAdded:   0,
+			wantDeleted: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			added, deleted := parseBlobNumstat(tt.in)
+			assert.Equal(t, tt.wantAdded, added, "added")
+			assert.Equal(t, tt.wantDeleted, deleted, "deleted")
+		})
+	}
+}
+
+// TestGetBlobDiffNumstat exercises the helper end-to-end against two committed
+// blobs (both present in the object database) and confirms a bad object errors.
+func TestGetBlobDiffNumstat(t *testing.T) {
+	tempDir := t.TempDir()
+	setupGitRepo(t, tempDir)
+
+	revParse := func(rev string) string {
+		cmd := exec.Command("git", "rev-parse", rev)
+		cmd.Dir = tempDir
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "f.txt"), []byte("a\nb\nc\n"), 0o644))
+	runGitCommand(t, tempDir, "add", "f.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "v1")
+	oldBlob := revParse("HEAD:f.txt")
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "f.txt"), []byte("a\nB\nc\nd\n"), 0o644))
+	runGitCommand(t, tempDir, "add", "f.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "v2")
+	newBlob := revParse("HEAD:f.txt")
+
+	added, deleted, err := GetBlobDiffNumstat(tempDir, oldBlob, newBlob)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, added)
+	assert.Equal(t, 1, deleted)
+
+	// An unknown blob (e.g. a never-staged working-tree hash) errors rather than
+	// silently returning zero churn.
+	_, _, err = GetBlobDiffNumstat(tempDir, oldBlob, "0000000000000000000000000000000000000000")
+	assert.Error(t, err)
+}
+
 func TestGetChangedFiles(t *testing.T) {
 	tempDir := t.TempDir()
 	setupGitRepo(t, tempDir)
