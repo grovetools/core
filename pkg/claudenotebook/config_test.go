@@ -115,6 +115,66 @@ func TestMerge_AllowGroveToolsGapFill(t *testing.T) {
 	})
 }
 
+// TestMerge_DefaultModeGapFill confirms permissions.defaultMode is a
+// root-wins-gap scalar string (empty = unset): a member fills an empty root
+// slot, an explicit root value wins over a member value, a set root value
+// survives a merge with an empty member, and it is never unioned.
+func TestMerge_DefaultModeGapFill(t *testing.T) {
+	t.Run("root empty + member set -> member fills gap", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{Permissions: ClaudePermissions{DefaultMode: "bypassPermissions"}}
+		root.Merge(member)
+		if root.Permissions.DefaultMode != "bypassPermissions" {
+			t.Errorf("expected member to fill empty root, got %q", root.Permissions.DefaultMode)
+		}
+	})
+
+	t.Run("root set + member set -> root (highest) wins", func(t *testing.T) {
+		root := &ClaudeConfig{Permissions: ClaudePermissions{DefaultMode: "acceptEdits"}}
+		member := &ClaudeConfig{Permissions: ClaudePermissions{DefaultMode: "bypassPermissions"}}
+		root.Merge(member)
+		if root.Permissions.DefaultMode != "acceptEdits" {
+			t.Errorf("expected explicit root value to win, got %q", root.Permissions.DefaultMode)
+		}
+	})
+
+	t.Run("root set survives merge with empty member", func(t *testing.T) {
+		root := &ClaudeConfig{Permissions: ClaudePermissions{DefaultMode: "plan"}}
+		member := &ClaudeConfig{}
+		root.Merge(member)
+		if root.Permissions.DefaultMode != "plan" {
+			t.Errorf("expected root value to survive, got %q", root.Permissions.DefaultMode)
+		}
+	})
+
+	t.Run("inherit=false does not clear the scalar", func(t *testing.T) {
+		// inherit=false only replaces arrays wholesale; the scalar gap-fill is
+		// outside that branch, so a member's defaultMode still flows up.
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{
+			Inherit:     boolPtr(false),
+			Permissions: ClaudePermissions{DefaultMode: "bypassPermissions"},
+		}
+		root.Merge(member)
+		if root.Permissions.DefaultMode != "bypassPermissions" {
+			t.Errorf("expected defaultMode to survive inherit=false, got %q", root.Permissions.DefaultMode)
+		}
+	})
+}
+
+// TestDefaultModeInIsEmpty confirms a lone defaultMode counts as content, so a
+// config whose only signal is defaultMode forces a settings write.
+func TestDefaultModeInIsEmpty(t *testing.T) {
+	c := &ClaudeConfig{Permissions: ClaudePermissions{DefaultMode: "bypassPermissions"}}
+	if c.IsEmpty() {
+		t.Errorf("expected a config with defaultMode set to be non-empty")
+	}
+	empty := &ClaudeConfig{}
+	if !empty.IsEmpty() {
+		t.Errorf("expected an all-zero config to be empty")
+	}
+}
+
 // TestDecode_InheritRoundTrips confirms a raw map decodes `inherit` into the
 // *bool field (mirrors UnmarshalExtension's mapstructure/yaml-tag decode).
 func TestDecode_InheritRoundTrips(t *testing.T) {

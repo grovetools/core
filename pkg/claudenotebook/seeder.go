@@ -183,6 +183,12 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 			mergeStringArray(root, []string{"permissions", "allow"}, allowRules)
 		}
 
+		// permissions.defaultMode (scalar string; only write when non-empty so we
+		// never clobber a user's existing value with an empty default). Like the
+		// sandbox booleans below, an explicit grove.toml value OVERWRITES an
+		// existing one (grove.toml wins).
+		mergeString(root, []string{"permissions", "defaultMode"}, cfg.Permissions.DefaultMode)
+
 		// sandbox booleans (only write if non-nil)
 		mergeBool(root, []string{"sandbox", "enabled"}, cfg.Sandbox.Enabled)
 		mergeBool(root, []string{"sandbox", "failIfUnavailable"}, cfg.Sandbox.FailIfUnavailable)
@@ -273,6 +279,28 @@ func mergeBool(root map[string]any, path []string, val *bool) {
 		parent = child
 	}
 	parent[path[len(path)-1]] = *val
+}
+
+// mergeString walks/creates the nested object path in root and sets the leaf
+// key to the given string value. Only writes if val is non-empty (empty string
+// = unset, so a configured value in the file is never clobbered). If the path
+// does not exist, it is created. Like mergeBool, this OVERWRITES an existing
+// value (grove.toml scalars win over local settings when explicitly set).
+func mergeString(root map[string]any, path []string, val string) {
+	if val == "" {
+		return
+	}
+	// Descend to the parent object of the leaf key, creating objects as needed.
+	parent := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := parent[key].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			parent[key] = child
+		}
+		parent = child
+	}
+	parent[path[len(path)-1]] = val
 }
 
 // mergeStringArray walks/creates the nested object path in root and appends any
