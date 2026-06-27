@@ -241,6 +241,57 @@ func TestGetChangedFiles(t *testing.T) {
 	assert.Equal(t, '?', byPath["untracked.txt"].Working)
 }
 
+// TestGetChangedFilesSinceRef diffs the working tree against a historical
+// commit hash and asserts both the name-status parse and the numstat churn.
+func TestGetChangedFilesSinceRef(t *testing.T) {
+	tempDir := t.TempDir()
+	setupGitRepo(t, tempDir)
+
+	// Commit a base revision, capture its hash, then mutate the tree.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "keep.txt"), []byte("one\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "gone.txt"), []byte("delete me\n"), 0o644))
+	runGitCommand(t, tempDir, "add", "keep.txt", "gone.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "base")
+
+	revCmd := exec.Command("git", "rev-parse", "HEAD")
+	revCmd.Dir = tempDir
+	out, err := revCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(out))
+
+	// Modify a tracked file, add a brand-new tracked file, delete another.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "keep.txt"), []byte("one\ntwo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "added.txt"), []byte("new\n"), 0o644))
+	runGitCommand(t, tempDir, "rm", "gone.txt")
+	runGitCommand(t, tempDir, "add", "keep.txt", "added.txt")
+
+	files, err := GetChangedFilesSinceRef(tempDir, base)
+	require.NoError(t, err)
+
+	byPath := make(map[string]FileStatus)
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+
+	require.Contains(t, byPath, "keep.txt")
+	assert.Equal(t, 'M', byPath["keep.txt"].Working)
+	assert.Equal(t, 1, byPath["keep.txt"].LinesAdded)
+
+	require.Contains(t, byPath, "added.txt")
+	assert.Equal(t, 'A', byPath["added.txt"].Working)
+	assert.Equal(t, 1, byPath["added.txt"].LinesAdded)
+
+	require.Contains(t, byPath, "gone.txt")
+	assert.Equal(t, 'D', byPath["gone.txt"].Working)
+}
+
+// TestGetChangedFilesSinceRefEmptyRef guards the caller-bug rule: an empty ref
+// must error rather than silently diffing against HEAD.
+func TestGetChangedFilesSinceRefEmptyRef(t *testing.T) {
+	_, err := GetChangedFilesSinceRef(t.TempDir(), "")
+	require.Error(t, err)
+}
+
 // TestGetChangedFilesUntrackedNewDir guards the -uall behavior: a new file in a
 // directory that does not yet contain any tracked files must surface as the file
 // itself, not as a collapsed `dir/` record. Without --untracked-files=all git

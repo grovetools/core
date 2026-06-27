@@ -292,9 +292,25 @@ func GetChangedFilesSinceMain(repoPath string) ([]FileStatus, error) {
 	if mainBranch == "" {
 		return nil, nil
 	}
+	return GetChangedFilesSinceRef(repoPath, mainBranch)
+}
+
+// GetChangedFilesSinceRef returns the per-file change list between an arbitrary
+// ref (branch, tag, or commit hash) and the working tree — everything that
+// differs from ref, including work already committed on the current branch.
+//
+// It runs `git diff --name-status -z <ref>` (two-dot: ref vs working tree). It
+// is the generic engine behind GetChangedFilesSinceMain and is reused to diff
+// the working tree against a historical commit selected in the log view. A
+// caller that passes an empty ref has a bug, so this returns an error rather
+// than silently diffing against HEAD.
+func GetChangedFilesSinceRef(repoPath, ref string) ([]FileStatus, error) {
+	if ref == "" {
+		return nil, fmt.Errorf("GetChangedFilesSinceRef: empty ref")
+	}
 
 	cmdBuilder := command.NewSafeBuilder()
-	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--name-status", "-z", mainBranch)
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--name-status", "-z", ref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build command: %w", err)
 	}
@@ -302,14 +318,14 @@ func GetChangedFilesSinceMain(repoPath string) ([]FileStatus, error) {
 	execCmd.Dir = repoPath
 	output, err := execCmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to diff against %s: %w, output: %s", mainBranch, err, string(output))
+		return nil, fmt.Errorf("failed to diff against %s: %w, output: %s", ref, err, string(output))
 	}
 
 	files := parseDiffNameStatusZ(string(output))
 
-	// Per-file churn for the since-main diff: a single numstat pass against the
-	// same base (committed + working-tree delta from main).
-	applyNumstat(files, getNumstatZ(repoPath, mainBranch))
+	// Per-file churn for the since-ref diff: a single numstat pass against the
+	// same base (committed + working-tree delta from ref).
+	applyNumstat(files, getNumstatZ(repoPath, ref))
 
 	return files, nil
 }
