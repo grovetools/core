@@ -37,7 +37,10 @@ func GetTmuxSocketPath() string {
 	return os.Getenv(EnvGroveTmuxSocket)
 }
 
-// GetTuimuxSocketPath returns the tuimux socket path, falling back to tuimux.DefaultSocketPath().
+// GetTuimuxSocketPath returns the tuimux socket path. GROVE_TUIMUX_SOCKET is the
+// explicit override; otherwise it falls back to tuimux.DefaultSocketPath(),
+// which is scope-derived (it reads GROVE_SCOPE) — an empty scope keeps the
+// legacy machine-wide socket, non-empty scopes get an isolated daemon-<scope>.sock.
 func GetTuimuxSocketPath() string {
 	if s := os.Getenv(EnvGroveTuimuxSocket); s != "" {
 		return s
