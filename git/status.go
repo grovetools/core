@@ -326,6 +326,24 @@ func LocalMainBranch(repoPath string) string {
 	return ""
 }
 
+// HasRemoteBranch reports whether origin/<branch> exists in the repo — i.e.
+// the branch has been pushed. It runs `git show-ref --verify --quiet
+// refs/remotes/origin/<branch>`, the same probe LocalMainBranch uses for local
+// refs. A blank or "HEAD" branch name (detached) is never remote-tracked.
+func HasRemoteBranch(repoPath, branch string) bool {
+	if branch == "" || branch == "HEAD" {
+		return false
+	}
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", "refs/remotes/origin/"+branch)
+	if err != nil {
+		return false
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	return execCmd.Run() == nil
+}
+
 // GetChangedFilesSinceMain returns the per-file change list between the local
 // main/master branch and the working tree — i.e. everything that differs from
 // main, including work already committed on the current branch. This mirrors
