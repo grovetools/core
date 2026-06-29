@@ -117,3 +117,30 @@ func TestGetCommitsDivergence(t *testing.T) {
 	assert.Equal(t, 2, ahead, "feature has 2 commits main lacks")
 	assert.Equal(t, 1, behind, "main has 1 commit feature lacks")
 }
+
+func TestDeleteRemoteBranch(t *testing.T) {
+	// A bare repo stands in for the GitHub remote.
+	remote := t.TempDir()
+	runGitCommand(t, remote, "init", "--bare")
+
+	dir := setupRebaseRepo(t)
+	runGitCommand(t, dir, "remote", "add", "origin", remote)
+
+	// Push a feature branch so origin/feature exists.
+	runGitCommand(t, dir, "checkout", "-b", "feature")
+	writeAndCommit(t, dir, "feature.txt", "feature\n", "feature work")
+	runGitCommand(t, dir, "push", "origin", "feature")
+	runGitCommand(t, dir, "fetch", "origin")
+	require.True(t, HasRemoteBranch(dir, "feature"), "branch should exist on origin after push")
+
+	// Delete it from the remote and confirm it is gone.
+	require.NoError(t, DeleteRemoteBranch(dir, "feature"))
+	runGitCommand(t, dir, "fetch", "origin", "--prune")
+	assert.False(t, HasRemoteBranch(dir, "feature"), "branch should be gone from origin after delete")
+}
+
+func TestDeleteRemoteBranch_EmptyBranch(t *testing.T) {
+	dir := setupRebaseRepo(t)
+	assert.Error(t, DeleteRemoteBranch(dir, ""), "empty branch name must be refused")
+	assert.Error(t, DeleteRemoteBranch(dir, "   "), "blank branch name must be refused")
+}
