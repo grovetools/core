@@ -513,6 +513,10 @@
         "label": {
           "description": "Display label for header and sidebar",
           "type": "string"
+        },
+        "singleton": {
+          "description": "Focus a single reusable pane instead of spawning a new one each press",
+          "type": "boolean"
         }
       },
       "type": "object"

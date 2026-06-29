@@ -416,6 +416,10 @@ type PanelBindingConfig struct {
 	// ArgsCommand is a shell command whose stdout is trimmed and appended
 	// as a single argument. Runs asynchronously before spawning the panel.
 	ArgsCommand string `yaml:"args_command,omitempty" toml:"args_command,omitempty" jsonschema:"description=Shell command whose stdout becomes an extra argument"`
+	// Singleton makes the binding focus-or-create a single reusable pane
+	// (deterministic ID "editor-bound-<label>") instead of spawning a fresh
+	// pane on every press. Use for scratchpad-style editors (e.g. ctrl+e).
+	Singleton bool `yaml:"singleton,omitempty" toml:"singleton,omitempty" jsonschema:"description=Focus a single reusable pane instead of spawning a new one each press"`
 }
 
 // ContextConfig holds configuration for the grove-context (cx) tool.
