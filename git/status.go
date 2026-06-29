@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -101,6 +102,69 @@ func GetChangedFiles(path string) ([]FileStatus, error) {
 	addNumstat(stats, getNumstatZ(path, "--cached"))
 	applyNumstat(files, stats)
 
+	return files, nil
+}
+
+// ListAllFiles returns every project file in the repository at path: tracked
+// files (`git ls-files`) plus untracked-not-ignored files (`git ls-files
+// --others --exclude-standard`), so .gitignore'd paths are excluded. Paths are
+// repo-relative, deduped, and sorted. The file browser's "all-files" mode
+// merges this listing with the changed-file statuses so unchanged files show a
+// neutral icon while changed ones keep their git badges.
+//
+// Both passes use -z (NUL-delimited) so paths containing spaces are
+// unambiguous. A repo before its first commit still lists its untracked files.
+func ListAllFiles(path string) ([]string, error) {
+	tracked, err := lsFilesZ(path)
+	if err != nil {
+		return nil, err
+	}
+	untracked, err := lsFilesZ(path, "--others", "--exclude-standard")
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool, len(tracked)+len(untracked))
+	var out []string
+	for _, p := range append(tracked, untracked...) {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// lsFilesZ runs `git ls-files -z [args...]` in path and returns the
+// NUL-delimited repo-relative paths it lists. It surfaces "not a git
+// repository" with a clear error and treats a pre-first-commit repo (no error,
+// just no tracked output) as an empty list.
+func lsFilesZ(path string, args ...string) ([]string, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	full := append([]string{"ls-files", "-z"}, args...)
+	cmd, err := cmdBuilder.Build(context.Background(), "git", full...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = path
+	output, err := execCmd.Output()
+	if err != nil {
+		outputStr := string(output)
+		if strings.Contains(outputStr, "not a git repository") {
+			return nil, fmt.Errorf("not a git repository: %s", path)
+		}
+		return nil, fmt.Errorf("failed to list files: %w, output: %s", err, outputStr)
+	}
+
+	var files []string
+	for _, p := range strings.Split(string(output), "\x00") {
+		if p != "" {
+			files = append(files, p)
+		}
+	}
 	return files, nil
 }
 
