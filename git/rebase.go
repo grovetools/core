@@ -106,6 +106,117 @@ func DeleteRemoteBranch(repoPath, branch string) error {
 	return nil
 }
 
+// MainCheckoutPath resolves the path to a repo's MAIN (primary) checkout from
+// any of its linked worktrees. It runs `git worktree list --porcelain` in
+// repoPath and returns the first non-bare worktree — git always lists the main
+// worktree first — which is the working copy where the local default branch
+// (main/master) lives. When repoPath itself IS the main checkout it returns
+// repoPath's own entry.
+//
+// This is the inverse of workspace.FindWorktreePath (which goes main → linked
+// worktree): the Rebase page rows are linked worktrees, so landing needs the
+// main checkout to fast-forward its default branch.
+func MainCheckoutPath(repoPath string) (string, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to list worktrees: %w", err)
+	}
+	if path := firstNonBareWorktree(string(output)); path != "" {
+		return path, nil
+	}
+	return "", fmt.Errorf("could not resolve main checkout for %s", repoPath)
+}
+
+// firstNonBareWorktree extracts the path of the first non-bare worktree from
+// `git worktree list --porcelain` output. Entries are separated by blank lines;
+// each begins with a "worktree <path>" line and a bare worktree carries a
+// standalone "bare" line. The main worktree is always listed first.
+func firstNonBareWorktree(output string) string {
+	var path string
+	bare := false
+	flush := func() string {
+		if path != "" && !bare {
+			return path
+		}
+		path, bare = "", false
+		return ""
+	}
+	for _, line := range strings.Split(output, "\n") {
+		if line == "" {
+			if p := flush(); p != "" {
+				return p
+			}
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			path = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+		case line == "bare":
+			bare = true
+		}
+	}
+	return flush()
+}
+
+// AdvanceMainToBranch lands a caught-up worktree branch into the repo's default
+// branch. In the MAIN checkout it checks out defaultBranch and fast-forwards it
+// to branch (`merge --ff-only`); when worktreePath is non-empty it then resyncs
+// that worktree's working copy to the advanced default (`reset --hard`). This
+// mirrors flow's planutil.RebaseAndMergeRepo without importing flow.
+//
+// The ff-only merge is the safety gate: it SUCCEEDS only when branch already
+// contains defaultBranch (i.e. branch was rebased/caught up onto it first), so a
+// branch that has diverged is refused with a clear error rather than creating a
+// merge commit or moving main backward. Callers MUST confirm intent first — this
+// mutates the shared default branch.
+func AdvanceMainToBranch(mainRepoPath, branch, defaultBranch, worktreePath string) error {
+	branch = strings.TrimSpace(branch)
+	defaultBranch = strings.TrimSpace(defaultBranch)
+	if mainRepoPath == "" {
+		return fmt.Errorf("cannot advance main: empty main checkout path")
+	}
+	if branch == "" || branch == "HEAD" {
+		return fmt.Errorf("cannot advance main: invalid branch %q", branch)
+	}
+	if defaultBranch == "" {
+		return fmt.Errorf("cannot advance main: empty default branch")
+	}
+
+	cmdBuilder := command.NewSafeBuilder()
+	run := func(dir string, args ...string) error {
+		cmd, err := cmdBuilder.Build(context.Background(), "git", args...)
+		if err != nil {
+			return fmt.Errorf("failed to build command: %w", err)
+		}
+		execCmd := cmd.Exec()
+		execCmd.Dir = dir
+		if output, err := execCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %s failed: %s", strings.Join(args, " "), strings.TrimSpace(string(output)))
+		}
+		return nil
+	}
+
+	if err := run(mainRepoPath, "checkout", defaultBranch); err != nil {
+		return err
+	}
+	if err := run(mainRepoPath, "merge", "--ff-only", branch); err != nil {
+		return fmt.Errorf("fast-forward merge of %s into %s failed (is the branch caught up?): %w", branch, defaultBranch, err)
+	}
+	if worktreePath != "" {
+		if err := run(worktreePath, "reset", "--hard", defaultBranch); err != nil {
+			return fmt.Errorf("advanced %s but failed to resync worktree: %w", defaultBranch, err)
+		}
+	}
+	return nil
+}
+
 // AbortRebase runs `git rebase --abort` in repoPath, restoring the branch to its
 // pre-rebase state. It is the rollback for a Rebase that failed partway through.
 func AbortRebase(repoPath string) error {

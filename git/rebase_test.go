@@ -2,7 +2,9 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -154,4 +156,100 @@ func TestDeleteRemoteBranch_EmptyBranch(t *testing.T) {
 	dir := setupRebaseRepo(t)
 	assert.Error(t, DeleteRemoteBranch(dir, ""), "empty branch name must be refused")
 	assert.Error(t, DeleteRemoteBranch(dir, "   "), "blank branch name must be refused")
+}
+
+func TestFirstNonBareWorktree(t *testing.T) {
+	// Main first, then a linked worktree — the main path wins.
+	out := "worktree /repos/foo\nHEAD abc\nbranch refs/heads/main\n\n" +
+		"worktree /wt/foo-feature\nHEAD def\nbranch refs/heads/feature\n"
+	assert.Equal(t, "/repos/foo", firstNonBareWorktree(out))
+
+	// A leading bare entry (no checkout) is skipped in favor of the first
+	// real working copy.
+	bareFirst := "worktree /repos/bare\nbare\n\n" +
+		"worktree /repos/foo\nHEAD abc\nbranch refs/heads/main\n"
+	assert.Equal(t, "/repos/foo", firstNonBareWorktree(bareFirst))
+
+	assert.Equal(t, "", firstNonBareWorktree(""), "no worktrees yields empty path")
+}
+
+// setupMainAndWorktree builds a main checkout on "main" with a baseline commit
+// plus a linked worktree on branch "feature", and returns both paths. The
+// worktree lives outside the main checkout (git refuses nested worktrees).
+func setupMainAndWorktree(t *testing.T) (mainPath, wtPath, feature string) {
+	t.Helper()
+	mainPath = setupRebaseRepo(t) // on "main", one baseline commit
+	wtPath = filepath.Join(t.TempDir(), "feature-wt")
+	runGitCommand(t, mainPath, "worktree", "add", "-b", "feature", wtPath)
+	return mainPath, wtPath, "feature"
+}
+
+func TestMainCheckoutPath_FromWorktree(t *testing.T) {
+	mainPath, wtPath, _ := setupMainAndWorktree(t)
+
+	// Resolving from the linked worktree must point back to the main checkout.
+	got, err := MainCheckoutPath(wtPath)
+	require.NoError(t, err)
+	// macOS /tmp is a symlink to /private/tmp; compare resolved paths.
+	wantResolved, _ := filepath.EvalSymlinks(mainPath)
+	gotResolved, _ := filepath.EvalSymlinks(got)
+	assert.Equal(t, wantResolved, gotResolved)
+}
+
+func TestAdvanceMainToBranch_FastForward(t *testing.T) {
+	mainPath, wtPath, feature := setupMainAndWorktree(t)
+
+	// The feature branch adds a commit on top of main (already caught up), so
+	// main can fast-forward to it.
+	writeAndCommit(t, wtPath, "feature.txt", "feature\n", "feature work")
+	featureHead := headCommit(t, wtPath)
+
+	require.NoError(t, AdvanceMainToBranch(mainPath, feature, "main", wtPath))
+
+	// main now points at the feature tip...
+	assert.Equal(t, featureHead, revParse(t, mainPath, "main"), "main fast-forwarded to feature")
+	// ...and the worktree was resynced to main (still the same commit, clean).
+	status, err := GetStatus(wtPath)
+	require.NoError(t, err)
+	assert.False(t, status.IsDirty, "worktree clean after resync")
+	assert.Equal(t, featureHead, headCommit(t, wtPath))
+}
+
+func TestAdvanceMainToBranch_RefusesDivergedBranch(t *testing.T) {
+	mainPath, wtPath, feature := setupMainAndWorktree(t)
+
+	// feature adds a commit...
+	writeAndCommit(t, wtPath, "feature.txt", "feature\n", "feature work")
+	// ...and main diverges with its own commit, so an ff-only merge is impossible.
+	writeAndCommit(t, mainPath, "main.txt", "main\n", "main work")
+	mainHead := revParse(t, mainPath, "main")
+
+	err := AdvanceMainToBranch(mainPath, feature, "main", wtPath)
+	require.Error(t, err, "diverged branch must not fast-forward main")
+	// main must be left untouched — never moved backward or force-merged.
+	assert.Equal(t, mainHead, revParse(t, mainPath, "main"), "main unchanged after refused land")
+}
+
+func TestAdvanceMainToBranch_Validation(t *testing.T) {
+	mainPath := setupRebaseRepo(t)
+	assert.Error(t, AdvanceMainToBranch("", "feature", "main", ""), "empty main path refused")
+	assert.Error(t, AdvanceMainToBranch(mainPath, "", "main", ""), "empty branch refused")
+	assert.Error(t, AdvanceMainToBranch(mainPath, "HEAD", "main", ""), "detached HEAD refused")
+	assert.Error(t, AdvanceMainToBranch(mainPath, "feature", "", ""), "empty default branch refused")
+}
+
+// headCommit returns the resolved HEAD commit of dir.
+func headCommit(t *testing.T, dir string) string {
+	t.Helper()
+	return revParse(t, dir, "HEAD")
+}
+
+// revParse resolves ref to a commit hash in dir.
+func revParse(t *testing.T, dir, ref string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", ref)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
 }
