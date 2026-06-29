@@ -56,6 +56,29 @@ func Rebase(repoPath, ontoRef string) error {
 	return nil
 }
 
+// DeleteRemoteBranch deletes branch from the origin remote by running
+// `git push origin --delete <branch>` in repoPath. It is DESTRUCTIVE and
+// OUTWARD-FACING — it removes the branch on the remote (e.g. GitHub), not just
+// the local tracking ref — so callers MUST confirm intent before invoking. On
+// failure it returns an error carrying git's output.
+func DeleteRemoteBranch(repoPath, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("cannot delete remote branch: empty branch name")
+	}
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "push", "origin", "--delete", branch)
+	if err != nil {
+		return fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	if output, err := execCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git push origin --delete %s failed: %s", branch, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // AbortRebase runs `git rebase --abort` in repoPath, restoring the branch to its
 // pre-rebase state. It is the rollback for a Rebase that failed partway through.
 func AbortRebase(repoPath string) error {
