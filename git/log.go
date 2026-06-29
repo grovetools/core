@@ -40,6 +40,22 @@ type LogEntry struct {
 // GetLog returns (nil, nil), matching GetChangedFiles' treatment of the same
 // state.
 func GetLog(repoPath string, limit int) ([]LogEntry, error) {
+	return runLog(repoPath, limit, "")
+}
+
+// GetLogRange returns up to limit commits in the revision range revRange (e.g.
+// "HEAD..main", giving the commits main has that HEAD lacks), most recent
+// first. It shares GetLog's machine-readable format and empty-repo handling; a
+// caller passing an empty revRange gets the same result as GetLog. The range is
+// passed to `git log` verbatim, so it accepts any rev-range git understands.
+func GetLogRange(repoPath, revRange string, limit int) ([]LogEntry, error) {
+	return runLog(repoPath, limit, revRange)
+}
+
+// runLog is the shared engine behind GetLog and GetLogRange: it runs `git log`
+// with the machine-readable format, optionally scoped to a revision range, and
+// parses the output. An empty revRange logs from HEAD.
+func runLog(repoPath string, limit int, revRange string) ([]LogEntry, error) {
 	cmdBuilder := command.NewSafeBuilder()
 	// %H hash, %an author name, %ae author email, %aI author date (ISO-8601
 	// strict, RFC3339-parseable), %D ref decorations, %ar relative author date,
@@ -49,6 +65,9 @@ func GetLog(repoPath string, limit int) ([]LogEntry, error) {
 	args := []string{"log", "-z", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%ar%x1f%P%x1f%s"}
 	if limit > 0 {
 		args = append(args, "-n", strconv.Itoa(limit))
+	}
+	if revRange != "" {
+		args = append(args, revRange)
 	}
 
 	cmd, err := cmdBuilder.Build(context.Background(), "git", args...)
