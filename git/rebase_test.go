@@ -61,6 +61,17 @@ func TestWouldRebaseConflict_Clean(t *testing.T) {
 	assert.False(t, conflict, "disjoint edits should not be predicted as a conflict")
 }
 
+func TestListLocalBranches(t *testing.T) {
+	dir := setupRebaseRepo(t) // starts on "main"
+	runGitCommand(t, dir, "checkout", "-b", "feature")
+	runGitCommand(t, dir, "checkout", "-b", "wip/experiment")
+
+	branches, err := ListLocalBranches(dir)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"main", "feature", "wip/experiment"}, branches,
+		"should enumerate every local branch by short name")
+}
+
 func TestRebase_Success(t *testing.T) {
 	dir := setupRebaseRepo(t)
 

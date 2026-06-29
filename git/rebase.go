@@ -38,6 +38,33 @@ func WouldRebaseConflict(repoPath, ontoRef, branchRef string) (bool, error) {
 	return strings.Contains(string(output), "CONFLICT"), nil
 }
 
+// ListLocalBranches returns the repo's local branch names (refs/heads), in git's
+// default ordering. It runs `git for-each-ref --format='%(refname:short)'
+// refs/heads`, the canonical way to enumerate local branches without parsing the
+// porcelain `git branch` output. Blank lines are dropped. It is the shared helper
+// behind the Rebase page's ref picker, which unions the branches across the
+// in-scope repos.
+func ListLocalBranches(repoPath string) ([]string, error) {
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list local branches: %w", err)
+	}
+	var branches []string
+	for _, line := range strings.Split(string(output), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			branches = append(branches, name)
+		}
+	}
+	return branches, nil
+}
+
 // Rebase runs `git rebase <ontoRef>` in repoPath, replaying the current branch
 // onto ontoRef. On failure (including conflicts) it returns an error carrying
 // git's output; the repo is left mid-rebase, so callers that want a clean tree
