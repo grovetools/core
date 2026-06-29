@@ -408,6 +408,46 @@ func TestGetChangedFilesUntrackedNewDir(t *testing.T) {
 	assert.NotContains(t, byPath, "newpkg/")
 }
 
+// TestListAllFiles verifies the all-files listing includes tracked AND
+// untracked-not-ignored files, deduped and sorted, while honoring .gitignore.
+func TestListAllFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	setupGitRepo(t, tempDir)
+
+	// Tracked file (committed) plus a nested tracked file.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "tracked.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "pkg", "mod.go"), []byte("b"), 0o644))
+	runGitCommand(t, tempDir, "add", "tracked.txt", "pkg/mod.go")
+	runGitCommand(t, tempDir, "commit", "-m", "initial")
+
+	// Modify a tracked file (still tracked, must appear once), add an untracked
+	// file, and an ignored one that must NOT appear.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "tracked.txt"), []byte("changed"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "new.txt"), []byte("new"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".gitignore"), []byte("ignored.txt\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "ignored.txt"), []byte("nope"), 0o644))
+
+	files, err := ListAllFiles(tempDir)
+	require.NoError(t, err)
+
+	set := make(map[string]bool)
+	for _, f := range files {
+		set[f] = true
+	}
+
+	assert.True(t, set["tracked.txt"], "tracked file should be listed")
+	assert.True(t, set["pkg/mod.go"], "nested tracked file should be listed")
+	assert.True(t, set["new.txt"], "untracked-not-ignored file should be listed")
+	assert.True(t, set[".gitignore"], "the .gitignore itself is an untracked file and should be listed")
+	assert.False(t, set["ignored.txt"], "ignored file must be excluded")
+
+	// No duplicates and sorted ascending.
+	for i := 1; i < len(files); i++ {
+		assert.Less(t, files[i-1], files[i], "files should be sorted with no duplicates")
+	}
+}
+
 func TestGetStatus(t *testing.T) {
 	t.Run("invalid path", func(t *testing.T) {
 		_, err := GetStatus("/non/existent/path")
