@@ -423,6 +423,10 @@ type PTYSessionInfo struct {
 	SessionID         string            `json:"session_id,omitempty"`
 	CreatedBy         string            `json:"created_by,omitempty"`
 	ForegroundProcess string            `json:"foreground_process,omitempty"`
+	// LastDetached is when the last client disconnected (zero if never
+	// orphaned). Plumbed from tuimux SessionMetadata for the inspector's
+	// idle-age column and leak sorting.
+	LastDetached time.Time `json:"last_detached,omitempty"`
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.
