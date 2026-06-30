@@ -100,8 +100,10 @@ type Client interface {
 	GetConfig(ctx context.Context) (*RunningConfig, error)
 
 	// SetFocus tells the daemon which workspaces to prioritize for scanning.
+	// source identifies the caller (e.g. "nav", "treemux_git") so multiple
+	// clients can register focus paths without clobbering each other.
 	// For LocalClient, this is a no-op since there's no daemon to notify.
-	SetFocus(ctx context.Context, paths []string) error
+	SetFocus(ctx context.Context, source string, paths []string) error
 
 	// Refresh triggers a re-scan of workspaces and enrichment data.
 	// For LocalClient, this is a no-op since there's no daemon cache to refresh.
