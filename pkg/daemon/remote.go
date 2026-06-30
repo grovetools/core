@@ -241,8 +241,10 @@ func (c *RemoteClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
 }
 
 // SetFocus tells the daemon which workspaces to prioritize for scanning.
-func (c *RemoteClient) SetFocus(ctx context.Context, paths []string) error {
-	body, err := json.Marshal(map[string][]string{"paths": paths})
+// source identifies the caller (e.g. "nav", "treemux_git") so multiple clients
+// can register focus paths without clobbering each other.
+func (c *RemoteClient) SetFocus(ctx context.Context, source string, paths []string) error {
+	body, err := json.Marshal(map[string]any{"source": source, "paths": paths})
 	if err != nil {
 		return fmt.Errorf("failed to marshal focus request: %w", err)
 	}

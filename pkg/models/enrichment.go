@@ -115,6 +115,8 @@ type EnrichedWorkspace struct {
 	GitRemoteURL string                 `json:"git_remote_url,omitempty"`
 	TaskResults  map[string]*TaskResult `json:"task_results,omitempty"`
 	TestReports  map[string]*TestReport `json:"test_reports,omitempty"`
+	ChangedFiles []git.FileStatus       `json:"changed_files,omitempty"`
+	BlobHashes   map[string]string      `json:"blob_hashes,omitempty"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.
@@ -130,4 +132,6 @@ type WorkspaceDelta struct {
 	GitRemoteURL *string                `json:"git_remote_url,omitempty"`
 	TaskResults  map[string]*TaskResult `json:"task_results,omitempty"`
 	TestReports  map[string]*TestReport `json:"test_reports,omitempty"`
+	ChangedFiles []git.FileStatus       `json:"changed_files,omitempty"`
+	BlobHashes   map[string]string      `json:"blob_hashes,omitempty"`
 }

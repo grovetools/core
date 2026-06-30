@@ -101,7 +101,7 @@ func (c *LocalClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
 }
 
 // SetFocus is a no-op for LocalClient since there's no daemon to notify.
-func (c *LocalClient) SetFocus(ctx context.Context, paths []string) error {
+func (c *LocalClient) SetFocus(ctx context.Context, source string, paths []string) error {
 	return nil // No-op in local mode
 }
 
