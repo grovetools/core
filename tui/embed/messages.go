@@ -26,6 +26,9 @@ type (
 	SplitEditorRequestMsg        = tuimux_embed.SplitEditorRequestMsg
 	SplitEditorClosedMsg         = tuimux_embed.SplitEditorClosedMsg
 	SplitEditorCloseRequestMsg   = tuimux_embed.SplitEditorCloseRequestMsg
+	SplitReviewRequestMsg        = tuimux_embed.SplitReviewRequestMsg
+	SplitReviewClosedMsg         = tuimux_embed.SplitReviewClosedMsg
+	SplitReviewCloseRequestMsg   = tuimux_embed.SplitReviewCloseRequestMsg
 	SplitViewportRequestMsg      = tuimux_embed.SplitViewportRequestMsg
 	SplitViewportCloseRequestMsg = tuimux_embed.SplitViewportCloseRequestMsg
 	SplitViewportClosedMsg       = tuimux_embed.SplitViewportClosedMsg
