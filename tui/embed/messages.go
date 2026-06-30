@@ -39,6 +39,7 @@ type (
 	SplitMemoryCloseRequestMsg   = tuimux_embed.SplitMemoryCloseRequestMsg
 	SplitMemoryClosedMsg         = tuimux_embed.SplitMemoryClosedMsg
 	WorkspacesUpdatedMsg         = tuimux_embed.WorkspacesUpdatedMsg
+	NavBindingsUpdatedMsg        = tuimux_embed.NavBindingsUpdatedMsg
 	AppendContextRuleMsg         = tuimux_embed.AppendContextRuleMsg
 	SplitAgentRequestMsg         = tuimux_embed.SplitAgentRequestMsg
 )
