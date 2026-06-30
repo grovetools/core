@@ -128,6 +128,26 @@ type ClaudeSandboxFilesystem struct {
 type ClaudeSandboxNetwork struct {
 	// AllowedDomains is a list of domains the sandbox allows network access to.
 	AllowedDomains []string `yaml:"allowedDomains" toml:"allowedDomains" jsonschema:"description=Domains the sandbox allows network access to"`
+	// AllowUnixSockets is a list of unix-domain socket paths the sandbox allows
+	// connecting to (connect-only, per path). Does NOT grant bind() — for that a
+	// caller needs AllowAllUnixSockets (path-scoped bind is not yet a Claude Code
+	// feature). Unioned across layers like AllowedDomains.
+	AllowUnixSockets []string `yaml:"allowUnixSockets" toml:"allowUnixSockets" jsonschema:"description=Unix-domain socket paths the sandbox allows connecting to (connect-only, per path)"`
+	// AllowAllUnixSockets, when true, lets sandboxed processes connect AND bind
+	// unix-domain sockets at ANY path. This is the only knob that currently
+	// enables socket bind() (e.g. a tuimux daemon's listening socket). It is
+	// coarse and a security tradeoff: it opens docker.sock, the SSH agent, and
+	// GPG agent sockets to the sandboxed process. Prefer the per-path
+	// AllowUnixSockets when connect-only access suffices; reach for this only when
+	// bind() is required. Pointer distinguishes unset (nil) vs explicit false,
+	// like the sandbox bools.
+	AllowAllUnixSockets *bool `yaml:"allowAllUnixSockets" toml:"allowAllUnixSockets" jsonschema:"description=When true, allow connecting AND binding unix-domain sockets at any path (coarse; enables socket bind but opens docker.sock/SSH/GPG agents)"`
+	// AllowLocalBinding, when true, lets sandboxed processes bind localhost TCP
+	// ports. This is needed to bind grove's own daemon (groved) inside a
+	// sandboxed worktree — it listens on a 127.0.0.1 port, which the sandbox
+	// otherwise blocks. Pointer distinguishes unset (nil) vs explicit false, like
+	// the sandbox bools.
+	AllowLocalBinding *bool `yaml:"allowLocalBinding" toml:"allowLocalBinding" jsonschema:"description=When true, allow binding localhost TCP ports"`
 }
 
 // IsEmpty returns true if no configuration is set. ProtectConfig and
@@ -142,7 +162,10 @@ func (c *ClaudeConfig) IsEmpty() bool {
 		c.Sandbox.AutoAllowBashIfSandboxed == nil &&
 		len(c.Sandbox.Filesystem.AllowWrite) == 0 &&
 		len(c.Sandbox.Filesystem.DenyWrite) == 0 &&
-		len(c.Sandbox.Network.AllowedDomains) == 0
+		len(c.Sandbox.Network.AllowedDomains) == 0 &&
+		len(c.Sandbox.Network.AllowUnixSockets) == 0 &&
+		c.Sandbox.Network.AllowAllUnixSockets == nil &&
+		c.Sandbox.Network.AllowLocalBinding == nil
 }
 
 // ShouldSeed reports whether this config carries any signal the seeder must act
@@ -185,12 +208,14 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 		c.Sandbox.Filesystem.AllowWrite = append([]string(nil), other.Sandbox.Filesystem.AllowWrite...)
 		c.Sandbox.Filesystem.DenyWrite = append([]string(nil), other.Sandbox.Filesystem.DenyWrite...)
 		c.Sandbox.Network.AllowedDomains = append([]string(nil), other.Sandbox.Network.AllowedDomains...)
+		c.Sandbox.Network.AllowUnixSockets = append([]string(nil), other.Sandbox.Network.AllowUnixSockets...)
 	} else {
 		c.Permissions.Allow = unionStrings(c.Permissions.Allow, other.Permissions.Allow)
 		c.Permissions.Deny = unionStrings(c.Permissions.Deny, other.Permissions.Deny)
 		c.Sandbox.Filesystem.AllowWrite = unionStrings(c.Sandbox.Filesystem.AllowWrite, other.Sandbox.Filesystem.AllowWrite)
 		c.Sandbox.Filesystem.DenyWrite = unionStrings(c.Sandbox.Filesystem.DenyWrite, other.Sandbox.Filesystem.DenyWrite)
 		c.Sandbox.Network.AllowedDomains = unionStrings(c.Sandbox.Network.AllowedDomains, other.Sandbox.Network.AllowedDomains)
+		c.Sandbox.Network.AllowUnixSockets = unionStrings(c.Sandbox.Network.AllowUnixSockets, other.Sandbox.Network.AllowUnixSockets)
 	}
 
 	// For booleans, other (member) fills in gaps only if c (root) is nil.
@@ -203,6 +228,12 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	}
 	if c.Sandbox.AutoAllowBashIfSandboxed == nil && other.Sandbox.AutoAllowBashIfSandboxed != nil {
 		c.Sandbox.AutoAllowBashIfSandboxed = other.Sandbox.AutoAllowBashIfSandboxed
+	}
+	if c.Sandbox.Network.AllowAllUnixSockets == nil && other.Sandbox.Network.AllowAllUnixSockets != nil {
+		c.Sandbox.Network.AllowAllUnixSockets = other.Sandbox.Network.AllowAllUnixSockets
+	}
+	if c.Sandbox.Network.AllowLocalBinding == nil && other.Sandbox.Network.AllowLocalBinding != nil {
+		c.Sandbox.Network.AllowLocalBinding = other.Sandbox.Network.AllowLocalBinding
 	}
 	// AllowGroveTools is a root-wins-gap scalar like the sandbox bools: a member
 	// fills the slot only when the root left it nil. Note this scalar lives

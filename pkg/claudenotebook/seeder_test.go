@@ -483,6 +483,76 @@ func TestSeedSettings_WithClaudeConfig(t *testing.T) {
 	assertNoTmpLeak(t, wt)
 }
 
+// TestSeedSettings_SocketKnobsWritten asserts the three sandbox.network socket /
+// local-bind knobs are seeded: allowUnixSockets unions with any pre-existing
+// array, while allowAllUnixSockets and allowLocalBinding are written (and
+// OVERWRITE an existing value, like the other sandbox bools).
+func TestSeedSettings_SocketKnobsWritten(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	// Pre-seed an existing settings file with an allowUnixSockets entry (to be
+	// unioned) and allowLocalBinding=false (to be overwritten to true).
+	seed := map[string]any{
+		"sandbox": map[string]any{
+			"network": map[string]any{
+				"allowUnixSockets":  []any{"/run/existing.sock"},
+				"allowLocalBinding": false,
+			},
+		},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Sandbox: claudenotebook.ClaudeSandbox{
+			Network: claudenotebook.ClaudeSandboxNetwork{
+				AllowUnixSockets:    []string{"/run/existing.sock", "/run/tuimux.sock"},
+				AllowAllUnixSockets: boolPtr(true),
+				AllowLocalBinding:   boolPtr(true),
+			},
+		},
+	}
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+
+	// allowUnixSockets unions (no duplicate of the pre-existing entry).
+	sockets := stringSliceAt(t, root, "sandbox", "network", "allowUnixSockets")
+	assert.ElementsMatch(t, []string{"/run/existing.sock", "/run/tuimux.sock"}, sockets)
+
+	// allowAllUnixSockets written true; allowLocalBinding overwritten false->true.
+	assert.True(t, boolAt(t, root, "sandbox", "network", "allowAllUnixSockets"))
+	assert.True(t, boolAt(t, root, "sandbox", "network", "allowLocalBinding"))
+
+	assertNoTmpLeak(t, wt)
+}
+
+// TestSeedSettings_SocketKnobsAbsentNoOp confirms a config that sets no socket
+// knobs leaves the three keys unwritten (the empty/gate-off no-op holds).
+func TestSeedSettings_SocketKnobsAbsentNoOp(t *testing.T) {
+	wt := t.TempDir()
+
+	// A non-empty config (forces a write) that carries no socket knobs.
+	cfg := &claudenotebook.ClaudeConfig{
+		Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	assert.Nil(t, optionalBoolAt(root, "sandbox", "network", "allowAllUnixSockets"))
+	assert.Nil(t, optionalBoolAt(root, "sandbox", "network", "allowLocalBinding"))
+	// allowUnixSockets must be absent too.
+	if sb, ok := root["sandbox"].(map[string]any); ok {
+		if net, ok := sb["network"].(map[string]any); ok {
+			_, present := net["allowUnixSockets"]
+			assert.False(t, present, "allowUnixSockets should be absent")
+		}
+	}
+}
+
 // TestSeedSettings_MergeBoolNilVsFalseVsTrue tests that nil booleans are not
 // written, false is written explicitly, and true is written.
 func TestSeedSettings_MergeBoolNilVsFalseVsTrue(t *testing.T) {
