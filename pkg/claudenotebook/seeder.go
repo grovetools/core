@@ -31,6 +31,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/util/pathutil"
 )
 
@@ -45,6 +46,14 @@ const seedNotebookDirsEnvVar = "GROVE_SEED_CLAUDE_NOTEBOOK_DIRS"
 // seeds notebook dirs if that gate is open). Default (unset or anything else)
 // is ON.
 const seedSettingsEnvVar = "GROVE_SEED_CLAUDE_SETTINGS"
+
+// unlockConfigEnvVar is the dev escape hatch for the protectConfig toggle. When
+// set to "1" at seed time, the seeder treats protection as off for this launch:
+// it strips any grove-owned self-protection entries instead of writing them, so
+// an explicitly-unlocked agent can edit grove config. It lives OUTSIDE the
+// protected files by design — you cannot edit a locked grove.toml to unlock it.
+// flow injects this into dispatched-agent launches via its AgentEnv mechanism.
+const unlockConfigEnvVar = "GROVE_UNLOCK_CONFIG"
 
 // SeedNotebookDirs merges the given absolute notebook directories into the
 // worktree's .claude/settings.local.json under BOTH:
@@ -71,8 +80,10 @@ func SeedNotebookDirs(worktreePath string, dirs []string) error {
 	case "0", "false", "off":
 		return nil
 	}
-	// Delegate to SeedSettings with nil config (notebook dirs only).
-	return SeedSettings(worktreePath, nil, dirs)
+	// Delegate to SeedSettings with nil config (notebook dirs only). No repos:
+	// the local single-repo path has no ecosystem members to protect, and a nil
+	// config means the self-protection toggle never fires here anyway.
+	return SeedSettings(worktreePath, nil, nil, dirs)
 }
 
 // SeedSettings merges the given ClaudeConfig and notebook directories into the
@@ -92,16 +103,18 @@ func SeedNotebookDirs(worktreePath string, dirs []string) error {
 //   - Missing settings.local.json -> created from an empty object.
 //   - Malformed JSON -> returns an error WITHOUT touching the file.
 //   - Unknown top-level keys and unrelated nested fields are preserved verbatim.
-func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string) error {
+func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebookDirs []string) error {
 	notebookDirs = dedupeNonEmpty(notebookDirs)
 
 	// Check if there's anything to do.
 	settingsGateOff := isGateOff(seedSettingsEnvVar)
-	// allowGroveTools is a content signal that lives OUTSIDE IsEmpty (a lone
-	// flag must not be treated as empty), so the gate is widened to honor it:
-	// a config whose only signal is allowGroveTools=true still writes.
 	allowGroveTools := cfg != nil && cfg.AllowGroveTools != nil && *cfg.AllowGroveTools
-	hasConfig := cfg != nil && (!cfg.IsEmpty() || allowGroveTools) && !settingsGateOff
+	// ShouldSeed widens the bare IsEmpty() check to honor the lone-flag signals
+	// (allowGroveTools and protectConfig) that deliberately live outside IsEmpty.
+	// Without it a config whose only signal is protectConfig (true OR false) would
+	// be treated as empty and skipped, so the lock would never write and the
+	// strip-on-false could never fire.
+	hasConfig := cfg.ShouldSeed() && !settingsGateOff
 	hasDirs := len(notebookDirs) > 0
 
 	if !hasConfig && !hasDirs {
@@ -203,6 +216,56 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 		if len(cfg.Sandbox.Network.AllowedDomains) > 0 {
 			mergeStringArray(root, []string{"sandbox", "network", "allowedDomains"}, cfg.Sandbox.Network.AllowedDomains)
 		}
+
+		// Config self-protection: deny writes to the grove config files that
+		// govern this worktree's sandbox/permissions, so a sandboxed agent can't
+		// edit the config that sandboxes it. The two layers cover the two seams:
+		// sandbox.filesystem.denyWrite is the OS-enforced block for shell writes
+		// (bypass-proof when sandbox.enabled), and permissions.deny Edit/Write
+		// rules best-effort cover the native-tool seam. We compute the grove-owned
+		// entries and either ADD them (protect) or actively STRIP them (toggle off
+		// / unlocked), then re-merge the user's own deny arrays so user-authored
+		// entries are always preserved — including any that happen to match a
+		// grove-owned path.
+		unlocked := os.Getenv(unlockConfigEnvVar) == "1"
+		want := cfg.ProtectConfig != nil && *cfg.ProtectConfig
+		protect := want && !unlocked
+		// Strip whenever an explicit toggle is present but protection is not in
+		// effect (explicit false, or true-but-unlocked-for-this-launch), so a
+		// previously written lock is reversible. Unset (nil) touches nothing.
+		strip := cfg.ProtectConfig != nil && !protect
+
+		if protect || strip {
+			protPaths := protectedConfigPaths(worktreePath, repos)
+			denyWritePaths := make([]string, 0, len(protPaths))
+			denyRules := make([]string, 0, len(protPaths)*3)
+			for _, p := range protPaths {
+				denyWritePaths = append(denyWritePaths, p.path)
+				denyRules = append(denyRules, denyRulesForPath(p)...)
+			}
+			if protect {
+				mergeStringArray(root, []string{"sandbox", "filesystem", "denyWrite"}, denyWritePaths)
+				mergeStringArray(root, []string{"permissions", "deny"}, denyRules)
+				if cfg.Sandbox.Enabled == nil || !*cfg.Sandbox.Enabled {
+					fmt.Fprintln(os.Stderr, "Warning: [claude] protectConfig is enabled but sandbox is disabled. "+
+						"Config protection is relying solely on native-tool permissions (permissions.deny), "+
+						"which agents can bypass via shell commands. Set [claude.sandbox] enabled = true for the OS-enforced block.")
+				}
+			} else {
+				removeFromStringArray(root, []string{"sandbox", "filesystem", "denyWrite"}, denyWritePaths)
+				removeFromStringArray(root, []string{"permissions", "deny"}, denyRules)
+			}
+		}
+
+		// User-authored deny arrays are merged AFTER the protection add/strip so a
+		// user entry is always present, even one that coincides with a grove-owned
+		// path that strip just removed. These are normal additive config arrays.
+		if len(cfg.Permissions.Deny) > 0 {
+			mergeStringArray(root, []string{"permissions", "deny"}, cfg.Permissions.Deny)
+		}
+		if len(cfg.Sandbox.Filesystem.DenyWrite) > 0 {
+			mergeStringArray(root, []string{"sandbox", "filesystem", "denyWrite"}, cfg.Sandbox.Filesystem.DenyWrite)
+		}
 	}
 
 	out, err := json.MarshalIndent(root, "", "  ")
@@ -230,6 +293,94 @@ func SeedSettings(worktreePath string, cfg *ClaudeConfig, notebookDirs []string)
 // interpreted as project-root-relative (wrong).
 func editRuleForAbsDir(absDir string) string {
 	return "Edit(//" + strings.TrimPrefix(filepath.ToSlash(absDir), "/") + "/**)"
+}
+
+// protectedPath is a single config-file or config-directory target of the
+// self-protection toggle. isDir distinguishes the global config directory
+// (~/.config/grove), whose deny rules need a /** subtree glob to cover the files
+// inside it, from the individual config FILE paths (grove.toml/.yml/.yaml),
+// which match the file exactly with no glob.
+type protectedPath struct {
+	path  string
+	isDir bool
+}
+
+// configFileNames are the grove config filenames protected at each repo/worktree
+// root. grove.toml is the canonical one; the .yml/.yaml variants are included so
+// switching format can't sidestep the lock. Non-existent variants are harmless:
+// a deny rule for a path that doesn't exist yet simply blocks creating it there.
+var configFileNames = []string{"grove.toml", "grove.yml", "grove.yaml"}
+
+// protectedConfigPaths returns the canonicalized set of config paths the
+// self-protection toggle locks: the global grove config dir, the worktree-root
+// grove config files, and each member repo's grove config files. The worktree
+// root is canonicalized once (resolving symlinks + macOS case) and the config
+// filenames joined onto it, so the rules match the path Claude actually compares
+// against even for files that don't exist yet (CanonicalPath of a non-existent
+// leaf is unreliable; a canonical existing-dir prefix is not).
+func protectedConfigPaths(worktreePath string, repos []string) []protectedPath {
+	var out []protectedPath
+	seen := map[string]struct{}{}
+	add := func(p string, isDir bool) {
+		if p == "" {
+			return
+		}
+		if _, dup := seen[p]; dup {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, protectedPath{path: p, isDir: isDir})
+	}
+
+	// Global config directory. Resolved via paths.ConfigDir() (GROVE_HOME →
+	// XDG_CONFIG_HOME → ~/.config), the SAME resolver grove uses to load its
+	// global grove.yml — so we protect the dir grove actually reads, and a
+	// sandboxed XDG_CONFIG_HOME (e.g. tend e2e) resolves inside the sandbox
+	// instead of the developer's real ~/.config/grove.
+	if cfgDir := paths.ConfigDir(); cfgDir != "" {
+		if canon, cerr := pathutil.CanonicalPath(cfgDir); cerr == nil {
+			add(canon, true)
+		} else {
+			add(cfgDir, true)
+		}
+	}
+
+	// Canonical worktree root prefix; fall back to the raw path if it can't be
+	// canonicalized (it almost always exists at seed time).
+	canonWt := worktreePath
+	if canon, err := pathutil.CanonicalPath(worktreePath); err == nil {
+		canonWt = canon
+	}
+
+	for _, name := range configFileNames {
+		add(filepath.Join(canonWt, name), false)
+	}
+	for _, repo := range repos {
+		if repo == "" {
+			continue
+		}
+		for _, name := range configFileNames {
+			add(filepath.Join(canonWt, repo, name), false)
+		}
+	}
+	return out
+}
+
+// denyRulesForPath returns the permissions.deny rules (Edit/Write/MultiEdit) for
+// a single protected path, mirroring editRuleForAbsDir's anchor convention: the
+// leading "//" absolute anchor with the leading slash stripped. A directory uses
+// the "/**" subtree glob so edits to files INSIDE it are denied; a file matches
+// exactly with no glob.
+func denyRulesForPath(p protectedPath) []string {
+	anchored := "//" + strings.TrimPrefix(filepath.ToSlash(p.path), "/")
+	if p.isDir {
+		anchored += "/**"
+	}
+	return []string{
+		"Edit(" + anchored + ")",
+		"Write(" + anchored + ")",
+		"MultiEdit(" + anchored + ")",
+	}
 }
 
 // groveToolBashRules returns a Bash(<name>:*) allow rule for each canonical
@@ -351,6 +502,52 @@ func mergeStringArray(root map[string]any, path []string, values []string) {
 		merged[i] = s
 	}
 	parent[leafKey] = merged
+}
+
+// removeFromStringArray is the additive-inverse of mergeStringArray: it descends
+// the nested object path and, if the leaf array exists, filters out exactly the
+// elements equal to one of valuesToRemove, leaving every other element (and its
+// order) untouched. This is the strip-on-false mechanism for self-protection —
+// it removes only grove-owned entries, never a user's own deny rules. A missing
+// path or leaf is a no-op (nothing to remove). Non-string and unmatched elements
+// are preserved verbatim. If removal empties the array, the empty array is left
+// in place (a present-but-empty key is harmless and avoids resurrecting a stale
+// shape).
+func removeFromStringArray(root map[string]any, path []string, valuesToRemove []string) {
+	if len(valuesToRemove) == 0 {
+		return
+	}
+	// Descend WITHOUT creating: if any intermediate is absent, there is nothing
+	// to strip.
+	parent := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := parent[key].(map[string]any)
+		if !ok {
+			return
+		}
+		parent = child
+	}
+	leafKey := path[len(path)-1]
+	raw, ok := parent[leafKey].([]any)
+	if !ok {
+		return
+	}
+
+	remove := make(map[string]struct{}, len(valuesToRemove))
+	for _, v := range valuesToRemove {
+		remove[v] = struct{}{}
+	}
+
+	filtered := make([]any, 0, len(raw))
+	for _, item := range raw {
+		if s, ok := item.(string); ok {
+			if _, drop := remove[s]; drop {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
+	}
+	parent[leafKey] = filtered
 }
 
 // dedupeNonEmpty returns the sorted, de-duplicated, non-empty subset of in.

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/grovetools/core/pkg/claudenotebook"
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/util/pathutil"
 )
 
@@ -257,7 +258,7 @@ func allowRules(t *testing.T, root map[string]any) []string {
 func TestSeedSettings_EditRuleDerivation(t *testing.T) {
 	wt := t.TempDir()
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA", "/abs/nbB"}))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA", "/abs/nbB"}))
 
 	root := readSettings(t, wt)
 	rules := allowRules(t, root)
@@ -274,7 +275,7 @@ func TestSeedSettings_EditRuleDerivation(t *testing.T) {
 func TestSeedSettings_WorktreeEditRuleCanonicalized(t *testing.T) {
 	wt := t.TempDir()
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA"}))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
 
 	rules := allowRules(t, readSettings(t, wt))
 	canon, err := pathutil.CanonicalPath(wt)
@@ -292,7 +293,7 @@ func TestSeedSettings_EditRulesRideDirGate_SettingsGateOff(t *testing.T) {
 	wt := t.TempDir()
 	t.Setenv("GROVE_SEED_CLAUDE_SETTINGS", "off")
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA"}))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
 
 	root := readSettings(t, wt)
 	rules := allowRules(t, root)
@@ -330,7 +331,7 @@ func TestSeedSettings_EditRuleDedupNoClobber(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/abs/nbA"}))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
 
 	rules := allowRules(t, readSettings(t, wt))
 	// No duplicate of the pre-existing Edit rule.
@@ -355,7 +356,7 @@ func TestSeedSettings_AllowGroveToolsExpansion(t *testing.T) {
 	wt := t.TempDir()
 
 	cfg := &claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(true)}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	// The file is written even though the only signal is the flag.
 	_, statErr := os.Stat(filepath.Join(wt, settingsRel))
@@ -375,7 +376,7 @@ func TestSeedSettings_AllowGroveToolsOffNoExpansion(t *testing.T) {
 		cfg := &claudenotebook.ClaudeConfig{
 			Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
 		}
-		require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+		require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 		assert.NotContains(t, allowRules(t, readSettings(t, wt)), "Bash(grove:*)")
 	})
 
@@ -385,7 +386,7 @@ func TestSeedSettings_AllowGroveToolsOffNoExpansion(t *testing.T) {
 			AllowGroveTools: boolPtr(false),
 			Permissions:     claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
 		}
-		require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+		require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 		assert.NotContains(t, allowRules(t, readSettings(t, wt)), "Bash(grove:*)")
 	})
 }
@@ -451,7 +452,7 @@ func TestSeedSettings_WithClaudeConfig(t *testing.T) {
 	}
 	notebookDirs := []string{"/Users/dev/notebooks/core"}
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, notebookDirs))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, notebookDirs))
 
 	root := readSettings(t, wt)
 
@@ -522,7 +523,7 @@ func TestSeedSettings_MergeBoolNilVsFalseVsTrue(t *testing.T) {
 			// Need at least one non-empty field to trigger writing.
 			cfg.Permissions.Allow = []string{"Bash"}
 
-			require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+			require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 			root := readSettings(t, wt)
 			val := optionalBoolAt(root, "sandbox", "enabled")
@@ -570,7 +571,7 @@ func TestSeedSettings_ArrayUnionDedupe(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	root := readSettings(t, wt)
 
@@ -601,7 +602,7 @@ func TestSeedSettings_GateOff(t *testing.T) {
 			}
 			notebookDirs := []string{"/Users/dev/notebooks/core"}
 
-			require.NoError(t, claudenotebook.SeedSettings(wt, cfg, notebookDirs))
+			require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, notebookDirs))
 
 			root := readSettings(t, wt)
 
@@ -632,7 +633,7 @@ func TestSeedSettings_EmptyConfigNoOp(t *testing.T) {
 	wt := t.TempDir()
 
 	// Empty config and no notebook dirs.
-	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, nil))
 
 	_, err := os.Stat(filepath.Join(wt, settingsRel))
 	assert.True(t, os.IsNotExist(err), "no file should be created with empty config and no dirs")
@@ -643,7 +644,7 @@ func TestSeedSettings_EmptyConfigNoOp(t *testing.T) {
 func TestSeedSettings_NilConfigWithDirs(t *testing.T) {
 	wt := t.TempDir()
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, nil, []string{"/Users/dev/notebooks/core"}))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/Users/dev/notebooks/core"}))
 
 	root := readSettings(t, wt)
 	assert.Contains(t, additionalDirs(t, root), "/Users/dev/notebooks/core")
@@ -664,7 +665,7 @@ func TestSeedSettings_MalformedJSONNoOp(t *testing.T) {
 			Allow: []string{"Bash"},
 		},
 	}
-	err := claudenotebook.SeedSettings(wt, cfg, nil)
+	err := claudenotebook.SeedSettings(wt, nil, cfg, nil)
 	require.Error(t, err, "malformed JSON must return an error")
 
 	after, readErr := os.ReadFile(settingsPath)
@@ -685,7 +686,7 @@ func TestSeedSettings_AtomicWrite(t *testing.T) {
 			Allow: []string{"Bash"},
 		},
 	}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	info, err := os.Stat(settingsPath)
 	require.NoError(t, err)
@@ -717,7 +718,7 @@ func TestSeedSettings_BoolOverwritesExisting(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	root := readSettings(t, wt)
 	assert.True(t, boolAt(t, root, "sandbox", "enabled"), "enabled should be overwritten to true")
@@ -752,7 +753,7 @@ func TestSeedSettings_DefaultModeWritten(t *testing.T) {
 			DefaultMode: "bypassPermissions",
 		},
 	}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	root := readSettings(t, wt)
 	got := optionalStringAt(root, "permissions", "defaultMode")
@@ -772,7 +773,7 @@ func TestSeedSettings_DefaultModeAbsentWhenUnset(t *testing.T) {
 			Allow: []string{"Bash(git:*)"},
 		},
 	}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	root := readSettings(t, wt)
 	assert.Nil(t, optionalStringAt(root, "permissions", "defaultMode"),
@@ -799,7 +800,7 @@ func TestSeedSettings_DefaultModeNoClobberWhenUnset(t *testing.T) {
 	cfg := &claudenotebook.ClaudeConfig{
 		Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
 	}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	root := readSettings(t, wt)
 	got := optionalStringAt(root, "permissions", "defaultMode")
@@ -823,7 +824,7 @@ func TestSeedSettings_DefaultModeOverwritesExisting(t *testing.T) {
 	cfg := &claudenotebook.ClaudeConfig{
 		Permissions: claudenotebook.ClaudePermissions{DefaultMode: "bypassPermissions"},
 	}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	root := readSettings(t, wt)
 	got := optionalStringAt(root, "permissions", "defaultMode")
@@ -840,7 +841,7 @@ func TestSeedSettings_DefaultModeGateOff(t *testing.T) {
 	cfg := &claudenotebook.ClaudeConfig{
 		Permissions: claudenotebook.ClaudePermissions{DefaultMode: "bypassPermissions"},
 	}
-	require.NoError(t, claudenotebook.SeedSettings(wt, cfg, nil))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
 
 	_, err := os.Stat(filepath.Join(wt, settingsRel))
 	assert.True(t, os.IsNotExist(err), "gate off + lone defaultMode must not write the file")
@@ -964,4 +965,235 @@ func TestClaudeConfig_IsEmpty(t *testing.T) {
 		}
 		assert.False(t, cfg.IsEmpty())
 	})
+}
+
+// ============================================================================
+// Config self-protection (protectConfig) tests
+// ============================================================================
+
+// protectionExpectation mirrors the seeder's protectedConfigPaths/denyRulesForPath
+// so tests can assert the exact entries without importing unexported helpers.
+func protectionExpectation(t *testing.T, wt string, repos []string) (denyWrite []string, denyRules []string) {
+	t.Helper()
+	type pp struct {
+		path  string
+		isDir bool
+	}
+	var pths []pp
+	if cfgDir := paths.ConfigDir(); cfgDir != "" {
+		canon, cerr := pathutil.CanonicalPath(cfgDir)
+		if cerr != nil {
+			canon = cfgDir
+		}
+		pths = append(pths, pp{canon, true})
+	}
+	canonWt := wt
+	if canon, err := pathutil.CanonicalPath(wt); err == nil {
+		canonWt = canon
+	}
+	names := []string{"grove.toml", "grove.yml", "grove.yaml"}
+	for _, n := range names {
+		pths = append(pths, pp{filepath.Join(canonWt, n), false})
+	}
+	for _, r := range repos {
+		for _, n := range names {
+			pths = append(pths, pp{filepath.Join(canonWt, r, n), false})
+		}
+	}
+	for _, p := range pths {
+		denyWrite = append(denyWrite, p.path)
+		anchored := "//" + strings.TrimPrefix(filepath.ToSlash(p.path), "/")
+		if p.isDir {
+			anchored += "/**"
+		}
+		denyRules = append(denyRules,
+			"Edit("+anchored+")",
+			"Write("+anchored+")",
+			"MultiEdit("+anchored+")",
+		)
+	}
+	return denyWrite, denyRules
+}
+
+func permDeny(t *testing.T, root map[string]any) []string {
+	return stringSliceAt(t, root, "permissions", "deny")
+}
+
+func denyWriteAt(t *testing.T, root map[string]any) []string {
+	return stringSliceAt(t, root, "sandbox", "filesystem", "denyWrite")
+}
+
+// TestSeedSettings_ProtectConfig_WritesBothLayers: protectConfig=true emits the
+// sandbox denyWrite paths AND the permissions.deny Edit/Write/MultiEdit rules
+// for the worktree + member-repo config files and the global config dir.
+func TestSeedSettings_ProtectConfig_WritesBothLayers(t *testing.T) {
+	wt := t.TempDir()
+	repos := []string{"svc-a", "svc-b"}
+	cfg := &claudenotebook.ClaudeConfig{
+		ProtectConfig: boolPtr(true),
+		Sandbox:       claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, repos, cfg, nil))
+
+	root := readSettings(t, wt)
+	wantDenyWrite, wantRules := protectionExpectation(t, wt, repos)
+	gotDenyWrite := denyWriteAt(t, root)
+	gotDeny := permDeny(t, root)
+	for _, p := range wantDenyWrite {
+		assert.Contains(t, gotDenyWrite, p, "denyWrite must contain protected path")
+	}
+	for _, r := range wantRules {
+		assert.Contains(t, gotDeny, r, "permissions.deny must contain protection rule")
+	}
+	// The global config dir must use the /** subtree glob; the file paths must NOT.
+	var sawDirGlob, sawFileExact bool
+	for _, r := range gotDeny {
+		if strings.HasSuffix(r, "/.config/grove/**)") {
+			sawDirGlob = true
+		}
+		if strings.HasSuffix(r, "/grove.toml)") {
+			sawFileExact = true
+		}
+	}
+	assert.True(t, sawDirGlob, "global config dir rule must use /** subtree glob")
+	assert.True(t, sawFileExact, "grove.toml file rule must match the file exactly (no glob)")
+	assertNoTmpLeak(t, wt)
+}
+
+// TestSeedSettings_ProtectConfig_NeverDeniesToolInvocation: the protection rules
+// target file PATHS only — never a Bash(<tool>:*) invocation.
+func TestSeedSettings_ProtectConfig_NeverDeniesToolInvocation(t *testing.T) {
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(true), Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)}}
+	require.NoError(t, claudenotebook.SeedSettings(wt, []string{"core"}, cfg, nil))
+
+	for _, r := range permDeny(t, readSettings(t, wt)) {
+		assert.NotContains(t, r, "Bash(", "protection must never deny a Bash tool invocation")
+	}
+}
+
+// TestSeedSettings_ProtectConfig_OnlySignalStillSeeds: a config whose ONLY
+// signal is protectConfig=true (IsEmpty()==true) must still write protection.
+// This is the regression guard for the ShouldSeed gate; without it the upstream
+// IsEmpty short-circuits would drop the config before the seeder runs.
+func TestSeedSettings_ProtectConfig_OnlySignalStillSeeds(t *testing.T) {
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(true)} // nothing else set
+	require.True(t, cfg.IsEmpty(), "precondition: protectConfig-only config is IsEmpty")
+	require.True(t, cfg.ShouldSeed(), "ShouldSeed must be true for a protectConfig-only config")
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+	root := readSettings(t, wt)
+	assert.NotEmpty(t, denyWriteAt(t, root), "denyWrite must be written for protectConfig-only config")
+	assert.NotEmpty(t, permDeny(t, root), "permissions.deny must be written for protectConfig-only config")
+}
+
+// TestSeedSettings_ProtectConfig_NoClobberUserDeny: a pre-existing user deny rule
+// and user denyWrite path survive the protection seed, and the user's own
+// configured Deny/DenyWrite arrays are unioned in.
+func TestSeedSettings_ProtectConfig_NoClobberUserDeny(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+	seed := map[string]any{
+		"permissions": map[string]any{"deny": []any{"Read(/etc/passwd)"}},
+		"sandbox":     map[string]any{"filesystem": map[string]any{"denyWrite": []any{"/var/log"}}},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		ProtectConfig: boolPtr(true),
+		Sandbox:       claudenotebook.ClaudeSandbox{Enabled: boolPtr(true), Filesystem: claudenotebook.ClaudeSandboxFilesystem{DenyWrite: []string{"/srv/data"}}},
+		Permissions:   claudenotebook.ClaudePermissions{Deny: []string{"Read(/secret)"}},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	assert.Contains(t, permDeny(t, root), "Read(/etc/passwd)", "pre-existing user deny survives")
+	assert.Contains(t, permDeny(t, root), "Read(/secret)", "configured user deny unioned in")
+	assert.Contains(t, denyWriteAt(t, root), "/var/log", "pre-existing user denyWrite survives")
+	assert.Contains(t, denyWriteAt(t, root), "/srv/data", "configured user denyWrite unioned in")
+}
+
+// TestSeedSettings_ProtectConfig_FalseStripsOnlyGroveOwned: toggling false strips
+// grove-owned entries but leaves user-authored deny rules intact (reversibility).
+func TestSeedSettings_ProtectConfig_FalseStripsOnlyGroveOwned(t *testing.T) {
+	wt := t.TempDir()
+	// First lock it.
+	on := &claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(true), Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)}}
+	require.NoError(t, claudenotebook.SeedSettings(wt, []string{"svc-a"}, on, nil))
+	// Inject user entries alongside the grove-owned ones.
+	root := readSettings(t, wt)
+	root["permissions"].(map[string]any)["deny"] = append(root["permissions"].(map[string]any)["deny"].([]any), "Read(/etc/passwd)")
+	root["sandbox"].(map[string]any)["filesystem"].(map[string]any)["denyWrite"] = append(
+		root["sandbox"].(map[string]any)["filesystem"].(map[string]any)["denyWrite"].([]any), "/var/log")
+	data, err := json.MarshalIndent(root, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	// Now toggle off.
+	off := &claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(false), Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)}}
+	require.NoError(t, claudenotebook.SeedSettings(wt, []string{"svc-a"}, off, nil))
+
+	root = readSettings(t, wt)
+	_, wantRules := protectionExpectation(t, wt, []string{"svc-a"})
+	gotDeny := permDeny(t, root)
+	for _, r := range wantRules {
+		assert.NotContains(t, gotDeny, r, "grove-owned deny rule must be stripped on false")
+	}
+	assert.Contains(t, gotDeny, "Read(/etc/passwd)", "user deny rule must survive the strip")
+	assert.Contains(t, denyWriteAt(t, root), "/var/log", "user denyWrite must survive the strip")
+}
+
+// TestSeedSettings_ProtectConfig_UnlockEnvStrips: GROVE_UNLOCK_CONFIG=1 makes a
+// protectConfig=true seed behave as off for this launch (entries stripped).
+func TestSeedSettings_ProtectConfig_UnlockEnvStrips(t *testing.T) {
+	wt := t.TempDir()
+	// Lock first without the env var.
+	on := &claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(true), Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)}}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, on, nil))
+	require.NotEmpty(t, permDeny(t, readSettings(t, wt)))
+
+	// Re-seed with the unlock env: should strip the grove-owned rules.
+	t.Setenv("GROVE_UNLOCK_CONFIG", "1")
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, on, nil))
+	root := readSettings(t, wt)
+	_, wantRules := protectionExpectation(t, wt, nil)
+	for _, r := range wantRules {
+		assert.NotContains(t, permDeny(t, root), r, "unlock env must strip grove-owned deny rules")
+	}
+}
+
+// TestSeedSettings_ProtectConfig_UnsetNoOp: an unset ProtectConfig writes no
+// protection entries and performs no strip.
+func TestSeedSettings_ProtectConfig_UnsetNoOp(t *testing.T) {
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}}}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+	root := readSettings(t, wt)
+	_, denyExists := root["permissions"].(map[string]any)["deny"]
+	assert.False(t, denyExists, "unset protectConfig must not create a permissions.deny array")
+}
+
+// TestSeedSettings_ProtectConfig_SandboxDisabledStillWritesPermDeny: with
+// protectConfig=true but sandbox disabled, the best-effort permissions.deny seam
+// is still written (the warning path must not skip the write).
+func TestSeedSettings_ProtectConfig_SandboxDisabledStillWritesPermDeny(t *testing.T) {
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(true)} // sandbox.enabled nil
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+	root := readSettings(t, wt)
+	assert.NotEmpty(t, permDeny(t, root), "permissions.deny written even when sandbox disabled")
+	assert.NotEmpty(t, denyWriteAt(t, root), "denyWrite written even when sandbox disabled")
+}
+
+// TestClaudeConfig_ShouldSeed covers the lone-flag widening contract.
+func TestClaudeConfig_ShouldSeed(t *testing.T) {
+	assert.False(t, (*claudenotebook.ClaudeConfig)(nil).ShouldSeed(), "nil config should not seed")
+	assert.False(t, (&claudenotebook.ClaudeConfig{}).ShouldSeed(), "empty config should not seed")
+	assert.True(t, (&claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(true)}).ShouldSeed(), "protectConfig=true seeds")
+	assert.True(t, (&claudenotebook.ClaudeConfig{ProtectConfig: boolPtr(false)}).ShouldSeed(), "protectConfig=false seeds (to strip)")
+	assert.True(t, (&claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(true)}).ShouldSeed(), "allowGroveTools=true seeds")
+	assert.False(t, (&claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(false)}).ShouldSeed(), "allowGroveTools=false does not seed alone")
 }
