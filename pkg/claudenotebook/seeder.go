@@ -238,6 +238,17 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 			mergeStringArray(root, []string{"sandbox", "network", "allowedDomains"}, cfg.Sandbox.Network.AllowedDomains)
 		}
 
+		// sandbox.network.allowUnixSockets (connect-only socket paths; unioned
+		// like allowedDomains)
+		if len(cfg.Sandbox.Network.AllowUnixSockets) > 0 {
+			mergeStringArray(root, []string{"sandbox", "network", "allowUnixSockets"}, cfg.Sandbox.Network.AllowUnixSockets)
+		}
+
+		// sandbox.network socket/local-bind booleans (only write if non-nil;
+		// OVERWRITE like the other sandbox bools — grove.toml wins)
+		mergeBool(root, []string{"sandbox", "network", "allowAllUnixSockets"}, cfg.Sandbox.Network.AllowAllUnixSockets)
+		mergeBool(root, []string{"sandbox", "network", "allowLocalBinding"}, cfg.Sandbox.Network.AllowLocalBinding)
+
 		// Config self-protection: deny writes to the grove config files that
 		// govern this worktree's sandbox/permissions, so a sandboxed agent can't
 		// edit the config that sandboxes it. The two layers cover the two seams:

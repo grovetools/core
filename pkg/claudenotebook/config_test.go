@@ -175,6 +175,92 @@ func TestDefaultModeInIsEmpty(t *testing.T) {
 	}
 }
 
+// TestMerge_AllowUnixSocketsUnion confirms sandbox.network.allowUnixSockets
+// unions across layers by default and is replaced wholesale under inherit=false,
+// mirroring allowedDomains.
+func TestMerge_AllowUnixSocketsUnion(t *testing.T) {
+	t.Run("union by default", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+			AllowUnixSockets: []string{"/run/root.sock", "/run/shared.sock"},
+		}}}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+			AllowUnixSockets: []string{"/run/shared.sock", "/run/member.sock"},
+		}}}
+		root.Merge(member)
+		want := []string{"/run/root.sock", "/run/shared.sock", "/run/member.sock"}
+		if !reflect.DeepEqual(root.Sandbox.Network.AllowUnixSockets, want) {
+			t.Errorf("expected union %v, got %v", want, root.Sandbox.Network.AllowUnixSockets)
+		}
+	})
+
+	t.Run("inherit=false replaces wholesale", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+			AllowUnixSockets: []string{"/run/root.sock"},
+		}}}
+		member := &ClaudeConfig{
+			Inherit: boolPtr(false),
+			Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+				AllowUnixSockets: []string{"/run/member.sock"},
+			}},
+		}
+		root.Merge(member)
+		if !reflect.DeepEqual(root.Sandbox.Network.AllowUnixSockets, []string{"/run/member.sock"}) {
+			t.Errorf("expected allowUnixSockets overwritten to [/run/member.sock], got %v", root.Sandbox.Network.AllowUnixSockets)
+		}
+	})
+}
+
+// TestMerge_SocketBoolGapFill confirms allowAllUnixSockets and allowLocalBinding
+// are root-wins-gap *bool scalars like the other sandbox bools: a member fills a
+// nil root slot, an explicit root value survives.
+func TestMerge_SocketBoolGapFill(t *testing.T) {
+	t.Run("root nil + member set -> member fills gap", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+			AllowAllUnixSockets: boolPtr(true),
+			AllowLocalBinding:   boolPtr(true),
+		}}}
+		root.Merge(member)
+		if root.Sandbox.Network.AllowAllUnixSockets == nil || !*root.Sandbox.Network.AllowAllUnixSockets {
+			t.Errorf("expected member to fill allowAllUnixSockets, got %v", root.Sandbox.Network.AllowAllUnixSockets)
+		}
+		if root.Sandbox.Network.AllowLocalBinding == nil || !*root.Sandbox.Network.AllowLocalBinding {
+			t.Errorf("expected member to fill allowLocalBinding, got %v", root.Sandbox.Network.AllowLocalBinding)
+		}
+	})
+
+	t.Run("explicit root false wins over member true", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+			AllowAllUnixSockets: boolPtr(false),
+		}}}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{
+			AllowAllUnixSockets: boolPtr(true),
+		}}}
+		root.Merge(member)
+		if root.Sandbox.Network.AllowAllUnixSockets == nil || *root.Sandbox.Network.AllowAllUnixSockets {
+			t.Errorf("expected explicit root false to win, got %v", root.Sandbox.Network.AllowAllUnixSockets)
+		}
+	})
+}
+
+// TestSocketKnobsInIsEmpty confirms each new sandbox.network knob counts as
+// content, so a config whose only signal is one of them forces a settings write.
+func TestSocketKnobsInIsEmpty(t *testing.T) {
+	cases := map[string]*ClaudeConfig{
+		"allowUnixSockets":    {Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{AllowUnixSockets: []string{"/run/a.sock"}}}},
+		"allowAllUnixSockets": {Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{AllowAllUnixSockets: boolPtr(true)}}},
+		"allowLocalBinding":   {Sandbox: ClaudeSandbox{Network: ClaudeSandboxNetwork{AllowLocalBinding: boolPtr(false)}}},
+	}
+	for name, c := range cases {
+		if c.IsEmpty() {
+			t.Errorf("expected config with %s set to be non-empty", name)
+		}
+	}
+	if !(&ClaudeConfig{}).IsEmpty() {
+		t.Errorf("expected an all-zero config to be empty")
+	}
+}
+
 // TestDecode_InheritRoundTrips confirms a raw map decodes `inherit` into the
 // *bool field (mirrors UnmarshalExtension's mapstructure/yaml-tag decode).
 func TestDecode_InheritRoundTrips(t *testing.T) {
