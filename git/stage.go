@@ -3,6 +3,8 @@ package git
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/grovetools/core/command"
@@ -56,6 +58,71 @@ func GetBlobHash(repoPath, filePath string) (string, error) {
 		return "", fmt.Errorf("git hash-object failed for %s: %w", filePath, err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// GetBlobHashes returns the git blob object hashes for the given repo-relative
+// paths within repoPath, computed in a SINGLE `git hash-object --stdin-paths`
+// subprocess instead of one per file. It is the batch counterpart to
+// GetBlobHash and produces byte-for-byte the SAME hash: --stdin-paths hashes the
+// WORKING-TREE content of each path (applying the same gitattributes filters as
+// `git hash-object -- <path>`), NOT the index stage-0 hash. This matters for the
+// review-state machine, which compares LastReviewedBlobHash against the file's
+// current working-tree hash — using `git ls-files -s` (index hashes) would
+// silently mis-invalidate review state on files with unstaged edits.
+//
+// hash-object errors on any path that does not exist on disk (e.g. a deleted
+// file still present in the change list), which would abort the whole batch.
+// Like GetBlobHash's best-effort contract, missing paths are simply dropped:
+// input paths are filtered through os.Stat first, and only existing paths are
+// fed to git. The returned map therefore contains an entry only for each path
+// that exists and hashed cleanly; absent entries leave the review indicator to
+// fall back. Paths are validated with the same SafeBuilder "fileName" pattern
+// GetBlobHash uses; ones that fail validation are skipped.
+func GetBlobHashes(repoPath string, paths []string) (map[string]string, error) {
+	result := make(map[string]string)
+	cmdBuilder := command.NewSafeBuilder()
+
+	// Filter to paths that pass validation AND exist on disk, preserving order
+	// so the hashes read back from stdout line up with their input paths.
+	var valid []string
+	for _, p := range paths {
+		if err := cmdBuilder.Validate("fileName", p); err != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(repoPath, p)); err != nil {
+			continue
+		}
+		valid = append(valid, p)
+	}
+	if len(valid) == 0 {
+		return result, nil
+	}
+
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "hash-object", "--stdin-paths")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	execCmd.Stdin = strings.NewReader(strings.Join(valid, "\n") + "\n")
+	output, err := execCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git hash-object --stdin-paths failed: %w", err)
+	}
+
+	// One hash per input line, in order. Tolerate a short read (fewer lines than
+	// inputs) by mapping only what came back.
+	hashes := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for i, p := range valid {
+		if i >= len(hashes) {
+			break
+		}
+		h := strings.TrimSpace(hashes[i])
+		if h != "" {
+			result[p] = h
+		}
+	}
+	return result, nil
 }
 
 // GetBlobContent returns the raw bytes of the git blob object identified by

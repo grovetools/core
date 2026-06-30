@@ -148,6 +148,58 @@ func TestGetBlobHashChangesOnEdit(t *testing.T) {
 	assert.NotEqual(t, before, after)
 }
 
+func TestGetBlobHashes(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+
+	// Commit two tracked files, then leave an unstaged edit on one. The batch
+	// helper must hash the WORKING-TREE content (matching GetBlobHash), not the
+	// committed/index blob — otherwise review state breaks on unstaged edits.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.go"), []byte("package b\n"), 0o644))
+	runGitCommand(t, dir, "add", ".")
+	runGitCommand(t, dir, "commit", "-m", "seed")
+
+	// Unstaged modification to a.go.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n\nvar X = 1\n"), 0o644))
+
+	hashes, err := GetBlobHashes(dir, []string{"a.go", "b.go"})
+	require.NoError(t, err)
+
+	// Each batch hash matches the per-file GetBlobHash exactly.
+	for _, p := range []string{"a.go", "b.go"} {
+		want, err := GetBlobHash(dir, p)
+		require.NoError(t, err)
+		assert.Equal(t, want, hashes[p], "batch hash for %s should match GetBlobHash (working-tree content)", p)
+	}
+}
+
+func TestGetBlobHashesSkipsMissingPaths(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.go"), []byte("package main\n"), 0o644))
+
+	// A deleted/never-existing path in the list must not abort the batch; it is
+	// simply absent from the result (best-effort, like GetBlobHash's contract).
+	hashes, err := GetBlobHashes(dir, []string{"present.go", "gone.go", "../escape.go"})
+	require.NoError(t, err)
+
+	assert.Contains(t, hashes, "present.go")
+	assert.Regexp(t, `^[0-9a-f]{40}$`, hashes["present.go"])
+	assert.NotContains(t, hashes, "gone.go")
+	assert.NotContains(t, hashes, "../escape.go")
+}
+
+func TestGetBlobHashesEmpty(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+
+	hashes, err := GetBlobHashes(dir, nil)
+	require.NoError(t, err)
+	assert.Empty(t, hashes)
+}
+
 func TestGetBlobHashRejectsUnsafePath(t *testing.T) {
 	dir := t.TempDir()
 	setupGitRepo(t, dir)
