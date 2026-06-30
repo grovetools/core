@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // trustEnvVar gates seeding. When set to "0", "false", or "off" the seeder is a
@@ -115,4 +116,20 @@ func SeedTrust(paths ...string) error {
 		return fmt.Errorf("rename %s -> %s: %w", tmpPath, configPath, err)
 	}
 	return nil
+}
+
+// IsPermissionDenied reports whether err is the OS-sandbox rejection that
+// SeedTrust returns when ~/.claude.json (outside the sandbox's writable
+// boundary) cannot be written. It is the signal callers use to decide whether
+// to delegate the privileged write to the unsandboxed daemon.
+//
+// We check both os.IsPermission (EACCES/EPERM unwrapped via errors.Is) AND the
+// "operation not permitted" substring, because the sandbox's seatbelt denial
+// surfaces as EPERM whose text is "operation not permitted" — and some wrap
+// layers can obscure the errno from os.IsPermission while preserving the text.
+func IsPermissionDenied(err error) bool {
+	if err == nil {
+		return false
+	}
+	return os.IsPermission(err) || strings.Contains(err.Error(), "operation not permitted")
 }

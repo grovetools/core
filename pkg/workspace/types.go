@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,20 @@ type PrepareOptions struct {
 	// (paths.WorktreesDir()/<DirIdentifier>/<name>) for NEW worktrees.
 	// Existing worktrees are reused wherever they live, legacy first.
 	UseXDGWorktrees bool
+
+	// TrustSeedFallback, when set, delegates Claude folder-trust seeding to an
+	// unsandboxed daemon when the in-process claudetrust.SeedTrust write is
+	// rejected by the OS sandbox (~/.claude.json lives outside the sandbox's
+	// writable boundary). Prepare invokes it with the new worktree's container
+	// path as the worktree ref; the daemon re-derives the exact path set from
+	// its OWN authority (the worktree registry), never trusting caller paths.
+	//
+	// This is dependency injection on purpose: core/pkg/workspace MUST NOT
+	// import core/pkg/daemon (daemon already imports workspace, so the reverse
+	// closes a cycle). flow callers that already import daemon populate this
+	// with orchestration.NewTrustSeedFallback(gitRoot). Nil means "no
+	// delegation" — a sandboxed failure degrades to the best-effort warning.
+	TrustSeedFallback func(ctx context.Context, worktreeRef string) error
 }
 
 // WorkspaceInfo represents a workspace from grove ws list --json

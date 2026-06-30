@@ -267,6 +267,37 @@ func (c *RemoteClient) SetFocus(ctx context.Context, source string, paths []stri
 	return nil
 }
 
+// SeedTrust asks the daemon to pre-seed Claude folder-trust for the named
+// worktree. The daemon derives the trusted paths from the worktree registry,
+// not from this request — the body carries only the ref. Served on the unix
+// socket only (mirrors the unixOnly route on the server side).
+func (c *RemoteClient) SeedTrust(ctx context.Context, worktreeRef string) error {
+	body, err := json.Marshal(map[string]string{"worktree_ref": worktreeRef})
+	if err != nil {
+		return fmt.Errorf("failed to marshal trust seed request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/trust/seed", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to seed trust via daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Surface the daemon's error text (e.g. "no worktree registered")
+		// so the best-effort warning at the call site is actionable.
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("daemon returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+	return nil
+}
+
 // IsRunning returns true if the daemon is available and responding.
 func (c *RemoteClient) IsRunning() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

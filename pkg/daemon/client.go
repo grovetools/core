@@ -379,6 +379,19 @@ type Client interface {
 
 	// GetSystemInfo returns the daemon's version and commit information.
 	GetSystemInfo(ctx context.Context) (*models.SystemInfo, error)
+
+	// --- Claude Trust Seeding ---
+
+	// SeedTrust asks the (unsandboxed) daemon to pre-seed Claude Code
+	// folder-trust for the worktree named by worktreeRef (a registry-resolvable
+	// ref: absolute container path | "<id>/<name>" | plan name). The daemon
+	// derives the exact paths to trust SOLELY from the worktree registry entry —
+	// it ignores any caller-supplied paths so a sandboxed agent cannot self-grant
+	// trust to arbitrary directories. Used as the privileged fallback when an
+	// in-process SeedTrust write is denied because ~/.claude.json is outside the
+	// sandbox's writable boundary. LocalClient hard-fails (no daemon to delegate
+	// to means the in-process attempt already failed for the same reason).
+	SeedTrust(ctx context.Context, worktreeRef string) error
 }
 
 // SpawnAgentRequest contains the parameters for spawning a native agent pane.

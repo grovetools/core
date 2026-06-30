@@ -166,7 +166,19 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 			canonicalPaths = append(canonicalPaths, canonical)
 		}
 		if seedErr := claudetrust.SeedTrust(canonicalPaths...); seedErr != nil {
-			fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
+			// ~/.claude.json sits OUTSIDE the OS sandbox's writable boundary
+			// (roughly working-dir + temp), so when Prepare runs sandbox-side the
+			// write is rejected with EPERM. Delegate the privileged write to the
+			// unsandboxed daemon, which re-derives the trust path set from the
+			// registry entry saved above (never from caller-supplied paths). The
+			// registry Save already ran, so the daemon can resolve absWorktreePath.
+			if claudetrust.IsPermissionDenied(seedErr) && opts.TrustSeedFallback != nil {
+				if rpcErr := opts.TrustSeedFallback(ctx, absWorktreePath); rpcErr != nil {
+					fmt.Printf("Warning: failed to pre-seed Claude trust via daemon: %v\n", rpcErr)
+				}
+			} else {
+				fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
+			}
 		}
 
 		// Seed the worktree's .claude/settings.local.json with the union of
