@@ -204,6 +204,36 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 		mergeStringArray(root, []string{"permissions", "allow"}, editRules)
 	}
 
+	// Auto-add the canonicalized worktree root to the sandbox writable boundary.
+	// This is the write-side complement to the notebook-dir allowWrite merge
+	// above: additionalDirectories/notebook-dir entries extend the boundary OUT
+	// to out-of-tree notebooks, but the agent's OWN repo tree is only writable
+	// under the sandbox if it is in allowWrite too. Claude Code's default sandbox
+	// boundary makes only the literal cwd node + session temp writable — NOT the
+	// repo subtree — so a sandboxed agent in a primary checkout (e.g.
+	// ~/Code/<ecosystem>) cannot Bash-write its own member subdirs (core/, hooks/,
+	// …): gofumpt -w, go build, sed -i, and tmp+rename all fail with "operation
+	// not permitted". allowWrite is RECURSIVE (a directory entry covers its whole
+	// subtree — see grove-anthropic/pkg/ccsettings ComputeFilesystemBoundary +
+	// schema allowWrite description), so this single root entry covers every
+	// member subdir. XDG worktrees under ~/.local/share/grove/worktrees are
+	// already covered by that broad allowWrite prefix; the gap this closes is the
+	// primary checkout, which has no covering prefix. Fires whenever settings are
+	// seeded for a worktree, mirroring the notebook-dir merge. It is scoped to the
+	// SPECIFIC worktree path (recursive), never a broad ~/Code. Canonicalize like
+	// wtForEdit so the entry matches the path Claude resolves (symlinks + macOS
+	// case). denyWrite TAKES PRECEDENCE over allowWrite (schema:
+	// sandbox.filesystem.denyWrite), so the grove-owned denyWrite entries that
+	// protectConfig adds below for grove.toml / member configs still win even
+	// though those files live inside this worktree-root subtree — adding the root
+	// here does NOT un-protect them. Order is irrelevant: precedence is evaluated
+	// at runtime, not by array position.
+	wtForWrite := worktreePath
+	if canon, err := pathutil.CanonicalPath(worktreePath); err == nil {
+		wtForWrite = canon
+	}
+	mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, []string{wtForWrite})
+
 	// Merge ClaudeConfig fields (only if gate is open and config is non-empty).
 	if hasConfig {
 		// permissions.allow (config rules plus, when allowGroveTools is set, the
