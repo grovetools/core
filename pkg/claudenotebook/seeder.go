@@ -55,6 +55,25 @@ const seedSettingsEnvVar = "GROVE_SEED_CLAUDE_SETTINGS"
 // flow injects this into dispatched-agent launches via its AgentEnv mechanism.
 const unlockConfigEnvVar = "GROVE_UNLOCK_CONFIG"
 
+// debugEnvVar gates verbose, human-readable tracing of the seeding path to
+// stderr. It is OFF by default (this is a leaf package that cannot import
+// core/logging without a cycle: core/logging -> core/pkg/workspace ->
+// claudenotebook). Set GROVE_CLAUDE_SETTINGS_DEBUG to 1/true/on to watch which
+// worktree/root is being seeded, with which member repos, to which file, and
+// whether a write actually happened — the observability surface the
+// ecosystem-root seeding investigation needs.
+const debugEnvVar = "GROVE_CLAUDE_SETTINGS_DEBUG"
+
+// Debugf writes a gated trace line to stderr when GROVE_CLAUDE_SETTINGS_DEBUG is
+// truthy. It is exported so the workspace-level resolver
+// (workspace.SeedClaudeSettingsForWorktree) can share the same gate and prefix.
+func Debugf(format string, args ...any) {
+	switch os.Getenv(debugEnvVar) {
+	case "1", "true", "on":
+		fmt.Fprintf(os.Stderr, "[claude-settings] "+format+"\n", args...)
+	}
+}
+
 // SeedNotebookDirs merges the given absolute notebook directories into the
 // worktree's .claude/settings.local.json under BOTH:
 //
@@ -118,6 +137,8 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 	hasDirs := len(notebookDirs) > 0
 
 	if !hasConfig && !hasDirs {
+		Debugf("SeedSettings SKIP (nothing to seed): path=%s repos=%v hasConfig=%v hasDirs=%v settingsGateOff=%v",
+			worktreePath, repos, hasConfig, hasDirs, settingsGateOff)
 		return nil
 	}
 
@@ -282,6 +303,7 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 		_ = os.Remove(tmpPath) // best-effort cleanup of orphaned tmp
 		return fmt.Errorf("rename %s -> %s: %w", tmpPath, settingsPath, err)
 	}
+	Debugf("SeedSettings WROTE %s (repos=%v hasConfig=%v hasDirs=%v)", settingsPath, repos, hasConfig, hasDirs)
 	return nil
 }
 
