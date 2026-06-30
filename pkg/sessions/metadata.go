@@ -25,4 +25,9 @@ type SessionMetadata struct {
 	TmuxTarget       string    `json:"tmux_target,omitempty"`
 	PtyID            string    `json:"pty_id,omitempty"`
 	Channels         []string  `json:"channels,omitempty"`
+	// Scope is the owning daemon scope (ecosystem-boundary path) that launched
+	// this session. Empty == unscoped/global. Legacy records that predate this
+	// field unmarshal as empty and are therefore owned by the unscoped daemon.
+	// Used so a daemon only seeds/reaps sessions whose owning scope == its own.
+	Scope string `json:"scope,omitempty"`
 }
