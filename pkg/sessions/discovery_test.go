@@ -6,6 +6,69 @@ import (
 	"testing"
 )
 
+// writeLiveSession registers a session for the current (alive) process under the
+// given scope so RecoverSessions can pick it up.
+func writeLiveSession(t *testing.T, claudeID, scope string) {
+	t.Helper()
+	reg, err := NewFileSystemRegistry()
+	if err != nil {
+		t.Fatalf("NewFileSystemRegistry: %v", err)
+	}
+	if err := reg.Register(SessionMetadata{
+		SessionID:       claudeID,
+		ClaudeSessionID: claudeID,
+		Provider:        "claude",
+		PID:             os.Getpid(),
+		Scope:           scope,
+	}); err != nil {
+		t.Fatalf("Register(%s): %v", claudeID, err)
+	}
+}
+
+func TestRecoverSessionsForScope(t *testing.T) {
+	t.Setenv("GROVE_HOME", t.TempDir())
+
+	writeLiveSession(t, "scoped-a", "/eco/worktree-a")
+	writeLiveSession(t, "scoped-b", "/eco/worktree-b")
+	writeLiveSession(t, "global-1", "")
+
+	cases := []struct {
+		scope string
+		want  []string
+	}{
+		{"/eco/worktree-a", []string{"scoped-a"}},
+		{"/eco/worktree-b", []string{"scoped-b"}},
+		{"", []string{"global-1"}},
+	}
+	for _, tc := range cases {
+		got, err := RecoverSessionsForScope(tc.scope)
+		if err != nil {
+			t.Fatalf("RecoverSessionsForScope(%q): %v", tc.scope, err)
+		}
+		gotIDs := map[string]bool{}
+		for _, s := range got {
+			gotIDs[s.ClaudeSessionID] = true
+		}
+		if len(gotIDs) != len(tc.want) {
+			t.Fatalf("scope %q: got %v, want %v", tc.scope, gotIDs, tc.want)
+		}
+		for _, w := range tc.want {
+			if !gotIDs[w] {
+				t.Errorf("scope %q: missing %q (got %v)", tc.scope, w, gotIDs)
+			}
+		}
+	}
+
+	// The unfiltered sweep still returns everything.
+	all, err := RecoverSessions()
+	if err != nil {
+		t.Fatalf("RecoverSessions: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("RecoverSessions returned %d sessions, want 3", len(all))
+	}
+}
+
 func TestResolveClaudeSessionDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

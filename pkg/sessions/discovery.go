@@ -17,6 +17,19 @@ import (
 // that were running before the daemon restarted.
 // Dead sessions are cleaned up automatically.
 func RecoverSessions() ([]*models.Session, error) {
+	return recoverSessions(false, "")
+}
+
+// RecoverSessionsForScope behaves like RecoverSessions but returns only the
+// sessions whose owning scope equals the given scope, and only cleans up dead
+// records it owns. Empty scope == unscoped/global; legacy records without a
+// scope field read as unscoped. The daemon uses this to seed its operational
+// store so it only ever sees and reaps agents launched under its own scope.
+func RecoverSessionsForScope(scope string) ([]*models.Session, error) {
+	return recoverSessions(true, scope)
+}
+
+func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error) {
 	groveSessionsDir := filepath.Join(paths.StateDir(), "hooks", "sessions")
 
 	if _, err := os.Stat(groveSessionsDir); os.IsNotExist(err) {
@@ -56,7 +69,23 @@ func RecoverSessions() ([]*models.Session, error) {
 		isAlive := process.IsProcessAlive(pid)
 
 		if !isAlive {
-			// Clean up dead session recovery files
+			// Clean up dead session recovery files. When filtering by scope, a
+			// daemon must only reap records it owns: read the metadata to learn
+			// the owning scope and leave records belonging to other scopes (or
+			// whose ownership can't be determined) untouched.
+			if filterByScope {
+				metadataContent, merr := os.ReadFile(metadataFile)
+				if merr != nil {
+					continue
+				}
+				var deadMeta SessionMetadata
+				if err := json.Unmarshal(metadataContent, &deadMeta); err != nil {
+					continue
+				}
+				if deadMeta.Scope != scope {
+					continue
+				}
+			}
 			if registry != nil {
 				_ = registry.Unregister(dirName)
 			}
@@ -71,6 +100,11 @@ func RecoverSessions() ([]*models.Session, error) {
 
 		var metadata SessionMetadata
 		if err := json.Unmarshal(metadataContent, &metadata); err != nil {
+			continue
+		}
+
+		// Scope filter: a scoped daemon only seeds sessions it owns.
+		if filterByScope && metadata.Scope != scope {
 			continue
 		}
 
