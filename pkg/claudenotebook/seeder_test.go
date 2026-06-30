@@ -26,6 +26,20 @@ func worktreeEditRule(t *testing.T, wt string) string {
 	return "Edit(//" + strings.TrimPrefix(canon, "/") + "/**)"
 }
 
+// worktreeAllowWrite returns the canonicalized worktree root the seeder is
+// expected to auto-add to sandbox.filesystem.allowWrite (the write-side
+// complement to the notebook-dir merge). Canonicalization mirrors the seeder
+// (and worktreeEditRule), so on macOS a /var/folders tmp dir resolves to its
+// /private/var/folders form.
+func worktreeAllowWrite(t *testing.T, wt string) string {
+	t.Helper()
+	canon, err := pathutil.CanonicalPath(wt)
+	if err != nil {
+		canon = wt
+	}
+	return canon
+}
+
 const settingsRel = ".claude/settings.local.json"
 
 // readSettings reads and parses .claude/settings.local.json under worktree.
@@ -91,7 +105,8 @@ func TestSeedNotebookDirs_MissingFileCreated(t *testing.T) {
 
 	root := readSettings(t, wt)
 	assert.ElementsMatch(t, []string{d1, d2}, additionalDirs(t, root))
-	assert.ElementsMatch(t, []string{d1, d2}, allowWriteDirs(t, root))
+	// allowWrite carries the notebook dirs PLUS the auto-added worktree root.
+	assert.ElementsMatch(t, []string{d1, d2, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root))
 	assertNoTmpLeak(t, wt)
 }
 
@@ -132,7 +147,8 @@ func TestSeedNotebookDirs_PreservesAndAppends(t *testing.T) {
 	assert.Contains(t, allowRules(t, root), "Bash")
 	// User entries preserved AND notebook dir appended in both arrays.
 	assert.ElementsMatch(t, []string{userRead, nb}, additionalDirs(t, root))
-	assert.ElementsMatch(t, []string{userWrite, nb}, allowWriteDirs(t, root))
+	// User write entry + notebook dir + auto-added worktree root all coexist.
+	assert.ElementsMatch(t, []string{userWrite, nb, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root))
 	assertNoTmpLeak(t, wt)
 }
 
@@ -147,7 +163,8 @@ func TestSeedNotebookDirs_DedupSortDropEmpty(t *testing.T) {
 	root := readSettings(t, wt)
 	// Sorted + deduped + no empties.
 	assert.Equal(t, []string{a, b}, additionalDirs(t, root))
-	assert.Equal(t, []string{a, b}, allowWriteDirs(t, root))
+	// allowWrite is the sorted notebook dirs plus the auto-added worktree root.
+	assert.ElementsMatch(t, []string{a, b, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root))
 }
 
 // (d) Malformed JSON -> returns error, file left byte-for-byte unchanged.
@@ -226,7 +243,8 @@ func TestSeedNotebookDirs_Idempotent(t *testing.T) {
 
 	root := readSettings(t, wt)
 	assert.Equal(t, []string{nb}, additionalDirs(t, root), "no duplicate on re-seed")
-	assert.Equal(t, []string{nb}, allowWriteDirs(t, root), "no duplicate on re-seed")
+	// The auto-added worktree root is also idempotent (no duplicate on re-seed).
+	assert.ElementsMatch(t, []string{nb, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root), "no duplicate on re-seed")
 }
 
 // allowRules returns the permissions.allow string array (or empty if absent).
@@ -285,6 +303,98 @@ func TestSeedSettings_WorktreeEditRuleCanonicalized(t *testing.T) {
 		// The raw (unresolved) form must NOT appear — that was the bug.
 		assert.NotContains(t, rules, "Edit(//"+strings.TrimPrefix(wt, "/")+"/**)")
 	}
+}
+
+// Worktree-root allowWrite (the write-side complement to notebook-dir seeding).
+// ============================================================================
+
+// (wr-a) The canonicalized worktree root is auto-added to
+// sandbox.filesystem.allowWrite so a sandboxed agent can Bash-write its own repo
+// tree. The raw (unresolved) form must NOT appear — it would silently miss the
+// /private/var/... cwd Claude resolves on macOS.
+func TestSeedSettings_WorktreeRootInAllowWrite(t *testing.T) {
+	wt := t.TempDir()
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
+
+	allow := allowWriteDirs(t, readSettings(t, wt))
+	canon, err := pathutil.CanonicalPath(wt)
+	require.NoError(t, err)
+	assert.Contains(t, allow, canon, "canonical worktree root must be in allowWrite")
+	if canon != wt {
+		assert.NotContains(t, allow, wt, "raw (unresolved) worktree path must NOT appear")
+	}
+}
+
+// (wr-a') The worktree root is added even on a config-only seed with NO notebook
+// dirs: it fires whenever settings are seeded for a worktree, not only when the
+// notebook-dir block runs.
+func TestSeedSettings_WorktreeRootInAllowWrite_NoNotebookDirs(t *testing.T) {
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)}}
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	assert.Contains(t, allowWriteDirs(t, readSettings(t, wt)), worktreeAllowWrite(t, wt),
+		"worktree root must be added even with no notebook dirs")
+}
+
+// (wr-b) With protectConfig on, the worktree-root allowWrite COEXISTS with the
+// grove-owned denyWrite for the worktree's grove.toml. denyWrite takes
+// precedence over allowWrite (schema), so adding the root (which CONTAINS
+// grove.toml) does NOT un-protect it — the deny entry is still present.
+func TestSeedSettings_WorktreeRootAllowWriteCoexistsWithProtectDenyWrite(t *testing.T) {
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{
+		ProtectConfig: boolPtr(true),
+		Sandbox:       claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	canonWt := worktreeAllowWrite(t, wt)
+	// The worktree root is in allowWrite ...
+	assert.Contains(t, allowWriteDirs(t, root), canonWt, "worktree root present in allowWrite")
+	// ... AND the grove-owned denyWrite for its grove.toml is still present, even
+	// though grove.toml lives inside the worktree-root subtree. denyWrite wins.
+	assert.Contains(t, denyWriteAt(t, root), filepath.Join(canonWt, "grove.toml"),
+		"grove.toml denyWrite must coexist with the worktree-root allowWrite")
+}
+
+// (wr-c) Re-seeding does not duplicate the worktree-root allowWrite entry.
+func TestSeedSettings_WorktreeRootAllowWriteIdempotent(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
+
+	allow := allowWriteDirs(t, readSettings(t, wt))
+	canonWt := worktreeAllowWrite(t, wt)
+	n := 0
+	for _, p := range allow {
+		if p == canonWt {
+			n++
+		}
+	}
+	assert.Equal(t, 1, n, "worktree root must appear exactly once after re-seed")
+}
+
+// (wr-d) A pre-existing user allowWrite entry survives the worktree-root add.
+func TestSeedSettings_WorktreeRootAllowWritePreservesUserEntries(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+	userWrite := "/Users/dev/manual-write-dir"
+	seed := map[string]any{
+		"sandbox": map[string]any{"filesystem": map[string]any{"allowWrite": []any{userWrite}}},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, nil, []string{"/abs/nbA"}))
+
+	allow := allowWriteDirs(t, readSettings(t, wt))
+	assert.Contains(t, allow, userWrite, "pre-existing user allowWrite entry survives")
+	assert.Contains(t, allow, worktreeAllowWrite(t, wt), "worktree root added alongside")
 }
 
 // (2a) Edit rules ride the notebook-dir gate, NOT the settings gate:
