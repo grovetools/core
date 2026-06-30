@@ -534,6 +534,10 @@
         "command": {
           "description": "Default command binary (falls back to $EDITOR or vi)",
           "type": "string"
+        },
+        "singleton": {
+          "description": "Default singleton setting for all bindings (focus a single reusable pane instead of spawning a new one)",
+          "type": "boolean"
         }
       },
       "type": "object"

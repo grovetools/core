@@ -399,8 +399,13 @@ type PluginConfig struct {
 // map of keybindings that each spawn a panel.
 type PanelConfig struct {
 	// Command is the default binary to run. Defaults to $EDITOR or "vi".
-	Command  string                        `yaml:"command,omitempty" toml:"command,omitempty" jsonschema:"description=Default command binary (falls back to $EDITOR or vi)"`
-	Bindings map[string]PanelBindingConfig `yaml:"bindings,omitempty" toml:"bindings,omitempty" jsonschema:"description=Named panel keybindings"`
+	Command string `yaml:"command,omitempty" toml:"command,omitempty" jsonschema:"description=Default command binary (falls back to $EDITOR or vi)"`
+	// Singleton is the default singleton setting applied to every binding
+	// that does not set its own. Set at the [tui.panels] level to make all
+	// panel keybindings focus-or-create a single reusable pane (e.g. ctrl+e).
+	// A binding's own singleton=true still wins; this only supplies the default.
+	Singleton bool                          `yaml:"singleton,omitempty" toml:"singleton,omitempty" jsonschema:"description=Default singleton setting for all bindings (focus a single reusable pane instead of spawning a new one)"`
+	Bindings  map[string]PanelBindingConfig `yaml:"bindings,omitempty" toml:"bindings,omitempty" jsonschema:"description=Named panel keybindings"`
 }
 
 // PanelBindingConfig defines a single ephemeral panel keybinding.
