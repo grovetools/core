@@ -110,6 +110,16 @@ func (c *LocalClient) Refresh(ctx context.Context) error {
 	return nil // No-op in local mode
 }
 
+// SeedTrust hard-fails for LocalClient: privileged trust seeding only makes
+// sense when delegated to a live, unsandboxed daemon. Reaching LocalClient
+// means no daemon is listening on the dialed scope — and since this fallback is
+// only invoked AFTER an in-process SeedTrust already failed with EPERM, retrying
+// the same in-process write here would just fail again. Fail fast so the caller
+// degrades to the interactive trust prompt rather than silently looping.
+func (c *LocalClient) SeedTrust(ctx context.Context, worktreeRef string) error {
+	return errors.New("daemon unavailable for privileged trust seeding")
+}
+
 // IsRunning returns false since this is the local fallback client.
 func (c *LocalClient) IsRunning() bool {
 	return false
