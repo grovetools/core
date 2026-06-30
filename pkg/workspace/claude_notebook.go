@@ -165,12 +165,17 @@ func SeedClaudeSettingsForWorktree(worktreePath string, repos []string, provider
 	// Resolve notebook directories for all member repos.
 	dirs := resolveNotebookDirsForRepos(worktreePath, repos, provider)
 
-	// Pass to the leaf seeder (handles both config and notebook dirs).
+	// Pass to the leaf seeder (handles both config and notebook dirs). Gate on
+	// ShouldSeed, not bare IsEmpty: a config whose only signal is protectConfig
+	// (or allowGroveTools) is IsEmpty()==true but still must reach the seeder, so
+	// the lock writes (and strip-on-false fires) even on an otherwise-empty
+	// [claude] block. repos is threaded through so the seeder can target the
+	// member-repo grove config files for protection.
 	var cfgPtr *claudenotebook.ClaudeConfig
-	if !rootClaudeCfg.IsEmpty() {
+	if rootClaudeCfg.ShouldSeed() {
 		cfgPtr = &rootClaudeCfg
 	}
-	return claudenotebook.SeedSettings(worktreePath, cfgPtr, dirs)
+	return claudenotebook.SeedSettings(worktreePath, repos, cfgPtr, dirs)
 }
 
 // resolveNotebookDirsForRepos maps each member repo subdir to its paired

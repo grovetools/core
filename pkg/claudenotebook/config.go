@@ -58,6 +58,22 @@ type ClaudeConfig struct {
 	// IsEmpty (a lone flag is handled by a dedicated predicate in SeedSettings),
 	// but unlike a no-op it DOES force a write — see SeedSettings' widened gate.
 	AllowGroveTools *bool `yaml:"allowGroveTools" toml:"allowGroveTools" jsonschema:"description=When true, allow all canonical grove ecosystem CLIs (grove, flow, cx, nb, ...) via Bash(<tool>:*) rules"`
+	// ProtectConfig, when true, makes the seeder inject self-protection entries
+	// into settings.local.json so a sandboxed agent cannot edit the very config
+	// files that sandbox it: a sandbox.filesystem.denyWrite block (OS-enforced for
+	// shell writes, bypass-proof when sandbox.enabled) plus best-effort
+	// permissions.deny Edit/Write rules (the native-tool seam) on the worktree's
+	// grove.toml(s), member-repo configs, and ~/.config/grove. When explicitly
+	// false the seeder ACTIVELY STRIPS those grove-owned entries (reversible, not
+	// just skip-on-write), never touching user-authored deny rules. Unset = off
+	// (opt-in); dispatched-agent launches opt in via the ecosystem grove.toml. The
+	// dev escape hatch is the GROVE_UNLOCK_CONFIG=1 launch env var, which lives
+	// OUTSIDE the protected files. Pointer distinguishes unset (nil) from explicit
+	// false. Kept OUT of IsEmpty (a lone toggle is honored by ShouldSeed) so that
+	// both true (write) and false (strip) reach the seeder even on an otherwise
+	// empty [claude] block. Never protects tool INVOCATION (no Bash(grove:*) deny)
+	// — only file PATHS.
+	ProtectConfig *bool `yaml:"protectConfig" toml:"protectConfig" jsonschema:"description=When true, deny sandbox+native writes to grove config files (grove.toml, member configs, ~/.config/grove) so a sandboxed agent cannot edit the config that sandboxes it; false actively strips those grove-owned entries"`
 }
 
 // ClaudePermissions holds the permissions.* settings.
@@ -73,6 +89,12 @@ type ClaudePermissions struct {
 	// Allow this is a scalar string — it is NOT unioned across layers; highest
 	// cascade layer wins with lower layers filling an empty gap (see Merge).
 	DefaultMode string `yaml:"defaultMode" toml:"defaultMode" jsonschema:"description=Claude Code default permission mode; one of default, acceptEdits, plan, bypassPermissions (bypassPermissions skips permission prompts); empty means unset"`
+	// Deny is a list of Claude Code permission rules (e.g. "Edit(//path/**)")
+	// that are denied. Unioned across layers like Allow. The self-protection
+	// toggle (ProtectConfig) appends grove-owned Edit/Write/MultiEdit rules to
+	// this same array; user-authored Deny entries are preserved and never
+	// stripped.
+	Deny []string `yaml:"deny" toml:"deny" jsonschema:"description=List of Claude Code permission rules to deny"`
 }
 
 // ClaudeSandbox holds the sandbox.* settings.
@@ -93,6 +115,13 @@ type ClaudeSandbox struct {
 type ClaudeSandboxFilesystem struct {
 	// AllowWrite is a list of directories the sandbox allows writing to.
 	AllowWrite []string `yaml:"allowWrite" toml:"allowWrite" jsonschema:"description=Directories the sandbox allows writing to"`
+	// DenyWrite is a list of paths the OS sandbox forbids writing to, enforced
+	// for Bash commands and their child processes independently of permission
+	// mode (it holds even under bypassPermissions when sandbox.enabled). Unioned
+	// across layers like AllowWrite. The self-protection toggle (ProtectConfig)
+	// appends grove-owned config-file paths here; user-authored DenyWrite entries
+	// are preserved and never stripped.
+	DenyWrite []string `yaml:"denyWrite" toml:"denyWrite" jsonschema:"description=Paths the OS sandbox forbids writing to (Bash/child-process writes), enforced even under bypassPermissions"`
 }
 
 // ClaudeSandboxNetwork holds the sandbox.network.* settings.
@@ -101,15 +130,43 @@ type ClaudeSandboxNetwork struct {
 	AllowedDomains []string `yaml:"allowedDomains" toml:"allowedDomains" jsonschema:"description=Domains the sandbox allows network access to"`
 }
 
-// IsEmpty returns true if no configuration is set.
+// IsEmpty returns true if no configuration is set. ProtectConfig and
+// AllowGroveTools are deliberately excluded: they are lone-flag signals honored
+// by ShouldSeed and the seeder's gate, not by IsEmpty (mirroring Inherit).
 func (c *ClaudeConfig) IsEmpty() bool {
 	return len(c.Permissions.Allow) == 0 &&
+		len(c.Permissions.Deny) == 0 &&
 		c.Permissions.DefaultMode == "" &&
 		c.Sandbox.Enabled == nil &&
 		c.Sandbox.FailIfUnavailable == nil &&
 		c.Sandbox.AutoAllowBashIfSandboxed == nil &&
 		len(c.Sandbox.Filesystem.AllowWrite) == 0 &&
+		len(c.Sandbox.Filesystem.DenyWrite) == 0 &&
 		len(c.Sandbox.Network.AllowedDomains) == 0
+}
+
+// ShouldSeed reports whether this config carries any signal the seeder must act
+// on. It is the gate the seeder and its upstream callers use INSTEAD of a bare
+// !IsEmpty() check, because two lone-flag signals live outside IsEmpty:
+//   - AllowGroveTools=true expands into Bash(<tool>:*) allow rules.
+//   - ProtectConfig set (true OR false) must reach the seeder — true to write the
+//     self-protection entries, false to actively strip them. A protectConfig-only
+//     grove.toml is IsEmpty()==true, so without this predicate the upstream
+//     IsEmpty guards would drop it before the seeder ever runs.
+func (c *ClaudeConfig) ShouldSeed() bool {
+	if c == nil {
+		return false
+	}
+	if !c.IsEmpty() {
+		return true
+	}
+	if c.ProtectConfig != nil {
+		return true
+	}
+	if c.AllowGroveTools != nil && *c.AllowGroveTools {
+		return true
+	}
+	return false
 }
 
 // Merge combines two ClaudeConfigs. Arrays are unioned and deduped.
@@ -124,11 +181,15 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 		// arrays replace the receiver's wholesale instead of unioning. Mirrors
 		// deepMergeMapsUnionWithInherit in core/config/merge.go.
 		c.Permissions.Allow = append([]string(nil), other.Permissions.Allow...)
+		c.Permissions.Deny = append([]string(nil), other.Permissions.Deny...)
 		c.Sandbox.Filesystem.AllowWrite = append([]string(nil), other.Sandbox.Filesystem.AllowWrite...)
+		c.Sandbox.Filesystem.DenyWrite = append([]string(nil), other.Sandbox.Filesystem.DenyWrite...)
 		c.Sandbox.Network.AllowedDomains = append([]string(nil), other.Sandbox.Network.AllowedDomains...)
 	} else {
 		c.Permissions.Allow = unionStrings(c.Permissions.Allow, other.Permissions.Allow)
+		c.Permissions.Deny = unionStrings(c.Permissions.Deny, other.Permissions.Deny)
 		c.Sandbox.Filesystem.AllowWrite = unionStrings(c.Sandbox.Filesystem.AllowWrite, other.Sandbox.Filesystem.AllowWrite)
+		c.Sandbox.Filesystem.DenyWrite = unionStrings(c.Sandbox.Filesystem.DenyWrite, other.Sandbox.Filesystem.DenyWrite)
 		c.Sandbox.Network.AllowedDomains = unionStrings(c.Sandbox.Network.AllowedDomains, other.Sandbox.Network.AllowedDomains)
 	}
 
@@ -150,6 +211,13 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	// still flows up through this gap-fill regardless of the inherit flag.
 	if c.AllowGroveTools == nil && other.AllowGroveTools != nil {
 		c.AllowGroveTools = other.AllowGroveTools
+	}
+	// ProtectConfig is a root-wins-gap scalar like AllowGroveTools: a member fills
+	// the slot only when the root left it nil, so an explicit root value (true or
+	// false) survives. It lives outside the array branch above, so inherit=false
+	// (which only REPLACES arrays wholesale) does not clear it.
+	if c.ProtectConfig == nil && other.ProtectConfig != nil {
+		c.ProtectConfig = other.ProtectConfig
 	}
 	// Permissions.DefaultMode is a root-wins-gap scalar string (empty = unset),
 	// mirroring the *bool gap-fills above: a member fills the slot only when the
