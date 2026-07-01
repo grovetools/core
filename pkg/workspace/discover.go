@@ -361,6 +361,13 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 			s.logger.Warnf("Could not resolve path for grove '%s': %v", key, err)
 			continue
 		}
+		// Canonicalize the walk root to real FS case so every descendant
+		// node.Path matches the CanonicalPath form point-lookups and Claude
+		// trust use. WalkDir joins this root with real-FS names, so fixing the
+		// root fixes the whole tree. (Not NormalizeForLookup — that lowercases.)
+		if canon, canonErr := pathutil.CanonicalPath(absPath); canonErr == nil {
+			absPath = canon
+		}
 
 		wg.Add(1)
 		go func(groveName string, currentGroveCfg config.GroveSourceConfig, grovePath string) {
@@ -625,6 +632,10 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 			if err != nil {
 				s.logger.Warnf("Could not resolve explicit project path '%s': %v", ep.Path, err)
 				continue
+			}
+			// Canonicalize for real FS case (see walk-root note above).
+			if canon, canonErr := pathutil.CanonicalPath(absPath); canonErr == nil {
+				absPath = canon
 			}
 
 			// Check if directory exists

@@ -57,7 +57,7 @@ func TestPrepare(t *testing.T) {
 
 	t.Run("single repo workspace creation", func(t *testing.T) {
 		// Setup test repository
-		tempDir := t.TempDir()
+		tempDir := resolveDir(t.TempDir())
 		repoDir := filepath.Join(tempDir, "test-repo")
 		require.NoError(t, os.MkdirAll(repoDir, 0o755))
 		setupTestRepo(t, repoDir)
@@ -92,7 +92,7 @@ func TestPrepare(t *testing.T) {
 
 	t.Run("ecosystem worktree with repos", func(t *testing.T) {
 		// Setup ecosystem repository with submodules
-		tempDir := t.TempDir()
+		tempDir := resolveDir(t.TempDir())
 		ecosystemDir := filepath.Join(tempDir, "ecosystem")
 		require.NoError(t, os.MkdirAll(ecosystemDir, 0o755))
 		setupTestRepo(t, ecosystemDir)
@@ -122,9 +122,9 @@ func TestPrepare(t *testing.T) {
 
 		ctx := context.Background()
 		opts := PrepareOptions{
-			GitRoot:      ecosystemDir,
-			WorktreeName: "eco-workspace",
-			BranchName:   "feature/ecosystem",
+			GitRoot:           ecosystemDir,
+			WorktreeName:      "eco-workspace",
+			BranchName:        "feature/ecosystem",
 			SiblingWorkspaces: []string{"repo1"}, // Only setup repo1
 		}
 
@@ -158,7 +158,7 @@ func TestPrepare(t *testing.T) {
 	t.Run("xdg worktree with owner marker", func(t *testing.T) {
 		sandboxXDG(t)
 
-		tempDir := t.TempDir()
+		tempDir := resolveDir(t.TempDir())
 		repoDir := filepath.Join(tempDir, "test-repo")
 		require.NoError(t, os.MkdirAll(repoDir, 0o755))
 		setupTestRepo(t, repoDir)
@@ -220,7 +220,7 @@ func TestPrepare(t *testing.T) {
 		assert.Error(t, err)
 
 		// Test with empty worktree name
-		tempDir := t.TempDir()
+		tempDir := resolveDir(t.TempDir())
 		opts = PrepareOptions{
 			GitRoot:      tempDir,
 			WorktreeName: "",
@@ -233,7 +233,7 @@ func TestPrepare(t *testing.T) {
 
 	t.Run("prepare with existing branch", func(t *testing.T) {
 		// Setup test repository
-		tempDir := t.TempDir()
+		tempDir := resolveDir(t.TempDir())
 		repoDir := filepath.Join(tempDir, "test-repo")
 		require.NoError(t, os.MkdirAll(repoDir, 0o755))
 		setupTestRepo(t, repoDir)
@@ -265,7 +265,7 @@ func TestPrepare(t *testing.T) {
 
 	t.Run("prepare with branch already checked out in worktree", func(t *testing.T) {
 		// Setup test repository
-		tempDir := t.TempDir()
+		tempDir := resolveDir(t.TempDir())
 		repoDir := filepath.Join(tempDir, "test-repo")
 		require.NoError(t, os.MkdirAll(repoDir, 0o755))
 		setupTestRepo(t, repoDir)
