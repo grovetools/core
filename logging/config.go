@@ -23,7 +23,6 @@ var DefaultGroups = map[string][]string{
 		"grove-notebook",
 		"grove-notifications",
 		"grove-nvim",
-		"grove-openai",
 		"grove-proxy",
 		"grove-sandbox",
 		"grove-tend",
@@ -31,7 +30,6 @@ var DefaultGroups = map[string][]string{
 	},
 	"ai": {
 		"grove-gemini",
-		"grove-openai",
 		"grove-context",
 	},
 }
