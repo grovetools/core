@@ -20,7 +20,11 @@ func skipIfNoGit(t *testing.T) {
 
 // Helper to setup a git repository for testing
 func setupTestRepo(t *testing.T, dir string) {
-	cmd := exec.Command("git", "init")
+	// Pin the initial branch to main explicitly. With HOME sandboxed (below),
+	// there is no global git config, so a bare `git init` would fall back to
+	// `master` and later `git checkout main` steps would fail. -b main makes the
+	// default branch independent of the developer's ~/.gitconfig.
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = dir
 	err := cmd.Run()
 	require.NoError(t, err)
@@ -54,6 +58,14 @@ func setupTestRepo(t *testing.T, dir string) {
 
 func TestPrepare(t *testing.T) {
 	skipIfNoGit(t)
+
+	// Sandbox HOME so Prepare's claudetrust.SeedTrust writes folder-trust into a
+	// throwaway ~/.claude.json instead of polluting the developer's real one.
+	// Each subtest creates worktrees under t.TempDir() that are then deleted, so
+	// without this every run leaked orphan projects[] keys into the real file
+	// (the leak the PruneOrphanTrust sweep can't reach — those paths live outside
+	// WorktreesDir). Inherited by all subtests below.
+	t.Setenv("HOME", t.TempDir())
 
 	t.Run("single repo workspace creation", func(t *testing.T) {
 		// Setup test repository
