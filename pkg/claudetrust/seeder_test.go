@@ -181,3 +181,136 @@ func TestSeedTrust_PreservesMode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
+
+// writeConfig marshals seed into ~/.claude.json under home.
+func writeConfig(t *testing.T, home string, seed map[string]any) {
+	t.Helper()
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".claude.json"), data, 0o600))
+}
+
+// hasProject reports whether projects[path] exists at all (regardless of flag).
+func hasProject(t *testing.T, root map[string]any, path string) bool {
+	t.Helper()
+	projects, ok := root["projects"].(map[string]any)
+	require.True(t, ok, "projects must be a map")
+	_, ok = projects[path]
+	return ok
+}
+
+// PruneOrphanTrust removes an orphan key under worktreesDir, preserves a live
+// dir under worktreesDir, a non-existent key OUTSIDE worktreesDir, unrelated
+// per-project fields, and unknown top-level keys.
+func TestPruneOrphanTrust_RemovesOrphanPreservesRest(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	worktreesDir := filepath.Join(home, "worktrees")
+	liveDir := filepath.Join(worktreesDir, "plan-a", "svc")
+	require.NoError(t, os.MkdirAll(liveDir, 0o755))
+
+	orphan := filepath.Join(worktreesDir, "plan-gone", "svc")  // under worktreesDir, missing -> pruned
+	outsideMissing := filepath.Join(home, "code", "some-repo") // outside worktreesDir, missing -> kept
+
+	writeConfig(t, home, map[string]any{
+		"numStartups": 3.0, // unknown top-level key
+		"projects": map[string]any{
+			liveDir:        map[string]any{"hasTrustDialogAccepted": true},
+			orphan:         map[string]any{"hasTrustDialogAccepted": true},
+			outsideMissing: map[string]any{"hasTrustDialogAccepted": true, "keep": "me"},
+		},
+	})
+
+	require.NoError(t, claudetrust.PruneOrphanTrust(worktreesDir))
+
+	root := readConfig(t, home)
+	assert.False(t, hasProject(t, root, orphan), "orphan under worktreesDir must be pruned")
+	assert.True(t, hasProject(t, root, liveDir), "live dir under worktreesDir must be preserved")
+	assert.True(t, hasProject(t, root, outsideMissing), "missing key OUTSIDE worktreesDir must be preserved")
+	assert.Equal(t, 3.0, root["numStartups"], "unknown top-level key must survive")
+	projects := root["projects"].(map[string]any)
+	outside := projects[outsideMissing].(map[string]any)
+	assert.Equal(t, "me", outside["keep"], "unrelated per-project fields must survive")
+	assertNoTmpLeak(t, home)
+}
+
+// Malformed JSON -> error, file left byte-for-byte unchanged.
+func TestPruneOrphanTrust_MalformedNoOp(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	configPath := filepath.Join(home, ".claude.json")
+	garbage := []byte("{ not valid json ]]")
+	require.NoError(t, os.WriteFile(configPath, garbage, 0o600))
+
+	err := claudetrust.PruneOrphanTrust(filepath.Join(home, "worktrees"))
+	require.Error(t, err, "malformed JSON must return an error")
+
+	after, readErr := os.ReadFile(configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, garbage, after, "malformed file must be left byte-for-byte unchanged")
+	assertNoTmpLeak(t, home)
+}
+
+// Gate off -> no-op even when an orphan is present.
+func TestPruneOrphanTrust_GateOff(t *testing.T) {
+	for _, val := range []string{"0", "false", "off"} {
+		t.Run(val, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("GROVE_PRESEED_CLAUDE_TRUST", val)
+
+			worktreesDir := filepath.Join(home, "worktrees")
+			orphan := filepath.Join(worktreesDir, "plan-gone")
+			writeConfig(t, home, map[string]any{
+				"projects": map[string]any{
+					orphan: map[string]any{"hasTrustDialogAccepted": true},
+				},
+			})
+
+			require.NoError(t, claudetrust.PruneOrphanTrust(worktreesDir))
+
+			root := readConfig(t, home)
+			assert.True(t, hasProject(t, root, orphan), "gate off must not prune")
+			assertNoTmpLeak(t, home)
+		})
+	}
+}
+
+// Missing ~/.claude.json -> no-op, nil (file never created).
+func TestPruneOrphanTrust_MissingFileNoOp(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	require.NoError(t, claudetrust.PruneOrphanTrust(filepath.Join(home, "worktrees")))
+
+	_, err := os.Stat(filepath.Join(home, ".claude.json"))
+	assert.True(t, os.IsNotExist(err), "prune must not create the file")
+}
+
+// No orphans -> file left byte-for-byte unchanged (no needless rewrite).
+func TestPruneOrphanTrust_NoOrphansUntouched(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	worktreesDir := filepath.Join(home, "worktrees")
+	liveDir := filepath.Join(worktreesDir, "plan-a")
+	require.NoError(t, os.MkdirAll(liveDir, 0o755))
+
+	writeConfig(t, home, map[string]any{
+		"projects": map[string]any{
+			liveDir: map[string]any{"hasTrustDialogAccepted": true},
+		},
+	})
+	configPath := filepath.Join(home, ".claude.json")
+	before, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	require.NoError(t, claudetrust.PruneOrphanTrust(worktreesDir))
+
+	after, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "no-orphan prune must not rewrite the file")
+	assertNoTmpLeak(t, home)
+}
