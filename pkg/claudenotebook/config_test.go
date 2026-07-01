@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mitchellh/mapstructure"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 func boolPtr(b bool) *bool { return &b }
@@ -308,6 +309,256 @@ func TestDecode_InheritAbsentLeavesNil(t *testing.T) {
 	}
 	if cfg.Inherit != nil {
 		t.Errorf("expected inherit nil when absent, got %v", *cfg.Inherit)
+	}
+}
+
+// ============================================================================
+// autoMode classifier + useAutoModeDuringPlan (Part B)
+// ============================================================================
+
+// TestMerge_AutoModeArrayUnion confirms the four autoMode section arrays union
+// across layers by default (deduping, and passing "$defaults" through as an
+// ordinary entry), and are replaced wholesale under inherit=false.
+func TestMerge_AutoModeArrayUnion(t *testing.T) {
+	t.Run("union by default", func(t *testing.T) {
+		root := &ClaudeConfig{AutoMode: &ClaudeAutoMode{
+			Allow:    []string{"$defaults", "Bash(git:*)"},
+			SoftDeny: []string{"Read(secret)"},
+		}}
+		member := &ClaudeConfig{AutoMode: &ClaudeAutoMode{
+			Allow:    []string{"Bash(git:*)", "Bash(ls:*)"}, // Bash(git:*) dup
+			HardDeny: []string{"Bash(rm:*)"},
+		}}
+		root.Merge(member)
+
+		wantAllow := []string{"$defaults", "Bash(git:*)", "Bash(ls:*)"}
+		if !reflect.DeepEqual(root.AutoMode.Allow, wantAllow) {
+			t.Errorf("expected allow union %v, got %v", wantAllow, root.AutoMode.Allow)
+		}
+		if !reflect.DeepEqual(root.AutoMode.SoftDeny, []string{"Read(secret)"}) {
+			t.Errorf("expected soft_deny preserved, got %v", root.AutoMode.SoftDeny)
+		}
+		if !reflect.DeepEqual(root.AutoMode.HardDeny, []string{"Bash(rm:*)"}) {
+			t.Errorf("expected hard_deny adopted, got %v", root.AutoMode.HardDeny)
+		}
+	})
+
+	t.Run("inherit=false replaces wholesale", func(t *testing.T) {
+		root := &ClaudeConfig{AutoMode: &ClaudeAutoMode{Allow: []string{"RootRule"}}}
+		member := &ClaudeConfig{
+			Inherit:  boolPtr(false),
+			AutoMode: &ClaudeAutoMode{Allow: []string{"MemberRule"}},
+		}
+		root.Merge(member)
+		if !reflect.DeepEqual(root.AutoMode.Allow, []string{"MemberRule"}) {
+			t.Errorf("expected autoMode.allow overwritten to [MemberRule], got %v", root.AutoMode.Allow)
+		}
+	})
+}
+
+// TestMerge_AutoModeGapAdopt confirms a nil root autoMode adopts the member's
+// (deep copy, not aliased), and that a member with no autoMode leaves the root's
+// intact.
+func TestMerge_AutoModeGapAdopt(t *testing.T) {
+	t.Run("nil root adopts member (deep copy)", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{AutoMode: &ClaudeAutoMode{Allow: []string{"MemberRule"}}}
+		root.Merge(member)
+		if root.AutoMode == nil || !reflect.DeepEqual(root.AutoMode.Allow, []string{"MemberRule"}) {
+			t.Fatalf("expected root to adopt member autoMode, got %v", root.AutoMode)
+		}
+		// Mutating the member's slice must not affect the adopted copy.
+		member.AutoMode.Allow[0] = "Mutated"
+		if root.AutoMode.Allow[0] != "MemberRule" {
+			t.Errorf("expected deep copy, adopted slice aliased the member's")
+		}
+	})
+
+	t.Run("nil member leaves root intact", func(t *testing.T) {
+		root := &ClaudeConfig{AutoMode: &ClaudeAutoMode{Allow: []string{"RootRule"}}}
+		root.Merge(&ClaudeConfig{})
+		if root.AutoMode == nil || !reflect.DeepEqual(root.AutoMode.Allow, []string{"RootRule"}) {
+			t.Errorf("expected root autoMode preserved, got %v", root.AutoMode)
+		}
+	})
+}
+
+// TestMerge_UseAutoModeDuringPlanGapFill confirms useAutoModeDuringPlan is a
+// root-wins-gap *bool: a member fills a nil root slot, an explicit root value
+// (including false) survives.
+func TestMerge_UseAutoModeDuringPlanGapFill(t *testing.T) {
+	t.Run("root nil + member true -> true", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{UseAutoModeDuringPlan: boolPtr(true)}
+		root.Merge(member)
+		if root.UseAutoModeDuringPlan == nil || !*root.UseAutoModeDuringPlan {
+			t.Errorf("expected member to fill nil root, got %v", root.UseAutoModeDuringPlan)
+		}
+	})
+
+	t.Run("explicit root false wins over member true", func(t *testing.T) {
+		root := &ClaudeConfig{UseAutoModeDuringPlan: boolPtr(false)}
+		member := &ClaudeConfig{UseAutoModeDuringPlan: boolPtr(true)}
+		root.Merge(member)
+		if root.UseAutoModeDuringPlan == nil || *root.UseAutoModeDuringPlan {
+			t.Errorf("expected explicit root false to win, got %v", root.UseAutoModeDuringPlan)
+		}
+	})
+}
+
+// TestAutoModeInIsEmpty confirms autoMode (with any non-empty section) and
+// useAutoModeDuringPlan each count as content (ShouldSeed fires), while an
+// autoMode present-but-all-empty is treated as unset.
+func TestAutoModeInIsEmpty(t *testing.T) {
+	t.Run("autoMode with content is non-empty", func(t *testing.T) {
+		c := &ClaudeConfig{AutoMode: &ClaudeAutoMode{HardDeny: []string{"Bash(rm:*)"}}}
+		if c.IsEmpty() {
+			t.Errorf("expected autoMode with a section to be non-empty")
+		}
+		if !c.ShouldSeed() {
+			t.Errorf("expected autoMode-only config to ShouldSeed")
+		}
+	})
+
+	t.Run("useAutoModeDuringPlan-only is non-empty", func(t *testing.T) {
+		c := &ClaudeConfig{UseAutoModeDuringPlan: boolPtr(false)}
+		if c.IsEmpty() {
+			t.Errorf("expected useAutoModeDuringPlan set to be non-empty")
+		}
+		if !c.ShouldSeed() {
+			t.Errorf("expected useAutoModeDuringPlan-only config to ShouldSeed")
+		}
+	})
+
+	t.Run("autoMode present but all-empty is treated as unset", func(t *testing.T) {
+		c := &ClaudeConfig{AutoMode: &ClaudeAutoMode{}}
+		if !c.IsEmpty() {
+			t.Errorf("expected an all-empty autoMode to be empty (no forced write)")
+		}
+	})
+}
+
+// TestDecode_AutoModeRoundTrips confirms a TOML [claude.autoMode]-style block
+// decodes into ClaudeAutoMode via the snake_case toml keys, preserving the
+// "$defaults" token verbatim.
+func TestDecode_AutoModeRoundTrips(t *testing.T) {
+	src := `
+useAutoModeDuringPlan = true
+
+[autoMode]
+allow = ["$defaults", "Bash(git:*)"]
+soft_deny = ["Read(secret)"]
+environment = ["CI=1"]
+hard_deny = ["Bash(rm:*)"]
+`
+	var cfg ClaudeConfig
+	if err := toml.Unmarshal([]byte(src), &cfg); err != nil {
+		t.Fatalf("toml unmarshal: %v", err)
+	}
+	if cfg.AutoMode == nil {
+		t.Fatal("expected autoMode decoded, got nil")
+	}
+	if !reflect.DeepEqual(cfg.AutoMode.Allow, []string{"$defaults", "Bash(git:*)"}) {
+		t.Errorf("expected allow with $defaults preserved, got %v", cfg.AutoMode.Allow)
+	}
+	if !reflect.DeepEqual(cfg.AutoMode.SoftDeny, []string{"Read(secret)"}) {
+		t.Errorf("expected soft_deny decoded via snake_case key, got %v", cfg.AutoMode.SoftDeny)
+	}
+	if !reflect.DeepEqual(cfg.AutoMode.HardDeny, []string{"Bash(rm:*)"}) {
+		t.Errorf("expected hard_deny decoded via snake_case key, got %v", cfg.AutoMode.HardDeny)
+	}
+	if !reflect.DeepEqual(cfg.AutoMode.Environment, []string{"CI=1"}) {
+		t.Errorf("expected environment decoded, got %v", cfg.AutoMode.Environment)
+	}
+	if cfg.UseAutoModeDuringPlan == nil || !*cfg.UseAutoModeDuringPlan {
+		t.Errorf("expected useAutoModeDuringPlan=true, got %v", cfg.UseAutoModeDuringPlan)
+	}
+}
+
+// ============================================================================
+// sandbox escape-hatch lock: allowUnsandboxedCommands + excludedCommands (Part C)
+// ============================================================================
+
+// TestMerge_AllowUnsandboxedCommandsGapFill confirms allowUnsandboxedCommands is
+// a root-wins-gap *bool mirroring Sandbox.Enabled. Critically, an explicit
+// false (the lock) must survive and never be confused with unset.
+func TestMerge_AllowUnsandboxedCommandsGapFill(t *testing.T) {
+	t.Run("root nil + member false -> false fills gap", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(false)}}
+		root.Merge(member)
+		if root.Sandbox.AllowUnsandboxedCommands == nil {
+			t.Fatal("expected member false to fill nil root, got nil")
+		}
+		if *root.Sandbox.AllowUnsandboxedCommands {
+			t.Errorf("expected explicit false to survive, got true")
+		}
+	})
+
+	t.Run("explicit root false wins over member true", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(false)}}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(true)}}
+		root.Merge(member)
+		if root.Sandbox.AllowUnsandboxedCommands == nil || *root.Sandbox.AllowUnsandboxedCommands {
+			t.Errorf("expected explicit root false (the lock) to win, got %v", root.Sandbox.AllowUnsandboxedCommands)
+		}
+	})
+
+	t.Run("root false survives merge with nil member", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(false)}}
+		root.Merge(&ClaudeConfig{})
+		if root.Sandbox.AllowUnsandboxedCommands == nil || *root.Sandbox.AllowUnsandboxedCommands {
+			t.Errorf("expected root false to survive, got %v", root.Sandbox.AllowUnsandboxedCommands)
+		}
+	})
+}
+
+// TestMerge_ExcludedCommandsUnion confirms sandbox.excludedCommands unions across
+// layers by default and is replaced wholesale under inherit=false, mirroring
+// allowedDomains.
+func TestMerge_ExcludedCommandsUnion(t *testing.T) {
+	t.Run("union by default", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{ExcludedCommands: []string{"git", "docker"}}}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{ExcludedCommands: []string{"docker", "flow"}}}
+		root.Merge(member)
+		want := []string{"git", "docker", "flow"}
+		if !reflect.DeepEqual(root.Sandbox.ExcludedCommands, want) {
+			t.Errorf("expected union %v, got %v", want, root.Sandbox.ExcludedCommands)
+		}
+	})
+
+	t.Run("inherit=false replaces wholesale", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{ExcludedCommands: []string{"git"}}}
+		member := &ClaudeConfig{
+			Inherit: boolPtr(false),
+			Sandbox: ClaudeSandbox{ExcludedCommands: []string{"flow"}},
+		}
+		root.Merge(member)
+		if !reflect.DeepEqual(root.Sandbox.ExcludedCommands, []string{"flow"}) {
+			t.Errorf("expected excludedCommands overwritten to [flow], got %v", root.Sandbox.ExcludedCommands)
+		}
+	})
+}
+
+// TestAllowUnsandboxedInIsEmpty confirms an allowUnsandboxedCommands=false-only
+// profile counts as content (ShouldSeed fires) — explicit false must NOT be
+// treated as absent — and likewise for an excludedCommands-only profile.
+func TestAllowUnsandboxedInIsEmpty(t *testing.T) {
+	lockOnly := &ClaudeConfig{Sandbox: ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(false)}}
+	if lockOnly.IsEmpty() {
+		t.Errorf("expected allowUnsandboxedCommands=false-only config to be non-empty")
+	}
+	if !lockOnly.ShouldSeed() {
+		t.Errorf("expected allowUnsandboxedCommands=false-only config to ShouldSeed")
+	}
+
+	excludedOnly := &ClaudeConfig{Sandbox: ClaudeSandbox{ExcludedCommands: []string{"git"}}}
+	if excludedOnly.IsEmpty() {
+		t.Errorf("expected excludedCommands-only config to be non-empty")
+	}
+
+	if !(&ClaudeConfig{}).IsEmpty() {
+		t.Errorf("expected an all-zero config to be empty")
 	}
 }
 
