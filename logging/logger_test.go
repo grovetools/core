@@ -234,7 +234,6 @@ func TestResolveFilterSet(t *testing.T) {
 			groups: nil,
 			expected: map[string]bool{
 				"grove-gemini":  true,
-				"grove-openai":  true,
 				"grove-context": true,
 			},
 		},
