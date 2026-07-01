@@ -117,6 +117,11 @@ type EnrichedWorkspace struct {
 	TestReports  map[string]*TestReport `json:"test_reports,omitempty"`
 	ChangedFiles []git.FileStatus       `json:"changed_files,omitempty"`
 	BlobHashes   map[string]string      `json:"blob_hashes,omitempty"`
+	// ChangedFilesComputed is true once the per-file scan has run, so a clean
+	// repo (ChangedFiles nil, dropped by omitempty) is distinguishable from an
+	// uncomputed one. Key cache-hit/backfill on this, not ChangedFiles != nil.
+	// No omitempty: absent from an older daemon decodes false = safe fallback.
+	ChangedFilesComputed bool `json:"changed_files_computed"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.
@@ -134,4 +139,7 @@ type WorkspaceDelta struct {
 	TestReports  map[string]*TestReport `json:"test_reports,omitempty"`
 	ChangedFiles []git.FileStatus       `json:"changed_files,omitempty"`
 	BlobHashes   map[string]string      `json:"blob_hashes,omitempty"`
+	// *bool per the pointer convention above: nil = unchanged. Only the git
+	// delta builders set it, so non-git deltas leave the stored flag intact.
+	ChangedFilesComputed *bool `json:"changed_files_computed,omitempty"`
 }
