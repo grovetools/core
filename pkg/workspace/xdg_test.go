@@ -51,7 +51,7 @@ func setupXDGFixture(t *testing.T) *xdgFixture {
 	t.Helper()
 	sandboxXDG(t)
 
-	rootDir := t.TempDir()
+	rootDir := resolveDir(t.TempDir())
 
 	// Global config registering <root>/work as a grove; cx repo discovery
 	// disabled so the test never touches real user repos.
@@ -496,7 +496,7 @@ func TestResolveScope_AnchorInvariant(t *testing.T) {
 func TestDiscoverAll_AnchoredContainer(t *testing.T) {
 	sandboxXDG(t)
 
-	rootDir := t.TempDir()
+	rootDir := resolveDir(t.TempDir())
 
 	// Global config.
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")

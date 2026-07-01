@@ -15,7 +15,7 @@ import (
 
 // setupMockFS creates a mock filesystem structure for testing.
 func setupMockFS(t *testing.T) (string, string) {
-	rootDir := t.TempDir()
+	rootDir := resolveDir(t.TempDir())
 
 	// 1. Global config with 'search_paths'
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
@@ -138,7 +138,7 @@ func TestDiscoveryService(t *testing.T) {
 // what enables zero-footprint child repos (kitchen-app, kitchen-core) under
 // an ecosystem like kitchen-env.
 func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
-	rootDir := t.TempDir()
+	rootDir := resolveDir(t.TempDir())
 
 	// Global config: register the work dir as a grove
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
@@ -225,7 +225,7 @@ func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
 // misattributed or misclassified when the XDG enumeration pass also scans
 // project XDG bases.
 func TestDiscoverAll_NestedEcosystem_NoMisattribution(t *testing.T) {
-	rootDir := t.TempDir()
+	rootDir := resolveDir(t.TempDir())
 
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
