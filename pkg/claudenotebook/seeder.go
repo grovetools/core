@@ -253,14 +253,58 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 		// existing one (grove.toml wins).
 		mergeString(root, []string{"permissions", "defaultMode"}, cfg.Permissions.DefaultMode)
 
+		// autoMode classifier sections. Written ADDITIVELY per-section via
+		// mergeStringArray at the snake_case JSON keys Claude requires
+		// (soft_deny/hard_deny), only when non-empty — this preserves any
+		// user-authored entries (including "$defaults") and appends grove's, same as
+		// permissions.allow.
+		//
+		// Semantics note: Claude's autoMode arrays REPLACE the built-in section
+		// unless "$defaults" is present. Grove writes additively (its philosophy for
+		// permission arrays), so a grove-managed autoMode.allow fully replaces
+		// Claude's built-in allow list from Claude's POV — if the user wants the
+		// built-ins too, they add "$defaults" to the grove.toml array and grove
+		// passes it through verbatim.
+		if am := cfg.AutoMode; !am.isEmpty() {
+			if len(am.Allow) > 0 {
+				mergeStringArray(root, []string{"autoMode", "allow"}, am.Allow)
+			}
+			if len(am.SoftDeny) > 0 {
+				mergeStringArray(root, []string{"autoMode", "soft_deny"}, am.SoftDeny)
+			}
+			if len(am.Environment) > 0 {
+				mergeStringArray(root, []string{"autoMode", "environment"}, am.Environment)
+			}
+			if len(am.HardDeny) > 0 {
+				mergeStringArray(root, []string{"autoMode", "hard_deny"}, am.HardDeny)
+			}
+		}
+
+		// useAutoModeDuringPlan (top-level bool). nil = no-op; explicit value
+		// OVERWRITES like the other bools. Grove does not enforce Claude's "no effect
+		// unless defaultMode allows auto" cross-field rule.
+		mergeBool(root, []string{"useAutoModeDuringPlan"}, cfg.UseAutoModeDuringPlan)
+
 		// sandbox booleans (only write if non-nil)
 		mergeBool(root, []string{"sandbox", "enabled"}, cfg.Sandbox.Enabled)
 		mergeBool(root, []string{"sandbox", "failIfUnavailable"}, cfg.Sandbox.FailIfUnavailable)
 		mergeBool(root, []string{"sandbox", "autoAllowBashIfSandboxed"}, cfg.Sandbox.AutoAllowBashIfSandboxed)
+		// sandbox.allowUnsandboxedCommands: the escape-hatch lock. nil = no-op;
+		// explicit value OVERWRITES (grove.toml wins), same as the sandbox bools
+		// above. Its intended value is false, and false MUST land as literal JSON
+		// false — mergeBool writes *val verbatim, so an explicit false survives.
+		mergeBool(root, []string{"sandbox", "allowUnsandboxedCommands"}, cfg.Sandbox.AllowUnsandboxedCommands)
 
 		// sandbox.filesystem.allowWrite (from config, merged with notebook dirs)
 		if len(cfg.Sandbox.Filesystem.AllowWrite) > 0 {
 			mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, cfg.Sandbox.Filesystem.AllowWrite)
+		}
+
+		// sandbox.excludedCommands: the vetted unsandboxed allowlist (additive
+		// union, preserves user entries), next to allowedDomains. Only write when
+		// non-empty.
+		if len(cfg.Sandbox.ExcludedCommands) > 0 {
+			mergeStringArray(root, []string{"sandbox", "excludedCommands"}, cfg.Sandbox.ExcludedCommands)
 		}
 
 		// sandbox.network.allowedDomains

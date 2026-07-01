@@ -85,6 +85,20 @@ type ClaudeConfig struct {
 	// lone toggle, like Inherit) — trust is a separate concern from settings
 	// seeding and must not trigger a settings write on its own.
 	ManageTrust *bool `yaml:"manageTrust" toml:"manageTrust" jsonschema:"description=When true, grove manages Claude folder-trust in ~/.claude.json (seed on worktree creation, prune orphans on daemon reconcile); unset/false means grove never touches ~/.claude.json (opt-in, default off)"`
+	// AutoMode declaratively manages Claude Code's top-level `autoMode` classifier
+	// (the sections consulted by the "auto" permission mode). Pointer distinguishes
+	// unset (nil) from set. This IS a real setting (not a lone flag): it counts in
+	// IsEmpty when any section array is non-empty, so a lone [claude.autoMode] block
+	// forces a settings write. See ClaudeAutoMode for the "$defaults" splice
+	// semantics and the snake_case key rationale.
+	AutoMode *ClaudeAutoMode `yaml:"autoMode" toml:"autoMode" jsonschema:"description=Claude Code auto-mode classifier sections (allow/soft_deny/environment/hard_deny) consulted by the auto permission mode"`
+	// UseAutoModeDuringPlan maps to Claude's top-level useAutoModeDuringPlan bool:
+	// apply the auto-mode classifier during plan mode to auto-approve safe
+	// read-only calls. Unlike the lone flags (manageTrust/inherit) this maps to a
+	// written settings key, so it counts in IsEmpty. Grove writes it regardless of
+	// defaultMode — it does NOT enforce Claude's "no effect unless auto" cross-field
+	// rule (not grove's job). Pointer distinguishes unset (nil) from explicit false.
+	UseAutoModeDuringPlan *bool `yaml:"useAutoModeDuringPlan" toml:"useAutoModeDuringPlan" jsonschema:"description=When true, apply the auto-mode classifier during plan mode to auto-approve safe read-only calls (has no effect in Claude unless defaultMode allows auto)"`
 }
 
 // ClaudePermissions holds the permissions.* settings.
@@ -94,18 +108,57 @@ type ClaudePermissions struct {
 	Allow []string `yaml:"allow" toml:"allow" jsonschema:"description=List of Claude Code permission rules to allow without prompting"`
 	// DefaultMode sets Claude Code's permissions.defaultMode — the
 	// settings.local.json equivalent of the --dangerously-skip-permissions flag.
-	// Valid values: default, acceptEdits, plan, bypassPermissions
-	// (bypassPermissions skips permission prompts). Empty string means unset: the
-	// key is not written, so an existing user value is never clobbered. Unlike
-	// Allow this is a scalar string — it is NOT unioned across layers; highest
-	// cascade layer wins with lower layers filling an empty gap (see Merge).
-	DefaultMode string `yaml:"defaultMode" toml:"defaultMode" jsonschema:"description=Claude Code default permission mode; one of default, acceptEdits, plan, bypassPermissions (bypassPermissions skips permission prompts); empty means unset"`
+	// Commonly used values: default, acceptEdits, plan, bypassPermissions, auto
+	// (bypassPermissions skips permission prompts; auto auto-approves tool calls
+	// with background safety checks that verify actions align with your request).
+	// Claude also recognizes the undocumented modes delegate and dontAsk. Empty
+	// string means unset: the key is not written, so an existing user value is
+	// never clobbered. Unlike Allow this is a scalar string — it is NOT unioned
+	// across layers; highest cascade layer wins with lower layers filling an empty
+	// gap (see Merge). Kept a plain, free-form string on purpose (NO enum): Claude
+	// adds modes over time and grove passes them through verbatim, matching the
+	// tolerant/passthrough philosophy of the read side (ccsettings).
+	DefaultMode string `yaml:"defaultMode" toml:"defaultMode" jsonschema:"description=Claude Code default permission mode; commonly default, acceptEdits, plan, bypassPermissions, or auto (bypassPermissions skips prompts; auto auto-approves with background safety checks); delegate and dontAsk also exist; free-form passthrough, empty means unset"`
 	// Deny is a list of Claude Code permission rules (e.g. "Edit(//path/**)")
 	// that are denied. Unioned across layers like Allow. The self-protection
 	// toggle (ProtectConfig) appends grove-owned Edit/Write/MultiEdit rules to
 	// this same array; user-authored Deny entries are preserved and never
 	// stripped.
 	Deny []string `yaml:"deny" toml:"deny" jsonschema:"description=List of Claude Code permission rules to deny"`
+}
+
+// ClaudeAutoMode mirrors Claude Code's top-level `autoMode` classifier object —
+// the sections the "auto" permission mode consults when auto-approving tool
+// calls. Each section REPLACES Claude's built-in section entirely unless the
+// array includes the literal string "$defaults", which splices the built-ins in
+// at that position.
+//
+// Key casing is deliberately snake_case (soft_deny/hard_deny) to MATCH Claude's
+// literal JSON keys — the written settings.local.json keys MUST be exactly
+// soft_deny/hard_deny, so keeping the grove.toml keys identical avoids a mapping
+// layer. (This is the one place [claude] fields are not camelCase, on purpose.)
+type ClaudeAutoMode struct {
+	// Allow is the auto-mode allow section (calls auto-approved without a prompt).
+	Allow []string `yaml:"allow" toml:"allow" jsonschema:"description=Auto-mode allow section; use \"$defaults\" to splice in Claude's built-ins"`
+	// SoftDeny is the auto-mode soft_deny section (calls the classifier declines
+	// softly). JSON key MUST be snake_case soft_deny.
+	SoftDeny []string `yaml:"soft_deny" toml:"soft_deny" jsonschema:"description=Auto-mode soft_deny section; use \"$defaults\" to splice in Claude's built-ins"`
+	// Environment is the auto-mode environment section.
+	Environment []string `yaml:"environment" toml:"environment" jsonschema:"description=Auto-mode environment section; use \"$defaults\" to splice in Claude's built-ins"`
+	// HardDeny is the auto-mode hard_deny section (calls always refused). JSON key
+	// MUST be snake_case hard_deny.
+	HardDeny []string `yaml:"hard_deny" toml:"hard_deny" jsonschema:"description=Auto-mode hard_deny section; use \"$defaults\" to splice in Claude's built-ins"`
+}
+
+// isEmpty reports whether every auto-mode section array is empty. A non-nil
+// AutoMode whose sections are all empty is treated as unset (no write, no
+// ShouldSeed) so grove never forces empty arrays into settings.local.json.
+func (a *ClaudeAutoMode) isEmpty() bool {
+	return a == nil ||
+		(len(a.Allow) == 0 &&
+			len(a.SoftDeny) == 0 &&
+			len(a.Environment) == 0 &&
+			len(a.HardDeny) == 0)
 }
 
 // ClaudeSandbox holds the sandbox.* settings.
@@ -116,6 +169,25 @@ type ClaudeSandbox struct {
 	FailIfUnavailable *bool `yaml:"failIfUnavailable" toml:"failIfUnavailable" jsonschema:"description=Fail if sandboxing is requested but unavailable"`
 	// AutoAllowBashIfSandboxed automatically allows Bash commands when sandboxed.
 	AutoAllowBashIfSandboxed *bool `yaml:"autoAllowBashIfSandboxed" toml:"autoAllowBashIfSandboxed" jsonschema:"description=Auto-allow Bash commands when sandboxed"`
+	// AllowUnsandboxedCommands controls Claude's per-call sandbox escape hatch: the
+	// Bash tool's dangerouslyDisableSandbox parameter. The INTENDED value here is
+	// false — when false, dangerouslyDisableSandbox is completely ignored and every
+	// command must run sandboxed, turning the sandbox into a hard floor the agent
+	// cannot wave itself out of per-call (critical under defaultMode "auto" /
+	// bypassPermissions, where the escape-hatch approval prompt is auto-answered).
+	// The sanctioned way to still run specific vetted tools unsandboxed is
+	// ExcludedCommands, not this blanket hatch. Pointer distinguishes unset (nil,
+	// leaving Claude's true default) from explicit false — and explicit false is
+	// the whole point, so it must survive IsEmpty→Merge→seeder and land as literal
+	// JSON false. toml/yaml key matches Claude's JSON key verbatim.
+	AllowUnsandboxedCommands *bool `yaml:"allowUnsandboxedCommands" toml:"allowUnsandboxedCommands" jsonschema:"description=When false, ignore the Bash dangerouslyDisableSandbox escape hatch so every command must run sandboxed (locks the sandbox as a hard floor); nil leaves Claude's default"`
+	// ExcludedCommands is the curated allowlist of named commands (e.g.
+	// ["git","docker"]) permitted to run UNSANDBOXED — the sanctioned replacement
+	// for the blanket dangerouslyDisableSandbox hatch that AllowUnsandboxedCommands
+	// locks. Only bites when Enabled is also true (grove writes it regardless, not
+	// enforcing that cross-field rule). Unioned across layers like
+	// Network.AllowedDomains.
+	ExcludedCommands []string `yaml:"excludedCommands" toml:"excludedCommands" jsonschema:"description=Named commands allowed to run unsandboxed (the vetted replacement for the blanket per-call escape hatch)"`
 	// Filesystem holds filesystem sandbox settings.
 	Filesystem ClaudeSandboxFilesystem `yaml:"filesystem" toml:"filesystem" jsonschema:"description=Filesystem sandbox configuration"`
 	// Network holds network sandbox settings.
@@ -173,12 +245,16 @@ func (c *ClaudeConfig) IsEmpty() bool {
 		c.Sandbox.Enabled == nil &&
 		c.Sandbox.FailIfUnavailable == nil &&
 		c.Sandbox.AutoAllowBashIfSandboxed == nil &&
+		c.Sandbox.AllowUnsandboxedCommands == nil &&
+		len(c.Sandbox.ExcludedCommands) == 0 &&
 		len(c.Sandbox.Filesystem.AllowWrite) == 0 &&
 		len(c.Sandbox.Filesystem.DenyWrite) == 0 &&
 		len(c.Sandbox.Network.AllowedDomains) == 0 &&
 		len(c.Sandbox.Network.AllowUnixSockets) == 0 &&
 		c.Sandbox.Network.AllowAllUnixSockets == nil &&
-		c.Sandbox.Network.AllowLocalBinding == nil
+		c.Sandbox.Network.AllowLocalBinding == nil &&
+		c.AutoMode.isEmpty() &&
+		c.UseAutoModeDuringPlan == nil
 }
 
 // ShouldSeed reports whether this config carries any signal the seeder must act
@@ -231,6 +307,11 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 		c.Sandbox.Filesystem.DenyWrite = append([]string(nil), other.Sandbox.Filesystem.DenyWrite...)
 		c.Sandbox.Network.AllowedDomains = append([]string(nil), other.Sandbox.Network.AllowedDomains...)
 		c.Sandbox.Network.AllowUnixSockets = append([]string(nil), other.Sandbox.Network.AllowUnixSockets...)
+		c.Sandbox.ExcludedCommands = append([]string(nil), other.Sandbox.ExcludedCommands...)
+		// autoMode arrays are replaced wholesale too (clone the incoming layer's
+		// classifier, clearing c's when other has none) — same clean-slate rule as
+		// the permission/sandbox arrays above.
+		c.AutoMode = cloneAutoMode(other.AutoMode)
 	} else {
 		c.Permissions.Allow = unionStrings(c.Permissions.Allow, other.Permissions.Allow)
 		c.Permissions.Deny = unionStrings(c.Permissions.Deny, other.Permissions.Deny)
@@ -238,6 +319,21 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 		c.Sandbox.Filesystem.DenyWrite = unionStrings(c.Sandbox.Filesystem.DenyWrite, other.Sandbox.Filesystem.DenyWrite)
 		c.Sandbox.Network.AllowedDomains = unionStrings(c.Sandbox.Network.AllowedDomains, other.Sandbox.Network.AllowedDomains)
 		c.Sandbox.Network.AllowUnixSockets = unionStrings(c.Sandbox.Network.AllowUnixSockets, other.Sandbox.Network.AllowUnixSockets)
+		c.Sandbox.ExcludedCommands = unionStrings(c.Sandbox.ExcludedCommands, other.Sandbox.ExcludedCommands)
+		// autoMode: adopt other's if root has none, else union each of the four
+		// section arrays (the "$defaults" token is just another string entry that
+		// union/dedup handles), same as Permissions.Allow.
+		switch {
+		case other.AutoMode == nil:
+			// nothing to merge in
+		case c.AutoMode == nil:
+			c.AutoMode = cloneAutoMode(other.AutoMode)
+		default:
+			c.AutoMode.Allow = unionStrings(c.AutoMode.Allow, other.AutoMode.Allow)
+			c.AutoMode.SoftDeny = unionStrings(c.AutoMode.SoftDeny, other.AutoMode.SoftDeny)
+			c.AutoMode.Environment = unionStrings(c.AutoMode.Environment, other.AutoMode.Environment)
+			c.AutoMode.HardDeny = unionStrings(c.AutoMode.HardDeny, other.AutoMode.HardDeny)
+		}
 	}
 
 	// For booleans, other (member) fills in gaps only if c (root) is nil.
@@ -250,6 +346,12 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	}
 	if c.Sandbox.AutoAllowBashIfSandboxed == nil && other.Sandbox.AutoAllowBashIfSandboxed != nil {
 		c.Sandbox.AutoAllowBashIfSandboxed = other.Sandbox.AutoAllowBashIfSandboxed
+	}
+	// AllowUnsandboxedCommands: root-wins gap-fill mirroring Sandbox.Enabled above.
+	// An explicit root value (including false — the whole point of the lock) wins;
+	// a member fills the slot only when the root left it nil.
+	if c.Sandbox.AllowUnsandboxedCommands == nil && other.Sandbox.AllowUnsandboxedCommands != nil {
+		c.Sandbox.AllowUnsandboxedCommands = other.Sandbox.AllowUnsandboxedCommands
 	}
 	if c.Sandbox.Network.AllowAllUnixSockets == nil && other.Sandbox.Network.AllowAllUnixSockets != nil {
 		c.Sandbox.Network.AllowAllUnixSockets = other.Sandbox.Network.AllowAllUnixSockets
@@ -284,6 +386,26 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	// inherit=false (which only REPLACES arrays wholesale) does not clear it.
 	if c.Permissions.DefaultMode == "" && other.Permissions.DefaultMode != "" {
 		c.Permissions.DefaultMode = other.Permissions.DefaultMode
+	}
+	// UseAutoModeDuringPlan: root-wins gap-fill like the sandbox bools (outside the
+	// array branch, so inherit=false does not clear it).
+	if c.UseAutoModeDuringPlan == nil && other.UseAutoModeDuringPlan != nil {
+		c.UseAutoModeDuringPlan = other.UseAutoModeDuringPlan
+	}
+}
+
+// cloneAutoMode returns a deep copy of an autoMode classifier (nil-safe), so a
+// merged config never aliases another layer's section slices. Used by Merge for
+// both the gap-adopt and the inherit=false clean-slate paths.
+func cloneAutoMode(a *ClaudeAutoMode) *ClaudeAutoMode {
+	if a == nil {
+		return nil
+	}
+	return &ClaudeAutoMode{
+		Allow:       append([]string(nil), a.Allow...),
+		SoftDeny:    append([]string(nil), a.SoftDeny...),
+		Environment: append([]string(nil), a.Environment...),
+		HardDeny:    append([]string(nil), a.HardDeny...),
 	}
 }
 

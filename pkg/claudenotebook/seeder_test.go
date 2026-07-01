@@ -1377,3 +1377,189 @@ func TestClaudeConfig_ShouldSeed(t *testing.T) {
 	assert.True(t, (&claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(true)}).ShouldSeed(), "allowGroveTools=true seeds")
 	assert.False(t, (&claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(false)}).ShouldSeed(), "allowGroveTools=false does not seed alone")
 }
+
+// ============================================================================
+// autoMode classifier + useAutoModeDuringPlan seeding (Part B)
+// ============================================================================
+
+// sandboxHome points HOME and GROVE_HOME at throwaway dirs so no test can touch
+// the developer's real ~/.claude.json or ~/.config/grove.
+func sandboxHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GROVE_HOME", filepath.Join(home, "grove"))
+}
+
+// TestSeedSettings_AutoModeWritten confirms the four autoMode sections are
+// written additively under the EXACT snake_case JSON keys Claude requires
+// (soft_deny/hard_deny), useAutoModeDuringPlan is written at the top level, and
+// pre-existing user entries (including "$defaults") are preserved.
+func TestSeedSettings_AutoModeWritten(t *testing.T) {
+	sandboxHome(t)
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	// Pre-seed a user autoMode.allow with "$defaults" to prove additive-preserve.
+	seed := map[string]any{
+		"autoMode": map[string]any{
+			"allow": []any{"$defaults"},
+		},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		AutoMode: &claudenotebook.ClaudeAutoMode{
+			Allow:       []string{"Bash(git:*)"},
+			SoftDeny:    []string{"Read(secret)"},
+			Environment: []string{"CI=1"},
+			HardDeny:    []string{"Bash(rm:*)"},
+		},
+		UseAutoModeDuringPlan: boolPtr(true),
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+
+	// $defaults preserved and grove's rule appended (additive union).
+	assert.Equal(t, []string{"$defaults", "Bash(git:*)"}, stringSliceAt(t, root, "autoMode", "allow"))
+	assert.Equal(t, []string{"Read(secret)"}, stringSliceAt(t, root, "autoMode", "soft_deny"))
+	assert.Equal(t, []string{"CI=1"}, stringSliceAt(t, root, "autoMode", "environment"))
+	assert.Equal(t, []string{"Bash(rm:*)"}, stringSliceAt(t, root, "autoMode", "hard_deny"))
+	assert.True(t, boolAt(t, root, "useAutoModeDuringPlan"))
+
+	// The written keys MUST be exactly snake_case — assert against the raw bytes
+	// so a camelCase regression (softDeny/hardDeny) is caught.
+	raw, err := os.ReadFile(filepath.Join(wt, settingsRel))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"soft_deny"`)
+	assert.Contains(t, string(raw), `"hard_deny"`)
+	assert.NotContains(t, string(raw), `"softDeny"`)
+	assert.NotContains(t, string(raw), `"hardDeny"`)
+
+	assertNoTmpLeak(t, wt)
+}
+
+// TestSeedSettings_AutoModeGateOff confirms a lone autoMode/useAutoModeDuringPlan
+// config writes nothing when the settings gate is off.
+func TestSeedSettings_AutoModeGateOff(t *testing.T) {
+	sandboxHome(t)
+	wt := t.TempDir()
+	t.Setenv("GROVE_SEED_CLAUDE_SETTINGS", "off")
+
+	cfg := &claudenotebook.ClaudeConfig{
+		AutoMode:              &claudenotebook.ClaudeAutoMode{HardDeny: []string{"Bash(rm:*)"}},
+		UseAutoModeDuringPlan: boolPtr(true),
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	_, err := os.Stat(filepath.Join(wt, settingsRel))
+	assert.True(t, os.IsNotExist(err), "gate off + lone autoMode must not write the file")
+}
+
+// TestSeedSettings_AutoModeEmptyNoOp confirms an autoMode present-but-all-empty
+// carries no signal (treated as unset): no file is created.
+func TestSeedSettings_AutoModeEmptyNoOp(t *testing.T) {
+	sandboxHome(t)
+	wt := t.TempDir()
+
+	cfg := &claudenotebook.ClaudeConfig{AutoMode: &claudenotebook.ClaudeAutoMode{}}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	_, err := os.Stat(filepath.Join(wt, settingsRel))
+	assert.True(t, os.IsNotExist(err), "all-empty autoMode must not write a file")
+}
+
+// ============================================================================
+// sandbox escape-hatch lock seeding (Part C)
+// ============================================================================
+
+// TestSeedSettings_AllowUnsandboxedCommandsWritten is the security-critical case:
+// allowUnsandboxedCommands=false must land as literal JSON false, and
+// excludedCommands must be written under the exact key, additively preserving a
+// pre-existing user entry.
+func TestSeedSettings_AllowUnsandboxedCommandsWritten(t *testing.T) {
+	sandboxHome(t)
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	// Pre-seed a user excludedCommands entry to prove additive-preserve.
+	seed := map[string]any{
+		"sandbox": map[string]any{
+			"excludedCommands": []any{"git"},
+		},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Sandbox: claudenotebook.ClaudeSandbox{
+			AllowUnsandboxedCommands: boolPtr(false),
+			ExcludedCommands:         []string{"docker", "flow"},
+		},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+
+	// The lock: explicit false must survive all the way to literal JSON false.
+	got := optionalBoolAt(root, "sandbox", "allowUnsandboxedCommands")
+	require.NotNil(t, got, "expected sandbox.allowUnsandboxedCommands to be written")
+	assert.False(t, *got, "the lock must land as literal false")
+
+	// excludedCommands: additive union preserving the pre-existing "git".
+	assert.ElementsMatch(t, []string{"git", "docker", "flow"},
+		stringSliceAt(t, root, "sandbox", "excludedCommands"))
+
+	// Exact key names against raw bytes.
+	raw, err := os.ReadFile(filepath.Join(wt, settingsRel))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"allowUnsandboxedCommands": false`)
+	assert.Contains(t, string(raw), `"excludedCommands"`)
+
+	assertNoTmpLeak(t, wt)
+}
+
+// TestSeedSettings_AllowUnsandboxedGateOff confirms a lone
+// allowUnsandboxedCommands=false profile writes nothing when the gate is off
+// (it rides the same GROVE_SEED_CLAUDE_SETTINGS gate).
+func TestSeedSettings_AllowUnsandboxedGateOff(t *testing.T) {
+	sandboxHome(t)
+	wt := t.TempDir()
+	t.Setenv("GROVE_SEED_CLAUDE_SETTINGS", "off")
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Sandbox: claudenotebook.ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(false)},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	_, err := os.Stat(filepath.Join(wt, settingsRel))
+	assert.True(t, os.IsNotExist(err), "gate off + lone lock must not write the file")
+}
+
+// TestSeedSettings_AutoModeAndLockMalformedNoOp confirms a malformed settings
+// file is left untouched (the seeder returns an error and never clobbers it)
+// even when the config carries the new autoMode/sandbox-lock fields.
+func TestSeedSettings_AutoModeAndLockMalformedNoOp(t *testing.T) {
+	sandboxHome(t)
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	bad := []byte("{ this is not json")
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), bad, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		AutoMode: &claudenotebook.ClaudeAutoMode{HardDeny: []string{"Bash(rm:*)"}},
+		Sandbox:  claudenotebook.ClaudeSandbox{AllowUnsandboxedCommands: boolPtr(false)},
+	}
+	err := claudenotebook.SeedSettings(wt, nil, cfg, nil)
+	require.Error(t, err, "malformed JSON must surface an error")
+
+	after, rerr := os.ReadFile(filepath.Join(wt, settingsRel))
+	require.NoError(t, rerr)
+	assert.Equal(t, bad, after, "malformed file must be left untouched")
+	assertNoTmpLeak(t, wt)
+}
