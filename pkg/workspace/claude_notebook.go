@@ -118,6 +118,58 @@ func SeedNotebookDirsForWorktree(worktreePath string, repos []string, provider *
 	return claudenotebook.SeedNotebookDirs(worktreePath, dirs)
 }
 
+// ResolveClaudeConfigForWorktree loads the worktree's own grove.toml [claude]
+// profile and merges each member repo's [claude] block into it, returning the
+// combined config. Root (worktree) values take precedence; member repos fill
+// boolean gaps and union arrays (root.Merge(member) semantics).
+//
+// config.LoadFrom cascades the global ~/.config/grove/grove.toml into the
+// worktree layer, so a global [claude] preference (e.g. manageTrust=true)
+// reaches this resolved profile without any extra load.
+//
+// Errors are swallowed to nil the same way the seed path historically did: a
+// nil result (no readable config) must degrade callers to "disabled", never to
+// a panic or an accidental enable.
+func ResolveClaudeConfigForWorktree(worktreePath string, repos []string) *claudenotebook.ClaudeConfig {
+	rootCfg, _ := config.LoadFrom(worktreePath)
+	if rootCfg == nil {
+		return nil
+	}
+	var rootClaudeCfg claudenotebook.ClaudeConfig
+	_ = rootCfg.UnmarshalExtension("claude", &rootClaudeCfg)
+
+	// Union across all member repos.
+	for _, repo := range repos {
+		if repo == "" {
+			continue
+		}
+		repoPath := filepath.Join(worktreePath, repo)
+		repoCfg, err := config.LoadFrom(repoPath)
+		if err != nil || repoCfg == nil {
+			continue
+		}
+		var memberClaudeCfg claudenotebook.ClaudeConfig
+		if err := repoCfg.UnmarshalExtension("claude", &memberClaudeCfg); err != nil {
+			continue
+		}
+		// Merge member config into root (root wins for booleans, arrays union).
+		rootClaudeCfg.Merge(&memberClaudeCfg)
+	}
+	return &rootClaudeCfg
+}
+
+// WorktreeManagesTrust reports whether grove should manage Claude folder-trust
+// for this worktree, per its resolved (global→ecosystem→project) [claude]
+// profile. nil/err/absent => false. It is the per-worktree config master enable
+// for trust seeding; the env kill-switch (GROVE_PRESEED_CLAUDE_TRUST) is
+// enforced independently inside core/pkg/claudetrust.
+//
+// Exported deliberately: flow/cmd (a separate module) calls it from the
+// add-worktrees path, which cannot reach an unexported helper.
+func WorktreeManagesTrust(worktreePath string, repos []string) bool {
+	return ResolveClaudeConfigForWorktree(worktreePath, repos).ManagesTrust()
+}
+
 // SeedClaudeSettingsForWorktree resolves the [claude] grove.toml extension from
 // each member repo linked into the worktree, unions their arrays, and seeds the
 // combined profile into the worktree's .claude/settings.local.json alongside
@@ -137,29 +189,11 @@ func SeedNotebookDirsForWorktree(worktreePath string, repos []string, provider *
 // worktreePath. provider may be nil; resolution falls back to per-path
 // classification when it is.
 func SeedClaudeSettingsForWorktree(worktreePath string, repos []string, provider *Provider) error {
-	// Load the worktree's own config first (ecosystem root values take precedence).
-	rootCfg, _ := config.LoadFrom(worktreePath)
-	var rootClaudeCfg claudenotebook.ClaudeConfig
-	if rootCfg != nil {
-		_ = rootCfg.UnmarshalExtension("claude", &rootClaudeCfg)
-	}
-
-	// Union across all member repos.
-	for _, repo := range repos {
-		if repo == "" {
-			continue
-		}
-		repoPath := filepath.Join(worktreePath, repo)
-		repoCfg, err := config.LoadFrom(repoPath)
-		if err != nil || repoCfg == nil {
-			continue
-		}
-		var memberClaudeCfg claudenotebook.ClaudeConfig
-		if err := repoCfg.UnmarshalExtension("claude", &memberClaudeCfg); err != nil {
-			continue
-		}
-		// Merge member config into root (root wins for booleans, arrays union).
-		rootClaudeCfg.Merge(&memberClaudeCfg)
+	// Resolve the merged (worktree-root + member-union) [claude] profile. Root
+	// values take precedence; member repos fill gaps and union arrays.
+	rootClaudeCfg := ResolveClaudeConfigForWorktree(worktreePath, repos)
+	if rootClaudeCfg == nil {
+		rootClaudeCfg = &claudenotebook.ClaudeConfig{}
 	}
 
 	// Resolve notebook directories for all member repos.
@@ -176,7 +210,7 @@ func SeedClaudeSettingsForWorktree(worktreePath string, repos []string, provider
 	// member-repo grove config files for protection.
 	var cfgPtr *claudenotebook.ClaudeConfig
 	if rootClaudeCfg.ShouldSeed() {
-		cfgPtr = &rootClaudeCfg
+		cfgPtr = rootClaudeCfg
 	}
 	return claudenotebook.SeedSettings(worktreePath, repos, cfgPtr, dirs)
 }
