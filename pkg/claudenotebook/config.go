@@ -74,6 +74,17 @@ type ClaudeConfig struct {
 	// empty [claude] block. Never protects tool INVOCATION (no Bash(grove:*) deny)
 	// — only file PATHS.
 	ProtectConfig *bool `yaml:"protectConfig" toml:"protectConfig" jsonschema:"description=When true, deny sandbox+native writes to grove config files (grove.toml, member configs, ~/.config/grove) so a sandboxed agent cannot edit the config that sandboxes it; false actively strips those grove-owned entries"`
+	// ManageTrust, when true, lets grove manage Claude folder-trust in
+	// ~/.claude.json (seed on worktree creation, prune orphans on daemon
+	// reconcile). Lone flag: unset (nil) or false => grove does NOT touch
+	// ~/.claude.json. Default is therefore OFF (opt-in). This deliberately flips
+	// the historical default-ON behavior gated only by the
+	// GROVE_PRESEED_CLAUDE_TRUST env var (which remains a low-level kill-switch
+	// inside core/pkg/claudetrust). Pointer distinguishes unset (nil) from
+	// explicit false, like the sandbox bools. Kept OUT of IsEmpty/ShouldSeed (a
+	// lone toggle, like Inherit) — trust is a separate concern from settings
+	// seeding and must not trigger a settings write on its own.
+	ManageTrust *bool `yaml:"manageTrust" toml:"manageTrust" jsonschema:"description=When true, grove manages Claude folder-trust in ~/.claude.json (seed on worktree creation, prune orphans on daemon reconcile); unset/false means grove never touches ~/.claude.json (opt-in, default off)"`
 }
 
 // ClaudePermissions holds the permissions.* settings.
@@ -150,9 +161,11 @@ type ClaudeSandboxNetwork struct {
 	AllowLocalBinding *bool `yaml:"allowLocalBinding" toml:"allowLocalBinding" jsonschema:"description=When true, allow binding localhost TCP ports"`
 }
 
-// IsEmpty returns true if no configuration is set. ProtectConfig and
-// AllowGroveTools are deliberately excluded: they are lone-flag signals honored
-// by ShouldSeed and the seeder's gate, not by IsEmpty (mirroring Inherit).
+// IsEmpty returns true if no configuration is set. ProtectConfig,
+// AllowGroveTools and ManageTrust are deliberately excluded: they are lone-flag
+// signals honored elsewhere (ShouldSeed / the seeder's gate for the first two;
+// the trust gate in the workspace/daemon callers for ManageTrust), not by
+// IsEmpty (mirroring Inherit).
 func (c *ClaudeConfig) IsEmpty() bool {
 	return len(c.Permissions.Allow) == 0 &&
 		len(c.Permissions.Deny) == 0 &&
@@ -190,6 +203,15 @@ func (c *ClaudeConfig) ShouldSeed() bool {
 		return true
 	}
 	return false
+}
+
+// ManagesTrust reports whether grove should manage Claude folder-trust for
+// this resolved profile. Default (nil) is false. This is the config master
+// enable checked by the workspace seed sites and the daemon; the env
+// kill-switch (GROVE_PRESEED_CLAUDE_TRUST) is enforced independently inside
+// core/pkg/claudetrust.
+func (c *ClaudeConfig) ManagesTrust() bool {
+	return c != nil && c.ManageTrust != nil && *c.ManageTrust
 }
 
 // Merge combines two ClaudeConfigs. Arrays are unioned and deduped.
@@ -249,6 +271,11 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	// (which only REPLACES arrays wholesale) does not clear it.
 	if c.ProtectConfig == nil && other.ProtectConfig != nil {
 		c.ProtectConfig = other.ProtectConfig
+	}
+	// ManageTrust: root-wins gap-fill (outside the array branch, so
+	// inherit=false does not clear it) — same as AllowGroveTools/ProtectConfig.
+	if c.ManageTrust == nil && other.ManageTrust != nil {
+		c.ManageTrust = other.ManageTrust
 	}
 	// Permissions.DefaultMode is a root-wins-gap scalar string (empty = unset),
 	// mirroring the *bool gap-fills above: a member fills the slot only when the

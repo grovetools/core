@@ -151,33 +151,43 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		// symlinks), so an un-canonicalized key would silently miss. The dirs
 		// exist on disk here (SetupSubmodules already ran), so canonicalization
 		// resolves real case/symlinks. Never abort worktree creation on failure.
-		trustPaths := make([]string, 0, 1+len(opts.SiblingWorkspaces))
-		trustPaths = append(trustPaths, absWorktreePath)
-		for _, repo := range opts.SiblingWorkspaces {
-			trustPaths = append(trustPaths, filepath.Join(absWorktreePath, repo))
-		}
-		canonicalPaths := make([]string, 0, len(trustPaths))
-		for _, p := range trustPaths {
-			canonical, canonErr := pathutil.CanonicalPath(p)
-			if canonErr != nil {
-				fmt.Printf("Warning: failed to canonicalize path for Claude trust pre-seed (%s): %v\n", p, canonErr)
-				continue
+		//
+		// Gate: grove only touches ~/.claude.json when this worktree's resolved
+		// [claude] profile sets manageTrust=true (default off, opt-in). The gate
+		// is per-worktree by design — seeding has the worktree's own cascade in
+		// hand, so a per-project manageTrust legitimately enables its own trust.
+		// This is resolved INDEPENDENTLY of ShouldSeed (a manageTrust-only block
+		// is ShouldSeed()==false), and it also short-circuits the EPERM→daemon
+		// delegation fallback below.
+		if WorktreeManagesTrust(absWorktreePath, opts.SiblingWorkspaces) {
+			trustPaths := make([]string, 0, 1+len(opts.SiblingWorkspaces))
+			trustPaths = append(trustPaths, absWorktreePath)
+			for _, repo := range opts.SiblingWorkspaces {
+				trustPaths = append(trustPaths, filepath.Join(absWorktreePath, repo))
 			}
-			canonicalPaths = append(canonicalPaths, canonical)
-		}
-		if seedErr := claudetrust.SeedTrust(canonicalPaths...); seedErr != nil {
-			// ~/.claude.json sits OUTSIDE the OS sandbox's writable boundary
-			// (roughly working-dir + temp), so when Prepare runs sandbox-side the
-			// write is rejected with EPERM. Delegate the privileged write to the
-			// unsandboxed daemon, which re-derives the trust path set from the
-			// registry entry saved above (never from caller-supplied paths). The
-			// registry Save already ran, so the daemon can resolve absWorktreePath.
-			if claudetrust.IsPermissionDenied(seedErr) && opts.TrustSeedFallback != nil {
-				if rpcErr := opts.TrustSeedFallback(ctx, absWorktreePath); rpcErr != nil {
-					fmt.Printf("Warning: failed to pre-seed Claude trust via daemon: %v\n", rpcErr)
+			canonicalPaths := make([]string, 0, len(trustPaths))
+			for _, p := range trustPaths {
+				canonical, canonErr := pathutil.CanonicalPath(p)
+				if canonErr != nil {
+					fmt.Printf("Warning: failed to canonicalize path for Claude trust pre-seed (%s): %v\n", p, canonErr)
+					continue
 				}
-			} else {
-				fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
+				canonicalPaths = append(canonicalPaths, canonical)
+			}
+			if seedErr := claudetrust.SeedTrust(canonicalPaths...); seedErr != nil {
+				// ~/.claude.json sits OUTSIDE the OS sandbox's writable boundary
+				// (roughly working-dir + temp), so when Prepare runs sandbox-side the
+				// write is rejected with EPERM. Delegate the privileged write to the
+				// unsandboxed daemon, which re-derives the trust path set from the
+				// registry entry saved above (never from caller-supplied paths). The
+				// registry Save already ran, so the daemon can resolve absWorktreePath.
+				if claudetrust.IsPermissionDenied(seedErr) && opts.TrustSeedFallback != nil {
+					if rpcErr := opts.TrustSeedFallback(ctx, absWorktreePath); rpcErr != nil {
+						fmt.Printf("Warning: failed to pre-seed Claude trust via daemon: %v\n", rpcErr)
+					}
+				} else {
+					fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
+				}
 			}
 		}
 
