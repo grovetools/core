@@ -501,6 +501,12 @@ var (
 	IconStatusBeta  string
 )
 
+// ASCIIIcons reports whether the ASCII icon set is active (GROVE_ICONS=ascii
+// or tui.icons = "ascii" in config). Exported so views embedding non-icon
+// Unicode art (e.g. block-glyph logos) can swap to ASCII-safe variants in
+// step with the icon set.
+var ASCIIIcons bool
+
 // init function determines which icon set to use
 func init() {
 	useASCII := false
@@ -515,6 +521,8 @@ func init() {
 			useASCII = true
 		}
 	}
+
+	ASCIIIcons = useASCII
 
 	if useASCII {
 		// Load ASCII icons
