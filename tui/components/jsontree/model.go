@@ -901,7 +901,7 @@ func (m *Model) renderNode(n *node, selected, isResult, isVisual bool) string {
 func (m *Model) highlightMatch(text, query string, baseStyle lipgloss.Style) string {
 	lowerText := strings.ToLower(text)
 	lowerQuery := strings.ToLower(query)
-	highlightStyle := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
+	highlightStyle := lipgloss.NewStyle().Background(theme.DefaultTheme.Colors.Yellow).Foreground(theme.DefaultTheme.Colors.DarkText)
 
 	var result strings.Builder
 	start := 0
