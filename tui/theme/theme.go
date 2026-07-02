@@ -172,13 +172,18 @@ type Theme struct {
 	AccentColors []lipgloss.TerminalColor
 }
 
+// themeAliases maps legacy names onto registry entries. Aliases must never
+// shadow a real palette name: gruvbox-dark/-light are actual palettes now,
+// so aliasing them to the adaptive family would make the variant palettes
+// unreachable (Lookup/SetTheme/resolveThemeColors all consult aliases before
+// the registry).
 var themeAliases = map[string]string{
-	"kanagawa-dark":   "kanagawa",
-	"kanagawa-dragon": "kanagawa",
-	"kanagawa-wave":   "kanagawa",
-	"gruvbox-dark":    "gruvbox",
-	"gruvbox-light":   "gruvbox",
-	"branded":         "kanagawa",
+	// kanagawa-wave and kanagawa-dragon are real palettes since the Phase 2b
+	// upstream extraction; the old grove variant names map onto the upstream
+	// variants that replaced them.
+	"kanagawa-dark":  "kanagawa-wave",
+	"kanagawa-light": "kanagawa-lotus",
+	"branded":        "kanagawa",
 }
 
 // DefaultTheme is the default theme instance for the Grove ecosystem.
