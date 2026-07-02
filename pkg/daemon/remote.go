@@ -2116,6 +2116,146 @@ func (c *RemoteClient) ReportTestResults(ctx context.Context, workspace string, 
 	return nil
 }
 
+// SubmitBuild enqueues a build job on the daemon's machine-wide build queue.
+// A 404 means the daemon predates the build queue; that is surfaced as
+// ErrNotSupported so callers fall back to their local worker pool.
+func (c *RemoteClient) SubmitBuild(ctx context.Context, buildReq models.BuildJobRequest) (string, error) {
+	body, err := json.Marshal(buildReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal build request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		fmt.Sprintf("%s/api/build/submit", baseURL),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to submit build: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrNotSupported
+	}
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var out models.BuildSubmitResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("failed to decode build submit response: %w", err)
+	}
+	return out.JobID, nil
+}
+
+// CancelBuild cancels every queued and running build job in the given group.
+func (c *RemoteClient) CancelBuild(ctx context.Context, groupID string) error {
+	body, err := json.Marshal(models.BuildCancelRequest{GroupID: groupID})
+	if err != nil {
+		return fmt.Errorf("failed to marshal build cancel request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		fmt.Sprintf("%s/api/build/cancel", baseURL),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to cancel build group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotSupported
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// StreamBuildEvents subscribes to a build job's lifecycle + output SSE stream.
+func (c *RemoteClient) StreamBuildEvents(ctx context.Context, jobID string) (<-chan models.BuildJobEvent, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/build/jobs/"+jobID+"/stream", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stream request: %w", err)
+	}
+
+	// Use a separate client with no timeout for streaming
+	streamTransport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(dialCtx, "unix", c.socketPath)
+		},
+	}
+	streamClient := &http.Client{
+		Transport: streamTransport,
+		Timeout:   0, // No timeout for streaming
+	}
+
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to build event stream: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("build event stream returned status %d", resp.StatusCode)
+	}
+
+	ch := make(chan models.BuildJobEvent, 100)
+
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		defer streamTransport.CloseIdleConnections()
+
+		scanner := bufio.NewScanner(resp.Body)
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 1*1024*1024)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if strings.HasPrefix(line, ":") || line == "" {
+				continue
+			}
+
+			if strings.HasPrefix(line, "data: ") {
+				jsonStr := strings.TrimPrefix(line, "data: ")
+				var event models.BuildJobEvent
+				if err := json.Unmarshal([]byte(jsonStr), &event); err != nil {
+					continue
+				}
+				select {
+				case ch <- event:
+				case <-ctx.Done():
+					return
+				}
+				// The daemon closes the stream after the terminal event;
+				// return proactively so callers unblock without waiting on
+				// the transport teardown.
+				if event.Event == models.BuildEventFinished {
+					return
+				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
 // GetSystemInfo returns the daemon's version and commit information.
 func (c *RemoteClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/system/info", nil)

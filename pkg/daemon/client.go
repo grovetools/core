@@ -5,12 +5,19 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/workspace"
 )
+
+// ErrNotSupported is returned when a Client method has no meaningful
+// implementation for the underlying transport — e.g. the build queue
+// methods on LocalClient, or on a remote daemon that predates the
+// endpoint. Callers treat it as a "fall back to local execution" signal.
+var ErrNotSupported = errors.New("operation not supported by this daemon client")
 
 // SessionIntent represents the intent to start a session, registered before agent launch.
 // This enables race-free session tracking by pre-registering before the agent process exists.
@@ -374,6 +381,26 @@ type Client interface {
 
 	// ReportTestResults reports structured test results (per-scenario breakdown) to the daemon.
 	ReportTestResults(ctx context.Context, workspace string, report *models.TestReport) error
+
+	// --- Build Queue ---
+	// These methods drive the daemon's machine-wide build scheduler, which
+	// caps concurrent build jobs across every grove invocation on the host.
+
+	// SubmitBuild enqueues one build job on the daemon's build queue and
+	// returns its job ID. LocalClient (and remote daemons that predate the
+	// build queue) return ErrNotSupported so callers fall back to their
+	// local worker pool.
+	SubmitBuild(ctx context.Context, req models.BuildJobRequest) (string, error)
+
+	// CancelBuild cancels every queued and running build job submitted
+	// under the given group ID (one CLI invocation = one group). Running
+	// jobs have their whole process group killed; queued jobs are drained.
+	CancelBuild(ctx context.Context, groupID string) error
+
+	// StreamBuildEvents subscribes to a single build job's lifecycle +
+	// output event stream. The channel replays buffered history first,
+	// then live events, and closes when the job reaches a terminal state.
+	StreamBuildEvents(ctx context.Context, jobID string) (<-chan models.BuildJobEvent, error)
 
 	// --- System Information ---
 

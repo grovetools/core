@@ -625,6 +625,23 @@ func (c *LocalClient) ReportTestResults(ctx context.Context, workspace string, r
 	return nil // No daemon to report to
 }
 
+// --- Build Queue (requires the daemon) ---
+// The machine-wide build queue lives in the global daemon; without it
+// there is nothing to coordinate against. ErrNotSupported tells callers
+// (grove's orchestrator) to fall back to their local worker pool.
+
+func (c *LocalClient) SubmitBuild(ctx context.Context, req models.BuildJobRequest) (string, error) {
+	return "", ErrNotSupported
+}
+
+func (c *LocalClient) CancelBuild(ctx context.Context, groupID string) error {
+	return ErrNotSupported
+}
+
+func (c *LocalClient) StreamBuildEvents(ctx context.Context, jobID string) (<-chan models.BuildJobEvent, error) {
+	return nil, ErrNotSupported
+}
+
 // GetSystemInfo returns an error since system info requires the daemon.
 func (c *LocalClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, error) {
 	return nil, errors.New("system info requires the grove daemon; use daemon.NewWithAutoStart()")

@@ -441,6 +441,11 @@ type ContextConfig struct {
 	AllowedPaths []string `yaml:"allowed_paths,omitempty" toml:"allowed_paths,omitempty" jsonschema:"description=Additional paths allowed for context inclusion regardless of workspace boundaries" jsonschema_extras:"x-layer=project,x-priority=85"`
 }
 
+// BuildConfig holds configuration for the daemon's machine-wide build queue.
+type BuildConfig struct {
+	MaxParallel int `yaml:"max_parallel,omitempty" toml:"max_parallel,omitempty" jsonschema:"description=Maximum number of build jobs running concurrently machine-wide (default: max(2\\, NumCPU/2))"`
+}
+
 // DaemonJobsConfig holds configuration for the in-process job runner.
 type DaemonJobsConfig struct {
 	Enabled          *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Enable the background job runner (default: true)"`
@@ -475,6 +480,7 @@ type DaemonConfig struct {
 	SkillSyncDebounceMs    int               `yaml:"skill_sync_debounce_ms,omitempty" toml:"skill_sync_debounce_ms,omitempty" jsonschema:"description=Debounce window for skill syncs in milliseconds (default: 1000)"`
 	Hooks                  *DaemonHooks      `yaml:"hooks,omitempty" toml:"hooks,omitempty" jsonschema:"description=Daemon-specific hooks configuration"`
 	Jobs                   *DaemonJobsConfig `yaml:"jobs,omitempty" toml:"jobs,omitempty" jsonschema:"description=Job runner configuration"`
+	Build                  *BuildConfig      `yaml:"build,omitempty" toml:"build,omitempty" jsonschema:"description=Machine-wide build queue configuration"`
 	SSH                    *DaemonSSHConfig  `yaml:"ssh,omitempty" toml:"ssh,omitempty" jsonschema:"description=Embedded SSH server configuration"`
 	PairWithTreemux        *bool             `yaml:"pair_with_treemux,omitempty" toml:"pair_with_treemux,omitempty" jsonschema:"description=Opt-in to kill daemon when the parent treemux exits"`
 }
