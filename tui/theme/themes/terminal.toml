@@ -1,0 +1,50 @@
+# Terminal — ANSI passthrough theme. Uses only the 16 standard ANSI color
+# indices so every TUI inherits the terminal emulator's own color scheme.
+
+[meta]
+name = "terminal"
+family = "terminal"
+variant = "default"
+appearance = "dark"
+default = true
+ansi = true
+author = "grovetools"
+license = "MIT"
+
+[palette]
+bg = "0"           # Black
+bg_dark = "0"      # Black
+bg_highlight = "8" # Bright Black (gray)
+bg_visual = "8"    # Bright Black (gray)
+fg = "7"           # White
+fg_dark = "7"      # White
+fg_gutter = "8"    # Bright Black (gray)
+fg_inverse = "0"   # Black
+comment = "8"      # Bright Black (gray)
+border = "8"       # Bright Black (gray)
+red = "1"          # Red
+green = "2"        # Green
+yellow = "3"       # Yellow
+blue = "4"         # Blue
+magenta = "13"     # Bright Magenta
+cyan = "6"         # Cyan
+orange = "11"      # Bright Yellow (often appears orange)
+purple = "5"       # Magenta
+
+[terminal]
+black = "0"
+red = "1"
+green = "2"
+yellow = "3"
+blue = "4"
+magenta = "5"
+cyan = "6"
+white = "7"
+black_bright = "8"
+red_bright = "9"
+green_bright = "10"
+yellow_bright = "11"
+blue_bright = "12"
+magenta_bright = "13"
+cyan_bright = "14"
+white_bright = "15"
