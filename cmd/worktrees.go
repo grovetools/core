@@ -13,37 +13,7 @@ import (
 	"github.com/grovetools/core/cli"
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/workspace"
-)
-
-// Styles for worktree display
-var (
-	worktreeHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("99")).
-				MarginTop(1).
-				MarginBottom(0)
-
-	worktreePathStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241"))
-
-	worktreeBranchStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("33")).
-				Bold(true)
-
-	worktreeCleanStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("34"))
-
-	worktreeDirtyStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("208"))
-
-	worktreeErrorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("196"))
-
-	worktreeBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1).
-				MarginLeft(2)
+	"github.com/grovetools/core/tui/theme"
 )
 
 // NewWorktreesCmd creates the `worktrees` command
@@ -108,9 +78,17 @@ Only shows workspaces that have additional worktrees beyond the main one.`
 			return results[i].name < results[j].name
 		})
 
-		// Display results
+		// Display results. Styles are derived from the active theme at
+		// render time rather than captured in package vars.
+		t := theme.DefaultTheme
+		headerStyle := t.Highlight.MarginTop(1)
+		boxStyle := lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(t.Colors.Border).
+			Padding(0, 1).
+			MarginLeft(2)
 		for _, result := range results {
-			header := worktreeHeaderStyle.Render(result.name)
+			header := headerStyle.Render(result.name)
 			fmt.Println(header)
 
 			var lines []string
@@ -120,7 +98,7 @@ Only shows workspaces that have additional worktrees beyond the main one.`
 			}
 
 			content := strings.Join(lines, "\n")
-			boxed := worktreeBoxStyle.Render(content)
+			boxed := boxStyle.Render(content)
 			fmt.Println(boxed)
 		}
 
@@ -131,17 +109,19 @@ Only shows workspaces that have additional worktrees beyond the main one.`
 }
 
 func formatWorktreeLine(wt git.WorktreeWithStatus) string {
+	t := theme.DefaultTheme
+
 	cwd, _ := os.Getwd()
 	relPath, err := filepath.Rel(cwd, wt.Path)
 	if err != nil {
 		relPath = wt.Path
 	}
 
-	pathStr := worktreePathStyle.Render(relPath)
+	pathStr := t.Path.Render(relPath)
 
-	branchStr := worktreeBranchStyle.Render(wt.Branch)
+	branchStr := t.Info.Render(wt.Branch)
 	if wt.Branch == "" {
-		branchStr = worktreeBranchStyle.Render("(no branch)")
+		branchStr = t.Info.Render("(no branch)")
 	}
 
 	var statusStr string
@@ -157,12 +137,12 @@ func formatWorktreeLine(wt git.WorktreeWithStatus) string {
 			if wt.Status.UntrackedCount > 0 {
 				counts = append(counts, fmt.Sprintf("?:%d", wt.Status.UntrackedCount))
 			}
-			statusStr = worktreeDirtyStyle.Render(fmt.Sprintf("● %s", strings.Join(counts, " ")))
+			statusStr = t.WarningLight.Render(fmt.Sprintf("● %s", strings.Join(counts, " ")))
 		} else {
-			statusStr = worktreeCleanStyle.Render("Clean")
+			statusStr = t.SuccessLight.Render("Clean")
 		}
 	} else {
-		statusStr = worktreeErrorStyle.Render("Unknown")
+		statusStr = t.ErrorLight.Render("Unknown")
 	}
 
 	return fmt.Sprintf("%-50s %-20s %s", pathStr, branchStr, statusStr)
