@@ -25,7 +25,7 @@ type SectionInfo struct {
 
 // BindingInfo is a serializable representation of a single keybinding.
 type BindingInfo struct {
-	Name        string   // Action name, e.g., "up", "confirm"
+	Name        string   // Binding identity: struct field name, e.g., "Up", "Confirm" (falls back to Help().Desc for bindings not backed by a struct field)
 	Keys        []string // Key combinations, e.g., ["j", "down"]
 	Description string   // Human-readable description
 	Enabled     bool     // Whether the binding is active
@@ -65,6 +65,18 @@ func ExportSections(sections []Section) []SectionInfo {
 
 // MakeTUIInfo creates a TUIInfo from a SectionedKeyMap.
 // This is the standard way for TUIs to export their keybindings.
+//
+// Binding identity is derived from the keymap's struct FIELD NAMES, not from
+// help descriptions (which may collide across fields): each exported binding
+// is matched back to its struct field by signature (Keys() + Help(), see
+// bindingSignature), then Name is set to the field name (e.g. "PageUp") and
+// ConfigKey to its snake_case form (e.g. "page_up") using the same
+// CamelCase->snake_case conversion as the overrides system, so ConfigKey
+// round-trips with ApplyOverrides. Description remains Help().Desc.
+//
+// Bindings that cannot be matched to a field (e.g. constructed inline in a
+// Sections() method) fall back to the legacy description-derived Name and
+// ConfigKey.
 func MakeTUIInfo(name, pkg, description string, km SectionedKeyMap) TUIInfo {
 	info := TUIInfo{
 		Name:        name,
@@ -73,65 +85,34 @@ func MakeTUIInfo(name, pkg, description string, km SectionedKeyMap) TUIInfo {
 		Sections:    ExportSections(km.Sections()),
 	}
 
-	// Extract config keys via reflection on the keymap struct
-	configKeys := make(map[string]string)
-	extractConfigKeys(reflect.ValueOf(km), configKeys)
+	// Map binding signatures to struct field names via reflection. On a
+	// signature collision (two fields with identical keys AND help) the
+	// first field in declaration order wins, keeping output deterministic.
+	fieldBySig := make(map[string]string)
+	for _, f := range collectBindingFields(reflect.ValueOf(km), "") {
+		sig := bindingSignature(f.Binding)
+		if _, ok := fieldBySig[sig]; !ok {
+			fieldBySig[sig] = f.Name
+		}
+	}
 
-	// Map config keys back to the bindings by matching help descriptions
+	// ExportSections preserves section/binding order, so indices align with
+	// km.Sections() and each exported binding can be matched by signature.
+	sections := km.Sections()
 	for i := range info.Sections {
 		for j := range info.Sections[i].Bindings {
-			desc := info.Sections[i].Bindings[j].Description
-			if cKey, ok := configKeys[desc]; ok {
-				info.Sections[i].Bindings[j].ConfigKey = cKey
-			} else {
-				// Fallback: convert description to snake_case
-				info.Sections[i].Bindings[j].ConfigKey = toSnakeCase(strings.ReplaceAll(desc, " ", "_"))
+			b := &info.Sections[i].Bindings[j]
+			if fieldName, ok := fieldBySig[bindingSignature(sections[i].Bindings[j])]; ok {
+				b.Name = fieldName
+				b.ConfigKey = camelToSnake(fieldName)
+				continue
 			}
+			// Fallback: derive ConfigKey from the description (legacy behavior).
+			b.ConfigKey = toSnakeCase(strings.ReplaceAll(b.Description, " ", "_"))
 		}
 	}
 
 	return info
-}
-
-// extractConfigKeys uses reflection to find all key.Binding fields in a struct
-// and maps their help description to their snake_cased field name.
-func extractConfigKeys(v reflect.Value, m map[string]string) {
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Interface {
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return
-	}
-	t := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
-		val := v.Field(i)
-
-		// Handle embedded/anonymous fields by recursing
-		if field.Anonymous {
-			extractConfigKeys(val, m)
-			continue
-		}
-
-		// Check if this is a key.Binding field
-		if field.Type.String() == "key.Binding" {
-			if val.CanInterface() {
-				binding, ok := val.Interface().(key.Binding)
-				if ok && binding.Help().Desc != "" {
-					m[binding.Help().Desc] = toSnakeCase(field.Name)
-				}
-			}
-			continue
-		}
-
-		// Recurse into nested structs (but not slices/maps)
-		if val.Kind() == reflect.Struct {
-			extractConfigKeys(val, m)
-		}
-	}
 }
 
 // toSnakeCase converts a PascalCase or camelCase string to snake_case.

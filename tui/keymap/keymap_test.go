@@ -1,7 +1,10 @@
 package keymap
 
 import (
+	"reflect"
 	"testing"
+
+	"github.com/charmbracelet/bubbles/key"
 
 	"github.com/grovetools/core/config"
 )
@@ -273,6 +276,52 @@ func TestSections(t *testing.T) {
 		if sections[i].Name != name {
 			t.Errorf("Section %d: expected name %q, got %q", i, name, sections[i].Name)
 		}
+	}
+}
+
+// TestBaseSectionGettersCoverAllFields walks every key.Binding field of Base
+// via reflection and asserts that each appears in at least one of the seven
+// section getters. This guarantees a Base field can never silently be absent
+// from all sections (and thus from help output and the keys registry).
+func TestBaseSectionGettersCoverAllFields(t *testing.T) {
+	km := DefaultVim()
+
+	sections := []Section{
+		km.NavigationSection(),
+		km.ActionsSection(),
+		km.SearchSection(),
+		km.SelectionSection(),
+		km.ViewSection(),
+		km.FoldSection(),
+		km.SystemSection(),
+	}
+
+	// Union of binding signatures across all section getters.
+	covered := make(map[string]bool)
+	for _, s := range sections {
+		for _, b := range s.Bindings {
+			covered[bindingSignature(b)] = true
+		}
+	}
+
+	v := reflect.ValueOf(km)
+	typ := v.Type()
+	bindingType := reflect.TypeOf(key.Binding{})
+	checked := 0
+	for i := 0; i < v.NumField(); i++ {
+		field := typ.Field(i)
+		if field.Type != bindingType {
+			continue
+		}
+		checked++
+		b := v.Field(i).Interface().(key.Binding)
+		if !covered[bindingSignature(b)] {
+			t.Errorf("Base.%s (keys %v, help %q) appears in no section getter", field.Name, b.Keys(), b.Help().Desc)
+		}
+	}
+
+	if checked == 0 {
+		t.Fatal("reflection found no key.Binding fields on Base — test is broken")
 	}
 }
 

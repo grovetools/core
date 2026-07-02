@@ -160,6 +160,7 @@ func (m *Model) setViewportContent() {
 
 	var sections []keymap.Section
 	var helpGroups [][]key.Binding // fallback for older implementation
+	hasKeymap := true
 
 	// Prefer SectionedKeyMap interface, fall back to FullHelp
 	switch k := m.Keys.(type) {
@@ -167,6 +168,8 @@ func (m *Model) setViewportContent() {
 		sections = k.Sections()
 	case interface{ FullHelp() [][]key.Binding }:
 		helpGroups = k.FullHelp()
+	default:
+		hasKeymap = false
 	}
 
 	// Handle custom help bindings
@@ -184,6 +187,12 @@ func (m *Model) setViewportContent() {
 	}
 
 	content := m.renderHelpContent(sections, helpGroups, verticalMargin, horizontalMargin, gutterWidth)
+	if content == "" && !hasKeymap {
+		// Keys implements neither Sections() nor FullHelp() (and no custom
+		// help was supplied) — show a visible message instead of an empty
+		// overlay so the misconfiguration is diagnosable.
+		content = m.Theme.Muted.Render("(no keymap registered)")
+	}
 	m.viewport.SetContent(content)
 
 	// Set viewport dimensions with a margin. Reserve 1 line for the scroll indicator.
