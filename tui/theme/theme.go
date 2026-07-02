@@ -9,7 +9,10 @@ import (
 	"github.com/grovetools/core/config"
 )
 
-const defaultThemeName = "kanagawa"
+// DefaultThemeName is the theme in effect when neither GROVE_THEME nor
+// config sets one. Exported so out-of-process consumers (daemon, grove.nvim)
+// share the same fallback instead of mirroring the constant.
+const DefaultThemeName = "kanagawa"
 
 // Colors encapsulates the palette used by a theme. lipgloss.TerminalColor
 // allows a mix of adaptive and static colors.
@@ -427,18 +430,35 @@ func resolveThemeColors(name string) Colors {
 	if builder, ok := themeRegistry[key]; ok {
 		return builder()
 	}
-	if builder, ok := themeRegistry[defaultThemeName]; ok {
+	if builder, ok := themeRegistry[DefaultThemeName]; ok {
 		return builder()
 	}
 	// The embedded registry failed to load entirely; fall back to ANSI.
 	return fallbackColors()
 }
 
-func normalizeThemeName(name string) string {
+// NormalizeName canonicalizes a theme selection for registry lookup:
+// lowercased, trimmed, spaces and underscores mapped to hyphens. Exported so
+// consumers that diff or broadcast theme names (daemon, grove.nvim) match
+// what SetTheme resolves.
+func NormalizeName(name string) string {
 	normalized := strings.ToLower(strings.TrimSpace(name))
 	normalized = strings.ReplaceAll(normalized, " ", "-")
 	normalized = strings.ReplaceAll(normalized, "_", "-")
 	return normalized
+}
+
+func normalizeThemeName(name string) string {
+	return NormalizeName(name)
+}
+
+// CurrentName resolves the theme selection for this process with the same
+// precedence package init uses: GROVE_THEME env var first, then the resolved
+// config's tui.theme, then DefaultThemeName. Note it reflects the initial
+// selection sources, not a later SetTheme — use DefaultTheme.Name for the
+// currently applied theme.
+func CurrentName() string {
+	return getThemeName()
 }
 
 func getThemeName() string {
@@ -449,7 +469,7 @@ func getThemeName() string {
 	cfg, err := config.LoadDefault()
 	if err != nil || cfg == nil {
 		// Config loading failed or returned nil - use default
-		return defaultThemeName
+		return DefaultThemeName
 	}
 
 	// Check if TUI config exists and has a theme set
@@ -459,5 +479,5 @@ func getThemeName() string {
 		}
 	}
 
-	return defaultThemeName
+	return DefaultThemeName
 }
