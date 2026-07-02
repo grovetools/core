@@ -122,6 +122,20 @@ func WorktreesDir() string {
 	return filepath.Join(data, "worktrees")
 }
 
+// WorktreeArchiveDir returns the base directory for archived grove worktrees
+// (DataDir()/worktree-archive). It MUST remain a SIBLING of WorktreesDir() and
+// never live under it: worktreeregistry.Reconcile adopts every directory two
+// levels under WorktreesDir() as a live worktree, so an archive nested there
+// would be re-registered as active on the next daemon tick. Callers that
+// archive worktrees must MkdirAll the target themselves.
+func WorktreeArchiveDir() string {
+	data := DataDir()
+	if data == "" {
+		return ""
+	}
+	return filepath.Join(data, "worktree-archive")
+}
+
 // BinDir returns the Grove binary directory.
 // Resolution order:
 // 1. GROVE_BIN env var (explicit override for demos/testing)

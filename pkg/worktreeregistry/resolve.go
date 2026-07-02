@@ -98,7 +98,9 @@ func FindByRef(ref string) (*Entry, error) {
 	}
 	var matches []*Entry
 	for _, e := range all {
-		if e != nil && e.Plan == ref {
+		// Archived entries are skipped so a future plan reusing the same name
+		// cannot collide with (or be shadowed by) an archived worktree.
+		if e != nil && e.Plan == ref && !e.IsArchived() {
 			matches = append(matches, e)
 		}
 	}
