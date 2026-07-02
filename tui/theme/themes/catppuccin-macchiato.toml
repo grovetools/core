@@ -1,0 +1,59 @@
+# Catppuccin Macchiato — grove palette.
+# Derived from catppuccin/palette palette.json (flavor "macchiato": colors + ansiColors).
+# Role mapping: bg=base, bg_dark=mantle, bg_highlight=surface0, bg_visual=surface1,
+# fg=text, fg_dark=subtext1, fg_gutter=surface1, comment=overlay0, border=surface1,
+# magenta=pink, cyan=teal, orange=peach, purple=mauve (per catppuccin style guide).
+# Diagnostics per catppuccin style guide: error=red, warning=yellow, info=sky, hint=teal.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "catppuccin-macchiato"
+family = "catppuccin"
+variant = "macchiato"
+appearance = "dark"
+upstream = "https://github.com/catppuccin/palette"
+author = "Catppuccin Org"
+license = "MIT"
+
+[palette]
+bg = "#24273a"
+bg_dark = "#1e2030"
+bg_highlight = "#363a4f"
+bg_visual = "#494d64"
+fg = "#cad3f5"
+fg_dark = "#b8c0e0"
+fg_gutter = "#494d64"
+comment = "#6e738d"
+border = "#494d64"
+red = "#ed8796"
+green = "#a6da95"
+yellow = "#eed49f"
+blue = "#8aadf4"
+magenta = "#f5bde6"
+cyan = "#8bd5ca"
+orange = "#f5a97f"
+purple = "#c6a0f6"
+
+[palette.diagnostics]
+error = "#ed8796"
+warning = "#eed49f"
+info = "#91d7e3"
+hint = "#8bd5ca"
+
+[terminal]
+black = "#494d64"
+red = "#ed8796"
+green = "#a6da95"
+yellow = "#eed49f"
+blue = "#8aadf4"
+magenta = "#f5bde6"
+cyan = "#8bd5ca"
+white = "#a5adcb"
+black_bright = "#5b6078"
+red_bright = "#ec7486"
+green_bright = "#8ccf7f"
+yellow_bright = "#e1c682"
+blue_bright = "#78a1f6"
+magenta_bright = "#f2a9dd"
+cyan_bright = "#63cbc0"
+white_bright = "#b8c0e0"

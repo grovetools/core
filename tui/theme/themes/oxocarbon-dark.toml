@@ -1,0 +1,68 @@
+# Oxocarbon (dark) — nyoom-engineering/oxocarbon.nvim.
+# Source: lua/oxocarbon/init.lua (compiled from fnl/oxocarbon/init.fnl), dark
+# branch of the palette table. base01..05 are blend_hex(base00, base06, k)
+# results computed with oxocarbon's own blend-hex.
+# Mapping notes:
+#   bg=base00, bg_dark="blend", bg_highlight=base01 (CursorLine),
+#   bg_visual=base02 (Visual), fg=base04 (Normal fg), comment=base03 (Comment),
+#   fg_gutter=base03 (LineNr), border=base02. fg_dark/fg_inverse omitted
+#   (derived Go-side). git omitted (derived).
+#   Oxocarbon defines NO yellow or orange; yellow=#f1c21b and orange=#ff832b
+#   are IBM Carbon Design System values (yellow-30, orange-40), the palette
+#   oxocarbon is derived from.
+#   [terminal] copies upstream terminal_color_0..15 exactly; the unconventional
+#   slot assignments (red slot = base11 blue, green slot = base14 purple, ...)
+#   are upstream's.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "oxocarbon-dark"
+family = "oxocarbon"
+variant = "dark"
+appearance = "dark"
+default = true
+upstream = "https://github.com/nyoom-engineering/oxocarbon.nvim"
+author = "Nyoom Engineering"
+license = "MIT"
+
+[palette]
+bg = "#161616"
+bg_dark = "#131313"
+bg_highlight = "#262626"
+bg_visual = "#393939"
+fg = "#d0d0d0"
+fg_gutter = "#525252"
+comment = "#525252"
+border = "#393939"
+red = "#ee5396"
+green = "#42be65"
+yellow = "#f1c21b"
+blue = "#78a9ff"
+magenta = "#ff7eb6"
+cyan = "#3ddbd9"
+orange = "#ff832b"
+purple = "#be95ff"
+
+[palette.diagnostics]
+error = "#ee5396"
+warning = "#be95ff"
+info = "#78a9ff"
+hint = "#d0d0d0"
+
+[terminal]
+black = "#262626"
+red = "#33b1ff"
+green = "#be95ff"
+yellow = "#42be65"
+blue = "#78a9ff"
+magenta = "#82cfff"
+cyan = "#3ddbd9"
+white = "#f2f2f2"
+black_bright = "#525252"
+red_bright = "#33b1ff"
+green_bright = "#be95ff"
+yellow_bright = "#42be65"
+blue_bright = "#78a9ff"
+magenta_bright = "#82cfff"
+cyan_bright = "#08bdba"
+white_bright = "#ffffff"

@@ -83,19 +83,44 @@ func TestDefaultVariantSelection(t *testing.T) {
 
 func TestList(t *testing.T) {
 	metas := List()
-	if len(metas) != 5 {
-		t.Fatalf("List() returned %d palettes, want 5", len(metas))
+	if len(metas) < 5 {
+		t.Fatalf("List() returned %d palettes, want at least the 5 original built-ins", len(metas))
 	}
-	names := make([]string, len(metas))
-	for i, m := range metas {
-		names[i] = m.Name
+
+	// The original built-in palettes must always be present.
+	byName := make(map[string]PaletteMeta, len(metas))
+	for _, m := range metas {
+		byName[m.Name] = m
 	}
-	want := []string{"gruvbox-dark", "gruvbox-light", "kanagawa-dark", "kanagawa-light", "terminal"}
-	for i, n := range want {
-		if names[i] != n {
-			t.Fatalf("List() order = %v, want %v", names, want)
+	for _, want := range []string{"gruvbox-dark", "gruvbox-light", "kanagawa-dark", "kanagawa-light", "terminal"} {
+		if _, ok := byName[want]; !ok {
+			t.Errorf("List() missing built-in palette %q", want)
 		}
 	}
+
+	// Sorted by family, then appearance (dark first), then name.
+	appearanceRank := func(a string) int {
+		if a == "dark" {
+			return 0
+		}
+		return 1
+	}
+	for i := 1; i < len(metas); i++ {
+		prev, cur := metas[i-1], metas[i]
+		switch {
+		case prev.Family < cur.Family:
+			continue
+		case prev.Family > cur.Family:
+			t.Fatalf("List() not sorted by family: %q before %q", prev.Name, cur.Name)
+		case appearanceRank(prev.Appearance) < appearanceRank(cur.Appearance):
+			continue
+		case appearanceRank(prev.Appearance) > appearanceRank(cur.Appearance):
+			t.Fatalf("List() dark variants must precede light within family: %q before %q", prev.Name, cur.Name)
+		case prev.Name >= cur.Name:
+			t.Fatalf("List() not sorted by name within family/appearance: %q before %q", prev.Name, cur.Name)
+		}
+	}
+
 	for _, m := range metas {
 		if m.Family == "" || m.Variant == "" || m.Appearance == "" {
 			t.Errorf("palette %q has incomplete metadata: %+v", m.Name, m)

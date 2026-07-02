@@ -1,0 +1,52 @@
+# GitHub Dark Dimmed — grove palette for the "github" family.
+# Derived from GitHub Primer primitives (primer/primitives) design tokens:
+#   src/tokens/base/color/dark/dark.json5 + dark.dimmed.json5 (base overrides)
+#   src/tokens/functional/color/fgColor.json5 / bgColor.json5 / borderColor.json5
+# Functional tokens resolved for theme "dark-dimmed"
+#   (overrides[theme] ?? overrides[dark] ?? $value).
+# Mapping: bg=bgColor-default, bg_dark=bgColor-inset, bg_highlight=bgColor-muted,
+#   fg=fgColor-default, comment=fgColor-muted,
+#   border=borderColor-default, blue=fgColor-accent, green=fgColor-success,
+#   yellow=fgColor-attention, orange=fgColor-severe, red=fgColor-danger,
+#   purple=fgColor-done, magenta=fgColor-sponsors.
+# cyan: current primitives has no cyan scale; substituted base.color.blue.2 (#6cb6ff),
+#   a lighter blue-scale step distinct from fgColor-accent (#478be6).
+# bg_visual omitted: bgColor-accent-muted is alpha-translucent in this token set.
+# fg_inverse omitted (loader derives bg_dark): fgColor-onEmphasis is near-white
+#   here, tuned for primer's gray emphasis surfaces, not for text on accents.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "github-dark-dimmed"
+family = "github"
+variant = "dark-dimmed"
+appearance = "dark"
+upstream = "https://github.com/primer/primitives"
+author = "GitHub, Inc. (Primer)"
+license = "MIT"
+
+[palette]
+bg = "#212830"
+bg_dark = "#151b23"
+bg_highlight = "#262c36"
+fg = "#d1d7e0"
+comment = "#9198a1"
+border = "#3d444d"
+red = "#e5534b"
+green = "#57ab5a"
+yellow = "#c69026"
+blue = "#478be6"
+magenta = "#c96198"
+cyan = "#6cb6ff"
+orange = "#cc6b2c"
+purple = "#986ee2"
+
+[palette.git]
+add = "#57ab5a"
+change = "#c69026"
+delete = "#e5534b"
+
+[palette.diagnostics]
+error = "#e5534b"
+warning = "#c69026"
+info = "#478be6"

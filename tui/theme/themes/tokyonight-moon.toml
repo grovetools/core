@@ -1,0 +1,50 @@
+# Tokyo Night (moon) — tokyonight dark style with softer, warmer accents.
+# Derived from folke/tokyonight.nvim lua/tokyonight/colors/moon.lua
+# and lua/tokyonight/colors/init.lua.
+# border uses upstream fg_gutter (see tokyonight-night.toml note).
+# SPDX-License-Identifier: Apache-2.0
+
+[meta]
+name = "tokyonight-moon"
+family = "tokyonight"
+variant = "moon"
+appearance = "dark"
+upstream = "https://github.com/folke/tokyonight.nvim"
+author = "Folke Lemaitre"
+license = "Apache-2.0"
+
+[palette]
+bg = "#222436"
+bg_dark = "#1e2030"
+bg_highlight = "#2f334d"
+bg_visual = "#2d3f76"
+fg = "#c8d3f5"
+fg_dark = "#828bb8"
+fg_gutter = "#3b4261"
+comment = "#636da6"
+border = "#3b4261"
+red = "#ff757f"
+green = "#c3e88d"
+yellow = "#ffc777"
+blue = "#82aaff"
+magenta = "#c099ff"
+cyan = "#86e1fc"
+orange = "#ff966c"
+purple = "#fca7ea"
+
+[palette.git]
+add = "#b8db87"
+change = "#7ca1f2"
+delete = "#e26a75"
+
+[palette.diagnostics]
+error = "#c53b53"
+warning = "#ffc777"
+info = "#0db9d7"
+hint = "#4fd6be"
+
+[terminal]
+black = "#1b1d2b"
+black_bright = "#444a73"
+white = "#828bb8"
+white_bright = "#c8d3f5"

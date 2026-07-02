@@ -1,0 +1,58 @@
+# Floraverse (dawn) — mattsolo1/floraverse.nvim.
+# Source: upstream generates the dawn palette from
+# lua/floraverse/colors/twilight.lua via HSLuv inversion; values generated with
+# floraverse's own Util.invert (day_brightness = 0.3).
+# Diagnostics upstream match grove's derivation defaults, so
+# [palette.diagnostics] is omitted; fg_inverse is derived Go-side.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "floraverse-dawn"
+family = "floraverse"
+variant = "dawn"
+appearance = "light"
+upstream = "https://github.com/mattsolo1/floraverse.nvim"
+author = "mattsolo1"
+license = "MIT"
+
+[palette]
+bg = "#f8f8f9"
+bg_dark = "#ebeae9"
+bg_highlight = "#f0f0f3"
+bg_visual = "#a9a4bf"
+fg = "#716c5d"
+fg_dark = "#7d7868"
+fg_gutter = "#b0adbf"
+comment = "#9a95b1"
+border = "#a9a4bf"
+red = "#cd4973"
+green = "#7d8640"
+yellow = "#9a7141"
+blue = "#5290ba"
+magenta = "#ab4b8e"
+cyan = "#478a77"
+orange = "#bb7c3c"
+purple = "#a06288"
+
+[palette.git]
+add = "#7c963e"
+change = "#528fb9"
+delete = "#db7e9e"
+
+[terminal]
+black = "#ededf1"
+red = "#db7e9e"
+green = "#7c963e"
+yellow = "#bb7c3c"
+blue = "#528fb9"
+magenta = "#a06288"
+cyan = "#478a77"
+white = "#7d7868"
+black_bright = "#9a95b1"
+red_bright = "#cd4973"
+green_bright = "#7d8640"
+yellow_bright = "#9a7141"
+blue_bright = "#5290ba"
+magenta_bright = "#ab4b8e"
+cyan_bright = "#478a77"
+white_bright = "#5b5850"

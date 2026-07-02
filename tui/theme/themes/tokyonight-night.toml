@@ -1,0 +1,52 @@
+# Tokyo Night (night) — the tokyonight default dark style.
+# Derived from folke/tokyonight.nvim lua/tokyonight/colors/night.lua
+# (a delta over storm.lua) and lua/tokyonight/colors/init.lua.
+# border uses upstream fg_gutter: tokyonight's own border color (bg blended
+# 80% toward black) is indistinguishable from bg in a TUI.
+# SPDX-License-Identifier: Apache-2.0
+
+[meta]
+name = "tokyonight-night"
+family = "tokyonight"
+variant = "night"
+appearance = "dark"
+default = true
+upstream = "https://github.com/folke/tokyonight.nvim"
+author = "Folke Lemaitre"
+license = "Apache-2.0"
+
+[palette]
+bg = "#1a1b26"
+bg_dark = "#16161e"
+bg_highlight = "#292e42"
+bg_visual = "#283457"
+fg = "#c0caf5"
+fg_dark = "#a9b1d6"
+fg_gutter = "#3b4261"
+comment = "#565f89"
+border = "#3b4261"
+red = "#f7768e"
+green = "#9ece6a"
+yellow = "#e0af68"
+blue = "#7aa2f7"
+magenta = "#bb9af7"
+cyan = "#7dcfff"
+orange = "#ff9e64"
+purple = "#9d7cd8"
+
+[palette.git]
+add = "#449dab"
+change = "#6183bb"
+delete = "#914c54"
+
+[palette.diagnostics]
+error = "#db4b4b"
+warning = "#e0af68"
+info = "#0db9d7"
+hint = "#1abc9c"
+
+[terminal]
+black = "#15161e"
+black_bright = "#414868"
+white = "#a9b1d6"
+white_bright = "#c0caf5"

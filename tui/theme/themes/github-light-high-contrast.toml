@@ -1,0 +1,51 @@
+# GitHub Light High Contrast — grove palette for the "github" family.
+# Derived from GitHub Primer primitives (primer/primitives) design tokens:
+#   src/tokens/base/color/light/light.json5 + light.high-contrast.json5 (base overrides)
+#   src/tokens/functional/color/fgColor.json5 / bgColor.json5 / borderColor.json5
+# Functional tokens resolved for theme "light-high-contrast"
+#   (overrides[theme] ?? overrides[light] ?? $value).
+# Mapping: bg=bgColor-default, bg_dark=bgColor-inset, bg_highlight=bgColor-muted,
+#   fg=fgColor-default, comment=fgColor-muted, fg_inverse=fgColor-onEmphasis,
+#   border=borderColor-default, blue=fgColor-accent, green=fgColor-success,
+#   yellow=fgColor-attention, orange=fgColor-severe, red=fgColor-danger,
+#   purple=fgColor-done, magenta=fgColor-sponsors.
+# cyan: current primitives has no cyan scale; substituted base.color.blue.7 (#022f7a),
+#   one step darker than fgColor-accent (base.color.blue.6) to stay distinct from blue.
+# bg_visual omitted: bgColor-accent-muted is alpha-translucent in this token set.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "github-light-high-contrast"
+family = "github"
+variant = "light-high-contrast"
+appearance = "light"
+upstream = "https://github.com/primer/primitives"
+author = "GitHub, Inc. (Primer)"
+license = "MIT"
+
+[palette]
+bg = "#ffffff"
+bg_dark = "#eff2f5"
+bg_highlight = "#e6eaef"
+fg = "#010409"
+fg_inverse = "#ffffff"
+comment = "#454c54"
+border = "#454c54"
+red = "#960d1e"
+green = "#04591f"
+yellow = "#603700"
+blue = "#023b95"
+magenta = "#7d0c57"
+cyan = "#022f7a"
+orange = "#702c00"
+purple = "#5e2bb4"
+
+[palette.git]
+add = "#04591f"
+change = "#603700"
+delete = "#960d1e"
+
+[palette.diagnostics]
+error = "#960d1e"
+warning = "#603700"
+info = "#023b95"

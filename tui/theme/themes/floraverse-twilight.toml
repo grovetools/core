@@ -1,0 +1,57 @@
+# Floraverse (twilight) — mattsolo1/floraverse.nvim.
+# Source: lua/floraverse/colors/twilight.lua (copied 1:1; the upstream table
+# maps directly onto grove's roles, including git.* and terminal.*).
+# Diagnostics upstream match grove's derivation defaults, so
+# [palette.diagnostics] is omitted; fg_inverse is derived Go-side.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "floraverse-twilight"
+family = "floraverse"
+variant = "twilight"
+appearance = "dark"
+upstream = "https://github.com/mattsolo1/floraverse.nvim"
+author = "mattsolo1"
+license = "MIT"
+
+[palette]
+bg = "#0a0810"
+bg_dark = "#06050a"
+bg_highlight = "#12101a"
+bg_visual = "#4d456b"
+fg = "#c8c0a7"
+fg_dark = "#b4ad97"
+fg_gutter = "#444059"
+comment = "#5a5278"
+border = "#4d456b"
+red = "#c7476f"
+green = "#9ca751"
+yellow = "#d9a15f"
+blue = "#589ac7"
+magenta = "#c558a4"
+cyan = "#5fb49c"
+orange = "#c78440"
+purple = "#a3648a"
+
+[palette.git]
+add = "#566929"
+change = "#3b6a8a"
+delete = "#8c3858"
+
+[terminal]
+black = "#14121f"
+red = "#8c3858"
+green = "#566929"
+yellow = "#c78440"
+blue = "#3b6a8a"
+magenta = "#a3648a"
+cyan = "#5fb49c"
+white = "#b4ad97"
+black_bright = "#5a5278"
+red_bright = "#c7476f"
+green_bright = "#9ca751"
+yellow_bright = "#d9a15f"
+blue_bright = "#589ac7"
+magenta_bright = "#c558a4"
+cyan_bright = "#5fb49c"
+white_bright = "#e6e0cc"

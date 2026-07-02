@@ -82,7 +82,7 @@ Settings nested under the `tui` key.
 
 | Property | Description |
 | :--- | :--- |
-| `theme` | (string, optional) <br> Sets the color theme for the terminal interface. Valid options typically include 'kanagawa'. |
+| `theme` | (string, optional) <br> Sets the color theme for the terminal interfaces. Accepts a theme family ('ayu', 'catppuccin', 'floraverse', 'github', 'gruvbox', 'kanagawa', 'nord', 'onedark', 'oxocarbon', 'terminal', 'tokyonight') or a specific variant such as 'catppuccin-mocha', 'tokyonight-storm', or 'github-light-high-contrast'. Family names resolve to the family's default variant and adapt to light/dark terminal backgrounds when the family ships both. The complete list of valid names is generated into the JSON schema from the embedded theme registry. |
 | `icons` | (string, optional) <br> Controls the icon set used in the UI. Options are 'nerd' (requires a Nerd Font) or 'ascii' (text-based fallbacks). |
 | `nvim_embed` | (object, optional) <br> Configuration for the embedded Neovim component. Contains a `user_config` (boolean, required) property to toggle loading user's personal nvim config. |
 

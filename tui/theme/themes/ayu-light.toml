@@ -1,0 +1,43 @@
+# Ayu (light).
+# Derived from ayu-theme/ayu-colors themes/light.yaml: bg = editor.bg
+# (surface.lift), bg_dark = surface.base (ui.bg), comment = ui.fg (the
+# stepped $palette.gray.l4 token cannot be resolved without the designer's
+# OKLCH pipeline), border/bg_highlight/bg_visual composited from their
+# alpha-over-bg upstream definitions. magenta maps ayu's "pink", cyan maps
+# ayu's "teal".
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "ayu-light"
+family = "ayu"
+variant = "light"
+appearance = "light"
+default = true
+upstream = "https://github.com/ayu-theme/ayu-colors"
+author = "Ike Ku (dempfi)"
+license = "MIT"
+
+[palette]
+bg = "#fcfcfc"
+bg_dark = "#f8f9fa"
+bg_highlight = "#f0f1f3"
+bg_visual = "#d7e4f6"
+fg = "#5c6166"
+comment = "#828e9f"
+border = "#ebedef"
+red = "#f07171"
+green = "#86b300"
+yellow = "#eba400"
+blue = "#22a4e6"
+magenta = "#f2a191"
+cyan = "#4cbf99"
+orange = "#fa8532"
+purple = "#a37acc"
+
+[palette.git]
+add = "#6cbf43"
+change = "#478acc"
+delete = "#ff7383"
+
+[palette.diagnostics]
+error = "#e65050"

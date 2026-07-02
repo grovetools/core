@@ -1,0 +1,64 @@
+# Oxocarbon (light) — nyoom-engineering/oxocarbon.nvim.
+# Source: lua/oxocarbon/init.lua (compiled from fnl/oxocarbon/init.fnl), light
+# branch of the palette table. base01/base02 are blend_hex(base00, base06, k)
+# results computed with oxocarbon's own blend-hex.
+# Mapping notes:
+#   bg=base00 (#ffffff), bg_dark="blend" (#fafafa), bg_highlight=base01,
+#   bg_visual=base02, fg=base04 (Normal fg), fg_gutter=base05, border=base02.
+#   comment=#525252 (light base06 slot, used for secondary text): the raw
+#   Comment group uses base03 = #161616, which is full-contrast black and
+#   unusable as grove's muted text role.
+#   Oxocarbon light defines NO yellow; yellow=#8e6a00 is IBM Carbon yellow-60
+#   (the palette oxocarbon is derived from). orange=#ff6f00 is base10.
+#   [terminal] copies upstream light terminal_color_0..15 exactly; the
+#   unconventional slot assignments are upstream's.
+#   git and diagnostics omitted (derived Go-side): upstream light diagnostic
+#   colors are illegible on white, and grove's derivation defaults are
+#   role-wise equivalent.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "oxocarbon-light"
+family = "oxocarbon"
+variant = "light"
+appearance = "light"
+default = true
+upstream = "https://github.com/nyoom-engineering/oxocarbon.nvim"
+author = "Nyoom Engineering"
+license = "MIT"
+
+[palette]
+bg = "#ffffff"
+bg_dark = "#fafafa"
+bg_highlight = "#f2f2f2"
+bg_visual = "#d0d0d0"
+fg = "#37474f"
+fg_gutter = "#90a4ae"
+comment = "#525252"
+border = "#d0d0d0"
+red = "#ee5396"
+green = "#42be65"
+yellow = "#8e6a00"
+blue = "#0f62fe"
+magenta = "#ff7eb6"
+cyan = "#08bdba"
+orange = "#ff6f00"
+purple = "#673ab7"
+
+[terminal]
+black = "#f2f2f2"
+red = "#0f62fe"
+green = "#be95ff"
+yellow = "#42be65"
+blue = "#ee5396"
+magenta = "#ffab91"
+cyan = "#ff7eb6"
+white = "#90a4ae"
+black_bright = "#161616"
+red_bright = "#0f62fe"
+green_bright = "#be95ff"
+yellow_bright = "#42be65"
+blue_bright = "#ee5396"
+magenta_bright = "#ffab91"
+cyan_bright = "#08bdba"
+white_bright = "#525252"
