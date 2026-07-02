@@ -1,0 +1,37 @@
+# OneDark (darker) — grove palette.
+# Derived from navarasu/onedark.nvim lua/onedark/palette.lua (variant "darker").
+# Role mapping: bg=bg0, bg_dark=bg_d, bg_highlight=bg1, bg_visual=bg2, fg=fg,
+# fg_dark=light_grey, fg_gutter=grey, comment=grey, border=bg3.
+# magenta=purple: the onedark palette has no separate magenta accent, so the
+# purple value is duplicated into the magenta slot.
+# git/diagnostics/terminal omitted: the palette's diff_* colors are background
+# tints, not foreground accents, so the loader derives those roles.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "onedark-darker"
+family = "onedark"
+variant = "darker"
+appearance = "dark"
+upstream = "https://github.com/navarasu/onedark.nvim"
+author = "Navarasu"
+license = "MIT"
+
+[palette]
+bg = "#1f2329"
+bg_dark = "#181b20"
+bg_highlight = "#282c34"
+bg_visual = "#30363f"
+fg = "#a0a8b7"
+fg_dark = "#7a818e"
+fg_gutter = "#535965"
+comment = "#535965"
+border = "#323641"
+red = "#e55561"
+green = "#8ebd6b"
+yellow = "#e2b86b"
+blue = "#4fa6ed"
+magenta = "#bf68d9"
+cyan = "#48b0bd"
+orange = "#cc9057"
+purple = "#bf68d9"

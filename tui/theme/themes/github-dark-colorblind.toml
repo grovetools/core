@@ -1,0 +1,56 @@
+# GitHub Dark Colorblind (protanopia/deuteranopia) — grove palette, "github" family.
+# Derived from GitHub Primer primitives (primer/primitives) design tokens:
+#   src/tokens/base/color/dark/dark.json5
+#   src/tokens/functional/color/fgColor.json5 / bgColor.json5 / borderColor.json5
+# Functional tokens resolved for theme "dark-protanopia-deuteranopia"
+#   (overrides[theme] ?? overrides[dark] ?? $value).
+# Mapping: bg=bgColor-default, bg_dark=bgColor-inset, bg_highlight=bgColor-muted,
+#   fg=fgColor-default, comment=fgColor-muted,
+#   border=borderColor-default, blue=fgColor-accent, green=fgColor-success,
+#   yellow=fgColor-attention, orange=fgColor-severe, red=fgColor-danger,
+#   purple=fgColor-done, magenta=fgColor-sponsors.
+# Upstream intentionally remaps hues for red/green blindness: fgColor-danger is
+#   orange (#f0883e), fgColor-success is blue (base.color.blue.3 #58a6ff), and
+#   fgColor-done is neutral (base.color.neutral.10 #b7bdc8, per the token's own
+#   comment) — so red is orange-ish, green is blue-ish, purple is gray here.
+# cyan: current primitives has no cyan scale; substituted base.color.blue.2 (#79c0ff),
+#   a lighter blue-scale step distinct from fgColor-accent (#4493f8).
+# bg_visual omitted: bgColor-accent-muted is alpha-translucent in this token set.
+# fg_inverse omitted (loader derives bg_dark): fgColor-onEmphasis is white here,
+#   tuned for primer's gray emphasis surfaces, not for text on bright accents.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "github-dark-colorblind"
+family = "github"
+variant = "dark-colorblind"
+appearance = "dark"
+upstream = "https://github.com/primer/primitives"
+author = "GitHub, Inc. (Primer)"
+license = "MIT"
+
+[palette]
+bg = "#0d1117"
+bg_dark = "#010409"
+bg_highlight = "#151b23"
+fg = "#f0f6fc"
+comment = "#9198a1"
+border = "#3d444d"
+red = "#f0883e"
+green = "#58a6ff"
+yellow = "#d29922"
+blue = "#4493f8"
+magenta = "#db61a2"
+cyan = "#79c0ff"
+orange = "#db6d28"
+purple = "#b7bdc8"
+
+[palette.git]
+add = "#58a6ff"
+change = "#d29922"
+delete = "#f0883e"
+
+[palette.diagnostics]
+error = "#f0883e"
+warning = "#d29922"
+info = "#4493f8"

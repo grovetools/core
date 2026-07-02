@@ -17,6 +17,16 @@ import (
 //   - x-sensitive: true for API keys - mask display
 //   - x-hint: Additional guidance shown in edit dialog
 func GenerateSchema() ([]byte, error) {
+	return GenerateSchemaWithThemeNames(nil)
+}
+
+// GenerateSchemaWithThemeNames is GenerateSchema with a closed enum for
+// tui.theme injected from the given names. The theme roster lives in the
+// tui/theme registry (embedded TOML palettes), which imports this package —
+// so the names are passed in by the schema-generator tool instead of being
+// imported here (that would be an import cycle) or hardcoded in struct tags
+// (that caused roster drift). Passing nil leaves tui.theme an open string.
+func GenerateSchemaWithThemeNames(themeNames []string) ([]byte, error) {
 	r := &jsonschema.Reflector{
 		// Do not allow unknown fields, extensions will be added explicitly during composition.
 		AllowAdditionalProperties: false,
@@ -56,8 +66,10 @@ func GenerateSchema() ([]byte, error) {
 
 	// TUISchemaConfig mirrors TUIConfig for schema generation
 	type TUISchemaConfig struct {
-		Icons           string                   `yaml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-important=true"`
-		Theme           string                   `yaml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-important=true"`
+		Icons string `yaml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-important=true"`
+		// Theme's enum is injected from the theme registry by
+		// GenerateSchemaWithThemeNames; do not hardcode names here.
+		Theme           string                   `yaml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces" jsonschema_extras:"x-important=true"`
 		Preset          string                   `yaml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default) emacs or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-important=true"`
 		SidebarExpanded bool                     `yaml:"sidebar_expanded,omitempty" jsonschema:"description=Start terminal sidebar expanded (icon + label) instead of icon-only,default=false"`
 		Keybindings     *KeybindingsSchemaConfig `yaml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides"`
@@ -143,6 +155,24 @@ func GenerateSchema() ([]byte, error) {
 			searchPaths["x-status-replaced-by"] = "groves"
 			searchPaths["x-status-since"] = "v0.5.0"
 			searchPaths["x-status-target"] = "v1.0.0"
+		}
+	}
+
+	// 2b. Inject the closed theme enum from the theme registry.
+	// Path: $defs -> TUISchemaConfig -> properties -> theme
+	if len(themeNames) > 0 {
+		if defs := getMap(rawSchema, "$defs"); defs != nil {
+			if tui := getMap(defs, "TUISchemaConfig"); tui != nil {
+				if props := getMap(tui, "properties"); props != nil {
+					if themeField := getMap(props, "theme"); themeField != nil {
+						enum := make([]interface{}, len(themeNames))
+						for i, n := range themeNames {
+							enum[i] = n
+						}
+						themeField["enum"] = enum
+					}
+				}
+			}
 		}
 	}
 

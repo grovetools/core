@@ -6,10 +6,13 @@ import (
 	"path/filepath"
 
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/tui/theme"
 )
 
 func main() {
-	schemaBytes, err := config.GenerateSchema()
+	// The tui.theme enum is generated from the embedded theme registry so
+	// the schema roster can never drift from the data files.
+	schemaBytes, err := config.GenerateSchemaWithThemeNames(theme.Names())
 	if err != nil {
 		log.Fatalf("Error generating schema: %v", err)
 	}

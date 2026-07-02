@@ -1,0 +1,37 @@
+# OneDark (warmer) — grove palette.
+# Derived from navarasu/onedark.nvim lua/onedark/palette.lua (variant "warmer").
+# Role mapping: bg=bg0, bg_dark=bg_d, bg_highlight=bg1, bg_visual=bg2, fg=fg,
+# fg_dark=light_grey, fg_gutter=grey, comment=grey, border=bg3.
+# magenta=purple: the onedark palette has no separate magenta accent, so the
+# purple value is duplicated into the magenta slot.
+# git/diagnostics/terminal omitted: the palette's diff_* colors are background
+# tints, not foreground accents, so the loader derives those roles.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "onedark-warmer"
+family = "onedark"
+variant = "warmer"
+appearance = "dark"
+upstream = "https://github.com/navarasu/onedark.nvim"
+author = "Navarasu"
+license = "MIT"
+
+[palette]
+bg = "#232326"
+bg_dark = "#1b1c1e"
+bg_highlight = "#2c2d31"
+bg_visual = "#35363b"
+fg = "#a7aab0"
+fg_dark = "#818387"
+fg_gutter = "#5a5b5e"
+comment = "#5a5b5e"
+border = "#37383d"
+red = "#de5d68"
+green = "#8fb573"
+yellow = "#dbb671"
+blue = "#57a5e5"
+magenta = "#bb70d2"
+cyan = "#51a8b3"
+orange = "#c49060"
+purple = "#bb70d2"

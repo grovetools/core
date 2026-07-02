@@ -1,0 +1,54 @@
+# GitHub Light Colorblind (protanopia/deuteranopia) — grove palette, "github" family.
+# Derived from GitHub Primer primitives (primer/primitives) design tokens:
+#   src/tokens/base/color/light/light.json5
+#   src/tokens/functional/color/fgColor.json5 / bgColor.json5 / borderColor.json5
+# Functional tokens resolved for theme "light-protanopia-deuteranopia"
+#   (overrides[theme] ?? overrides[light] ?? $value).
+# Mapping: bg=bgColor-default, bg_dark=bgColor-inset, bg_highlight=bgColor-muted,
+#   fg=fgColor-default, comment=fgColor-muted, fg_inverse=fgColor-onEmphasis,
+#   border=borderColor-default, blue=fgColor-accent, green=fgColor-success,
+#   yellow=fgColor-attention, orange=fgColor-severe, red=fgColor-danger,
+#   purple=fgColor-done, magenta=fgColor-sponsors.
+# Upstream intentionally collapses hues for red/green blindness: fgColor-danger ==
+#   fgColor-severe (orange #bc4c00) and fgColor-success == fgColor-accent (blue
+#   #0969da), so red==orange and green==blue here — faithful to the tokens.
+# cyan: current primitives has no cyan scale; substituted base.color.blue.6 (#0550ae),
+#   one step darker than fgColor-accent (base.color.blue.5) to stay distinct from blue.
+# bg_visual omitted: bgColor-accent-muted is alpha-translucent in this token set.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "github-light-colorblind"
+family = "github"
+variant = "light-colorblind"
+appearance = "light"
+upstream = "https://github.com/primer/primitives"
+author = "GitHub, Inc. (Primer)"
+license = "MIT"
+
+[palette]
+bg = "#ffffff"
+bg_dark = "#f6f8fa"
+bg_highlight = "#f6f8fa"
+fg = "#1f2328"
+fg_inverse = "#ffffff"
+comment = "#59636e"
+border = "#d1d9e0"
+red = "#bc4c00"
+green = "#0969da"
+yellow = "#9a6700"
+blue = "#0969da"
+magenta = "#bf3989"
+cyan = "#0550ae"
+orange = "#bc4c00"
+purple = "#8250df"
+
+[palette.git]
+add = "#0969da"
+change = "#9a6700"
+delete = "#bc4c00"
+
+[palette.diagnostics]
+error = "#bc4c00"
+warning = "#9a6700"
+info = "#0969da"

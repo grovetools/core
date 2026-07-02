@@ -1,0 +1,60 @@
+# Catppuccin Mocha — grove palette.
+# Derived from catppuccin/palette palette.json (flavor "mocha": colors + ansiColors).
+# Role mapping: bg=base, bg_dark=mantle, bg_highlight=surface0, bg_visual=surface1,
+# fg=text, fg_dark=subtext1, fg_gutter=surface1, comment=overlay0, border=surface1,
+# magenta=pink, cyan=teal, orange=peach, purple=mauve (per catppuccin style guide).
+# Diagnostics per catppuccin style guide: error=red, warning=yellow, info=sky, hint=teal.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "catppuccin-mocha"
+family = "catppuccin"
+variant = "mocha"
+appearance = "dark"
+default = true
+upstream = "https://github.com/catppuccin/palette"
+author = "Catppuccin Org"
+license = "MIT"
+
+[palette]
+bg = "#1e1e2e"
+bg_dark = "#181825"
+bg_highlight = "#313244"
+bg_visual = "#45475a"
+fg = "#cdd6f4"
+fg_dark = "#bac2de"
+fg_gutter = "#45475a"
+comment = "#6c7086"
+border = "#45475a"
+red = "#f38ba8"
+green = "#a6e3a1"
+yellow = "#f9e2af"
+blue = "#89b4fa"
+magenta = "#f5c2e7"
+cyan = "#94e2d5"
+orange = "#fab387"
+purple = "#cba6f7"
+
+[palette.diagnostics]
+error = "#f38ba8"
+warning = "#f9e2af"
+info = "#89dceb"
+hint = "#94e2d5"
+
+[terminal]
+black = "#45475a"
+red = "#f38ba8"
+green = "#a6e3a1"
+yellow = "#f9e2af"
+blue = "#89b4fa"
+magenta = "#f5c2e7"
+cyan = "#94e2d5"
+white = "#a6adc8"
+black_bright = "#585b70"
+red_bright = "#f37799"
+green_bright = "#89d88b"
+yellow_bright = "#ebd391"
+blue_bright = "#74a8fc"
+magenta_bright = "#f2aede"
+cyan_bright = "#6bd7ca"
+white_bright = "#bac2de"

@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-//go:generate go run ../tools/schema-generator/
+//go:generate sh -c "cd .. && go run ./tools/schema-generator/"
 //go:generate sh -c "cd .. && go run ./tools/schema-composer/"
 //go:generate sh -c "cd .. && go run ./tools/notebook-schema-generator/"
 
@@ -270,8 +270,11 @@ func (k *KeybindingsConfig) UnmarshalTOML(data []byte) error {
 
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
-	Icons       string             `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-layer=global,x-priority=52,x-important=true"`
-	Theme       string             `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces,enum=kanagawa,enum=gruvbox,enum=terminal" jsonschema_extras:"x-layer=global,x-priority=51,x-important=true"`
+	Icons string `yaml:"icons,omitempty" toml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-layer=global,x-priority=52,x-important=true"`
+	// Theme's schema enum is generated from the theme registry (see
+	// config.GenerateSchemaWithThemeNames and tools/schema-generator); do
+	// not hardcode theme names in the tag.
+	Theme       string             `yaml:"theme,omitempty" toml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces" jsonschema_extras:"x-layer=global,x-priority=51,x-important=true"`
 	Preset      string             `yaml:"preset,omitempty" toml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default), emacs, or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-layer=global,x-priority=50,x-important=true"`
 	Keybindings *KeybindingsConfig `yaml:"keybindings,omitempty" toml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides" jsonschema_extras:"x-layer=global,x-priority=54"`
 	NvimEmbed   *NvimEmbedConfig   `yaml:"nvim_embed,omitempty" toml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration" jsonschema_extras:"x-status=alpha,x-layer=global,x-priority=55"`

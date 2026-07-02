@@ -1,0 +1,59 @@
+# Floraverse (main) — mattsolo1/floraverse.nvim.
+# Source: lua/floraverse/colors/main.lua (copied 1:1; the upstream table maps
+# directly onto grove's roles, including git.* and terminal.*).
+# Upstream defines fg_inverse nowhere; it is derived Go-side.
+# Diagnostics upstream (error=red, warning=yellow, info=blue, hint=cyan) match
+# grove's derivation defaults, so [palette.diagnostics] is omitted.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "floraverse-main"
+family = "floraverse"
+variant = "main"
+appearance = "dark"
+default = true
+upstream = "https://github.com/mattsolo1/floraverse.nvim"
+author = "mattsolo1"
+license = "MIT"
+
+[palette]
+bg = "#0a0810"
+bg_dark = "#06050a"
+bg_highlight = "#12101a"
+bg_visual = "#4c3866"
+fg = "#dbd1b9"
+fg_dark = "#f3e0b8"
+fg_gutter = "#3a3842"
+comment = "#4c3866"
+border = "#4c3866"
+red = "#d02063"
+green = "#b4ce59"
+yellow = "#fac357"
+blue = "#40a4cf"
+magenta = "#f12aae"
+cyan = "#62caa8"
+orange = "#cd751c"
+purple = "#b7077e"
+
+[palette.git]
+add = "#5d731a"
+change = "#1d6da1"
+delete = "#7e1a46"
+
+[terminal]
+black = "#08002e"
+red = "#7e1a46"
+green = "#5d731a"
+yellow = "#cd751c"
+blue = "#1d6da1"
+magenta = "#b7077e"
+cyan = "#42a38c"
+white = "#f3e0b8"
+black_bright = "#4c3866"
+red_bright = "#d02063"
+green_bright = "#b4ce59"
+yellow_bright = "#fac357"
+blue_bright = "#40a4cf"
+magenta_bright = "#f12aae"
+cyan_bright = "#62caa8"
+white_bright = "#fff5db"

@@ -1,0 +1,44 @@
+# Ayu (mirage) — ayu's softer mid-contrast dark variant.
+# Derived from ayu-theme/ayu-colors themes/mirage.yaml: bg = editor.bg
+# (surface.lift), bg_dark = surface.base, comment = ui.fg, border = ui.line,
+# bg_highlight = editor.line, bg_visual = editor.selection.active (25% alpha)
+# composited over bg. magenta maps ayu's "pink", cyan maps ayu's "teal".
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "ayu-mirage"
+family = "ayu"
+variant = "mirage"
+appearance = "dark"
+upstream = "https://github.com/ayu-theme/ayu-colors"
+author = "Ike Ku (dempfi)"
+license = "MIT"
+
+[palette]
+bg = "#242936"
+bg_dark = "#1f2430"
+bg_highlight = "#1a1f29"
+bg_visual = "#2b4768"
+fg = "#cccac2"
+comment = "#707a8c"
+border = "#171b24"
+red = "#f28779"
+green = "#d5ff80"
+yellow = "#ffcd66"
+blue = "#73d0ff"
+magenta = "#f29e74"
+cyan = "#95e6cb"
+orange = "#ffa659"
+purple = "#dfbfff"
+
+[palette.git]
+add = "#87d96c"
+change = "#80bfff"
+delete = "#f27983"
+
+[palette.diagnostics]
+error = "#ff6666"
+
+[terminal]
+black = "#0a0000"
+black_bright = "#0a0000"

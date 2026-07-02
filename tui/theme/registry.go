@@ -236,16 +236,23 @@ func Lookup(name string) (Palette, bool) {
 	return Palette{}, false
 }
 
-// Names returns every selectable theme name (families and individual
-// variants), sorted.
+// Names returns every selectable theme name (families, individual variants,
+// and aliases), sorted. This is the source of the generated tui.theme schema
+// enum.
 func Names() []string {
-	seen := make(map[string]bool, len(themeRegistry))
-	names := make([]string, 0, len(themeRegistry))
-	for name := range themeRegistry {
+	seen := make(map[string]bool, len(themeRegistry)+len(themeAliases))
+	names := make([]string, 0, len(themeRegistry)+len(themeAliases))
+	add := func(name string) {
 		if !seen[name] {
 			seen[name] = true
 			names = append(names, name)
 		}
+	}
+	for name := range themeRegistry {
+		add(name)
+	}
+	for name := range themeAliases {
+		add(name)
 	}
 	sort.Strings(names)
 	return names

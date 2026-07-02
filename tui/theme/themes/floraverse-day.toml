@@ -1,0 +1,59 @@
+# Floraverse (day) — mattsolo1/floraverse.nvim.
+# Source: upstream generates the day palette from lua/floraverse/colors/main.lua
+# via HSLuv inversion; values generated with floraverse's own Util.invert
+# (day_brightness = 0.3).
+# Diagnostics upstream match grove's derivation defaults, so
+# [palette.diagnostics] is omitted; fg_inverse is derived Go-side.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "floraverse-day"
+family = "floraverse"
+variant = "day"
+appearance = "light"
+default = true
+upstream = "https://github.com/mattsolo1/floraverse.nvim"
+author = "mattsolo1"
+license = "MIT"
+
+[palette]
+bg = "#f8f8f9"
+bg_dark = "#e9e9e9"
+bg_highlight = "#f0f0f3"
+bg_visual = "#baabd1"
+fg = "#666155"
+fg_dark = "#635638"
+fg_gutter = "#bcbac1"
+comment = "#baabd1"
+border = "#baabd1"
+red = "#f32775"
+green = "#61702d"
+yellow = "#7f6020"
+blue = "#368eb4"
+magenta = "#c11f8b"
+cyan = "#3a7d67"
+orange = "#955311"
+purple = "#fe3ab4"
+
+[palette.git]
+add = "#738d22"
+change = "#288dcf"
+delete = "#f392b2"
+
+[terminal]
+black = "#f8f8ff"
+red = "#f392b2"
+green = "#738d22"
+yellow = "#955311"
+blue = "#288dcf"
+magenta = "#fe3ab4"
+cyan = "#3d9883"
+white = "#635638"
+black_bright = "#baabd1"
+red_bright = "#f32775"
+green_bright = "#61702d"
+yellow_bright = "#7f6020"
+blue_bright = "#368eb4"
+magenta_bright = "#c11f8b"
+cyan_bright = "#3a7d67"
+white_bright = "#5a4b00"
