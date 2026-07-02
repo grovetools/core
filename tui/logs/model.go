@@ -393,6 +393,7 @@ type Model struct {
 	followMode     bool
 	filtersEnabled bool
 	filteredCount  int
+	unseenErrors   int
 	ready          bool
 	focus          paneFocus
 	visualMode     bool
@@ -901,6 +902,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.connectToDaemon()
 
 	case embed.FocusMsg:
+		m.unseenErrors = 0
 		return m, nil
 
 	case embed.BlurMsg:
@@ -1442,6 +1444,12 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 	component, _ := msg.data["component"].(string)
 	timeStr, _ := msg.data["time"].(string)
 
+	// Count error-level arrivals regardless of filters/visibility; the
+	// counter is cleared when the panel regains focus.
+	if levelRank(level) >= 3 {
+		m.unseenErrors++
+	}
+
 	// Component visibility filter (client-side only)
 	if m.filtersEnabled && m.logConfig != nil {
 		visibilityResult := logging.GetComponentVisibility(component, m.logConfig, m.overrideOpts)
@@ -1504,6 +1512,12 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 	}
 
 	return nil
+}
+
+// UnseenErrors returns the number of error-level records that arrived since
+// the panel was last focused; the count is cleared on embed.FocusMsg.
+func (m *Model) UnseenErrors() int {
+	return m.unseenErrors
 }
 
 func (m *Model) View() string {
