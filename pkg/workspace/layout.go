@@ -217,6 +217,11 @@ func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (str
 			if e == nil || e.AbsPath == "" || filepath.Base(e.AbsPath) != name {
 				continue
 			}
+			// Never resolve a name into the archive: archived entries keep a
+			// live AbsPath (under WorktreeArchiveDir) but are not workable.
+			if e.IsArchived() {
+				continue
+			}
 			if !ownerAccepted(e.Owner) {
 				continue
 			}

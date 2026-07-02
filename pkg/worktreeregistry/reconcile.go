@@ -39,11 +39,20 @@ func Reconcile(xdgBase string) error {
 			continue
 		}
 
+		// Archived entries pass the stat-prune above because Archive re-keys
+		// AbsPath to the archive location (which exists on disk); they never
+		// live under xdgBase, so the adopt step below ignores them too.
 		if _, statErr := os.Stat(entry.AbsPath); os.IsNotExist(statErr) {
 			_ = Delete(id)
 			continue
 		}
 		registered[entry.AbsPath] = struct{}{}
+
+		// Skip anchor-heal for archived entries: they are frozen history and
+		// their Repos/AnchorOverride must not be rewritten by reconciliation.
+		if entry.IsArchived() {
+			continue
+		}
 
 		if entry.AnchorOverride != "" && !reposContain(entry.Repos, entry.AnchorOverride) {
 			entry.AnchorOverride = ""

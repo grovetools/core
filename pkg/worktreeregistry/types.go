@@ -49,4 +49,20 @@ type Entry struct {
 
 	// GitCache is an opaque per-repo git status cache (repo name → status string).
 	GitCache map[string]string `json:"git_cache,omitempty"`
+
+	// ArchivedAt records when the worktree was archived (moved under
+	// paths.WorktreeArchiveDir()). Zero for live worktrees.
+	ArchivedAt time.Time `json:"archived_at,omitempty"`
+
+	// OriginalPath is the AbsPath the worktree had before it was archived.
+	// Empty for live worktrees.
+	OriginalPath string `json:"original_path,omitempty"`
+}
+
+// IsArchived reports whether this entry describes an archived worktree.
+// Archived entries keep their history (Plan, Labels, timestamps) but must be
+// skipped by name/plan resolution and by Reconcile's anchor-heal — the
+// worktree no longer lives under any active base.
+func (e *Entry) IsArchived() bool {
+	return !e.ArchivedAt.IsZero()
 }

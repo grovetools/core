@@ -554,6 +554,41 @@ func TestResolveWorktreePathByName_AnchoredViaRegistry(t *testing.T) {
 	}
 }
 
+// TestResolveWorktreePathByName_SkipsArchivedEntries pins the archive guard:
+// a registry entry that has been Archived (AbsPath re-keyed to the archive
+// location, which exists on disk) must never resolve by name — a name lookup
+// must not hand callers a path into the worktree archive.
+func TestResolveWorktreePathByName_SkipsArchivedEntries(t *testing.T) {
+	sandboxGroveHome(t)
+
+	gitRoot := "/code/my-eco"
+
+	// A live-looking worktree dir that gets archived: the archive location
+	// exists on disk (so the entry passes any stat check) but the entry is
+	// flagged archived.
+	oldPath := filepath.Join(t.TempDir(), "feature-x")
+	if err := os.MkdirAll(oldPath, 0o755); err != nil {
+		t.Fatalf("mkdir old worktree: %v", err)
+	}
+	archivePath := filepath.Join(t.TempDir(), "feature-x")
+	if err := os.MkdirAll(archivePath, 0o755); err != nil {
+		t.Fatalf("mkdir archive location: %v", err)
+	}
+	if err := worktreeregistry.Save(&worktreeregistry.Entry{
+		AbsPath: oldPath,
+		Owner:   gitRoot,
+	}); err != nil {
+		t.Fatalf("save registry entry: %v", err)
+	}
+	if err := worktreeregistry.Archive(oldPath, archivePath); err != nil {
+		t.Fatalf("archive registry entry: %v", err)
+	}
+
+	if got, ok := ResolveWorktreePathByName(gitRoot, "feature-x", nil); ok {
+		t.Errorf("ResolveWorktreePathByName resolved an archived worktree: got %q", got)
+	}
+}
+
 // TestResolveWorktreePathByName_EcosystemBase pins the non-anchored path: a
 // plain ecosystem worktree under gitRoot's own XDG base resolves with no
 // registry entry at all (on-disk fallback).
