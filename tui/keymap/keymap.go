@@ -739,7 +739,7 @@ func (k Base) Sections() []Section {
 func (k Base) NavigationSection() Section {
 	return Section{
 		Name:     "Navigation",
-		Bindings: []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown, k.Top, k.Bottom},
+		Bindings: []key.Binding{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown, k.Home, k.End, k.Top, k.Bottom},
 	}
 }
 
@@ -757,7 +757,7 @@ func (k Base) ActionsSection() Section {
 func (k Base) SearchSection() Section {
 	return Section{
 		Name:     "Search",
-		Bindings: []key.Binding{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch},
+		Bindings: []key.Binding{k.Search, k.SearchNext, k.SearchPrev, k.ClearSearch, k.Grep},
 	}
 }
 
@@ -775,7 +775,7 @@ func (k Base) SelectionSection() Section {
 func (k Base) ViewSection() Section {
 	return Section{
 		Name:     "View",
-		Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3, k.Tab4, k.Tab5, k.Tab6, k.Tab7, k.Tab8, k.Tab9, k.TogglePreview},
+		Bindings: []key.Binding{k.SwitchView, k.NextTab, k.PrevTab, k.FocusNext, k.FocusPrev, k.Tab1, k.Tab2, k.Tab3, k.Tab4, k.Tab5, k.Tab6, k.Tab7, k.Tab8, k.Tab9, k.TogglePreview},
 	}
 }
 

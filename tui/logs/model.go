@@ -40,6 +40,7 @@ import (
 	"github.com/grovetools/core/tui/components/help"
 	"github.com/grovetools/core/tui/components/jsontree"
 	"github.com/grovetools/core/tui/embed"
+	tuikeymap "github.com/grovetools/core/tui/keymap"
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -407,7 +408,7 @@ type Model struct {
 	statusMessage  string
 	jsonTree       jsontree.Model
 	jsonView       bool
-	lastGotoG      time.Time
+	sequence       *tuikeymap.SequenceState
 
 	// Compact mode: list-only, no detail viewport or focus switching.
 	compact bool
@@ -497,6 +498,7 @@ func New(ctx context.Context, cfg Config) *Model {
 		minLevel:            parseLevelConfig(cfg.InitialLevel),
 		hiddenComponents:    make(map[string]bool),
 		compact:             cfg.Compact,
+		sequence:            tuikeymap.NewSequenceState(),
 	}
 
 	// Resolve initial scope
@@ -1050,15 +1052,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		} else {
-			if key.Matches(msg, m.keys.GotoTop) {
-				if time.Since(m.lastGotoG) < 500*time.Millisecond {
-					m.list.Select(0)
-					m.lastGotoG = time.Time{}
-					return m, nil
-				}
-				m.lastGotoG = time.Now()
+			// Route multi-key sequences (gg) through the shared sequence
+			// state so GotoTop's binding can truthfully declare "gg".
+			seqResult, _ := m.sequence.Process(msg, m.keys.GotoTop)
+			switch seqResult {
+			case tuikeymap.SequenceMatch:
+				m.sequence.Clear()
+				m.list.Select(0)
+				return m, nil
+			case tuikeymap.SequencePending:
+				// First "g" of a potential "gg" — wait for more input.
 				return m, nil
 			}
+			m.sequence.Clear()
 
 			switch {
 			case key.Matches(msg, m.keys.Base.Quit):

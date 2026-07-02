@@ -57,7 +57,7 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 			key.WithHelp("ctrl+d", "half page down"),
 		),
 		GotoTop: key.NewBinding(
-			key.WithKeys("g"),
+			key.WithKeys("gg"),
 			key.WithHelp("gg", "go to top"),
 		),
 		GotoEnd: key.NewBinding(
