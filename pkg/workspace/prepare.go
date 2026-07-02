@@ -11,6 +11,7 @@ import (
 
 	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/claudetrust"
+	"github.com/grovetools/core/pkg/pitrust"
 	"github.com/grovetools/core/pkg/worktreeregistry"
 	"github.com/grovetools/core/util/pathutil"
 )
@@ -188,6 +189,23 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 				} else {
 					fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
 				}
+			}
+		}
+
+		// Pre-seed pi (coding agent) project trust for the container path,
+		// best-effort. Unlike Claude's per-exact-path trust, pi's lookup walks
+		// up to the nearest decided ancestor (trust-manager.ts in the pi
+		// source), so the container alone covers every member-repo subdir.
+		// This is seeded alongside Claude but NOT behind the [claude]
+		// manageTrust gate: pitrust gates itself on ~/.pi/agent existing (pi
+		// actually installed) and GROVE_PRESEED_PI_TRUST. It matters most for
+		// headless pi, which silently skips the trust prompt and treats an
+		// undecided project as untrusted, never loading project .pi/
+		// resources. No daemon fallback exists for pi (the trust/seed RPC is
+		// claude-specific), so a sandbox-side EPERM only costs a warning.
+		if piPath, piErr := pathutil.CanonicalPath(absWorktreePath); piErr == nil {
+			if seedErr := pitrust.SeedTrust(piPath); seedErr != nil {
+				fmt.Printf("Warning: failed to pre-seed pi trust: %v\n", seedErr)
 			}
 		}
 
