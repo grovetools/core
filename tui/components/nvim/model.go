@@ -52,6 +52,14 @@ type Options struct {
 	Height     int    // Initial height of the Neovim grid
 	FileToOpen string // Optional path to a file to open on startup
 	UseConfig  bool   // If true, loads the user's default Neovim config
+
+	// ApplyGroveTheme forces pushing the active grove theme (base highlight
+	// groups + 'background') into instances that load the user's config.
+	// Grove-managed bare instances (UseConfig false, launched with --clean)
+	// always receive the grove theme — they have no colorscheme of their
+	// own; instances with UseConfig true keep the user's colorscheme unless
+	// this flag opts them in, so grove never fights a configured setup.
+	ApplyGroveTheme bool
 }
 
 // NvimExitMsg is emitted when the embedded Neovim process exits.
@@ -79,6 +87,7 @@ type Model struct {
 	err                    error
 	uiAttached             bool
 	useConfig              bool
+	groveThemed            bool   // grove theme was pushed at construction; RefreshGroveTheme re-pushes
 	focused                bool   // true if this component currently has focus
 	exited                 bool   // true after the neovim process has exited
 	filePath               string // file opened (for NvimExitMsg)
@@ -137,6 +146,18 @@ func New(opts Options) (Model, error) {
 		debugLog("SUCCESS: RGB UI option enabled")
 	}
 
+	// Push the grove theme into grove-managed (--clean) instances, or into
+	// user-config instances that explicitly opted in. Applied BEFORE the
+	// Normal query below so the queried default colors reflect the theme.
+	groveThemed := !opts.UseConfig || opts.ApplyGroveTheme
+	if groveThemed {
+		if err := applyGroveTheme(v); err != nil {
+			debugLog(fmt.Sprintf("WARN: could not apply grove theme: %v", err))
+		} else {
+			debugLog("Applied grove theme highlights")
+		}
+	}
+
 	// Query default colors explicitly
 	var hlNormal map[string]interface{}
 	defaultStyle := lipgloss.NewStyle()
@@ -189,6 +210,7 @@ func New(opts Options) (Model, error) {
 		nvimHeight:        opts.Height,
 		uiAttached:        true,
 		useConfig:         opts.UseConfig,
+		groveThemed:       groveThemed,
 		focused:           false,
 		filePath:          opts.FileToOpen,
 	}
@@ -356,4 +378,15 @@ func (m *Model) ExecLua(code string, result interface{}, args ...interface{}) er
 // NvimCommand executes an ex command in the embedded neovim instance.
 func (m *Model) NvimCommand(cmd string) error {
 	return m.v.Command(cmd)
+}
+
+// RefreshGroveTheme re-pushes the currently active grove theme into the
+// embedded instance. Hosts call it from their live re-theme fan-out after
+// theme.SetTheme. It is a no-op for instances that did not receive the grove
+// theme at construction (user-config instances keep their own colorscheme).
+func (m *Model) RefreshGroveTheme() error {
+	if !m.groveThemed || m.v == nil || m.exited {
+		return nil
+	}
+	return applyGroveTheme(m.v)
 }
