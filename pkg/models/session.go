@@ -49,6 +49,17 @@ type Session struct {
 	// Daemon PTY session ID for agent processes owned by groved.
 	PtyID string `json:"pty_id,omitempty" db:"pty_id"`
 
+	// Live token usage for the agent's Claude session, computed by the daemon
+	// session collector from the Claude transcript (agentlogs/pkg/usage) and
+	// broadcast over /api/stream + /api/sessions. These are derived, throttled
+	// snapshots — NOT persisted to the DB (db:"-") — so consumers (e.g. treemux
+	// HUD) get per-agent live tokens/cost/context without a wire change.
+	// LiveTokens is the context-preferred token magnitude (ContextSize when
+	// non-zero, else the cumulative Usage.Total()).
+	LiveTokens  int64   `json:"live_tokens,omitempty" db:"-"`
+	LiveCostUSD float64 `json:"live_cost_usd,omitempty" db:"-"`
+	ContextSize int64   `json:"context_size,omitempty" db:"-"`
+
 	// Channel & Autonomous support
 	Channels        []string          `json:"channels,omitempty" db:"-"`
 	Autonomous      *AutonomousConfig `json:"autonomous,omitempty" db:"-"`
