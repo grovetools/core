@@ -1,0 +1,59 @@
+# Solarized (dark).
+# Derived from altercation/solarized: the canonical 16-color table
+# (base03..base3 monotones + 8 accents) with the standard dark-mode role
+# swap: base03=bg, base02=background highlights, base01=comments, base0=fg.
+# Role mapping: bg=base03, bg_dark/bg_highlight/bg_visual=base02 (solarized
+# defines exactly two background tones per mode; base02 is its designated
+# "background highlights" and statusline tone), fg=base0, fg_dark=base01
+# (secondary content, same as comments), fg_gutter=base01 (LineNr),
+# comment=base01, border=base00 (VertSplit). violet→purple. Terminal is the
+# canonical solarized 16-color scheme, identical in both modes: bright slots
+# 8-15 carry base03/orange/base01/base00/base0/violet/base1/base3.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "solarized-dark"
+family = "solarized"
+variant = "dark"
+appearance = "dark"
+default = true
+upstream = "https://github.com/altercation/solarized"
+author = "Ethan Schoonover"
+license = "MIT"
+
+[palette]
+bg = "#002b36"
+bg_dark = "#073642"
+bg_highlight = "#073642"
+bg_visual = "#073642"
+fg = "#839496"
+fg_dark = "#586e75"
+fg_gutter = "#586e75"
+comment = "#586e75"
+border = "#657b83"
+red = "#dc322f"
+green = "#859900"
+yellow = "#b58900"
+blue = "#268bd2"
+magenta = "#d33682"
+cyan = "#2aa198"
+orange = "#cb4b16"
+purple = "#6c71c4"
+
+[terminal]
+black = "#073642"
+red = "#dc322f"
+green = "#859900"
+yellow = "#b58900"
+blue = "#268bd2"
+magenta = "#d33682"
+cyan = "#2aa198"
+white = "#eee8d5"
+black_bright = "#002b36"
+red_bright = "#cb4b16"
+green_bright = "#586e75"
+yellow_bright = "#657b83"
+blue_bright = "#839496"
+magenta_bright = "#6c71c4"
+cyan_bright = "#93a1a1"
+white_bright = "#fdf6e3"

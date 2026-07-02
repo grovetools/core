@@ -1,29 +1,23 @@
-# Gruvbox (dark, medium contrast) — the gruvbox default dark style.
+# Gruvbox (dark, soft contrast) — g:gruvbox_contrast_dark = "soft".
 # Derived from gruvbox-community/gruvbox colors/gruvbox.vim (palette dict +
 # dark-mode role assignments; originally by Pavel Pertsev).
-# Role mapping: bg=bg0/dark0, bg_dark=dark0_hard (one step down the dark0
-# contrast ladder), bg_highlight=bg1 (CursorLine), bg_visual=bg3 (Visual),
-# fg=fg1, fg_dark=fg2, fg_gutter=bg4 (LineNr), comment=gray, border=bg3
-# (VertSplit). Accents are the bright_* row (dark mode); aqua→cyan,
-# bright_purple→magenta, neutral_purple→purple (gruvbox has one purple; grove
-# needs two purple-ish slots). git.change=aqua per GitGutterChange →
-# GruvboxAquaSign. Terminal: neutral_* normal row, bright_* bright row,
-# 0=bg0, 7=fg4, 8=gray, 15=fg1, all per the upstream terminal blocks.
+# Identical to gruvbox-dark except bg=dark0_soft (the contrast axis only
+# changes bg0). bg_dark=dark0, one step down the dark0 contrast ladder.
+# Role mapping and terminal colors: see gruvbox-dark.toml.
 # SPDX-License-Identifier: MIT
 
 [meta]
-name = "gruvbox-dark"
+name = "gruvbox-dark-soft"
 family = "gruvbox"
-variant = "dark"
+variant = "dark-soft"
 appearance = "dark"
-default = true
 upstream = "https://github.com/gruvbox-community/gruvbox"
 author = "Pavel Pertsev (morhetz) and the gruvbox community"
 license = "MIT"
 
 [palette]
-bg = "#282828"
-bg_dark = "#1d2021"
+bg = "#32302f"
+bg_dark = "#282828"
 bg_highlight = "#3c3836"
 bg_visual = "#665c54"
 fg = "#ebdbb2"
@@ -46,7 +40,7 @@ change = "#8ec07c"
 delete = "#fb4934"
 
 [terminal]
-black = "#282828"
+black = "#32302f"
 red = "#cc241d"
 green = "#98971a"
 yellow = "#d79921"

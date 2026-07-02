@@ -1,0 +1,59 @@
+# Everforest (dark, soft) — g:everforest_background = "soft".
+# Derived from sainnhe/everforest autoload/everforest.vim (palette function,
+# background "soft" + dark) and colors/everforest.vim role usage.
+# The hardness axis changes only the background ramp (bg_dim..bg5,
+# bg_visual); fg/grey/accent colors are shared across the dark variants.
+# Role mapping: see everforest-dark.toml.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "everforest-dark-soft"
+family = "everforest"
+variant = "dark-soft"
+appearance = "dark"
+upstream = "https://github.com/sainnhe/everforest"
+author = "Sainnhe Park"
+license = "MIT"
+
+[palette]
+bg = "#333c43"
+bg_dark = "#293136"
+bg_highlight = "#3a464c"
+bg_visual = "#5c3f4f"
+fg = "#d3c6aa"
+fg_dark = "#9da9a0"
+fg_gutter = "#5d6b66"
+comment = "#859289"
+border = "#555f66"
+red = "#e67e80"
+green = "#a7c080"
+yellow = "#dbbc7f"
+blue = "#7fbbb3"
+magenta = "#d699b6"
+cyan = "#83c092"
+orange = "#e69875"
+purple = "#d699b6"
+
+[palette.diagnostics]
+error = "#e67e80"
+warning = "#dbbc7f"
+info = "#7fbbb3"
+hint = "#d699b6"
+
+[terminal]
+black = "#4d5960"
+red = "#e67e80"
+green = "#a7c080"
+yellow = "#dbbc7f"
+blue = "#7fbbb3"
+magenta = "#d699b6"
+cyan = "#83c092"
+white = "#d3c6aa"
+black_bright = "#4d5960"
+red_bright = "#e67e80"
+green_bright = "#a7c080"
+yellow_bright = "#dbbc7f"
+blue_bright = "#7fbbb3"
+magenta_bright = "#d699b6"
+cyan_bright = "#83c092"
+white_bright = "#d3c6aa"

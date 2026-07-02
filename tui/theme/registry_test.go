@@ -92,7 +92,7 @@ func TestList(t *testing.T) {
 	for _, m := range metas {
 		byName[m.Name] = m
 	}
-	for _, want := range []string{"gruvbox-dark", "gruvbox-light", "kanagawa-dark", "kanagawa-light", "terminal"} {
+	for _, want := range []string{"gruvbox-dark", "gruvbox-light", "kanagawa-wave", "kanagawa-lotus", "terminal"} {
 		if _, ok := byName[want]; !ok {
 			t.Errorf("List() missing built-in palette %q", want)
 		}
@@ -133,9 +133,9 @@ func TestLookup(t *testing.T) {
 	if !ok {
 		t.Fatal("Lookup(kanagawa-dark) not found; alias should resolve")
 	}
-	// kanagawa-dark is aliased to the kanagawa family, whose default dark
-	// variant is kanagawa-dark itself.
-	if p.Meta.Name != "kanagawa-dark" {
+	// kanagawa-dark is aliased to kanagawa-wave, the upstream variant that
+	// replaced the hand-coded kanagawa-dark palette in Phase 2b.
+	if p.Meta.Name != "kanagawa-wave" {
 		t.Errorf("Lookup(kanagawa-dark) = %q", p.Meta.Name)
 	}
 
@@ -145,7 +145,7 @@ func TestLookup(t *testing.T) {
 	}
 
 	p, ok = Lookup("Kanagawa Light")
-	if !ok || p.Meta.Name != "kanagawa-light" {
+	if !ok || p.Meta.Name != "kanagawa-lotus" {
 		t.Errorf("Lookup normalization failed: %+v, %v", p.Meta, ok)
 	}
 
@@ -189,8 +189,8 @@ func TestSetTheme(t *testing.T) {
 	}
 
 	// Aliases work through SetTheme too.
-	if err := SetTheme("kanagawa-dragon"); err != nil {
-		t.Fatalf("SetTheme(kanagawa-dragon) error: %v", err)
+	if err := SetTheme("branded"); err != nil {
+		t.Fatalf("SetTheme(branded) error: %v", err)
 	}
 	if DefaultTheme.Name != "kanagawa" {
 		t.Errorf("DefaultTheme.Name = %q, want alias target kanagawa", DefaultTheme.Name)

@@ -1,0 +1,71 @@
+# Kanagawa Dragon — the kanagawa.nvim muted late-night dark theme.
+# Derived from rebelot/kanagawa.nvim lua/kanagawa/colors.lua (palette table)
+# and lua/kanagawa/themes.lua (the "dragon" ThemeColors role assignments).
+# Role mapping: bg=ui.bg (dragonBlack3), bg_dark=ui.bg_dim (dragonBlack1),
+# bg_highlight=ui.bg_p2 (CursorLine, dragonBlack5), bg_visual=ui.bg_visual
+# (waveBlue1), fg=dragonWhite, fg_dark=ui.fg_dim (oldWhite),
+# fg_gutter=ui.nontext (LineNr, dragonBlack6), comment=dragonAsh. border
+# uses FloatBorder fg (sumiInk6): upstream WinSeparator is bg_m3, darker
+# than bg and invisible in a TUI. Accents follow the dragon terminal/syntax
+# roles: red=dragonRed, green=dragonGreen2, yellow=dragonYellow,
+# blue=dragonBlue2, magenta=dragonPink, cyan=dragonAqua, orange=dragonOrange,
+# purple=dragonViolet. git = vcs autumnGreen/autumnYellow/autumnRed;
+# diagnostics per diag. Terminal is the dragon 16-slot term table verbatim.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "kanagawa-dragon"
+family = "kanagawa"
+variant = "dragon"
+appearance = "dark"
+upstream = "https://github.com/rebelot/kanagawa.nvim"
+author = "Tommaso Laurenzi (rebelot)"
+license = "MIT"
+
+[palette]
+bg = "#181616"
+bg_dark = "#12120f"
+bg_highlight = "#393836"
+bg_visual = "#223249"
+fg = "#c5c9c5"
+fg_dark = "#c8c093"
+fg_gutter = "#625e5a"
+comment = "#737c73"
+border = "#54546d"
+red = "#c4746e"
+green = "#8a9a7b"
+yellow = "#c4b28a"
+blue = "#8ba4b0"
+magenta = "#a292a3"
+cyan = "#8ea4a2"
+orange = "#b6927b"
+purple = "#8992a7"
+
+[palette.git]
+add = "#76946a"
+change = "#dca561"
+delete = "#c34043"
+
+[palette.diagnostics]
+error = "#e82424"
+warning = "#ff9e3b"
+info = "#658594"
+hint = "#6a9589"
+
+[terminal]
+black = "#0d0c0c"
+red = "#c4746e"
+green = "#8a9a7b"
+yellow = "#c4b28a"
+blue = "#8ba4b0"
+magenta = "#a292a3"
+cyan = "#8ea4a2"
+white = "#c8c093"
+black_bright = "#a6a69c"
+red_bright = "#e46876"
+green_bright = "#87a987"
+yellow_bright = "#e6c384"
+blue_bright = "#7fb4ca"
+magenta_bright = "#938aa9"
+cyan_bright = "#7aa89f"
+white_bright = "#c5c9c5"

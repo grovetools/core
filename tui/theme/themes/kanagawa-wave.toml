@@ -1,0 +1,75 @@
+# Kanagawa Wave — the kanagawa.nvim default dark theme.
+# Derived from rebelot/kanagawa.nvim lua/kanagawa/colors.lua (palette table)
+# and lua/kanagawa/themes.lua (the "wave" ThemeColors role assignments).
+# Replaces grove's hand-coded kanagawa-dark palette (Phase 2b upstream
+# extraction).
+# Role mapping: bg=ui.bg (sumiInk3), bg_dark=ui.bg_dim (sumiInk1),
+# bg_highlight=ui.bg_p2 (CursorLine, sumiInk5), bg_visual=ui.bg_visual
+# (waveBlue1), fg=fujiWhite, fg_dark=ui.fg_dim (oldWhite),
+# fg_gutter=ui.nontext (LineNr, sumiInk6), comment=fujiGray. border uses
+# FloatBorder fg (sumiInk6): upstream WinSeparator is bg_m3, darker than bg
+# and invisible in a TUI. Accents follow the wave terminal/syntax roles:
+# red=peachRed, green=springGreen, yellow=carpYellow (bright yellow /
+# identifier), blue=crystalBlue, magenta=sakuraPink, cyan=waveAqua2 (bright
+# cyan / type), orange=surimiOrange, purple=oniViolet. git = vcs
+# autumnGreen/autumnYellow/autumnRed; diagnostics per diag. Terminal is the
+# wave 16-slot term table verbatim.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "kanagawa-wave"
+family = "kanagawa"
+variant = "wave"
+appearance = "dark"
+default = true
+upstream = "https://github.com/rebelot/kanagawa.nvim"
+author = "Tommaso Laurenzi (rebelot)"
+license = "MIT"
+
+[palette]
+bg = "#1f1f28"
+bg_dark = "#181820"
+bg_highlight = "#363646"
+bg_visual = "#223249"
+fg = "#dcd7ba"
+fg_dark = "#c8c093"
+fg_gutter = "#54546d"
+comment = "#727169"
+border = "#54546d"
+red = "#ff5d62"
+green = "#98bb6c"
+yellow = "#e6c384"
+blue = "#7e9cd8"
+magenta = "#d27e99"
+cyan = "#7aa89f"
+orange = "#ffa066"
+purple = "#957fb8"
+
+[palette.git]
+add = "#76946a"
+change = "#dca561"
+delete = "#c34043"
+
+[palette.diagnostics]
+error = "#e82424"
+warning = "#ff9e3b"
+info = "#658594"
+hint = "#6a9589"
+
+[terminal]
+black = "#16161d"
+red = "#c34043"
+green = "#76946a"
+yellow = "#c0a36e"
+blue = "#7e9cd8"
+magenta = "#957fb8"
+cyan = "#6a9589"
+white = "#c8c093"
+black_bright = "#727169"
+red_bright = "#e82424"
+green_bright = "#98bb6c"
+yellow_bright = "#e6c384"
+blue_bright = "#7fb4ca"
+magenta_bright = "#938aa9"
+cyan_bright = "#7aa89f"
+white_bright = "#dcd7ba"

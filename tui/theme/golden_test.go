@@ -6,80 +6,88 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// This file pins the legacy Colors values that were hand-coded in theme.go
-// before themes became TOML data files. The derived legacy Colors for the
-// original three themes must stay byte-identical to these constants.
+// This file pins the legacy Colors derived for the original three themes
+// (kanagawa, gruvbox, terminal) so the TOML palettes cannot drift silently.
+//
+// Phase 2b intentionally broke parity with the pre-TOML hand-coded values
+// for kanagawa and gruvbox: both families were re-extracted from their
+// upstreams (rebelot/kanagawa.nvim wave/lotus and gruvbox-community/gruvbox)
+// and upstream fidelity won over grove's hand-coded approximations. The
+// constants below pin the new upstream-derived values; each one matches the
+// corresponding themes/*.toml role verbatim (or its documented derivation,
+// e.g. DarkText = fg_inverse = bg_dark). The terminal palette is unchanged
+// from the original hand-coded values.
 
-// --- Kanagawa Dragon (dark) palette ---
+// --- Kanagawa Wave (dark family default; themes/kanagawa-wave.toml) ---
 const (
-	kanagawaDarkGreen                = "#98BB6C"
-	kanagawaDarkYellow               = "#FF9E3B"
-	kanagawaDarkRed                  = "#FF5D62"
-	kanagawaDarkOrange               = "#FFA066"
-	kanagawaDarkCyan                 = "#7E9CD8"
-	kanagawaDarkBlue                 = "#7FB4CA"
-	kanagawaDarkViolet               = "#957FB8"
-	kanagawaDarkPink                 = "#D27E99"
-	kanagawaDarkLightText            = "#DCD7BA"
+	kanagawaDarkGreen                = "#98bb6c"
+	kanagawaDarkYellow               = "#e6c384"
+	kanagawaDarkRed                  = "#ff5d62"
+	kanagawaDarkOrange               = "#ffa066"
+	kanagawaDarkCyan                 = "#7aa89f"
+	kanagawaDarkBlue                 = "#7e9cd8"
+	kanagawaDarkViolet               = "#957fb8"
+	kanagawaDarkPink                 = "#d27e99"
+	kanagawaDarkLightText            = "#dcd7ba"
 	kanagawaDarkMutedText            = "#727169"
-	kanagawaDarkDarkText             = "#1D1C19"
-	kanagawaDarkBorder               = "#363646"
+	kanagawaDarkDarkText             = "#181820"
+	kanagawaDarkBorder               = "#54546d"
 	kanagawaDarkSelectedBackground   = "#223249"
-	kanagawaDarkSubtleBackground     = "#1F1F28"
+	kanagawaDarkSubtleBackground     = "#1f1f28"
 	kanagawaDarkVerySubtleBackground = "#181820"
 )
 
-// --- Kanagawa Wave (light-inspired) palette ---
+// --- Kanagawa Lotus (light family default; themes/kanagawa-lotus.toml) ---
 const (
-	kanagawaLightGreen                = "#4E7C5A"
-	kanagawaLightYellow               = "#A68A64"
-	kanagawaLightRed                  = "#C34043"
-	kanagawaLightOrange               = "#CC6B4E"
-	kanagawaLightCyan                 = "#5B8BBE"
-	kanagawaLightBlue                 = "#4F7CAC"
-	kanagawaLightViolet               = "#674D7A"
-	kanagawaLightPink                 = "#B35C74"
-	kanagawaLightLightText            = "#2B2F42"
-	kanagawaLightMutedText            = "#6C7086"
-	kanagawaLightDarkText             = "#E6E9EF"
-	kanagawaLightBorder               = "#B5BDC5"
-	kanagawaLightSelectedBackground   = "#E2E6F3"
-	kanagawaLightSubtleBackground     = "#F7F7FB"
-	kanagawaLightVerySubtleBackground = "#EFF1F8"
+	kanagawaLightGreen                = "#6f894e"
+	kanagawaLightYellow               = "#77713f"
+	kanagawaLightRed                  = "#c84053"
+	kanagawaLightOrange               = "#cc6d00"
+	kanagawaLightCyan                 = "#597b75"
+	kanagawaLightBlue                 = "#4d699b"
+	kanagawaLightViolet               = "#624c83"
+	kanagawaLightPink                 = "#b35b79"
+	kanagawaLightLightText            = "#545464"
+	kanagawaLightMutedText            = "#8a8980"
+	kanagawaLightDarkText             = "#dcd5ac"
+	kanagawaLightBorder               = "#716e61"
+	kanagawaLightSelectedBackground   = "#c9cbd1"
+	kanagawaLightSubtleBackground     = "#f2ecbc"
+	kanagawaLightVerySubtleBackground = "#dcd5ac"
 )
 
-// --- Gruvbox palette ---
+// --- Gruvbox (medium contrast; themes/gruvbox-dark.toml / -light.toml) ---
 const (
-	gruvboxDarkGreen                 = "#B8BB26"
-	gruvboxLightGreen                = "#98971A"
-	gruvboxDarkYellow                = "#FABD2F"
-	gruvboxLightYellow               = "#D79921"
-	gruvboxDarkRed                   = "#FB4934"
-	gruvboxLightRed                  = "#CC241D"
-	gruvboxDarkOrange                = "#FE8019"
-	gruvboxLightOrange               = "#D65D0E"
-	gruvboxDarkCyan                  = "#83A598"
-	gruvboxLightCyan                 = "#458588"
-	gruvboxDarkBlue                  = "#458588"
+	gruvboxDarkGreen                 = "#b8bb26"
+	gruvboxLightGreen                = "#79740e"
+	gruvboxDarkYellow                = "#fabd2f"
+	gruvboxLightYellow               = "#b57614"
+	gruvboxDarkRed                   = "#fb4934"
+	gruvboxLightRed                  = "#9d0006"
+	gruvboxDarkOrange                = "#fe8019"
+	gruvboxLightOrange               = "#af3a03"
+	gruvboxDarkCyan                  = "#8ec07c"
+	gruvboxLightCyan                 = "#427b58"
+	gruvboxDarkBlue                  = "#83a598"
 	gruvboxLightBlue                 = "#076678"
-	gruvboxDarkViolet                = "#B16286"
-	gruvboxLightViolet               = "#8F3F71"
-	gruvboxDarkPink                  = "#D3869B"
-	gruvboxLightPink                 = "#B57679"
-	gruvboxDarkLightText             = "#EBDBB2"
-	gruvboxLightLightText            = "#3C3836"
-	gruvboxDarkMutedText             = "#BDAE93"
+	gruvboxDarkViolet                = "#b16286"
+	gruvboxLightViolet               = "#8f3f71"
+	gruvboxDarkPink                  = "#d3869b"
+	gruvboxLightPink                 = "#b16286"
+	gruvboxDarkLightText             = "#ebdbb2"
+	gruvboxLightLightText            = "#3c3836"
+	gruvboxDarkMutedText             = "#928374"
 	gruvboxLightMutedText            = "#928374"
-	gruvboxDarkDarkText              = "#1D2021"
-	gruvboxLightDarkText             = "#F9F5D7"
-	gruvboxDarkBorder                = "#504945"
-	gruvboxLightBorder               = "#D5C4A1"
-	gruvboxDarkSelectedBackground    = "#32302F"
-	gruvboxLightSelectedBackground   = "#F2E5BC"
+	gruvboxDarkDarkText              = "#1d2021"
+	gruvboxLightDarkText             = "#f9f5d7"
+	gruvboxDarkBorder                = "#665c54"
+	gruvboxLightBorder               = "#bdae93"
+	gruvboxDarkSelectedBackground    = "#665c54"
+	gruvboxLightSelectedBackground   = "#bdae93"
 	gruvboxDarkSubtleBackground      = "#282828"
-	gruvboxLightSubtleBackground     = "#FBF1C7"
-	gruvboxDarkVerySubtleBackground  = "#1D2021"
-	gruvboxLightVerySubtleBackground = "#F9F5D7"
+	gruvboxLightSubtleBackground     = "#fbf1c7"
+	gruvboxDarkVerySubtleBackground  = "#1d2021"
+	gruvboxLightVerySubtleBackground = "#f9f5d7"
 )
 
 // --- Terminal (ANSI-friendly) palette ---
@@ -191,22 +199,62 @@ func compareColors(t *testing.T, theme string, want, got Colors) {
 }
 
 // TestLegacyColorsGoldenParity asserts that the Colors derived from the TOML
-// palettes are identical to the constants previously hand-coded in theme.go.
+// palettes are identical to the pinned constants above.
 func TestLegacyColorsGoldenParity(t *testing.T) {
 	compareColors(t, "kanagawa", goldenKanagawaColors(), resolveThemeColors("kanagawa"))
 	compareColors(t, "gruvbox", goldenGruvboxColors(), resolveThemeColors("gruvbox"))
 	compareColors(t, "terminal", goldenTerminalColors(), resolveThemeColors("terminal"))
 }
 
-// TestAliasesResolveToFamilies asserts the pre-existing alias behavior is
-// unchanged: variant-style names resolve to the family's adaptive colors.
+// TestAliasesResolveToFamilies asserts alias behavior: family-style names
+// resolve to the family's adaptive colors, and the legacy kanagawa variant
+// names resolve to the upstream variants that replaced them in Phase 2b.
 func TestAliasesResolveToFamilies(t *testing.T) {
-	for _, alias := range []string{"kanagawa-dark", "kanagawa-dragon", "kanagawa-wave", "branded", "Kanagawa Dragon"} {
+	for _, alias := range []string{"branded", "Kanagawa"} {
 		compareColors(t, alias, goldenKanagawaColors(), resolveThemeColors(alias))
 	}
-	for _, alias := range []string{"gruvbox-dark", "gruvbox-light", "gruvbox_dark"} {
-		compareColors(t, alias, goldenGruvboxColors(), resolveThemeColors(alias))
+	// Old grove variant names point at the upstream palettes that replaced
+	// their hand-coded predecessors.
+	compareColors(t, "kanagawa-dark", resolveThemeColors("kanagawa-wave"), resolveThemeColors("kanagawa-dark"))
+	compareColors(t, "kanagawa-light", resolveThemeColors("kanagawa-lotus"), resolveThemeColors("kanagawa-light"))
+}
+
+// TestVariantNamesResolveToVariantPalettes asserts that gruvbox-dark and
+// gruvbox-light select their real variant palettes (static colors), not the
+// adaptive family: the former aliases onto the family shadowed the variant
+// palettes, which made e.g. the family's light slot unreachable for the
+// theme_changed payload builder.
+func TestVariantNamesResolveToVariantPalettes(t *testing.T) {
+	adaptive := goldenGruvboxColors()
+	darkHalf := func(c lipgloss.TerminalColor) lipgloss.TerminalColor {
+		return lipgloss.Color(c.(lipgloss.AdaptiveColor).Dark)
 	}
+	lightHalf := func(c lipgloss.TerminalColor) lipgloss.TerminalColor {
+		return lipgloss.Color(c.(lipgloss.AdaptiveColor).Light)
+	}
+	half := func(pick func(lipgloss.TerminalColor) lipgloss.TerminalColor) Colors {
+		return Colors{
+			Green:                pick(adaptive.Green),
+			Yellow:               pick(adaptive.Yellow),
+			Red:                  pick(adaptive.Red),
+			Orange:               pick(adaptive.Orange),
+			Cyan:                 pick(adaptive.Cyan),
+			Blue:                 pick(adaptive.Blue),
+			Violet:               pick(adaptive.Violet),
+			Pink:                 pick(adaptive.Pink),
+			LightText:            pick(adaptive.LightText),
+			MutedText:            pick(adaptive.MutedText),
+			DarkText:             pick(adaptive.DarkText),
+			Border:               pick(adaptive.Border),
+			SelectedBackground:   pick(adaptive.SelectedBackground),
+			SubtleBackground:     pick(adaptive.SubtleBackground),
+			VerySubtleBackground: pick(adaptive.VerySubtleBackground),
+		}
+	}
+	for _, name := range []string{"gruvbox-dark", "gruvbox_dark"} {
+		compareColors(t, name, half(darkHalf), resolveThemeColors(name))
+	}
+	compareColors(t, "gruvbox-light", half(lightHalf), resolveThemeColors("gruvbox-light"))
 }
 
 // TestUnknownThemeFallsBackToDefault asserts unrecognized names resolve to

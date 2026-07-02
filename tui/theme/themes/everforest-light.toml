@@ -1,0 +1,64 @@
+# Everforest (light, medium) — the everforest default light background.
+# Derived from sainnhe/everforest autoload/everforest.vim (palette function,
+# background "medium" + light) and colors/everforest.vim role usage.
+# Role mapping: bg=bg0, bg_dark=bg_dim, bg_highlight=bg1 (CursorLine),
+# bg_visual=bg_visual, fg=fg, fg_dark=grey2, fg_gutter=bg5 (LineNr at the
+# default low ui_contrast), comment=grey1, border=bg4 (VertSplit). aqua→cyan;
+# everforest has a single purple, duplicated into magenta. diagnostics
+# hint=purple per DiagnosticHint. Terminal per the upstream terminal block:
+# in light mode black=fg and white=bg3 (swapped from dark), bright rows
+# identical to the normal rows.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "everforest-light"
+family = "everforest"
+variant = "light"
+appearance = "light"
+default = true
+upstream = "https://github.com/sainnhe/everforest"
+author = "Sainnhe Park"
+license = "MIT"
+
+[palette]
+bg = "#fdf6e3"
+bg_dark = "#efebd4"
+bg_highlight = "#f4f0d9"
+bg_visual = "#eaedc8"
+fg = "#5c6a72"
+fg_dark = "#829181"
+fg_gutter = "#bdc3af"
+comment = "#939f91"
+border = "#e0dcc7"
+red = "#f85552"
+green = "#8da101"
+yellow = "#dfa000"
+blue = "#3a94c5"
+magenta = "#df69ba"
+cyan = "#35a77c"
+orange = "#f57d26"
+purple = "#df69ba"
+
+[palette.diagnostics]
+error = "#f85552"
+warning = "#dfa000"
+info = "#3a94c5"
+hint = "#df69ba"
+
+[terminal]
+black = "#5c6a72"
+red = "#f85552"
+green = "#8da101"
+yellow = "#dfa000"
+blue = "#3a94c5"
+magenta = "#df69ba"
+cyan = "#35a77c"
+white = "#e6e2cc"
+black_bright = "#5c6a72"
+red_bright = "#f85552"
+green_bright = "#8da101"
+yellow_bright = "#dfa000"
+blue_bright = "#3a94c5"
+magenta_bright = "#df69ba"
+cyan_bright = "#35a77c"
+white_bright = "#e6e2cc"

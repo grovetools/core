@@ -438,42 +438,155 @@ SOFTWARE.
    limitations under the License.
 ```
 
-## Pending families (Phase 2b)
+## Everforest
 
-The following families are planned; their sections will be completed when the
-palettes land. All are MIT-licensed upstream:
-
-### Gruvbox
-- Upstream: https://github.com/gruvbox-community/gruvbox
-- Author: Pavel Pertsev (morhetz) and the gruvbox-community maintainers
-- SPDX-License-Identifier: MIT
-- Derived material: gruvbox dark/light palettes (existing gruvbox-dark/-light plus the hard/soft contrast variants)
-- License text: TODO (Phase 2b)
-
-### Everforest
 - Upstream: https://github.com/sainnhe/everforest
 - Author: Sainnhe Park
 - SPDX-License-Identifier: MIT
-- Derived material: everforest dark/light x hardness palettes
-- License text: TODO (Phase 2b)
+- Derived material: everforest-dark/-light x hard/medium/soft palettes (autoload/everforest.vim palette function + colors/everforest.vim role usage)
 
-### Solarized
-- Upstream: https://github.com/altercation/solarized
-- Author: Ethan Schoonover
+```
+MIT License
+
+Copyright (c) 2019 sainnhe
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Gruvbox
+
+- Upstream: https://github.com/gruvbox-community/gruvbox
+- Author: Pavel Pertsev (morhetz) and the gruvbox community
 - SPDX-License-Identifier: MIT
-- Derived material: solarized-dark, solarized-light palettes
-- License text: TODO (Phase 2b)
+- Derived material: gruvbox-dark/-light x hard/medium/soft palettes (colors/gruvbox.vim palette dict + mode role assignments)
 
-### Kanagawa
+```
+MIT License
+
+Copyright (c) 2018 Pavel Pertsev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Kanagawa
+
 - Upstream: https://github.com/rebelot/kanagawa.nvim
 - Author: Tommaso Laurenzi (rebelot)
 - SPDX-License-Identifier: MIT
-- Derived material: the existing kanagawa-dark/-light palettes plus the wave/dragon/lotus variants
-- License text: TODO (Phase 2b)
+- Derived material: kanagawa-wave, -dragon, -lotus palettes (lua/kanagawa/colors.lua + lua/kanagawa/themes.lua)
 
-### Rose Pine
-- Upstream: https://github.com/rose-pine/rose-pine-theme
-- Author: Rose Pine maintainers
+```
+MIT License
+
+Copyright (c) 2021 Tommaso Laurenzi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Rosé Pine
+
+- Upstream: https://github.com/rose-pine/neovim
+- Author: Rosé Pine maintainers (mvllow and contributors)
 - SPDX-License-Identifier: MIT
-- Derived material: rose-pine main/moon/dawn palettes
-- License text: TODO (Phase 2b)
+- Derived material: rose-pine-main, -moon, -dawn palettes (lua/rose-pine/palette.lua + lua/rose-pine.lua)
+
+```
+MIT License
+
+Copyright (c) 2023 Rosé Pine
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Solarized
+
+- Upstream: https://github.com/altercation/solarized
+- Author: Ethan Schoonover
+- SPDX-License-Identifier: MIT
+- Derived material: solarized-dark, solarized-light palettes (canonical 16-color table)
+
+```
+Copyright (c) 2011 Ethan Schoonover
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```

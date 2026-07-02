@@ -1,0 +1,65 @@
+# Rosé Pine Moon — the rose-pine softer dark variant.
+# Derived from rose-pine/neovim lua/rose-pine/palette.lua (canonical palette
+# including the leaf and highlight_* roles) and lua/rose-pine.lua highlight
+# groups.
+# Role mapping and terminal layout: see rose-pine-main.toml (moon shares
+# the main accent hues except rose and pine, and shifts the background
+# ramp).
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "rose-pine-moon"
+family = "rose-pine"
+variant = "moon"
+appearance = "dark"
+upstream = "https://github.com/rose-pine/neovim"
+author = "Rosé Pine maintainers (mvllow and contributors)"
+license = "MIT"
+
+[palette]
+bg = "#232136"
+bg_dark = "#1f1d30"
+bg_highlight = "#393552"
+bg_visual = "#44415a"
+fg = "#e0def4"
+fg_dark = "#908caa"
+fg_gutter = "#6e6a86"
+comment = "#908caa"
+border = "#6e6a86"
+red = "#eb6f92"
+green = "#95b1ac"
+yellow = "#f6c177"
+blue = "#3e8fb0"
+magenta = "#c4a7e7"
+cyan = "#9ccfd8"
+orange = "#ea9a97"
+purple = "#c4a7e7"
+
+[palette.git]
+add = "#9ccfd8"
+change = "#ea9a97"
+delete = "#eb6f92"
+
+[palette.diagnostics]
+error = "#eb6f92"
+warning = "#f6c177"
+info = "#9ccfd8"
+hint = "#c4a7e7"
+
+[terminal]
+black = "#393552"
+red = "#eb6f92"
+green = "#3e8fb0"
+yellow = "#f6c177"
+blue = "#9ccfd8"
+magenta = "#c4a7e7"
+cyan = "#ea9a97"
+white = "#e0def4"
+black_bright = "#908caa"
+red_bright = "#eb6f92"
+green_bright = "#3e8fb0"
+yellow_bright = "#f6c177"
+blue_bright = "#9ccfd8"
+magenta_bright = "#c4a7e7"
+cyan_bright = "#ea9a97"
+white_bright = "#e0def4"

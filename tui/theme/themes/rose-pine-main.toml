@@ -1,0 +1,74 @@
+# Rosé Pine (main) — the rose-pine default dark variant.
+# Derived from rose-pine/neovim lua/rose-pine/palette.lua (canonical palette
+# including the leaf and highlight_* roles) and lua/rose-pine.lua highlight
+# groups.
+# Role mapping: bg=base, bg_dark=_nc (dimmed inactive/panel background),
+# bg_highlight=overlay (CursorLine), bg_visual=highlight_med (the palette's
+# designated selection tone; upstream Visual is iris at 15% blend, not a
+# flat palette color), fg=text, fg_dark=subtle, fg_gutter=muted (LineNr),
+# comment=subtle (upstream Comment), border=muted (groups.border default).
+# Accents: love→red, gold→yellow, rose→orange (the palette's warm
+# pink-peach), pine→blue, foam→cyan, leaf→green, iris→purple AND magenta
+# (rose-pine has a single purple). git add/change/delete=foam/rose/love and
+# diagnostics error/warn/info/hint=love/gold/foam/iris per the upstream
+# group defaults. Terminal per the upstream block: 0=overlay, 8=subtle,
+# 2=pine, 4=foam, 5=iris, 6=rose, 7=text, bright rows identical.
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "rose-pine-main"
+family = "rose-pine"
+variant = "main"
+appearance = "dark"
+default = true
+upstream = "https://github.com/rose-pine/neovim"
+author = "Rosé Pine maintainers (mvllow and contributors)"
+license = "MIT"
+
+[palette]
+bg = "#191724"
+bg_dark = "#16141f"
+bg_highlight = "#26233a"
+bg_visual = "#403d52"
+fg = "#e0def4"
+fg_dark = "#908caa"
+fg_gutter = "#6e6a86"
+comment = "#908caa"
+border = "#6e6a86"
+red = "#eb6f92"
+green = "#95b1ac"
+yellow = "#f6c177"
+blue = "#31748f"
+magenta = "#c4a7e7"
+cyan = "#9ccfd8"
+orange = "#ebbcba"
+purple = "#c4a7e7"
+
+[palette.git]
+add = "#9ccfd8"
+change = "#ebbcba"
+delete = "#eb6f92"
+
+[palette.diagnostics]
+error = "#eb6f92"
+warning = "#f6c177"
+info = "#9ccfd8"
+hint = "#c4a7e7"
+
+[terminal]
+black = "#26233a"
+red = "#eb6f92"
+green = "#31748f"
+yellow = "#f6c177"
+blue = "#9ccfd8"
+magenta = "#c4a7e7"
+cyan = "#ebbcba"
+white = "#e0def4"
+black_bright = "#908caa"
+red_bright = "#eb6f92"
+green_bright = "#31748f"
+yellow_bright = "#f6c177"
+blue_bright = "#9ccfd8"
+magenta_bright = "#c4a7e7"
+cyan_bright = "#ebbcba"
+white_bright = "#e0def4"

@@ -90,17 +90,50 @@ var contrastExceptions = map[string]map[string]float64{
 		"magenta": 2.30, // pink #ea76cb = 2.34
 		"orange":  2.60, // peach #fe640b = 2.64
 	},
+	// Everforest's light accents are pastel-forest tones on warm cream; the
+	// grey1 comments are soft in every light hardness (autoload palette
+	// verbatim, measured 2026-07-02). The softer the background, the more
+	// pairs dip under 3:1.
+	"everforest-light-hard": {
+		"comment": 2.65, // #939f91 on #fffbef = 2.67
+		"green":   2.75, // #8da101 on #fffbef = 2.81
+		"yellow":  2.15, // #dfa000 on #fffbef = 2.21
+		"magenta": 2.90, // #df69ba on #fffbef = 2.96
+		"cyan":    2.85, // #35a77c on #fffbef = 2.91
+		"orange":  2.55, // #f57d26 on #fffbef = 2.59
+		"purple":  2.90, // #df69ba on #fffbef = 2.96
+	},
+	"everforest-light": {
+		"comment": 2.50, // #939f91 on #fdf6e3 = 2.56
+		"green":   2.65, // #8da101 on #fdf6e3 = 2.69
+		"yellow":  2.10, // #dfa000 on #fdf6e3 = 2.12
+		"magenta": 2.80, // #df69ba on #fdf6e3 = 2.83
+		"cyan":    2.75, // #35a77c on #fdf6e3 = 2.79
+		"orange":  2.45, // #f57d26 on #fdf6e3 = 2.48
+		"purple":  2.80, // #df69ba on #fdf6e3 = 2.83
+	},
+	"everforest-light-soft": {
+		"comment": 2.25, // #939f91 on #f3ead3 = 2.30
+		"red":     2.70, // #f85552 on #f3ead3 = 2.73
+		"green":   2.40, // #8da101 on #f3ead3 = 2.42
+		"yellow":  1.90, // #dfa000 on #f3ead3 = 1.91
+		"blue":    2.80, // #3a94c5 on #f3ead3 = 2.82
+		"magenta": 2.50, // #df69ba on #f3ead3 = 2.55
+		"cyan":    2.50, // #35a77c on #f3ead3 = 2.51
+		"orange":  2.20, // #f57d26 on #f3ead3 = 2.23
+		"purple":  2.50, // #df69ba on #f3ead3 = 2.55
+	},
 	// Floraverse intentionally uses its dim purple range for comments.
 	"floraverse-main":     {"comment": 1.90}, // #4c3866 on #0a0810 = 1.96
 	"floraverse-midnight": {"comment": 1.90}, // #4c3866 on #0a0810 = 1.96
 	"floraverse-twilight": {"comment": 2.70}, // #5a5278 on #0a0810 = 2.76
 	"floraverse-day":      {"comment": 1.95}, // #baabd1 on #f8f8f9 = 2.01 (Util.invert output)
 	"floraverse-dawn":     {"comment": 2.65}, // #9a95b1 on #f8f8f9 = 2.71 (Util.invert output)
-	// Gruvbox light's neutral green/yellow are classic upstream values.
-	"gruvbox-light": {
-		"green":  2.70, // #98971a on #fbf1c7 = 2.73
-		"yellow": 2.15, // #d79921 on #fbf1c7 = 2.19
-	},
+	// Gruvbox's gray comments sit just under 3:1 on the soft light bg0
+	// (colors/gruvbox.vim verbatim; the medium/hard backgrounds pass).
+	"gruvbox-light-soft": {"comment": 2.90}, // #928374 on #f2e5bc = 2.92
+	// Kanagawa lotus uses lotusGray3 for comments on the warm lotus paper.
+	"kanagawa-lotus": {"comment": 2.90}, // #8a8980 on #f2ecbc = 2.93
 	// Nord comments: even the brightened nord3 (#616e88, used by official
 	// nord editor ports) stays low against nord0; raw nord3 is ~1.7:1.
 	"nord-dark": {"comment": 2.40}, // #616e88 on #2e3440 = 2.43
@@ -120,6 +153,23 @@ var contrastExceptions = map[string]map[string]float64{
 		"magenta": 2.35, // #ff7eb6 on #ffffff = 2.36
 		"cyan":    2.30, // #08bdba on #ffffff = 2.33
 		"orange":  2.75, // #ff6f00 on #ffffff = 2.79
+	},
+	// Rosé Pine dawn's gold and rose are pastel-warm accents on near-white
+	// (rose-pine/neovim palette.lua verbatim).
+	"rose-pine-dawn": {
+		"yellow": 2.00, // gold #ea9d34 on #faf4ed = 2.05
+		"orange": 2.55, // rose #d7827e on #faf4ed = 2.60
+	},
+	// Solarized's base01/base1 comment tones are the canonical values; in
+	// light mode base00 body text and several accents also sit under the
+	// tier floors (altercation/solarized 16-color table verbatim).
+	"solarized-dark": {"comment": 2.75}, // base01 #586e75 on #002b36 = 2.79
+	"solarized-light": {
+		"fg":      4.10, // base00 #657b83 on #fdf6e3 = 4.13
+		"comment": 2.45, // base1 #93a1a1 on #fdf6e3 = 2.48
+		"green":   2.95, // #859900 on #fdf6e3 = 2.97
+		"yellow":  2.95, // #b58900 on #fdf6e3 = 2.98
+		"cyan":    2.90, // #2aa198 on #fdf6e3 = 2.93
 	},
 	// Tokyonight comments are soft by design in every style.
 	"tokyonight-night": {"comment": 2.75}, // #565f89 on #1a1b26 = 2.76

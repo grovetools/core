@@ -1,0 +1,67 @@
+# Rosé Pine Dawn — the rose-pine light variant.
+# Derived from rose-pine/neovim lua/rose-pine/palette.lua (canonical palette
+# including the leaf and highlight_* roles) and lua/rose-pine.lua highlight
+# groups.
+# Role mapping and terminal layout: see rose-pine-main.toml (dawn inverts
+# the monotone ramp and darkens every accent for a light background; note
+# dawn's surface/overlay are brighter than base, so bg_dark=_nc is the
+# dimmed panel tone and bg_highlight=overlay per upstream CursorLine).
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "rose-pine-dawn"
+family = "rose-pine"
+variant = "dawn"
+appearance = "light"
+default = true
+upstream = "https://github.com/rose-pine/neovim"
+author = "Rosé Pine maintainers (mvllow and contributors)"
+license = "MIT"
+
+[palette]
+bg = "#faf4ed"
+bg_dark = "#f8f0e7"
+bg_highlight = "#f2e9e1"
+bg_visual = "#dfdad9"
+fg = "#464261"
+fg_dark = "#797593"
+fg_gutter = "#9893a5"
+comment = "#797593"
+border = "#9893a5"
+red = "#b4637a"
+green = "#6d8f89"
+yellow = "#ea9d34"
+blue = "#286983"
+magenta = "#907aa9"
+cyan = "#56949f"
+orange = "#d7827e"
+purple = "#907aa9"
+
+[palette.git]
+add = "#56949f"
+change = "#d7827e"
+delete = "#b4637a"
+
+[palette.diagnostics]
+error = "#b4637a"
+warning = "#ea9d34"
+info = "#56949f"
+hint = "#907aa9"
+
+[terminal]
+black = "#f2e9e1"
+red = "#b4637a"
+green = "#286983"
+yellow = "#ea9d34"
+blue = "#56949f"
+magenta = "#907aa9"
+cyan = "#d7827e"
+white = "#464261"
+black_bright = "#797593"
+red_bright = "#b4637a"
+green_bright = "#286983"
+yellow_bright = "#ea9d34"
+blue_bright = "#56949f"
+magenta_bright = "#907aa9"
+cyan_bright = "#d7827e"
+white_bright = "#464261"

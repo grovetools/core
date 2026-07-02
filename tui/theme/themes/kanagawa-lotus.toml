@@ -1,0 +1,75 @@
+# Kanagawa Lotus — the kanagawa.nvim light theme.
+# Derived from rebelot/kanagawa.nvim lua/kanagawa/colors.lua (palette table)
+# and lua/kanagawa/themes.lua (the "lotus" ThemeColors role assignments).
+# Replaces grove's hand-coded "wave-inspired" kanagawa-light palette
+# (Phase 2b upstream extraction).
+# Role mapping: bg=ui.bg (lotusWhite3), bg_dark=ui.bg_dim (lotusWhite1),
+# bg_highlight=ui.bg_p2 (CursorLine, lotusWhite5), bg_visual=ui.bg_visual
+# (lotusViolet3), fg=lotusInk1, fg_dark=ui.fg_dim (lotusInk2),
+# fg_gutter=ui.nontext (LineNr, lotusViolet1), comment=lotusGray3. border
+# uses FloatBorder fg (lotusGray2): upstream WinSeparator is bg_m3, brighter
+# than bg and invisible in a TUI. Accents follow the lotus terminal/syntax
+# roles: red=lotusRed, green=lotusGreen, yellow=lotusYellow,
+# blue=lotusBlue4, magenta=lotusPink, cyan=lotusAqua, orange=lotusOrange,
+# purple=lotusViolet4. git = vcs lotusGreen2/lotusYellow3/lotusRed2;
+# diagnostics per diag. Terminal is the lotus 16-slot term table verbatim
+# (slot 0 is sumiInk3 upstream).
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "kanagawa-lotus"
+family = "kanagawa"
+variant = "lotus"
+appearance = "light"
+default = true
+upstream = "https://github.com/rebelot/kanagawa.nvim"
+author = "Tommaso Laurenzi (rebelot)"
+license = "MIT"
+
+[palette]
+bg = "#f2ecbc"
+bg_dark = "#dcd5ac"
+bg_highlight = "#e4d794"
+bg_visual = "#c9cbd1"
+fg = "#545464"
+fg_dark = "#43436c"
+fg_gutter = "#a09cac"
+comment = "#8a8980"
+border = "#716e61"
+red = "#c84053"
+green = "#6f894e"
+yellow = "#77713f"
+blue = "#4d699b"
+magenta = "#b35b79"
+cyan = "#597b75"
+orange = "#cc6d00"
+purple = "#624c83"
+
+[palette.git]
+add = "#6e915f"
+change = "#de9800"
+delete = "#d7474b"
+
+[palette.diagnostics]
+error = "#e82424"
+warning = "#e98a00"
+info = "#5a7785"
+hint = "#5e857a"
+
+[terminal]
+black = "#1f1f28"
+red = "#c84053"
+green = "#6f894e"
+yellow = "#77713f"
+blue = "#4d699b"
+magenta = "#b35b79"
+cyan = "#597b75"
+white = "#545464"
+black_bright = "#8a8980"
+red_bright = "#d7474b"
+green_bright = "#6e915f"
+yellow_bright = "#836f4a"
+blue_bright = "#6693bf"
+magenta_bright = "#624c83"
+cyan_bright = "#5e857a"
+white_bright = "#43436c"
