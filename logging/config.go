@@ -56,9 +56,10 @@ type Config struct {
 
 	// SystemLevel is the minimum log level for system-scoped logging (daemon, global tools).
 	// When set, overrides Level for processes running in ScopeSystem.
-	// Useful for capturing debug events in ~/.local/state/grove/logs/ without
-	// affecting workspace log verbosity.
-	SystemLevel string `yaml:"system_level,omitempty" toml:"system_level,omitempty" jsonschema:"description=Minimum log level for system/daemon logs (debug/info/warn/error),enum=debug,enum=info,enum=warn,enum=error" jsonschema_extras:"x-layer=global,x-priority=61"`
+	// Prefer file.level for targeted debug capture in the file sink, or the
+	// GROVE_LOG_LEVEL=debug environment variable for one-shot debugging;
+	// system_level=debug makes the daemon verbose on every sink.
+	SystemLevel string `yaml:"system_level,omitempty" toml:"system_level,omitempty" jsonschema:"description=Minimum log level for system/daemon logs (debug/info/warn/error). Prefer file.level for targeted file capture or GROVE_LOG_LEVEL=debug for one-shot debugging,enum=debug,enum=info,enum=warn,enum=error" jsonschema_extras:"x-layer=global,x-priority=61"`
 
 	// ReportCaller, if true, includes the file, line, and function name in the log output.
 	// Can be enabled with the GROVE_LOG_CALLER=true environment variable.
@@ -95,6 +96,15 @@ type FileSinkConfig struct {
 	// Path is the full path to the log file.
 	Path   string `yaml:"path" toml:"path" jsonschema:"description=Full path to the log file" jsonschema_extras:"x-layer=global,x-priority=71"`
 	Format string `yaml:"format,omitempty" toml:"format,omitempty" jsonschema:"description=File log format: text or json,default=json,enum=text,enum=json" jsonschema_extras:"x-layer=global,x-priority=72"`
+	// Level is the minimum log level for the file sink only. When unset, the
+	// file sink follows the console level. Useful for capturing debug detail
+	// in the audit trail without making the console verbose.
+	// GROVE_LOG_LEVEL overrides both the console and file levels.
+	Level string `yaml:"level,omitempty" toml:"level,omitempty" jsonschema:"description=Minimum log level for the file sink only (defaults to the console level; GROVE_LOG_LEVEL overrides both),enum=debug,enum=info,enum=warn,enum=error" jsonschema_extras:"x-layer=global,x-priority=73"`
+	// RetentionDays is how many days of dated log files to keep. Old files
+	// are swept by the grove daemon; files for the current day are never
+	// removed. 0 means use the default (14).
+	RetentionDays int `yaml:"retention_days,omitempty" toml:"retention_days,omitempty" jsonschema:"description=Days of dated log files to keep before the daemon sweeps them (0 = default of 14),default=14" jsonschema_extras:"x-layer=global,x-priority=74"`
 }
 
 // FormatConfig controls the log output format.
@@ -118,8 +128,9 @@ func GetDefaultLoggingConfig() Config {
 		Level:        "info",
 		ReportCaller: true,
 		File: FileSinkConfig{
-			Enabled: true,
-			Format:  "json",
+			Enabled:       true,
+			Format:        "json",
+			RetentionDays: 14,
 		},
 	}
 }

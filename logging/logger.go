@@ -276,6 +276,72 @@ func StructToLogrusFields(v interface{}) logrus.Fields {
 	return fields
 }
 
+// resolvedConsoleLevel caches the console level resolved by the most recent
+// NewLogger call so the unified logger can gate pretty output without
+// re-loading configuration. Levels are process-wide, not per component.
+var (
+	resolvedConsoleLevel   = logrus.InfoLevel
+	resolvedConsoleLevelMu sync.RWMutex
+)
+
+func setResolvedConsoleLevel(level logrus.Level) {
+	resolvedConsoleLevelMu.Lock()
+	resolvedConsoleLevel = level
+	resolvedConsoleLevelMu.Unlock()
+}
+
+// ConsoleLevel returns the console log level resolved by the most recent
+// NewLogger call (info before any logger has been created).
+func ConsoleLevel() logrus.Level {
+	resolvedConsoleLevelMu.RLock()
+	defer resolvedConsoleLevelMu.RUnlock()
+	return resolvedConsoleLevel
+}
+
+// parseLevelOrInfo parses a level string, falling back to info.
+func parseLevelOrInfo(s string) logrus.Level {
+	level, err := logrus.ParseLevel(s)
+	if err != nil {
+		return logrus.InfoLevel
+	}
+	return level
+}
+
+// resolveLevels resolves the per-sink log levels from config and scope.
+//
+// consoleLevel follows the chain: GROVE_LOG_LEVEL env > system_level (for
+// ScopeSystem) > level > "info". fileLevel is file.level when set, otherwise
+// consoleLevel. GROVE_LOG_LEVEL overrides both sinks.
+func resolveLevels(logCfg *Config, scope LogScope) (consoleLevel, fileLevel logrus.Level) {
+	if env := os.Getenv("GROVE_LOG_LEVEL"); env != "" {
+		level := parseLevelOrInfo(env)
+		return level, level
+	}
+
+	levelStr := "info" // Default level
+	if scope == ScopeSystem && logCfg.SystemLevel != "" {
+		levelStr = logCfg.SystemLevel
+	} else if logCfg.Level != "" {
+		levelStr = logCfg.Level
+	}
+	consoleLevel = parseLevelOrInfo(levelStr)
+
+	fileLevel = consoleLevel
+	if logCfg.File.Level != "" {
+		fileLevel = parseLevelOrInfo(logCfg.File.Level)
+	}
+	return consoleLevel, fileLevel
+}
+
+// mostVerbose returns the more verbose of two levels (logrus levels are
+// numerically inverted: Debug=5 > Info=4).
+func mostVerbose(a, b logrus.Level) logrus.Level {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // NewLogger creates and returns a pre-configured logger for a specific component.
 // It uses a singleton pattern per component to avoid re-initializing.
 func NewLogger(component string) *logrus.Entry {
@@ -300,26 +366,16 @@ func NewLogger(component string) *logrus.Entry {
 		}
 	}
 
-	// Configure Level
-	levelStr := "info" // Default level
-	if os.Getenv("GROVE_LOG_LEVEL") != "" {
-		levelStr = os.Getenv("GROVE_LOG_LEVEL")
-	} else {
-		scopeMu.RLock()
-		isSystem := activeScope == ScopeSystem
-		scopeMu.RUnlock()
+	scopeMu.RLock()
+	currentScope := activeScope
+	scopeMu.RUnlock()
 
-		if isSystem && logCfg.SystemLevel != "" {
-			levelStr = logCfg.SystemLevel
-		} else if logCfg.Level != "" {
-			levelStr = logCfg.Level
-		}
-	}
-	level, err := logrus.ParseLevel(levelStr)
-	if err != nil {
-		level = logrus.InfoLevel
-	}
-	logger.SetLevel(level)
+	// Configure Level. The logrus level must admit the most verbose sink;
+	// the console output is filtered back down to consoleLevel via
+	// levelFilteringFormatter, and the file sink via FileHook.LogLevels.
+	consoleLevel, fileLevel := resolveLevels(&logCfg, currentScope)
+	logger.SetLevel(mostVerbose(consoleLevel, fileLevel))
+	setResolvedConsoleLevel(consoleLevel)
 
 	// Configure Caller Reporting
 	if os.Getenv("GROVE_LOG_CALLER") == "true" || logCfg.ReportCaller {
@@ -341,22 +397,23 @@ func NewLogger(component string) *logrus.Entry {
 
 	// Configure File Sink
 	if logCfg.File.Enabled {
-		var logFilePath string
-
-		scopeMu.RLock()
-		currentScope := activeScope
-		scopeMu.RUnlock()
+		// pathFn derives the log file path for a point in time so the
+		// dateRotatingWriter can reopen date-patterned paths when the day
+		// changes. Fixed paths (env override, explicit config) never roll.
+		var pathFn func(time.Time) string
 
 		if envPath := os.Getenv("GROVE_LOG_FILE"); envPath != "" {
-			logFilePath = expandPath(envPath)
+			p := expandPath(envPath)
+			pathFn = func(time.Time) string { return p }
 		} else if currentScope == ScopeSystem {
 			// System scope: write to central XDG state directory
-			now := time.Now()
-			dateStr := now.Format("2006-01-02")
-			logFilePath = filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", dateStr))
+			pathFn = func(now time.Time) string {
+				return filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", now.Format("2006-01-02")))
+			}
 		} else if logCfg.File.Path != "" {
 			// Use explicitly configured path
-			logFilePath = expandPath(logCfg.File.Path)
+			p := expandPath(logCfg.File.Path)
+			pathFn = func(time.Time) string { return p }
 		} else {
 			// Default to XDG state directory organized by workspace identifier
 			cwd, err := os.Getwd()
@@ -367,23 +424,22 @@ func NewLogger(component string) *logrus.Entry {
 			}
 
 			if cwd != "" {
-				now := time.Now()
-				dateStr := now.Format("2006-01-02")
-
 				node, err := workspace.GetProjectByPath(cwd)
 				if err == nil && node != nil {
-					logFilePath = filepath.Join(paths.StateDir(), "logs", "workspaces", node.Identifier("/"), fmt.Sprintf("workspace-%s.log", dateStr))
+					identifier := node.Identifier("/")
+					pathFn = func(now time.Time) string {
+						return filepath.Join(paths.StateDir(), "logs", "workspaces", identifier, fmt.Sprintf("workspace-%s.log", now.Format("2006-01-02")))
+					}
 				} else {
-					logFilePath = filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", dateStr))
+					pathFn = func(now time.Time) string {
+						return filepath.Join(paths.StateDir(), "logs", fmt.Sprintf("system-%s.log", now.Format("2006-01-02")))
+					}
 				}
 			}
 		}
 
-		if logFilePath != "" {
-			if err := os.MkdirAll(filepath.Dir(logFilePath), 0o755); err != nil {
-				fmt.Fprintf(os.Stderr, "grove-log: failed to create log directory: %v\n", err)
-			}
-			writer, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if pathFn != nil {
+			writer, err := newDateRotatingWriter(pathFn, nil)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "grove-log: failed to open log file: %v\n", err)
 			} else {
@@ -395,7 +451,7 @@ func NewLogger(component string) *logrus.Entry {
 				}
 				logger.AddHook(&FileHook{
 					Writer:    writer,
-					LogLevels: logrus.AllLevels,
+					LogLevels: logrus.AllLevels[:fileLevel+1],
 					Formatter: fileFormatter,
 				})
 			}
@@ -416,7 +472,10 @@ func NewLogger(component string) *logrus.Entry {
 	case "never":
 		shouldLogToStderr = false
 	case "auto":
-		isDebug := os.Getenv("GROVE_DEBUG") == "1" || logger.GetLevel() == logrus.DebugLevel
+		// Use consoleLevel, not logger.GetLevel(): the logrus level may be
+		// raised to satisfy a more verbose file sink (file.level=debug)
+		// without the console being in debug mode.
+		isDebug := os.Getenv("GROVE_DEBUG") == "1" || consoleLevel >= logrus.DebugLevel
 		isInteractive := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
 		if isDebug || !isInteractive {
 			shouldLogToStderr = true
@@ -438,6 +497,11 @@ func NewLogger(component string) *logrus.Entry {
 		logger.SetOutput(GetGlobalOutput())
 		if suppressDualEmit {
 			logger.SetFormatter(&dualEmitSuppressingFormatter{inner: logger.Formatter})
+		}
+		if consoleLevel < logger.GetLevel() {
+			// The logrus level admits entries for a more verbose file sink;
+			// filter them out of the console output here (outermost wrapper).
+			logger.SetFormatter(&levelFilteringFormatter{maxLevel: consoleLevel, inner: logger.Formatter})
 		}
 	} else {
 		logger.SetOutput(io.Discard)
@@ -507,6 +571,86 @@ func (f *dualEmitSuppressingFormatter) Format(entry *logrus.Entry) ([]byte, erro
 	return f.inner.Format(entry)
 }
 
+// levelFilteringFormatter wraps the console formatter and emits nothing for
+// entries more verbose than maxLevel. It is installed when the file sink's
+// level is more verbose than the console level: the logrus logger level must
+// admit the verbose entries so the FileHook can capture them, so the console
+// output filters them here instead. File sinks use their own formatter via
+// FileHook and are not affected.
+type levelFilteringFormatter struct {
+	maxLevel logrus.Level
+	inner    logrus.Formatter
+}
+
+// Format implements logrus.Formatter.
+func (f *levelFilteringFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	if entry.Level > f.maxLevel {
+		return nil, nil
+	}
+	return f.inner.Format(entry)
+}
+
+// dateRotatingWriter writes to a path derived from the current time and
+// reopens the file when the derived path changes (i.e. at midnight for
+// date-patterned paths). There is intentionally NO intra-day size-based
+// rename rotation: log tailers follow a single fd and only switch when a
+// file with a different name appears, so renaming the live file would
+// silently detach them. Retention of old dated files is handled by the
+// grove daemon sweep (see FileSinkConfig.RetentionDays), not here.
+type dateRotatingWriter struct {
+	mu      sync.Mutex
+	pathFn  func(time.Time) string
+	now     func() time.Time
+	curPath string
+	file    *os.File
+}
+
+// newDateRotatingWriter opens the file for the current time. nowFn is
+// injectable for tests; nil means time.Now.
+func newDateRotatingWriter(pathFn func(time.Time) string, nowFn func() time.Time) (*dateRotatingWriter, error) {
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	w := &dateRotatingWriter{pathFn: pathFn, now: nowFn}
+	if err := w.reopen(w.pathFn(w.now())); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+// reopen opens path (creating parent directories) and swaps it in as the
+// current file. Callers must hold w.mu (or be the constructor).
+func (w *dateRotatingWriter) reopen(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	if err != nil {
+		return err
+	}
+	if w.file != nil {
+		w.file.Close()
+	}
+	w.file = f
+	w.curPath = path
+	return nil
+}
+
+// Write implements io.Writer, rolling to the new path first when the
+// derived path has changed since the last write.
+func (w *dateRotatingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if path := w.pathFn(w.now()); path != w.curPath {
+		if err := w.reopen(path); err != nil && w.file == nil {
+			return 0, err
+		}
+		// On reopen failure with a still-open previous file, keep writing
+		// to the old fd rather than dropping the entry.
+	}
+	return w.file.Write(p)
+}
+
 // FileHook is a logrus hook for writing logs to a file with a specific formatter.
 // It includes a mutex to handle concurrent writes from different tool processes.
 type FileHook struct {
@@ -555,6 +699,7 @@ func Reset() {
 	initOnce = sync.Once{}
 	currentProjectOnce = sync.Once{}
 	currentProjectName = ""
+	setResolvedConsoleLevel(logrus.InfoLevel)
 
 	scopeMu.Lock()
 	activeScope = ScopeWorkspace

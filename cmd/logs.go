@@ -25,7 +25,8 @@ func NewLogsCmd() *cobra.Command {
 		Use:   "logs",
 		Short: "Aggregate and display logs from Grove workspaces",
 		Long: `Streams logs from one or more workspaces. By default, shows logs from the
-current workspace only.
+current workspace only at level info and above (use --level debug to
+include debug entries).
 
 Examples:
   # Stream current workspace logs
@@ -45,6 +46,9 @@ Examples:
 
   # Include debug entries
   core logs --level debug -f
+
+  # Lifecycle events (job.*, plan.*, note.*, ...) plus warnings/errors only
+  core logs --events -f
 
   # Last 50 errors
   core logs --level error --tail 50
@@ -67,9 +71,10 @@ Examples:
 	cmd.Flags().Bool("system", false, "Include system logs alongside workspace scope")
 
 	// Filtering
-	cmd.Flags().String("level", "", "Minimum log level: debug, info, warn, error")
+	cmd.Flags().String("level", "", "Minimum log level: debug, info, warn, error (default: info)")
 	cmd.Flags().StringSlice("component", []string{}, "Show only these components (comma-separated whitelist)")
 	cmd.Flags().Bool("show-all", false, "Ignore all configured hide/show rules")
+	cmd.Flags().Bool("events", false, "Show only lifecycle events (entries with an event field) plus warn/error")
 
 	// Output
 	cmd.Flags().BoolP("follow", "f", false, "Follow log output")
@@ -91,6 +96,32 @@ var validLevels = map[string]int{
 	"warn":    2,
 	"warning": 2,
 	"error":   3,
+}
+
+// resolveMinLevelRank maps the --level flag value to a severity rank.
+// An empty value defaults to info so debug entries stay hidden unless
+// explicitly requested with --level debug.
+func resolveMinLevelRank(level string) (int, error) {
+	if level == "" {
+		return validLevels["info"], nil
+	}
+	rank, ok := validLevels[strings.ToLower(level)]
+	if !ok {
+		return 0, fmt.Errorf("invalid --level %q: must be debug, info, warn, or error", level)
+	}
+	return rank, nil
+}
+
+// passesEventsFilter reports whether a parsed log entry passes the --events
+// filter: it carries a non-empty `event` field (lifecycle events such as
+// job.created, plan.finished, note.updated) or is at warn level and above.
+func passesEventsFilter(logMap map[string]interface{}) bool {
+	if ev, ok := logMap["event"].(string); ok && ev != "" {
+		return true
+	}
+	entryLevel, _ := logMap["level"].(string)
+	rank, known := validLevels[strings.ToLower(entryLevel)]
+	return known && rank >= validLevels["warn"]
 }
 
 // filterStats holds counters for logging statistics.
@@ -119,6 +150,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	level, _ := cmd.Flags().GetString("level")
 	showAll, _ := cmd.Flags().GetBool("show-all")
 	showOnly, _ := cmd.Flags().GetStringSlice("component")
+	eventsOnly, _ := cmd.Flags().GetBool("events")
 	follow, _ := cmd.Flags().GetBool("follow")
 	tuiMode, _ := cmd.Flags().GetBool("tui")
 
@@ -129,15 +161,10 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid --scope %q: must be workspace, ecosystem, all, system, or daemon", scope)
 	}
 
-	// Validate level
-	var minLevelRank int = -1
-	if level != "" {
-		level = strings.ToLower(level)
-		rank, ok := validLevels[level]
-		if !ok {
-			return fmt.Errorf("invalid --level %q: must be debug, info, warn, or error", level)
-		}
-		minLevelRank = rank
+	// Validate level (defaults to info when unset)
+	minLevelRank, err := resolveMinLevelRank(level)
+	if err != nil {
+		return err
 	}
 
 	// -w implies ecosystem scope for workspace discovery
@@ -207,7 +234,7 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 	}
 
 	if tuiMode {
-		return runLogsTUI(workspaces, follow, overrideOpts, scope, includeSystem, level)
+		return runLogsTUI(workspaces, follow, overrideOpts, scope, includeSystem, level, eventsOnly)
 	}
 
 	// --- Non-TUI file tailing mode ---
@@ -319,6 +346,11 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 					continue
 				}
 			}
+		}
+
+		// Events-only filtering: keep lifecycle events and warn/error
+		if eventsOnly && !passesEventsFilter(logMap) {
+			continue
 		}
 
 		// Component visibility filtering

@@ -24,6 +24,7 @@
 package claudenotebook
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -123,6 +124,17 @@ func SeedNotebookDirs(worktreePath string, dirs []string) error {
 //   - Malformed JSON -> returns an error WITHOUT touching the file.
 //   - Unknown top-level keys and unrelated nested fields are preserved verbatim.
 func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebookDirs []string) error {
+	_, err := SeedSettingsChanged(worktreePath, repos, cfg, notebookDirs)
+	return err
+}
+
+// SeedSettingsChanged is SeedSettings but additionally reports whether the
+// settings file was actually (re)written. When the merged output is
+// byte-identical to what is already on disk the write is skipped entirely and
+// changed=false is returned — this is what keeps timer-driven reconciles
+// (daemon SettingsHandler) from rewriting every worktree's settings file on
+// every pass.
+func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig, notebookDirs []string) (changed bool, err error) {
 	notebookDirs = dedupeNonEmpty(notebookDirs)
 
 	// Check if there's anything to do.
@@ -139,12 +151,12 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 	if !hasConfig && !hasDirs {
 		Debugf("SeedSettings SKIP (nothing to seed): path=%s repos=%v hasConfig=%v hasDirs=%v settingsGateOff=%v",
 			worktreePath, repos, hasConfig, hasDirs, settingsGateOff)
-		return nil
+		return false, nil
 	}
 
 	claudeDir := filepath.Join(worktreePath, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		return fmt.Errorf("create .claude dir %s: %w", claudeDir, err)
+		return false, fmt.Errorf("create .claude dir %s: %w", claudeDir, err)
 	}
 	settingsPath := filepath.Join(claudeDir, "settings.local.json")
 
@@ -165,12 +177,12 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 			root = map[string]any{}
 		} else if uerr := json.Unmarshal(data, &root); uerr != nil {
 			// Never overwrite a file we can't parse.
-			return fmt.Errorf("parse %s: %w", settingsPath, uerr)
+			return false, fmt.Errorf("parse %s: %w", settingsPath, uerr)
 		}
 	case os.IsNotExist(readErr):
 		// Fresh file: start from an empty object.
 	default:
-		return fmt.Errorf("read %s: %w", settingsPath, readErr)
+		return false, fmt.Errorf("read %s: %w", settingsPath, readErr)
 	}
 
 	// Merge notebook directories (always write to both keys).
@@ -374,22 +386,31 @@ func SeedSettings(worktreePath string, repos []string, cfg *ClaudeConfig, notebo
 		}
 	}
 
-	out, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal %s: %w", settingsPath, err)
+	out, merr := json.MarshalIndent(root, "", "  ")
+	if merr != nil {
+		return false, fmt.Errorf("marshal %s: %w", settingsPath, merr)
 	}
 	out = append(out, '\n')
 
+	// No-op skip: when the merged output is byte-identical to what was read
+	// from disk, skip the tmp+rename entirely. This kills the steady-state
+	// write churn (and most of the tmp-rename race with concurrent worktree
+	// teardown) caused by reconciles that change nothing.
+	if readErr == nil && bytes.Equal(out, data) {
+		Debugf("SeedSettings NO-OP (unchanged) %s (repos=%v hasConfig=%v hasDirs=%v)", settingsPath, repos, hasConfig, hasDirs)
+		return false, nil
+	}
+
 	tmpPath := settingsPath + ".tmp"
 	if err := os.WriteFile(tmpPath, out, mode); err != nil {
-		return fmt.Errorf("write tmp %s: %w", tmpPath, err)
+		return false, fmt.Errorf("write tmp %s: %w", tmpPath, err)
 	}
 	if err := os.Rename(tmpPath, settingsPath); err != nil {
 		_ = os.Remove(tmpPath) // best-effort cleanup of orphaned tmp
-		return fmt.Errorf("rename %s -> %s: %w", tmpPath, settingsPath, err)
+		return false, fmt.Errorf("rename %s -> %s: %w", tmpPath, settingsPath, err)
 	}
 	Debugf("SeedSettings WROTE %s (repos=%v hasConfig=%v hasDirs=%v)", settingsPath, repos, hasConfig, hasDirs)
-	return nil
+	return true, nil
 }
 
 // editRuleForAbsDir returns the Claude Code permission rule that grants

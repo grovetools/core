@@ -22,6 +22,7 @@ type LogKeyMap struct {
 	Clear            key.Binding
 	ToggleFollow     key.Binding
 	ToggleFilters    key.Binding
+	ToggleEvents     key.Binding
 	ViewJSON         key.Binding
 	VisualModeStart  key.Binding
 	Yank             key.Binding
@@ -82,6 +83,10 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 		ToggleFilters: key.NewBinding(
 			key.WithKeys("f"),
 			key.WithHelp("f", "toggle filters"),
+		),
+		ToggleEvents: key.NewBinding(
+			key.WithKeys("E"),
+			key.WithHelp("E", "toggle events only"),
 		),
 		ViewJSON: key.NewBinding(
 			key.WithKeys("J"),
@@ -159,6 +164,7 @@ func (k LogKeyMap) FullHelp() [][]key.Binding {
 			k.CycleLevel,
 			k.ComponentSummary,
 			k.ToggleFilters,
+			k.ToggleEvents,
 			k.ToggleFollow,
 			k.Search,
 		},

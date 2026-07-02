@@ -21,6 +21,9 @@ type UnifiedLogger struct {
 	component  string
 	pretty     *PrettyLogger
 	structured *logrus.Entry
+	// prettyLevel is the resolved console level; entries more verbose than
+	// this skip the pretty output path (structured sinks are unaffected).
+	prettyLevel logrus.Level
 }
 
 // NewUnifiedLogger creates a new unified logger for a specific component.
@@ -33,14 +36,17 @@ func NewUnifiedLogger(component string) *UnifiedLogger {
 	structured.Logger.SetReportCaller(false)
 
 	return &UnifiedLogger{
-		component:  component,
-		pretty:     NewPrettyLogger(),
-		structured: structured,
+		component:   component,
+		pretty:      NewPrettyLogger(),
+		structured:  structured,
+		prettyLevel: ConsoleLevel(),
 	}
 }
 
 // Debug returns a LogEntry at DEBUG level.
-// Debug messages are hidden in pretty output by default (shown with --verbose or GROVE_LOG_LEVEL=debug).
+// Debug messages are skipped by the pretty output path unless the resolved
+// console level is debug (e.g. via GROVE_LOG_LEVEL=debug); they still reach
+// structured sinks whose level admits them.
 func (u *UnifiedLogger) Debug(msg string) *LogEntry {
 	return &LogEntry{
 		logger: u,
@@ -236,9 +242,11 @@ func (e *LogEntry) Log(ctx context.Context) {
 	// Compute the pretty output once (used by both logPretty and logStructured)
 	prettyOutput := e.computePrettyOutput()
 
-	// Pretty output (to context writer -> CLI + job.log)
+	// Pretty output (to context writer -> CLI + job.log), gated at the
+	// resolved console level (logrus levels are numerically inverted:
+	// Debug=5 > Info=4, so "more verbose" means a larger value).
 	// Add extra newline for visual spacing between log entries in TUI
-	emittedPretty := !e.structOnly
+	emittedPretty := !e.structOnly && e.level <= e.logger.prettyLevel
 	if emittedPretty {
 		writer := GetWriter(ctx)
 		fmt.Fprintf(writer, "%s\n\n", prettyOutput)
