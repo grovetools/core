@@ -189,6 +189,17 @@ func WorktreeManagesTrust(worktreePath string, repos []string) bool {
 // worktreePath. provider may be nil; resolution falls back to per-path
 // classification when it is.
 func SeedClaudeSettingsForWorktree(worktreePath string, repos []string, provider *Provider) error {
+	_, err := SeedClaudeSettingsForWorktreeChanged(worktreePath, repos, provider)
+	return err
+}
+
+// SeedClaudeSettingsForWorktreeChanged is SeedClaudeSettingsForWorktree but
+// additionally reports whether the settings file was actually (re)written.
+// changed=false means the merged output was byte-identical to what was already
+// on disk and no write occurred (see claudenotebook.SeedSettingsChanged) —
+// callers running on a timer (daemon SettingsHandler) use this to gate their
+// per-node logging and change counters.
+func SeedClaudeSettingsForWorktreeChanged(worktreePath string, repos []string, provider *Provider) (bool, error) {
 	// Resolve the merged (worktree-root + member-union) [claude] profile. Root
 	// values take precedence; member repos fill gaps and union arrays.
 	rootClaudeCfg := ResolveClaudeConfigForWorktree(worktreePath, repos)
@@ -212,7 +223,7 @@ func SeedClaudeSettingsForWorktree(worktreePath string, repos []string, provider
 	if rootClaudeCfg.ShouldSeed() {
 		cfgPtr = rootClaudeCfg
 	}
-	return claudenotebook.SeedSettings(worktreePath, repos, cfgPtr, dirs)
+	return claudenotebook.SeedSettingsChanged(worktreePath, repos, cfgPtr, dirs)
 }
 
 // resolveNotebookDirsForRepos maps each member repo subdir to its paired

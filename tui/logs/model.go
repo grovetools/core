@@ -68,6 +68,10 @@ type Config struct {
 	// InitialLevel sets the starting minimum log level (e.g. "debug", "info", "warn", "error").
 	// Empty string defaults to "info".
 	InitialLevel string
+	// EventsOnly starts the viewer in events-only mode: only entries
+	// carrying a non-empty `event` field or at warn level and above are
+	// shown. Toggleable at runtime with the ToggleEvents key ("E").
+	EventsOnly bool
 }
 
 // paneFocus tracks which pane has focus.
@@ -392,6 +396,7 @@ type Model struct {
 	height         int
 	followMode     bool
 	filtersEnabled bool
+	eventsOnly     bool
 	filteredCount  int
 	unseenErrors   int
 	ready          bool
@@ -484,6 +489,7 @@ func New(ctx context.Context, cfg Config) *Model {
 		help:                help.New(keys),
 		followMode:          cfg.Follow,
 		filtersEnabled:      false,
+		eventsOnly:          cfg.EventsOnly,
 		logConfig:           logCfg,
 		overrideOpts:        cfg.OverrideOpts,
 		includeSystem:       cfg.IncludeSystem,
@@ -733,7 +739,7 @@ var levelLabels = [4]string{"DEBUG", "INFO", "WARN", "ERROR"}
 func (m *Model) rebuildVisible() {
 	m.visible = m.visible[:0]
 	for _, it := range m.items {
-		if m.matchesComponentFilter(it) {
+		if m.matchesComponentFilter(it) && m.matchesEventsFilter(it) {
 			m.visible = append(m.visible, it)
 		}
 	}
@@ -752,6 +758,26 @@ func (m *Model) matchesComponentFilter(it logItem) bool {
 	}
 	visibilityResult := logging.GetComponentVisibility(it.component, m.logConfig, m.overrideOpts)
 	return visibilityResult.Visible
+}
+
+// matchesEventsFilter returns true when the item passes the events-only
+// filter: entries carrying a non-empty structured `event` field (lifecycle
+// events such as job.created, plan.finished, note.updated) or at warn level
+// and above. It applies regardless of filtersEnabled, which gates only the
+// component visibility config. Daemon-scope entries are synthesized by
+// classifyStateUpdate and already represent curated events, so they are
+// always passed through.
+func (m *Model) matchesEventsFilter(it logItem) bool {
+	if !m.eventsOnly {
+		return true
+	}
+	if m.activeScope == ScopeDaemon {
+		return true
+	}
+	if ev, ok := it.rawData["event"].(string); ok && ev != "" {
+		return true
+	}
+	return levelRank(it.level) >= 2
 }
 
 func (m *Model) clearStatusMessageAfter(d time.Duration) tea.Cmd {
@@ -1264,6 +1290,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rebuildVisible()
 				return m, m.clearStatusMessageAfter(2 * time.Second)
 
+			case key.Matches(msg, m.keys.ToggleEvents):
+				m.eventsOnly = !m.eventsOnly
+				if m.eventsOnly {
+					m.statusMessage = "Events only: showing events + warn/error"
+				} else {
+					m.statusMessage = "Events only: off"
+				}
+				m.rebuildVisible()
+				return m, m.clearStatusMessageAfter(2 * time.Second)
+
 			case key.Matches(msg, m.keys.ToggleScope):
 				switch m.activeScope {
 				case ScopeProject:
@@ -1495,13 +1531,15 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 
 	// Append to visible (daemon already filtered by scope/level).
 	if i == len(m.items)-1 {
-		m.visible = append(m.visible, newItem)
-		m.list.SetItems(m.visible)
+		if m.matchesEventsFilter(newItem) {
+			m.visible = append(m.visible, newItem)
+			m.list.SetItems(m.visible)
+		}
 	} else {
 		m.rebuildVisible()
 	}
 
-	if m.followMode {
+	if m.followMode && len(m.visible) > 0 {
 		m.list.Select(len(m.visible) - 1)
 		if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 			if li, ok := selectedItem.(logItem); ok {
@@ -1592,6 +1630,11 @@ func (m *Model) View() string {
 
 	levelIndicator := fmt.Sprintf(" [Level: %s+]", levelLabels[m.minLevel])
 
+	eventsIndicator := ""
+	if m.eventsOnly {
+		eventsIndicator = " [Events]"
+	}
+
 	modeIndicator := ""
 	if m.jsonView {
 		modeIndicator = " [JSON VIEW - esc to exit]"
@@ -1603,8 +1646,8 @@ func (m *Model) View() string {
 		modeIndicator = fmt.Sprintf(" [%s]", m.statusMessage)
 	}
 
-	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s | ? for help | q to quit",
-		position, scopeIndicator, systemIndicator, levelIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
+	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s%s | ? for help | q to quit",
+		position, scopeIndicator, systemIndicator, levelIndicator, eventsIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
 
 	if m.compact || m.height < 15 {
 		var listView string

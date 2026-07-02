@@ -41,7 +41,7 @@ func (s standaloneLogs) View() string { return s.inner.View() }
 // runLogsTUI launches the interactive logs TUI as a standalone
 // bubbletea program. It connects to the daemon's aggregated log
 // stream instead of doing local file tailing.
-func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, scope string, includeSystem bool, level string) error {
+func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts *logging.OverrideOptions, scope string, includeSystem bool, level string, eventsOnly bool) error {
 	logCfg := logging.GetDefaultLoggingConfig()
 	if cfg, err := config.LoadDefault(); err == nil {
 		_ = cfg.UnmarshalExtension("logging", &logCfg)
@@ -65,6 +65,7 @@ func runLogsTUI(workspaces []*workspace.WorkspaceNode, follow bool, overrideOpts
 		InitialWorkspacePath: initialPath,
 		Replay:               500,
 		InitialLevel:         level,
+		EventsOnly:           eventsOnly,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

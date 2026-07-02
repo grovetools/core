@@ -59,6 +59,25 @@
           "default": "json",
           "x-layer": "global",
           "x-priority": "72"
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Minimum log level for the file sink only (defaults to the console level; GROVE_LOG_LEVEL overrides both)",
+          "x-layer": "global",
+          "x-priority": "73"
+        },
+        "retention_days": {
+          "type": "integer",
+          "description": "Days of dated log files to keep before the daemon sweeps them (0 = default of 14)",
+          "default": 14,
+          "x-layer": "global",
+          "x-priority": "74"
         }
       },
       "type": "object",
@@ -138,7 +157,7 @@
         "warn",
         "error"
       ],
-      "description": "Minimum log level for system/daemon logs (debug/info/warn/error)",
+      "description": "Minimum log level for system/daemon logs (debug/info/warn/error). Prefer file.level for targeted file capture or GROVE_LOG_LEVEL=debug for one-shot debugging",
       "x-layer": "global",
       "x-priority": "61"
     },
