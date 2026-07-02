@@ -1,0 +1,32 @@
+# Gruvbox (light).
+# Derived from gruvbox-community/gruvbox (originally by Pavel Pertsev).
+# SPDX-License-Identifier: MIT
+
+[meta]
+name = "gruvbox-light"
+family = "gruvbox"
+variant = "light"
+appearance = "light"
+default = true
+upstream = "https://github.com/gruvbox-community/gruvbox"
+author = "Pavel Pertsev (morhetz) and the gruvbox community"
+license = "MIT"
+
+[palette]
+bg = "#FBF1C7"
+bg_dark = "#F9F5D7"
+bg_highlight = "#EBDBB2"
+bg_visual = "#F2E5BC"
+fg = "#3C3836"
+fg_dark = "#504945"
+fg_gutter = "#A89984"
+comment = "#928374"
+border = "#D5C4A1"
+red = "#CC241D"
+green = "#98971A"
+yellow = "#D79921"
+blue = "#076678"
+magenta = "#B57679"
+cyan = "#458588"
+orange = "#D65D0E"
+purple = "#8F3F71"

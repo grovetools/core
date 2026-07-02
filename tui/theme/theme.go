@@ -11,98 +11,6 @@ import (
 
 const defaultThemeName = "kanagawa"
 
-// --- Kanagawa Dragon (dark) palette ---
-const (
-	kanagawaDarkGreen                = "#98BB6C"
-	kanagawaDarkYellow               = "#FF9E3B"
-	kanagawaDarkRed                  = "#FF5D62"
-	kanagawaDarkOrange               = "#FFA066"
-	kanagawaDarkCyan                 = "#7E9CD8"
-	kanagawaDarkBlue                 = "#7FB4CA"
-	kanagawaDarkViolet               = "#957FB8"
-	kanagawaDarkPink                 = "#D27E99"
-	kanagawaDarkLightText            = "#DCD7BA"
-	kanagawaDarkMutedText            = "#727169"
-	kanagawaDarkDarkText             = "#1D1C19"
-	kanagawaDarkBorder               = "#363646"
-	kanagawaDarkSelectedBackground   = "#223249"
-	kanagawaDarkSubtleBackground     = "#1F1F28"
-	kanagawaDarkVerySubtleBackground = "#181820"
-)
-
-// --- Kanagawa Wave (light-inspired) palette ---
-const (
-	kanagawaLightGreen                = "#4E7C5A"
-	kanagawaLightYellow               = "#A68A64"
-	kanagawaLightRed                  = "#C34043"
-	kanagawaLightOrange               = "#CC6B4E"
-	kanagawaLightCyan                 = "#5B8BBE"
-	kanagawaLightBlue                 = "#4F7CAC"
-	kanagawaLightViolet               = "#674D7A"
-	kanagawaLightPink                 = "#B35C74"
-	kanagawaLightLightText            = "#2B2F42"
-	kanagawaLightMutedText            = "#6C7086"
-	kanagawaLightDarkText             = "#E6E9EF"
-	kanagawaLightBorder               = "#B5BDC5"
-	kanagawaLightSelectedBackground   = "#E2E6F3"
-	kanagawaLightSubtleBackground     = "#F7F7FB"
-	kanagawaLightVerySubtleBackground = "#EFF1F8"
-)
-
-// --- Gruvbox palette ---
-const (
-	gruvboxDarkGreen                 = "#B8BB26"
-	gruvboxLightGreen                = "#98971A"
-	gruvboxDarkYellow                = "#FABD2F"
-	gruvboxLightYellow               = "#D79921"
-	gruvboxDarkRed                   = "#FB4934"
-	gruvboxLightRed                  = "#CC241D"
-	gruvboxDarkOrange                = "#FE8019"
-	gruvboxLightOrange               = "#D65D0E"
-	gruvboxDarkCyan                  = "#83A598"
-	gruvboxLightCyan                 = "#458588"
-	gruvboxDarkBlue                  = "#458588"
-	gruvboxLightBlue                 = "#076678"
-	gruvboxDarkViolet                = "#B16286"
-	gruvboxLightViolet               = "#8F3F71"
-	gruvboxDarkPink                  = "#D3869B"
-	gruvboxLightPink                 = "#B57679"
-	gruvboxDarkLightText             = "#EBDBB2"
-	gruvboxLightLightText            = "#3C3836"
-	gruvboxDarkMutedText             = "#BDAE93"
-	gruvboxLightMutedText            = "#928374"
-	gruvboxDarkDarkText              = "#1D2021"
-	gruvboxLightDarkText             = "#F9F5D7"
-	gruvboxDarkBorder                = "#504945"
-	gruvboxLightBorder               = "#D5C4A1"
-	gruvboxDarkSelectedBackground    = "#32302F"
-	gruvboxLightSelectedBackground   = "#F2E5BC"
-	gruvboxDarkSubtleBackground      = "#282828"
-	gruvboxLightSubtleBackground     = "#FBF1C7"
-	gruvboxDarkVerySubtleBackground  = "#1D2021"
-	gruvboxLightVerySubtleBackground = "#F9F5D7"
-)
-
-// --- Terminal (ANSI-friendly) palette ---
-// Uses only the 16 standard ANSI colors to match terminal color schemes
-const (
-	terminalGreen                = "2"  // Green
-	terminalYellow               = "3"  // Yellow
-	terminalRed                  = "1"  // Red
-	terminalOrange               = "11" // Bright Yellow (often appears orange)
-	terminalCyan                 = "6"  // Cyan
-	terminalBlue                 = "4"  // Blue
-	terminalViolet               = "5"  // Magenta
-	terminalPink                 = "13" // Bright Magenta
-	terminalLightText            = "7"  // White
-	terminalMutedText            = "8"  // Bright Black (gray)
-	terminalDarkText             = "0"  // Black
-	terminalBorder               = "8"  // Bright Black (gray)
-	terminalSelectedBackground   = "8"  // Bright Black (gray)
-	terminalSubtleBackground     = "0"  // Black
-	terminalVerySubtleBackground = "0"  // Black
-)
-
 // Colors encapsulates the palette used by a theme. lipgloss.TerminalColor
 // allows a mix of adaptive and static colors.
 type Colors struct {
@@ -165,6 +73,8 @@ func (c Colors) ResolveColor(name string, fallback lipgloss.TerminalColor) lipgl
 		return c.SelectedBackground
 	case "subtle_background", "subtlebackground":
 		return c.SubtleBackground
+	case "very_subtle_background", "verysubtlebackground":
+		return c.VerySubtleBackground
 	default:
 		return fallback
 	}
@@ -194,6 +104,9 @@ var DefaultColors Colors
 
 // Theme holds all the pre-configured styles for the Grove ecosystem.
 type Theme struct {
+	// Name is the resolved registry name the theme was built from.
+	Name string
+
 	Colors Colors
 
 	// Headers and titles
@@ -257,12 +170,6 @@ type Theme struct {
 
 	// Dynamic color palette for components
 	AccentColors []lipgloss.TerminalColor
-}
-
-var themeRegistry = map[string]func() Colors{
-	"kanagawa": newKanagawaColors,
-	"gruvbox":  newGruvboxColors,
-	"terminal": newTerminalColors,
 }
 
 var themeAliases = map[string]string{
@@ -331,6 +238,7 @@ func newThemeFromName(name string) *Theme {
 
 func newThemeFromColors(colors Colors, themeName string) *Theme {
 	return &Theme{
+		Name:   themeName,
 		Colors: colors,
 
 		Header: lipgloss.NewStyle().
@@ -514,7 +422,11 @@ func resolveThemeColors(name string) Colors {
 	if builder, ok := themeRegistry[key]; ok {
 		return builder()
 	}
-	return themeRegistry[defaultThemeName]()
+	if builder, ok := themeRegistry[defaultThemeName]; ok {
+		return builder()
+	}
+	// The embedded registry failed to load entirely; fall back to ANSI.
+	return fallbackColors()
 }
 
 func normalizeThemeName(name string) string {
@@ -543,64 +455,4 @@ func getThemeName() string {
 	}
 
 	return defaultThemeName
-}
-
-func newKanagawaColors() Colors {
-	return Colors{
-		Green:                lipgloss.AdaptiveColor{Light: kanagawaLightGreen, Dark: kanagawaDarkGreen},
-		Yellow:               lipgloss.AdaptiveColor{Light: kanagawaLightYellow, Dark: kanagawaDarkYellow},
-		Red:                  lipgloss.AdaptiveColor{Light: kanagawaLightRed, Dark: kanagawaDarkRed},
-		Orange:               lipgloss.AdaptiveColor{Light: kanagawaLightOrange, Dark: kanagawaDarkOrange},
-		Cyan:                 lipgloss.AdaptiveColor{Light: kanagawaLightCyan, Dark: kanagawaDarkCyan},
-		Blue:                 lipgloss.AdaptiveColor{Light: kanagawaLightBlue, Dark: kanagawaDarkBlue},
-		Violet:               lipgloss.AdaptiveColor{Light: kanagawaLightViolet, Dark: kanagawaDarkViolet},
-		Pink:                 lipgloss.AdaptiveColor{Light: kanagawaLightPink, Dark: kanagawaDarkPink},
-		LightText:            lipgloss.AdaptiveColor{Light: kanagawaLightLightText, Dark: kanagawaDarkLightText},
-		MutedText:            lipgloss.AdaptiveColor{Light: kanagawaLightMutedText, Dark: kanagawaDarkMutedText},
-		DarkText:             lipgloss.AdaptiveColor{Light: kanagawaLightDarkText, Dark: kanagawaDarkDarkText},
-		Border:               lipgloss.AdaptiveColor{Light: kanagawaLightBorder, Dark: kanagawaDarkBorder},
-		SelectedBackground:   lipgloss.AdaptiveColor{Light: kanagawaLightSelectedBackground, Dark: kanagawaDarkSelectedBackground},
-		SubtleBackground:     lipgloss.AdaptiveColor{Light: kanagawaLightSubtleBackground, Dark: kanagawaDarkSubtleBackground},
-		VerySubtleBackground: lipgloss.AdaptiveColor{Light: kanagawaLightVerySubtleBackground, Dark: kanagawaDarkVerySubtleBackground},
-	}
-}
-
-func newGruvboxColors() Colors {
-	return Colors{
-		Green:                lipgloss.AdaptiveColor{Light: gruvboxLightGreen, Dark: gruvboxDarkGreen},
-		Yellow:               lipgloss.AdaptiveColor{Light: gruvboxLightYellow, Dark: gruvboxDarkYellow},
-		Red:                  lipgloss.AdaptiveColor{Light: gruvboxLightRed, Dark: gruvboxDarkRed},
-		Orange:               lipgloss.AdaptiveColor{Light: gruvboxLightOrange, Dark: gruvboxDarkOrange},
-		Cyan:                 lipgloss.AdaptiveColor{Light: gruvboxLightCyan, Dark: gruvboxDarkCyan},
-		Blue:                 lipgloss.AdaptiveColor{Light: gruvboxLightBlue, Dark: gruvboxDarkBlue},
-		Violet:               lipgloss.AdaptiveColor{Light: gruvboxLightViolet, Dark: gruvboxDarkViolet},
-		Pink:                 lipgloss.AdaptiveColor{Light: gruvboxLightPink, Dark: gruvboxDarkPink},
-		LightText:            lipgloss.AdaptiveColor{Light: gruvboxLightLightText, Dark: gruvboxDarkLightText},
-		MutedText:            lipgloss.AdaptiveColor{Light: gruvboxLightMutedText, Dark: gruvboxDarkMutedText},
-		DarkText:             lipgloss.AdaptiveColor{Light: gruvboxLightDarkText, Dark: gruvboxDarkDarkText},
-		Border:               lipgloss.AdaptiveColor{Light: gruvboxLightBorder, Dark: gruvboxDarkBorder},
-		SelectedBackground:   lipgloss.AdaptiveColor{Light: gruvboxLightSelectedBackground, Dark: gruvboxDarkSelectedBackground},
-		SubtleBackground:     lipgloss.AdaptiveColor{Light: gruvboxLightSubtleBackground, Dark: gruvboxDarkSubtleBackground},
-		VerySubtleBackground: lipgloss.AdaptiveColor{Light: gruvboxLightVerySubtleBackground, Dark: gruvboxDarkVerySubtleBackground},
-	}
-}
-
-func newTerminalColors() Colors {
-	return Colors{
-		Green:                lipgloss.Color(terminalGreen),
-		Yellow:               lipgloss.Color(terminalYellow),
-		Red:                  lipgloss.Color(terminalRed),
-		Orange:               lipgloss.Color(terminalOrange),
-		Cyan:                 lipgloss.Color(terminalCyan),
-		Blue:                 lipgloss.Color(terminalBlue),
-		Violet:               lipgloss.Color(terminalViolet),
-		Pink:                 lipgloss.Color(terminalPink),
-		LightText:            lipgloss.Color(terminalLightText),
-		MutedText:            lipgloss.Color(terminalMutedText),
-		DarkText:             lipgloss.Color(terminalDarkText),
-		Border:               lipgloss.Color(terminalBorder),
-		SelectedBackground:   lipgloss.Color(terminalSelectedBackground),
-		SubtleBackground:     lipgloss.Color(terminalSubtleBackground),
-		VerySubtleBackground: lipgloss.Color(terminalVerySubtleBackground),
-	}
 }
