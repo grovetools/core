@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	grovelogging "github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/daemon"
+	"github.com/grovetools/core/tui/theme"
 )
 
 // AttachAgentPaneMsg is produced when the daemon broadcasts an attach_agent_pane SSE event.
@@ -18,6 +19,15 @@ type AttachAgentPaneMsg struct {
 	WorkDir   string            `json:"work_dir"`
 	Env       map[string]string `json:"env,omitempty"`
 	AutoSplit bool              `json:"auto_split"`
+}
+
+// ThemeChangedMsg is produced when the daemon broadcasts a theme_changed SSE
+// event, or when an initial snapshot after (re)connect carries the current
+// theme. By the time an embedding TUI receives it, HandleUpdate has already
+// re-themed the process via theme.SetTheme (a no-op when GROVE_THEME pins the
+// theme), so the TUI only needs to rebuild any cached styles and repaint.
+type ThemeChangedMsg struct {
+	Payload daemon.ThemeChangedPayload
 }
 
 // StreamReadyMsg signals that the SSE subscription is established.
@@ -72,8 +82,12 @@ func WaitForNextMsg(ch <-chan daemon.StateUpdate) tea.Cmd {
 }
 
 // HandleUpdate processes an SSE update and returns a tea.Cmd if it contains
-// an attach_agent_pane event.
+// an attach_agent_pane event or a theme change.
 func HandleUpdate(update daemon.StateUpdate) tea.Cmd {
+	if payload, ok := daemon.ParseThemeChanged(update); ok {
+		return handleThemeChanged(payload)
+	}
+
 	if update.UpdateType != "attach_agent_pane" {
 		return nil
 	}
@@ -94,5 +108,29 @@ func HandleUpdate(update daemon.StateUpdate) tea.Cmd {
 		Field("pty_id", msg.PtyID).
 		StructuredOnly().Log(context.Background())
 
+	return func() tea.Msg { return msg }
+}
+
+// handleThemeChanged applies a daemon theme change to the running process and
+// surfaces a ThemeChangedMsg so the embedding TUI can restyle. SetTheme
+// resolves aliases and family names itself and self-no-ops when GROVE_THEME
+// pins the theme for this process.
+func handleThemeChanged(payload *daemon.ThemeChangedPayload) tea.Cmd {
+	ulog := grovelogging.NewUnifiedLogger("daemonstream")
+
+	if err := theme.SetTheme(payload.Name); err != nil {
+		ulog.Warn("Ignoring theme change for unknown theme").
+			Field("theme", payload.Name).
+			Field("error", err.Error()).
+			StructuredOnly().Log(context.Background())
+		return nil
+	}
+
+	ulog.Info("Applied daemon theme change").
+		Field("theme", payload.Name).
+		Field("family", payload.Family).
+		StructuredOnly().Log(context.Background())
+
+	msg := ThemeChangedMsg{Payload: *payload}
 	return func() tea.Msg { return msg }
 }
