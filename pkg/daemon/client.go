@@ -481,4 +481,9 @@ type StateUpdate struct {
 	Scanned         int                         `json:"scanned,omitempty"`     // Number of items actually scanned (for focused updates)
 	ConfigFile      string                      `json:"config_file,omitempty"` // The config file that changed (for "config_reload" events)
 	Payload         interface{}                 `json:"payload,omitempty"`     // Generic payload for events like skill_sync
+	// Theme carries the current resolved theme on the "initial" snapshot so
+	// a theme change during a disconnect isn't lost across reconnects.
+	// Dedicated "theme_changed" events arrive via Payload instead (decode
+	// with ParseThemeChanged, which handles both shapes).
+	Theme *ThemeChangedPayload `json:"theme,omitempty"`
 }
