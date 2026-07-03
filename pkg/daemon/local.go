@@ -647,5 +647,11 @@ func (c *LocalClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, er
 	return nil, errors.New("system info requires the grove daemon; use daemon.NewWithAutoStart()")
 }
 
+// GetBootStatus reports Done immediately: LocalClient means there is no daemon
+// process to boot, so there is nothing to wait on.
+func (c *LocalClient) GetBootStatus(ctx context.Context) (*BootStatus, error) {
+	return &BootStatus{Done: true}, nil
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)
