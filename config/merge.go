@@ -433,6 +433,12 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.NvimEmbed != nil {
 			result.TUI.NvimEmbed = override.TUI.NvimEmbed
 		}
+		// Bool fields need explicit clauses or an override layer's value is
+		// silently dropped (a false in an override can never un-set a true
+		// in the base, matching the other or-style bool merges here).
+		if override.TUI.HideSplashOnStartup {
+			result.TUI.HideSplashOnStartup = true
+		}
 		if override.TUI.Panels != nil {
 			result.TUI.Panels = override.TUI.Panels
 		}

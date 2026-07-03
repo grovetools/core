@@ -292,6 +292,12 @@ type TUIConfig struct {
 	// (showing labels) or collapsed (icons only). Default: false.
 	SidebarExpanded bool `yaml:"sidebar_expanded,omitempty" toml:"sidebar_expanded,omitempty" jsonschema:"description=Start terminal sidebar expanded (icon + label) instead of icon-only,default=false" jsonschema_extras:"x-layer=global,x-priority=57"`
 
+	// HideSplashOnStartup suppresses the welcome splash overlay that
+	// treemux otherwise opens on every start. Toggled from the splash
+	// itself (h) and persisted to the global config layer; `treemux
+	// start --welcome` still forces the splash. Default: false.
+	HideSplashOnStartup bool `yaml:"hide_splash_on_startup,omitempty" toml:"hide_splash_on_startup,omitempty" jsonschema:"description=Hide the treemux welcome splash on startup,default=false" jsonschema_extras:"x-layer=global,x-priority=67"`
+
 	// Shortcuts maps key chords to deep-link navigation targets.
 	// Each value uses the syntax "navigate:<panel>[.<tab>]", e.g.
 	// "navigate:context.stats" or "navigate:flow". Parsed by the
@@ -326,7 +332,7 @@ type TUIConfig struct {
 	// Default: false (collapsed).
 	DrawerExpanded bool `yaml:"drawer_expanded,omitempty" toml:"drawer_expanded,omitempty" jsonschema:"description=Start active sessions drawer expanded,default=false" jsonschema_extras:"x-layer=global,x-priority=63"`
 
-	ExperimentalPages []string `yaml:"experimental_pages,omitempty" toml:"experimental_pages,omitempty" json:"experimental_pages,omitempty" jsonschema:"description=List of experimental pages to enable (env,memory,keymap,config)" jsonschema_extras:"x-layer=global,x-priority=64"`
+	ExperimentalPages []string `yaml:"experimental_pages,omitempty" toml:"experimental_pages,omitempty" json:"experimental_pages,omitempty" jsonschema:"description=List of experimental pages to enable (env,memory,keymap,logs,inspector)" jsonschema_extras:"x-layer=global,x-priority=64"`
 
 	// JobDetail configures keybinds for the job detail tab wrapper.
 	JobDetail *JobDetailConfig `yaml:"job_detail,omitempty" toml:"job_detail,omitempty" json:"job_detail,omitempty" jsonschema:"description=Job detail pane tab keybindings" jsonschema_extras:"x-layer=global,x-priority=65"`
