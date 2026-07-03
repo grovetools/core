@@ -134,17 +134,43 @@ func (r *AliasResolver) InitProviderFromNodes(nodes []*workspace.WorkspaceNode) 
 // ambiguous without an explicit marker.
 func (r *AliasResolver) Resolve(alias string) (string, error) {
 	defer profiling.Start("alias.Resolve").Stop()
+	info, err := r.ResolveWithInfo(alias)
+	if err != nil {
+		return "", err
+	}
+	return info.Path, nil
+}
+
+// ResolveInfo carries resolution metadata alongside the resolved path so callers
+// can react to HOW a project alias was chosen — in particular, to loudly surface
+// an arbitrary/fallback root that is not the caller's current worktree.
+//
+// Node and Reason are only populated for project/workspace aliases; notebook
+// resource aliases (nb:) return Path only.
+type ResolveInfo struct {
+	Path   string
+	Node   *workspace.WorkspaceNode
+	Reason workspace.MatchReason
+}
+
+// ResolveWithInfo is Resolve plus the resolution metadata (chosen node + reason).
+// See Resolve for alias syntax.
+func (r *AliasResolver) ResolveWithInfo(alias string) (ResolveInfo, error) {
 	r.InitProvider()
 	if r.DiscoverErr != nil {
-		return "", r.DiscoverErr
+		return ResolveInfo{}, r.DiscoverErr
 	}
 	if r.Provider == nil {
-		return "", fmt.Errorf("workspace provider not initialized")
+		return ResolveInfo{}, fmt.Errorf("workspace provider not initialized")
 	}
 
 	// Check for explicit nb: prefix for notebook resources
 	if strings.HasPrefix(alias, "nb:") {
-		return r.ResolveResourceAlias(strings.TrimPrefix(alias, "nb:"))
+		path, err := r.ResolveResourceAlias(strings.TrimPrefix(alias, "nb:"))
+		if err != nil {
+			return ResolveInfo{}, err
+		}
+		return ResolveInfo{Path: path}, nil
 	}
 
 	// Optional: support explicit project: prefix (can be omitted)
@@ -156,12 +182,30 @@ func (r *AliasResolver) Resolve(alias string) (string, error) {
 		currentPath = strings.TrimPrefix(currentPath, "/private")
 	}
 
-	node := r.Provider.FindByIdentifier(alias, currentPath)
+	node, reason := r.Provider.FindByIdentifierWithInfo(alias, currentPath)
 	if node != nil {
-		return node.Path, nil
+		return ResolveInfo{Path: node.Path, Node: node, Reason: reason}, nil
 	}
 
-	return "", fmt.Errorf("alias not found: '%s'", alias)
+	return ResolveInfo{}, fmt.Errorf("alias not found: '%s'", alias)
+}
+
+// CurrentNode returns the WorkspaceNode containing the resolver's working
+// directory, or nil if the workDir is outside every known workspace. Callers use
+// it to decide whether a resolved @a: root belongs to the current worktree.
+func (r *AliasResolver) CurrentNode() *workspace.WorkspaceNode {
+	r.InitProvider()
+	if r.Provider == nil {
+		return nil
+	}
+	currentPath := r.workDir
+	if strings.HasPrefix(currentPath, "/private/") {
+		currentPath = strings.TrimPrefix(currentPath, "/private")
+	}
+	if currentPath == "" {
+		return nil
+	}
+	return r.Provider.FindByPath(currentPath)
 }
 
 // ResolveResourceAlias resolves a notebook resource alias (e.g., "my-project:plans/my-plan")
@@ -222,6 +266,15 @@ func (r *AliasResolver) ResolveResourceAlias(alias string) (string, error) {
 
 // ResolveLine parses a full rule line, resolves the alias, and reconstructs the line with an absolute path.
 func (r *AliasResolver) ResolveLine(line string) (string, error) {
+	resolved, _, err := r.ResolveLineWithInfo(line)
+	return resolved, err
+}
+
+// ResolveLineWithInfo is ResolveLine plus the ResolveInfo for the alias it
+// resolved, so callers can surface an arbitrary/fallback root (e.g. an @a: line
+// that rooted outside the current worktree). For nb: resource lines the returned
+// ResolveInfo carries only the resolved Path.
+func (r *AliasResolver) ResolveLineWithInfo(line string) (string, ResolveInfo, error) {
 	defer profiling.Start("alias.ResolveLine").Stop()
 	// Handle @a:nb: and @alias:nb: prefixes for notebook paths
 	trimmedLine := strings.TrimSpace(line)
@@ -243,21 +296,22 @@ func (r *AliasResolver) ResolveLine(line string) (string, error) {
 		// Use the new unified resolver.
 		resolvedPath, err := r.ResolveResourceAlias(resourceAlias)
 		if err != nil {
-			return "", err
+			return "", ResolveInfo{}, err
 		}
-		return prefix + resolvedPath, nil
+		return prefix + resolvedPath, ResolveInfo{Path: resolvedPath}, nil
 	}
 
 	parts, err := r.parseAliasLine(line)
 	if err != nil {
-		return "", err
+		return "", ResolveInfo{}, err
 	}
 
-	resolvedPath, err := r.Resolve(parts.Alias)
+	info, err := r.ResolveWithInfo(parts.Alias)
 	if err != nil {
 		// TODO: Add suggestions for similar aliases.
-		return "", fmt.Errorf("on line '%s': %w", line, err)
+		return "", ResolveInfo{}, fmt.Errorf("on line '%s': %w", line, err)
 	}
+	resolvedPath := info.Path
 
 	// Reconstruct the line.
 	var finalPath string
@@ -289,7 +343,7 @@ func (r *AliasResolver) ResolveLine(line string) (string, error) {
 		parts.ResolvedLine = "@view: " + finalPath
 	}
 
-	return parts.ResolvedLine, nil
+	return parts.ResolvedLine, info, nil
 }
 
 // parseAliasLine deconstructs a rule line into its prefix, alias, and pattern.

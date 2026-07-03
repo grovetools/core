@@ -3,11 +3,92 @@ package workspace
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/util/pathutil"
 )
+
+// MatchReason classifies how an identifier/name resolved to a WorkspaceNode.
+// Callers (e.g. cx's loud @a: fallback notice) use it to decide when a choice
+// needs to be surfaced to the user.
+type MatchReason int
+
+const (
+	// MatchNone means no node matched.
+	MatchNone MatchReason = iota
+	// ExactIdentifier: a fully-qualified colon identifier matched a node exactly.
+	ExactIdentifier
+	// MatchedUnique: a short name matched exactly one node.
+	MatchedUnique
+	// MatchedByContext: a short name was ambiguous and disambiguated using the
+	// current path's ecosystem context.
+	MatchedByContext
+	// MatchedByFallback: a short name was ambiguous and no context applied, so a
+	// deterministic canonical-first fallback ordering chose the node. This is the
+	// case callers should surface loudly when the chosen root is not the current
+	// worktree.
+	MatchedByFallback
+	// MatchedBySuffix: a multi-component identifier matched a node's identifier suffix.
+	MatchedBySuffix
+)
+
+// String renders a MatchReason for diagnostics.
+func (r MatchReason) String() string {
+	switch r {
+	case ExactIdentifier:
+		return "exact-identifier"
+	case MatchedUnique:
+		return "unique-name"
+	case MatchedByContext:
+		return "context"
+	case MatchedByFallback:
+		return "fallback"
+	case MatchedBySuffix:
+		return "suffix"
+	default:
+		return "none"
+	}
+}
+
+// isCanonicalNode reports whether a node is a canonical (main) checkout rather
+// than a worktree or a copy living inside an ecosystem worktree. Used to bias
+// deterministic tie-breaks toward the "real" checkout so that, e.g.,
+// `@a:grove-anthropic` from an unrelated cwd means the main checkout, never a
+// random worktree.
+func isCanonicalNode(n *WorkspaceNode) bool {
+	if n.IsWorktree() {
+		return false
+	}
+	switch n.Kind {
+	case KindEcosystemWorktreeSubProject, KindEcosystemWorktreeSubProjectWorktree:
+		// A sub-project living inside an ecosystem worktree is a copy.
+		return false
+	}
+	return true
+}
+
+// sortNodesDeterministic orders candidate nodes so that resolution is stable
+// run-to-run and prefers the canonical checkout. Ordering: canonical checkouts
+// first, then ascending Depth (shallowest first), then lexicographic Path.
+//
+// Note: Depth is not serialized across the daemon boundary (json:"-"), so
+// daemon-seeded nodes fall back to the canonical-then-Path ordering — still
+// fully deterministic.
+func sortNodesDeterministic(nodes []*WorkspaceNode) {
+	sort.SliceStable(nodes, func(i, j int) bool {
+		a, b := nodes[i], nodes[j]
+		ac, bc := isCanonicalNode(a), isCanonicalNode(b)
+		if ac != bc {
+			return ac // canonical first
+		}
+		if a.Depth != b.Depth {
+			return a.Depth < b.Depth
+		}
+		return a.Path < b.Path
+	})
+}
 
 // Provider acts as a read-only, in-memory store for a snapshot of discovered workspaces.
 // It provides fast lookups and access to the workspace hierarchy.
@@ -66,15 +147,26 @@ func (p *Provider) All() []*WorkspaceNode {
 	return p.nodes
 }
 
-// FindByName returns the first workspace node that matches the given name.
-// It returns nil if no matching workspace is found.
+// FindByName returns the workspace node that matches the given name, preferring
+// the canonical checkout deterministically when several nodes share the name.
+//
+// Historically this returned the FIRST node in discovery order, which is
+// arbitrary and unstable when a name collides across worktrees/ecosystems (the
+// root cause behind `nb:`/`@a:` aliases rooting into random worktrees). It now
+// applies the same canonical-first, shallowest-then-lexicographic ordering as
+// FindByIdentifier's fallback. It returns nil if no matching workspace is found.
 func (p *Provider) FindByName(name string) *WorkspaceNode {
+	var matches []*WorkspaceNode
 	for _, node := range p.nodes {
 		if node.Name == name {
-			return node
+			matches = append(matches, node)
 		}
 	}
-	return nil
+	if len(matches) == 0 {
+		return nil
+	}
+	sortNodesDeterministic(matches)
+	return matches[0]
 }
 
 // FindSubProjectByName returns the CANONICAL sub-project named name within the
@@ -267,14 +359,37 @@ func (p *Provider) FindByWorktree(baseProjectNode *WorkspaceNode, worktreeName s
 // FindByIdentifier resolves a colon-delimited alias to a WorkspaceNode using
 // progressive disambiguation. It tries exact fully-qualified matches first,
 // then falls back to short name matching with context-aware scoping.
+//
+// It is a thin wrapper over FindByIdentifierWithInfo; callers that need to know
+// HOW the node was chosen (e.g. to loudly surface an arbitrary fallback) should
+// call FindByIdentifierWithInfo directly.
 func (p *Provider) FindByIdentifier(identifier, currentPath string) *WorkspaceNode {
+	node, _ := p.FindByIdentifierWithInfo(identifier, currentPath)
+	return node
+}
+
+// FindByIdentifierWithInfo is FindByIdentifier plus a MatchReason describing how
+// the node was selected. The resolution ladder is:
+//
+//  1. Exact fully-qualified colon identifier -> ExactIdentifier.
+//  2. Short name: a single match -> MatchedUnique; multiple matches
+//     disambiguated by the current path's ecosystem context -> MatchedByContext;
+//     otherwise a deterministic canonical-first fallback -> MatchedByFallback.
+//  3. Suffix match of a multi-component identifier -> MatchedBySuffix.
+//
+// Ambiguous short-name candidates are sorted deterministically up-front
+// (sortNodesDeterministic), so both the context-priority ladder and the final
+// fallback pick stable, reproducible nodes regardless of discovery order. This
+// is what fixes the "same rules file roots into a different worktree every
+// invocation" instability.
+func (p *Provider) FindByIdentifierWithInfo(identifier, currentPath string) (*WorkspaceNode, MatchReason) {
 	components := strings.Split(identifier, ":")
 
 	// 1. For multi-component identifiers, try exact fully qualified match
 	if len(components) > 1 {
 		for _, node := range p.nodes {
 			if node.Identifier(":") == identifier {
-				return node
+				return node, ExactIdentifier
 			}
 		}
 	}
@@ -289,8 +404,12 @@ func (p *Provider) FindByIdentifier(identifier, currentPath string) *WorkspaceNo
 			}
 		}
 
+		// Sort candidates deterministically so every "return first match" branch
+		// below (context priorities and the final fallback) is reproducible.
+		sortNodesDeterministic(matches)
+
 		if len(matches) == 1 {
-			return matches[0]
+			return matches[0], MatchedUnique
 		}
 
 		// Disambiguate using current path's ecosystem
@@ -311,7 +430,7 @@ func (p *Provider) FindByIdentifier(identifier, currentPath string) *WorkspaceNo
 				if currentNode.IsEcosystem() {
 					for _, match := range matches {
 						if match.ParentEcosystemPath == currentNode.Path {
-							return match
+							return match, MatchedByContext
 						}
 					}
 				}
@@ -319,28 +438,22 @@ func (p *Provider) FindByIdentifier(identifier, currentPath string) *WorkspaceNo
 				if currentNode.ParentEcosystemPath != "" {
 					for _, match := range matches {
 						if match.ParentEcosystemPath == currentNode.ParentEcosystemPath {
-							return match
+							return match, MatchedByContext
 						}
 					}
 				}
 				// Priority 3: same root ecosystem
 				for _, match := range matches {
 					if match.RootEcosystemPath == currentNode.RootEcosystemPath {
-						return match
+						return match, MatchedByContext
 					}
 				}
 			}
 		}
 
-		// Fallback: prefer shallowest match
+		// Fallback: deterministic canonical-first ordering (matches already sorted).
 		if len(matches) > 0 {
-			best := matches[0]
-			for _, m := range matches[1:] {
-				if m.Depth < best.Depth {
-					best = m
-				}
-			}
-			return best
+			return matches[0], MatchedByFallback
 		}
 	}
 
@@ -353,12 +466,12 @@ func (p *Provider) FindByIdentifier(identifier, currentPath string) *WorkspaceNo
 			// Verify it's a clean component boundary (preceded by ":" or is the full string)
 			prefixLen := len(nodeID) - len(identifier)
 			if prefixLen == 0 || nodeID[prefixLen-1] == ':' {
-				return node
+				return node, MatchedBySuffix
 			}
 		}
 	}
 
-	return nil
+	return nil, MatchNone
 }
 
 // Ecosystems returns all nodes that are ecosystem roots.

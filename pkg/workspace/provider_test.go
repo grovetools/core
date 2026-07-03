@@ -347,6 +347,140 @@ func TestProvider_FindByIdentifier_EcosystemWorktreeRoot(t *testing.T) {
 	assert.Equal(t, "/path/to/my-ecosystem/.grove-worktrees/feature-branch/project-beta", result.Path)
 }
 
+// TestProvider_FindByIdentifier_DeterministicFallback pins down the wrong-and-
+// unstable-worktree rooting bug: when a short alias like "grove-anthropic"
+// matches several nodes across worktrees and the cwd is outside every one of
+// them (no context), resolution must be deterministic AND prefer the canonical
+// checkout — never a random worktree, and never a different worktree run-to-run.
+func TestProvider_FindByIdentifier_DeterministicFallback(t *testing.T) {
+	eco := "/Code/grovetools"
+	canonical := eco + "/grove-anthropic"
+	worktreeA := eco + "/.grove-worktrees/treemux-back-button/grove-anthropic"
+	worktreeB := eco + "/.grove-worktrees/grove-build-queue/grove-anthropic"
+
+	// Discovery order deliberately lists worktrees BEFORE the canonical checkout
+	// to prove the fallback does not depend on slice order.
+	nodes := []*WorkspaceNode{
+		{Name: "grovetools", Path: eco, Kind: KindEcosystemRoot, RootEcosystemPath: eco},
+		{
+			Name:                "grove-anthropic",
+			Path:                worktreeB,
+			Kind:                KindEcosystemWorktreeSubProject,
+			ParentEcosystemPath: eco + "/.grove-worktrees/grove-build-queue",
+			RootEcosystemPath:   eco,
+			Depth:               2,
+		},
+		{
+			Name:                "grove-anthropic",
+			Path:                worktreeA,
+			Kind:                KindEcosystemWorktreeSubProject,
+			ParentEcosystemPath: eco + "/.grove-worktrees/treemux-back-button",
+			RootEcosystemPath:   eco,
+			Depth:               2,
+		},
+		{
+			Name:                "grove-anthropic",
+			Path:                canonical,
+			Kind:                KindEcosystemSubProject,
+			ParentEcosystemPath: eco,
+			RootEcosystemPath:   eco,
+			Depth:               1,
+		},
+	}
+	provider := NewProviderFromNodes(nodes)
+
+	// From a cwd outside every candidate (a notebooks dir / $HOME), the canonical
+	// checkout wins, flagged as a fallback so callers can surface it.
+	node, reason := provider.FindByIdentifierWithInfo("grove-anthropic", "/Users/someone/notebooks")
+	assert.NotNil(t, node)
+	assert.Equal(t, canonical, node.Path, "fallback must prefer the canonical (main) checkout")
+	assert.Equal(t, MatchedByFallback, reason)
+
+	// Stability: the same query resolves identically across repeated calls and
+	// across freshly-constructed providers with a shuffled node order.
+	for i := 0; i < 5; i++ {
+		shuffled := []*WorkspaceNode{nodes[2], nodes[0], nodes[3], nodes[1]}
+		p2 := NewProviderFromNodes(shuffled)
+		got, _ := p2.FindByIdentifierWithInfo("grove-anthropic", "/Users/someone/notebooks")
+		assert.Equal(t, canonical, got.Path, "resolution must be stable run-to-run")
+	}
+}
+
+// TestProvider_FindByIdentifierWithInfo_Reasons asserts the reason metadata for
+// each rung of the resolution ladder.
+func TestProvider_FindByIdentifierWithInfo_Reasons(t *testing.T) {
+	eco := "/eco"
+	wt := eco + "/.grove-worktrees/feat"
+	nodes := []*WorkspaceNode{
+		{Name: "eco", Path: eco, Kind: KindEcosystemRoot, RootEcosystemPath: eco},
+		{Name: "cx", Path: eco + "/cx", Kind: KindEcosystemSubProject, ParentEcosystemPath: eco, RootEcosystemPath: eco, Depth: 1},
+		{Name: "core", Path: eco + "/core", Kind: KindEcosystemSubProject, ParentEcosystemPath: eco, RootEcosystemPath: eco, Depth: 1},
+		// A second "cx" inside a worktree makes the short name ambiguous, so the
+		// current-path context must break the tie toward the sibling checkout.
+		{Name: "cx", Path: wt + "/cx", Kind: KindEcosystemWorktreeSubProject, ParentEcosystemPath: wt, RootEcosystemPath: eco, Depth: 2},
+		{Name: "solo", Path: "/solo", Kind: KindStandaloneProject},
+	}
+	provider := NewProviderFromNodes(nodes)
+
+	tests := []struct {
+		name        string
+		identifier  string
+		currentPath string
+		wantPath    string
+		wantReason  MatchReason
+	}{
+		{"exact fully-qualified", "eco:cx", "", eco + "/cx", ExactIdentifier},
+		{"unique short name", "solo", "", "/solo", MatchedUnique},
+		{"context sibling", "cx", eco + "/core", eco + "/cx", MatchedByContext},
+		{"not found", "nope", "", "", MatchNone},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node, reason := provider.FindByIdentifierWithInfo(tt.identifier, tt.currentPath)
+			assert.Equal(t, tt.wantReason, reason)
+			if tt.wantReason == MatchNone {
+				assert.Nil(t, node)
+			} else {
+				assert.NotNil(t, node)
+				assert.Equal(t, tt.wantPath, node.Path)
+			}
+		})
+	}
+}
+
+// TestProvider_FindByName_PrefersCanonical ensures FindByName (used by nb:
+// resource aliases) no longer returns an arbitrary first-in-discovery-order
+// node when a name collides, but the canonical checkout deterministically.
+func TestProvider_FindByName_PrefersCanonical(t *testing.T) {
+	eco := "/Code/grovetools"
+	canonical := eco + "/grove-anthropic"
+	worktreeCopy := eco + "/.grove-worktrees/wt/grove-anthropic"
+	nodes := []*WorkspaceNode{
+		// Worktree copy listed first.
+		{
+			Name:                "grove-anthropic",
+			Path:                worktreeCopy,
+			Kind:                KindEcosystemWorktreeSubProject,
+			ParentEcosystemPath: eco + "/.grove-worktrees/wt",
+			RootEcosystemPath:   eco,
+			Depth:               2,
+		},
+		{
+			Name:                "grove-anthropic",
+			Path:                canonical,
+			Kind:                KindEcosystemSubProject,
+			ParentEcosystemPath: eco,
+			RootEcosystemPath:   eco,
+			Depth:               1,
+		},
+	}
+	provider := NewProviderFromNodes(nodes)
+	got := provider.FindByName("grove-anthropic")
+	assert.NotNil(t, got)
+	assert.Equal(t, canonical, got.Path)
+	assert.Nil(t, provider.FindByName("missing"))
+}
+
 // TestProvider_FindSubProjectByName_PrefersCanonicalOverWorktreeCopy is the
 // core-side regression for the flow --anchor bug: a sub-project name present
 // BOTH as the ecosystem's direct child AND as a copy inside another ecosystem
