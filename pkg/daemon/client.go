@@ -407,6 +407,12 @@ type Client interface {
 	// GetSystemInfo returns the daemon's version and commit information.
 	GetSystemInfo(ctx context.Context) (*models.SystemInfo, error)
 
+	// GetBootStatus returns the daemon's boot progress (GET /api/system/boot).
+	// RemoteClient hits the endpoint; a daemon that predates it (404) is
+	// reported as already booted (Done=true) so callers don't wait forever.
+	// LocalClient has no daemon to boot, so it returns Done=true immediately.
+	GetBootStatus(ctx context.Context) (*BootStatus, error)
+
 	// --- Claude Trust Seeding ---
 
 	// SeedTrust asks the (unsandboxed) daemon to pre-seed Claude Code
@@ -486,4 +492,9 @@ type StateUpdate struct {
 	// Dedicated "theme_changed" events arrive via Payload instead (decode
 	// with ParseThemeChanged, which handles both shapes).
 	Theme *ThemeChangedPayload `json:"theme,omitempty"`
+	// BootPhase carries the daemon's boot progress on "boot_phase" updates,
+	// broadcast as the early-bind daemon advances through its boot steps. Nil
+	// on every other update type — it rides the same struct as workspace and
+	// session updates, so consumers must gate on UpdateType == "boot_phase".
+	BootPhase *BootStatus `json:"boot_phase,omitempty"`
 }

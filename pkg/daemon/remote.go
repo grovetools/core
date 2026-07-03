@@ -2284,6 +2284,39 @@ func (c *RemoteClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, e
 	return &info, nil
 }
 
+// GetBootStatus returns the daemon's boot progress from GET /api/system/boot.
+// A daemon that predates the endpoint returns 404, which we translate to a
+// booted status (Done=true) so callers relying on this to gate a loading UI
+// don't stall against an old binary that never advertises boot phases.
+func (c *RemoteClient) GetBootStatus(ctx context.Context) (*BootStatus, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/system/boot", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get boot status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Older daemon without the endpoint: it only serves once fully
+		// booted, so treat reachability as Done.
+		return &BootStatus{Done: true}, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var status BootStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, fmt.Errorf("failed to decode boot status: %w", err)
+	}
+	return &status, nil
+}
+
 // SocketPath returns the Unix socket path used by this client.
 // Used by the terminal to configure WebSocket dialers for PTY attach.
 func (c *RemoteClient) SocketPath() string {

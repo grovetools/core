@@ -107,7 +107,44 @@ func New(dir ...string) Client {
 // If auto-start fails, it falls back to LocalClient gracefully.
 func NewWithAutoStart(dir ...string) Client {
 	resolvedDir := resolveDir(dir)
-	return newAutoStart(resolvedDir, 0)
+	return newAutoStart(resolvedDir, autoStartOptions{})
+}
+
+// autoStartOptions collects the tunables for an auto-starting client factory.
+// Zero value = today's behavior (paired to nothing, default boot ordering).
+type autoStartOptions struct {
+	pairPID    int
+	earlyReady bool
+}
+
+// Option customizes NewWithAutoStartOpts.
+type Option func(*autoStartOptions)
+
+// EarlyReady makes the spawned daemon bind its socket early (--ready-at=bind)
+// and stream boot progress, so the caller unblocks in milliseconds and can
+// render a loading UI while the daemon finishes booting. If the spawned
+// binary is too old to understand the flag it exits immediately; the factory
+// detects that and respawns once without the flag before falling back to
+// LocalClient. Intended for treemux's cold-start splash.
+func EarlyReady() Option {
+	return func(o *autoStartOptions) { o.earlyReady = true }
+}
+
+// PairWith instructs the spawned daemon to shut down when pairPID exits
+// (see NewPaired). No-op when the daemon is already running.
+func PairWith(pairPID int) Option {
+	return func(o *autoStartOptions) { o.pairPID = pairPID }
+}
+
+// NewWithAutoStartOpts is the option-taking form of NewWithAutoStart. It exists
+// so treemux can request EarlyReady() (and optionally PairWith) without adding
+// a new positional factory per combination.
+func NewWithAutoStartOpts(dir string, opts ...Option) Client {
+	var o autoStartOptions
+	for _, f := range opts {
+		f(&o)
+	}
+	return newAutoStart(resolveDir([]string{dir}), o)
 }
 
 // NewGlobalClient returns a Client targeted at the global/unscoped daemon,
@@ -117,7 +154,7 @@ func NewWithAutoStart(dir ...string) Client {
 // the daemon started here never self-terminates via --auto-shutdown because
 // autoStartDaemon omits that flag when scope is empty (see autoStartDaemon).
 func NewGlobalClient() Client {
-	return newAutoStart("", 0)
+	return newAutoStart("", autoStartOptions{})
 }
 
 // NewPaired works like NewWithAutoStart but instructs the spawned daemon to
@@ -128,10 +165,10 @@ func NewGlobalClient() Client {
 // Callers that need to guarantee pairing semantics must ensure no stale daemon
 // is running for the scope before invoking NewPaired.
 func NewPaired(dir string, pairPID int) Client {
-	return newAutoStart(dir, pairPID)
+	return newAutoStart(dir, autoStartOptions{pairPID: pairPID})
 }
 
-func newAutoStart(resolvedDir string, pairPID int) Client {
+func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	scope, socketPath, pidPath := resolveScopedTargets(resolvedDir)
 
 	// Try to connect to existing daemon
@@ -144,12 +181,33 @@ func newAutoStart(resolvedDir string, pairPID int) Client {
 	// (via --ready-fd); groved closes it after the socket is bound, giving us
 	// a deterministic EOF to wait on instead of polling with a guessed window.
 	// On pipe-setup failure readyPipe is nil and we fall back to plain polling.
-	readyPipe, ok := autoStartDaemon(scope, socketPath, pidPath, pairPID)
+	readyPipe, exited, ok := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, opts.earlyReady)
 	if !ok {
 		return NewLocalClient()
 	}
 	if client := waitForDaemonReady(readyPipe, socketPath, readyHandshakeTimeout); client != nil {
 		return client
+	}
+
+	// One-shot flagless respawn: with EarlyReady() we passed --ready-at=bind,
+	// which an older installed groved rejects as an unknown flag and exits on
+	// during flag parsing (before it ever binds). That looks like an instant
+	// child death, so if the child has already exited and we still couldn't
+	// connect, retry the spawn once WITHOUT the flag before giving up. The
+	// dead child never reached pidfile.Acquire, so there's no lock/socket
+	// residue to clash with. A genuinely-slow new daemon is still running at
+	// this point (exited not yet closed), so it is NOT respawned.
+	if opts.earlyReady {
+		select {
+		case <-exited:
+			readyPipe2, _, ok2 := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, false)
+			if ok2 {
+				if client := waitForDaemonReady(readyPipe2, socketPath, readyHandshakeTimeout); client != nil {
+					return client
+				}
+			}
+		default:
+		}
 	}
 
 	// Auto-start succeeded but daemon never signaled ready (or the short
@@ -232,7 +290,7 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 // idle. Empty scope falls through to groved's own unscoped defaults. When
 // pairPID > 0, --pair-with-pid is added so the daemon exits when that
 // parent process dies.
-func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, bool) {
+func autoStartDaemon(scope, socketPath, pidPath string, pairPID int, earlyReady bool) (readyPipe *os.File, exited <-chan struct{}, ok bool) {
 	// Diagnostic: log the caller stack so we can trace which tool is
 	// triggering a scoped-daemon auto-spawn. View with:
 	//   core logs --component daemon.factory -f
@@ -268,7 +326,7 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 			}
 		}
 		if grovedPath == "" {
-			return nil, false
+			return nil, nil, false
 		}
 	}
 
@@ -295,6 +353,13 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 	if pairPID > 0 {
 		args = append(args, "--pair-with-pid", strconv.Itoa(pairPID))
 	}
+	// EarlyReady: bind the socket before the slow boot steps so this connect
+	// returns in milliseconds and treemux can render its boot-progress splash.
+	// An older groved that doesn't know the flag exits during flag parsing;
+	// newAutoStart detects that death and respawns once without it.
+	if earlyReady {
+		args = append(args, "--ready-at", "bind")
+	}
 
 	// Readiness pipe: the write end is inherited by the child as fd 3
 	// (ExtraFiles[0]). groved closes fd 3 after binding its unix socket, which
@@ -319,7 +384,7 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 		if readyW != nil {
 			readyW.Close()
 		}
-		return nil, false
+		return nil, nil, false
 	}
 
 	// Child now holds fd 3 (its dup of readyW); parent no longer needs its
@@ -343,12 +408,17 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int) (*os.File, 
 	}
 	fmt.Fprintln(os.Stderr, notice)
 
-	// Don't wait for the process - let it run in background
+	// Don't wait for the process - let it run in background. Closing exitedCh
+	// on Wait() lets newAutoStart distinguish "old binary rejected the flag and
+	// died" (channel closed, no connection) from "new daemon still booting"
+	// (channel open) so it only respawns in the former case.
+	exitedCh := make(chan struct{})
 	go func() {
 		_ = cmd.Wait()
+		close(exitedCh)
 	}()
 
-	return readyR, true
+	return readyR, exitedCh, true
 }
 
 // MustConnect returns a DaemonClient or panics if the daemon is not available.
