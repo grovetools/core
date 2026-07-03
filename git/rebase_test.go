@@ -63,6 +63,69 @@ func TestWouldRebaseConflict_Clean(t *testing.T) {
 	assert.False(t, conflict, "disjoint edits should not be predicted as a conflict")
 }
 
+func TestTouchedFilesSinceMergeBase(t *testing.T) {
+	dir := setupRebaseRepo(t)
+
+	// Feature adds two files (committed out of sorted order)...
+	runGitCommand(t, dir, "checkout", "-b", "feature")
+	writeAndCommit(t, dir, "b.txt", "b\n", "feature b")
+	writeAndCommit(t, dir, "a.txt", "a\n", "feature a")
+
+	// ...and main moves on independently; the three-dot diff must NOT report
+	// main's own file, only what the branch touched since the merge-base.
+	runGitCommand(t, dir, "checkout", "main")
+	writeAndCommit(t, dir, "main-only.txt", "m\n", "main work")
+	runGitCommand(t, dir, "checkout", "feature")
+
+	files, err := TouchedFilesSinceMergeBase(dir, "main")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.txt", "b.txt"}, files,
+		"only the branch's files, sorted; main's independent work excluded")
+}
+
+func TestTouchedFilesSinceMergeBase_EmptyOnto(t *testing.T) {
+	dir := setupRebaseRepo(t)
+	_, err := TouchedFilesSinceMergeBase(dir, "")
+	assert.Error(t, err, "empty ontoRef must be refused")
+}
+
+func TestMergeTreeConflictFiles_Conflict(t *testing.T) {
+	dir := setupRebaseRepo(t)
+
+	// Feature and main both edit shared.txt; feature also adds a clean file.
+	runGitCommand(t, dir, "checkout", "-b", "feature")
+	writeAndCommit(t, dir, "shared.txt", "feature change\n", "feature edit")
+	writeAndCommit(t, dir, "clean.txt", "clean\n", "clean file")
+
+	runGitCommand(t, dir, "checkout", "main")
+	writeAndCommit(t, dir, "shared.txt", "main change\n", "main edit")
+
+	files, err := MergeTreeConflictFiles(dir, "main", "feature")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shared.txt"}, files,
+		"only the conflicted path, not the cleanly merged one")
+}
+
+func TestMergeTreeConflictFiles_Clean(t *testing.T) {
+	dir := setupRebaseRepo(t)
+
+	runGitCommand(t, dir, "checkout", "-b", "feature")
+	writeAndCommit(t, dir, "feature.txt", "feature only\n", "feature file")
+
+	runGitCommand(t, dir, "checkout", "main")
+	writeAndCommit(t, dir, "main.txt", "main only\n", "main file")
+
+	files, err := MergeTreeConflictFiles(dir, "main", "feature")
+	require.NoError(t, err)
+	assert.Empty(t, files, "disjoint edits predict no conflicted files")
+}
+
+func TestMergeTreeConflictFiles_EmptyOnto(t *testing.T) {
+	dir := setupRebaseRepo(t)
+	_, err := MergeTreeConflictFiles(dir, "", "HEAD")
+	assert.Error(t, err, "empty ontoRef must be refused")
+}
+
 func TestListLocalBranches(t *testing.T) {
 	dir := setupRebaseRepo(t) // starts on "main"
 	runGitCommand(t, dir, "checkout", "-b", "feature")

@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/grovetools/core/command"
@@ -36,6 +37,90 @@ func WouldRebaseConflict(repoPath, ontoRef, branchRef string) (bool, error) {
 	// a non-zero exit as a hard error; scan the combined output instead.
 	output, _ := execCmd.CombinedOutput()
 	return strings.Contains(string(output), "CONFLICT"), nil
+}
+
+// TouchedFilesSinceMergeBase returns the files the current branch's commits
+// changed relative to the merge-base with ontoRef — `git diff --name-only
+// <ontoRef>...HEAD` (three-dot: only what the branch touched, not what ontoRef
+// moved on to). Paths are sorted for deterministic output. A caller that passes
+// an empty ontoRef has a bug, so this returns an error rather than silently
+// diffing against the working tree.
+func TouchedFilesSinceMergeBase(repoPath, ontoRef string) ([]string, error) {
+	if ontoRef == "" {
+		return nil, fmt.Errorf("TouchedFilesSinceMergeBase: empty ontoRef")
+	}
+
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--name-only", ontoRef+"...HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff %s...HEAD: %w", ontoRef, err)
+	}
+	var files []string
+	for _, line := range strings.Split(string(output), "\n") {
+		if f := strings.TrimSpace(line); f != "" {
+			files = append(files, f)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+// MergeTreeConflictFiles returns the paths `git merge-tree --write-tree`
+// predicts would conflict when merging branchRef into ontoRef — the file-level
+// detail behind WouldRebaseConflict's boolean, under the same single
+// three-way-merge heuristic (see that function's caveats). A clean merge (or a
+// repo where the prediction cannot run) yields nil.
+//
+// It runs `git merge-tree --write-tree --name-only -z` (git ≥ 2.40): the NUL-
+// separated output is the toplevel tree OID, then one token per conflicted
+// path, then an empty token separating the informational section. merge-tree
+// exits non-zero when the merge conflicts, so a non-zero exit is not treated as
+// an error. branchRef defaults to "HEAD" when empty.
+func MergeTreeConflictFiles(repoPath, ontoRef, branchRef string) ([]string, error) {
+	if ontoRef == "" {
+		return nil, fmt.Errorf("MergeTreeConflictFiles: empty ontoRef")
+	}
+	if branchRef == "" {
+		branchRef = "HEAD"
+	}
+
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "merge-tree", "--write-tree", "--name-only", "-z", ontoRef, branchRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	// Stdout only (the informational section shares it); the conflict exit code
+	// is expected, so the error is ignored and an unrunnable prediction simply
+	// yields no paths.
+	output, _ := execCmd.Output()
+
+	tokens := strings.Split(string(output), "\x00")
+	if len(tokens) < 2 {
+		return nil, nil
+	}
+	var files []string
+	seen := make(map[string]bool)
+	// tokens[0] is the tree OID; conflicted paths follow until the empty token
+	// that separates the informational section.
+	for _, tok := range tokens[1:] {
+		if tok == "" {
+			break
+		}
+		if !seen[tok] {
+			seen[tok] = true
+			files = append(files, tok)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 // ListLocalBranches returns the repo's local branch names (refs/heads), in git's
