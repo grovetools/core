@@ -398,7 +398,7 @@ type Model struct {
 	filtersEnabled bool
 	eventsOnly     bool
 	filteredCount  int
-	unseenErrors   int
+	unseenAlerts   int
 	ready          bool
 	focus          paneFocus
 	visualMode     bool
@@ -928,7 +928,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.connectToDaemon()
 
 	case embed.FocusMsg:
-		m.unseenErrors = 0
+		m.unseenAlerts = 0
 		return m, nil
 
 	case embed.BlurMsg:
@@ -1480,10 +1480,12 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 	component, _ := msg.data["component"].(string)
 	timeStr, _ := msg.data["time"].(string)
 
-	// Count error-level arrivals regardless of filters/visibility; the
-	// counter is cleared when the panel regains focus.
-	if levelRank(level) >= 3 {
-		m.unseenErrors++
+	// Count warn- and error-level arrivals regardless of filters/visibility;
+	// the counter is cleared when the panel regains focus. Warn is included
+	// so advisory records (e.g. config schema warnings) can drive the host's
+	// attention affordance, not just hard errors.
+	if levelRank(level) >= 2 {
+		m.unseenAlerts++
 	}
 
 	// Component visibility filter (client-side only)
@@ -1552,10 +1554,11 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 	return nil
 }
 
-// UnseenErrors returns the number of error-level records that arrived since
-// the panel was last focused; the count is cleared on embed.FocusMsg.
-func (m *Model) UnseenErrors() int {
-	return m.unseenErrors
+// UnseenAlerts returns the number of warn- and error-level records that
+// arrived since the panel was last focused; the count is cleared on
+// embed.FocusMsg.
+func (m *Model) UnseenAlerts() int {
+	return m.unseenAlerts
 }
 
 func (m *Model) View() string {
