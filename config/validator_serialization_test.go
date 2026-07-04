@@ -71,3 +71,56 @@ func TestLoadFromTOMLBytesValidationIsNonFatal(t *testing.T) {
 		t.Fatalf("expected tui.leader_key to load despite the violation, got: %+v", cfg.TUI)
 	}
 }
+
+// TestLoadFromTOMLBytes_CoreKeysNotLeakedToExtensions locks in the
+// coreConfigKeys derivation fix: "commands" and "test_scopes" ARE core Config
+// struct fields, but the hand-maintained key list omitted them, so the TOML
+// extension-capture loop copied them into the inline Extensions map — and
+// yaml.Marshal then PANICKED during warn-only validation ("cannot have key
+// test_scopes in inlined map: conflicts with struct field"), crashing any
+// binary that loaded such a grove.toml. This load previously panicked.
+func TestLoadFromTOMLBytes_CoreKeysNotLeakedToExtensions(t *testing.T) {
+	data := []byte(`version = "1.0"
+
+[commands]
+build = "make build"
+
+[[test_scopes]]
+name = "orchestration"
+rules = ".grove/rules.d/orchestration.rules"
+scenarios = ["coordinator-workflow"]
+`)
+
+	cfg, err := LoadFromTOMLBytes(data)
+	if err != nil {
+		t.Fatalf("LoadFromTOMLBytes with [commands]/[[test_scopes]] must load cleanly, got: %v", err)
+	}
+
+	// Struct fields must carry the values...
+	if cfg.Commands["build"] != "make build" {
+		t.Errorf("Commands not parsed into struct field: %+v", cfg.Commands)
+	}
+	if len(cfg.TestScopes) != 1 || cfg.TestScopes[0].Name != "orchestration" {
+		t.Errorf("TestScopes not parsed into struct field: %+v", cfg.TestScopes)
+	}
+
+	// ...and the keys must NOT be duplicated into Extensions (the duplication
+	// is what made yaml.Marshal panic on the inline map).
+	if _, ok := cfg.Extensions["commands"]; ok {
+		t.Error("core key 'commands' leaked into Extensions")
+	}
+	if _, ok := cfg.Extensions["test_scopes"]; ok {
+		t.Error("core key 'test_scopes' leaked into Extensions")
+	}
+}
+
+// TestCoreConfigKeysTrackStructTags guards the derivation itself: every
+// top-level Config tag name must be in the set, including the two that
+// historically drifted.
+func TestCoreConfigKeysTrackStructTags(t *testing.T) {
+	for _, key := range []string{"name", "version", "workspaces", "commands", "test_scopes", "groves", "worktree", "_grove"} {
+		if !coreConfigKeys[key] {
+			t.Errorf("coreConfigKeys missing %q", key)
+		}
+	}
+}
