@@ -44,6 +44,44 @@ func ResetLoadCache() {
 
 var envVarRegex = regexp.MustCompile(`\$\{([^}]+)\}`)
 
+var (
+	sharedValidator     *SchemaValidator
+	sharedValidatorErr  error
+	sharedValidatorOnce sync.Once
+)
+
+// getSharedValidator compiles the embedded-schema validator once and reuses it.
+// Compiling the JSONSchema is the ~15ms cost the load cache exists to amortize,
+// so the warn-only load-path validation must not pay it on every call.
+func getSharedValidator() (*SchemaValidator, error) {
+	sharedValidatorOnce.Do(func() {
+		sharedValidator, sharedValidatorErr = NewSchemaValidator()
+	})
+	return sharedValidator, sharedValidatorErr
+}
+
+// validateAndWarn validates a loaded config against the embedded schema and
+// reports any violation through logger at Warn level. It is deliberately never
+// fatal: the embedded schema is advisory. It can lag real struct fields (e.g.
+// tui leader_key / shortcuts) and it does not model extension namespaces, so a
+// violation must never block loading — forward-compat keys and config fragments
+// have to keep working. Extensions serialize inline at the top level, where the
+// schema permits additional properties, so legitimate namespaces do not warn.
+func validateAndWarn(cfg *Config, logger *logrus.Logger, source string) {
+	if cfg == nil || logger == nil {
+		return
+	}
+	validator, err := getSharedValidator()
+	if err != nil {
+		logger.WithError(err).Debug("config schema validator unavailable; skipping validation")
+		return
+	}
+	if err := validator.Validate(cfg); err != nil {
+		logger.WithError(err).WithField("source", source).
+			Warn("configuration does not fully conform to the schema (continuing; validation is advisory)")
+	}
+}
+
 // ConfigMeta holds metadata about the config file itself.
 // This is parsed from the [_grove] section and stripped from the final config.
 type ConfigMeta struct {
@@ -622,6 +660,11 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	// Set defaults
 	finalConfig.SetDefaults()
 
+	// Warn-only schema check over the merged config. Never fatal — see
+	// validateAndWarn. This is the report F2 called for: the "real" load path
+	// now surfaces schema violations instead of validating nothing.
+	validateAndWarn(finalConfig, logger, "merged config")
+
 	logger.Debug("Configuration loaded and validated successfully")
 
 	// Log the merged config at debug level
@@ -650,15 +693,12 @@ func LoadFromBytes(data []byte) (*Config, error) {
 		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to parse YAML configuration")
 	}
 
-	// Validate against schema
-	validator, err := NewSchemaValidator()
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to create validator")
-	}
-
-	if err := validator.Validate(&config); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "schema validation failed")
-	}
+	// Warn-only schema check. Never fatal: now that validation actually
+	// compares snake_case keys (see schema.Validator.Validate), the embedded
+	// schema's drift from real struct fields and its lack of extension coverage
+	// must not turn config.Load — used across the whole ecosystem — into a hard
+	// failure on otherwise-usable configs.
+	validateAndWarn(&config, logrus.StandardLogger(), "config bytes")
 
 	// Set defaults
 	config.SetDefaults()
@@ -694,15 +734,8 @@ func LoadFromTOMLBytes(data []byte) (*Config, error) {
 	// Post-process notebook sync configs (the field is toml:"-")
 	postProcessTOMLNotebookSync(&config, []byte(expanded))
 
-	// Validate against schema
-	validator, err := NewSchemaValidator()
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to create validator")
-	}
-
-	if err := validator.Validate(&config); err != nil {
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "schema validation failed")
-	}
+	// Warn-only schema check. Never fatal — see the note in LoadFromBytes.
+	validateAndWarn(&config, logrus.StandardLogger(), "config TOML bytes")
 
 	// Set defaults
 	config.SetDefaults()
@@ -1363,6 +1396,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	finalConfig.SetDefaults()
 
 	layeredConfig.Final = finalConfig
+
+	// Warn-only schema check over the merged view (never fatal; see
+	// validateAndWarn). logger is WarnLevel, so this only surfaces on an actual
+	// violation.
+	validateAndWarn(finalConfig, logger, "layered config")
 
 	return layeredConfig, nil
 }
