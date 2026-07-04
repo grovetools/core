@@ -28,16 +28,16 @@ func TestSchemaValidatorSnakeCaseSerialization(t *testing.T) {
 		}
 	})
 
-	t.Run("schema violation is caught for a real drift field", func(t *testing.T) {
-		// tui.leader_key is a real TUIConfig field the schema shadow struct
-		// omits (TUISchemaConfig is additionalProperties:false), so it is a
-		// genuine drift case the corrected validator now flags.
+	t.Run("schema violation is caught for an unknown nested key", func(t *testing.T) {
+		// TUIConfig is additionalProperties:false in the schema, so a key that
+		// exists in no version of the struct must trip validation — proving the
+		// validator compares real snake_case property names.
 		drift := map[string]interface{}{
 			"version": "1.0",
-			"tui":     map[string]interface{}{"leader_key": "space"},
+			"tui":     map[string]interface{}{"not_a_real_tui_key": "x"},
 		}
 		if err := v.Validate(drift); err == nil {
-			t.Fatal("expected a schema violation for tui.leader_key, got nil")
+			t.Fatal("expected a schema violation for tui.not_a_real_tui_key, got nil")
 		}
 	})
 
@@ -60,9 +60,9 @@ func TestSchemaValidatorSnakeCaseSerialization(t *testing.T) {
 // the single-file load path (config.Load, used across every repo) must warn,
 // not fail — forward-compat and drift keys have to keep loading.
 func TestLoadFromTOMLBytesValidationIsNonFatal(t *testing.T) {
-	// tui.leader_key violates the schema (see above) but is a real, parseable
-	// field. Loading must succeed and preserve the value.
-	data := []byte("version = \"1.0\"\n[tui]\nleader_key = \"space\"\n")
+	// The unknown tui key violates the schema (see above) but the file is
+	// parseable. Loading must succeed and preserve the sibling value.
+	data := []byte("version = \"1.0\"\n[tui]\nleader_key = \"space\"\nnot_a_real_tui_key = \"x\"\n")
 	cfg, err := LoadFromTOMLBytes(data)
 	if err != nil {
 		t.Fatalf("schema violation must not fail LoadFromTOMLBytes, got: %v", err)
