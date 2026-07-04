@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed grove.embedded.schema.json
@@ -33,18 +34,32 @@ func NewValidator() (*Validator, error) {
 }
 
 // Validate validates configuration data against the schema.
-// It expects the configData to be any struct that can be marshaled to JSON.
+//
+// configData may be a *config.Config struct or an already-decoded config
+// document (map[string]interface{}). Serialization goes through YAML rather
+// than JSON on purpose: the core Config struct carries yaml/toml tags but no
+// json tags, so json.Marshal would emit Go field names ("Groves",
+// "SearchPaths", …) that can never match the schema's snake_case properties —
+// making validation silently vacuous. YAML marshaling honors the same field
+// names the schema was generated from (the reflector uses FieldNameTag:
+// "yaml"). Values that are already generic maps pass through unchanged.
 func (v *Validator) Validate(configData interface{}) error {
-	// Convert the Go struct to a generic map[string]interface{} for validation.
-	// This is necessary because the schema expects plain JSON-like objects.
-	jsonData, err := json.Marshal(configData)
+	yamlData, err := yaml.Marshal(configData)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config to JSON for validation: %w", err)
+		return fmt.Errorf("failed to marshal config to YAML for validation: %w", err)
 	}
 
 	var dataToValidate interface{}
-	if err := json.Unmarshal(jsonData, &dataToValidate); err != nil {
-		return fmt.Errorf("failed to unmarshal JSON for validation: %w", err)
+	if err := yaml.Unmarshal(yamlData, &dataToValidate); err != nil {
+		return fmt.Errorf("failed to unmarshal config for validation: %w", err)
+	}
+
+	// Normalize to plain JSON value types (float64 numbers, string-keyed maps)
+	// so the JSON Schema validator sees the shapes it expects, regardless of
+	// whether the value originated from a struct, TOML, or YAML.
+	dataToValidate, err = toJSONValue(dataToValidate)
+	if err != nil {
+		return fmt.Errorf("failed to normalize config for validation: %w", err)
 	}
 
 	if err := v.schema.Validate(dataToValidate); err != nil {
@@ -58,6 +73,23 @@ func (v *Validator) Validate(configData interface{}) error {
 	}
 
 	return nil
+}
+
+// toJSONValue round-trips a value through encoding/json so downstream
+// consumers see canonical JSON types. YAML decoding yields int for whole
+// numbers and TOML yields int64/time.Time; the schema validator is happiest
+// with the float64/string/bool/[]interface{}/map[string]interface{} shapes
+// that json.Unmarshal into interface{} produces.
+func toJSONValue(v interface{}) (interface{}, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out interface{}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // collectErrors recursively collects all validation errors into a slice
