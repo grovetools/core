@@ -135,6 +135,19 @@ func findProjectByWorkspaceName(workspaceName string, cfg *config.Config) *Works
 			if err != nil {
 				continue
 			}
+			// The grove path itself may BE the workspace: single-ecosystem
+			// groves point directly at the ecosystem root, so the join below
+			// would yield <grove>/<name>/<name> — a path that never exists.
+			// Without this check, every lookup for such a grove fell through
+			// to the full DiscoverAll walk, which can transiently return
+			// nothing while racing the daemon's workspace collectors (the
+			// intermittent "notebook plan resolves to no project" failures).
+			// Resolve the grove path deterministically first.
+			if filepath.Base(grovePath) == workspaceName {
+				if node, err := GetProjectByPath(grovePath); err == nil && node != nil && node.Name == workspaceName {
+					return node
+				}
+			}
 			projectPath := filepath.Join(grovePath, workspaceName)
 			if node, err := GetProjectByPath(projectPath); err == nil && node != nil {
 				return node

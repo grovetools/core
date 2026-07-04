@@ -43,7 +43,18 @@ func NewValidator() (*Validator, error) {
 // making validation silently vacuous. YAML marshaling honors the same field
 // names the schema was generated from (the reflector uses FieldNameTag:
 // "yaml"). Values that are already generic maps pass through unchanged.
-func (v *Validator) Validate(configData interface{}) error {
+func (v *Validator) Validate(configData interface{}) (retErr error) {
+	// yaml.Marshal PANICS (rather than returning an error) on some inputs —
+	// notably an inline map carrying a key that conflicts with a struct field
+	// (e.g. a Config whose Extensions map holds "test_scopes"). Validation is
+	// advisory (warn-only at every call site), so a serialization edge case
+	// must surface as a returned error, never crash the binary.
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = fmt.Errorf("schema validation panicked while serializing config: %v", r)
+		}
+	}()
+
 	yamlData, err := yaml.Marshal(configData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config to YAML for validation: %w", err)
