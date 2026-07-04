@@ -67,6 +67,11 @@ func getSharedValidator() (*SchemaValidator, error) {
 // violation must never block loading — forward-compat keys and config fragments
 // have to keep working. Extensions serialize inline at the top level, where the
 // schema permits additional properties, so legitimate namespaces do not warn.
+//
+// Delivery goes through reportSchemaWarning: deduped per process (identical
+// warnings would otherwise repeat once per fragment per load), routed to the
+// logging pipeline's sink when available, and never written to an interactive
+// stderr — see schema_warnings.go.
 func validateAndWarn(cfg *Config, logger *logrus.Logger, source string) {
 	if cfg == nil || logger == nil {
 		return
@@ -77,8 +82,7 @@ func validateAndWarn(cfg *Config, logger *logrus.Logger, source string) {
 		return
 	}
 	if err := validator.Validate(cfg); err != nil {
-		logger.WithError(err).WithField("source", source).
-			Warn("configuration does not fully conform to the schema (continuing; validation is advisory)")
+		reportSchemaWarning(logger, source, err)
 	}
 }
 

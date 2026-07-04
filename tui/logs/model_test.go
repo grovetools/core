@@ -78,3 +78,24 @@ func TestRebuildVisibleAppliesEventsFilter(t *testing.T) {
 		t.Fatalf("expected 3 visible items with eventsOnly off, got %d", len(m.visible))
 	}
 }
+
+// TestUnseenAlertsCountsWarnAndError locks in the alert counter's level
+// threshold: warn and error arrivals increment it (so advisory records like
+// config schema warnings can drive host attention affordances), info/debug
+// do not, and embed.FocusMsg-style clearing is exposed via UnseenAlerts.
+func TestUnseenAlertsCountsWarnAndError(t *testing.T) {
+	m := &Model{}
+	m.list = list.New(nil, itemDelegate{model: m}, 0, 0)
+
+	for _, level := range []string{"debug", "info", "warning", "warn", "error"} {
+		m.handleNewLog(newLogMsg{data: map[string]interface{}{"level": level, "msg": "x"}})
+	}
+	if got := m.UnseenAlerts(); got != 3 {
+		t.Fatalf("UnseenAlerts = %d, want 3 (warning + warn + error)", got)
+	}
+
+	m.unseenAlerts = 0
+	if got := m.UnseenAlerts(); got != 0 {
+		t.Fatalf("UnseenAlerts after clear = %d, want 0", got)
+	}
+}

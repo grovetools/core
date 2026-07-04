@@ -548,9 +548,30 @@ func NewLogger(component string) *logrus.Entry {
 		logger.WithFields(fields).Info("Grove binary started")
 	})
 
+	// Config-load schema warnings buffer inside the config package until a
+	// logging pipeline exists (config cannot import this package). The first
+	// fully-configured logger becomes their sink, so early-load warnings —
+	// including ones fired at package-init time — reach the file sink and
+	// honor the TUI-safe console gating above.
+	schemaWarnSinkOnce.Do(func() { registerSchemaWarningSink(logger) })
+
 	entry := logger.WithField("component", component)
 	loggers[component] = entry
 	return entry
+}
+
+var schemaWarnSinkOnce sync.Once
+
+// registerSchemaWarningSink points config's schema-warning channel at a
+// configured logger. The closure can fire inside a config.Load made by
+// NewLogger itself (loggersMu held), so it must log through the captured
+// logger directly and never call NewLogger.
+func registerSchemaWarningSink(logger *logrus.Logger) {
+	entry := logger.WithField("component", "config")
+	config.SetSchemaWarningSink(func(source string, err error) {
+		entry.WithError(err).WithField("source", source).
+			Warn("configuration does not fully conform to the schema (continuing; validation is advisory)")
+	})
 }
 
 // dualEmitSuppressingFormatter wraps a formatter and emits nothing for
