@@ -40,42 +40,48 @@ func GenerateSchemaWithThemeNames(themeNames []string) ([]byte, error) {
 	// so it's not included in the base schema.
 	// UI metadata (x-layer, x-priority, x-important) is added via jsonschema_extras.
 
-	// LoggingSchemaConfig mirrors logging.Config for schema generation (avoids circular import)
+	// The mirrors below track logging.Config and its sub-structs, which this
+	// package cannot import (core/logging imports core/config). Every field
+	// must carry ,omitempty so the reflector marks nothing required: configs
+	// are merged from partial fragments, and the load-path validation
+	// (config.validateAndWarn) checks each fragment against this schema —
+	// a required field would flag every fragment that doesn't set it.
+
+	// FileSinkSchemaConfig mirrors logging.FileSinkConfig.
+	type FileSinkSchemaConfig struct {
+		Enabled       bool   `yaml:"enabled,omitempty" jsonschema:"description=Enable file logging,default=true"`
+		Path          string `yaml:"path,omitempty" jsonschema:"description=Full path to the log file"`
+		Format        string `yaml:"format,omitempty" jsonschema:"description=File log format: text or json,default=json,enum=text,enum=json"`
+		Level         string `yaml:"level,omitempty" jsonschema:"description=Minimum log level for the file sink only (defaults to the console level; GROVE_LOG_LEVEL overrides both),enum=debug,enum=info,enum=warn,enum=error"`
+		RetentionDays int    `yaml:"retention_days,omitempty" jsonschema:"description=Days of dated log files to keep before the daemon sweeps them (0 = default of 14),default=14"`
+	}
+
+	// FormatSchemaConfig mirrors logging.FormatConfig.
+	type FormatSchemaConfig struct {
+		Preset             string `yaml:"preset,omitempty" jsonschema:"description=Log format preset: default (rich)/simple/json,enum=default,enum=simple,enum=json"`
+		DisableTimestamp   bool   `yaml:"disable_timestamp,omitempty" jsonschema:"description=Disable timestamp in log output,default=false"`
+		DisableComponent   bool   `yaml:"disable_component,omitempty" jsonschema:"description=Disable component name in log output,default=false"`
+		StructuredToStderr string `yaml:"structured_to_stderr,omitempty" jsonschema:"description=When to send structured logs to stderr,enum=auto,enum=always,enum=never,default=auto"`
+	}
+
+	// ComponentFilteringSchemaConfig mirrors logging.ComponentFilteringConfig.
+	type ComponentFilteringSchemaConfig struct {
+		Only []string `yaml:"only,omitempty" jsonschema:"description=Strict whitelist of components/groups to show (ignores show/hide)"`
+		Show []string `yaml:"show,omitempty" jsonschema:"description=Components/groups to always show (overrides hide)"`
+		Hide []string `yaml:"hide,omitempty" jsonschema:"description=Components/groups to hide from log output"`
+	}
+
+	// LoggingSchemaConfig mirrors logging.Config.
 	type LoggingSchemaConfig struct {
-		Level              string              `yaml:"level" jsonschema:"description=Minimum log level (debug, info, warn, error),default=info"`
-		ReportCaller       bool                `yaml:"report_caller" jsonschema:"description=Include file/line/function in output,default=true"`
-		LogStartup         bool                `yaml:"log_startup" jsonschema:"description=Log 'Grove binary started' on first init"`
-		Groups             map[string][]string `yaml:"groups,omitempty" jsonschema:"description=Named collections of component loggers for filtering"`
-		ShowCurrentProject *bool               `yaml:"show_current_project,omitempty" jsonschema:"description=Always show logs from current project regardless of filters"`
-	}
-
-	// KeybindingSectionSchemaConfig mirrors KeybindingSectionConfig for schema generation
-	type KeybindingSectionSchemaConfig map[string][]string
-
-	// KeybindingsSchemaConfig mirrors KeybindingsConfig for schema generation
-	type KeybindingsSchemaConfig struct {
-		Navigation KeybindingSectionSchemaConfig            `yaml:"navigation,omitempty" jsonschema:"description=Navigation keybindings (up, down, left, right, page_up, page_down, top, bottom)"`
-		Selection  KeybindingSectionSchemaConfig            `yaml:"selection,omitempty" jsonschema:"description=Selection keybindings (select, select_all, select_none, toggle_select)"`
-		Actions    KeybindingSectionSchemaConfig            `yaml:"actions,omitempty" jsonschema:"description=Action keybindings (confirm, cancel, back, edit, delete, yank)"`
-		Search     KeybindingSectionSchemaConfig            `yaml:"search,omitempty" jsonschema:"description=Search keybindings (search, next_match, prev_match, clear_search, grep)"`
-		View       KeybindingSectionSchemaConfig            `yaml:"view,omitempty" jsonschema:"description=View keybindings (switch_view, next_tab, prev_tab, toggle_preview)"`
-		Fold       KeybindingSectionSchemaConfig            `yaml:"fold,omitempty" jsonschema:"description=Fold keybindings (open, close, toggle, open_all, close_all)"`
-		System     KeybindingSectionSchemaConfig            `yaml:"system,omitempty" jsonschema:"description=System keybindings (quit, help, refresh)"`
-		Overrides  map[string]KeybindingSectionSchemaConfig `yaml:"overrides,omitempty" jsonschema:"description=Per-TUI keybinding overrides (e.g., nb.browser, flow.status)"`
-	}
-
-	// TUISchemaConfig mirrors TUIConfig for schema generation
-	type TUISchemaConfig struct {
-		Icons string `yaml:"icons,omitempty" jsonschema:"description=Icon set to use: nerd or ascii,enum=nerd,enum=ascii" jsonschema_extras:"x-important=true"`
-		// Theme's enum is injected from the theme registry by
-		// GenerateSchemaWithThemeNames; do not hardcode names here.
-		Theme           string                   `yaml:"theme,omitempty" jsonschema:"description=Color theme for terminal interfaces" jsonschema_extras:"x-important=true"`
-		Preset          string                   `yaml:"preset,omitempty" jsonschema:"description=Keybinding preset: vim (default) emacs or arrows,enum=vim,enum=emacs,enum=arrows,default=vim" jsonschema_extras:"x-important=true"`
-		SidebarExpanded bool                     `yaml:"sidebar_expanded,omitempty" jsonschema:"description=Start terminal sidebar expanded (icon + label) instead of icon-only,default=false"`
-		Keybindings     *KeybindingsSchemaConfig `yaml:"keybindings,omitempty" jsonschema:"description=Custom keybinding overrides"`
-		NvimEmbed       *NvimEmbedConfig         `yaml:"nvim_embed,omitempty" jsonschema:"description=Embedded Neovim configuration"`
-		Panels          *PanelConfig             `yaml:"panels,omitempty" jsonschema:"description=User-defined ephemeral panel keybindings"`
-		Focus           *FocusConfig             `yaml:"focus,omitempty" jsonschema:"description=BSP pane focus indicator configuration"`
+		Level              string                          `yaml:"level,omitempty" jsonschema:"description=Minimum log level (debug/info/warn/error),default=info,enum=debug,enum=info,enum=warn,enum=error"`
+		SystemLevel        string                          `yaml:"system_level,omitempty" jsonschema:"description=Minimum log level for system/daemon logs (debug/info/warn/error),enum=debug,enum=info,enum=warn,enum=error"`
+		ReportCaller       bool                            `yaml:"report_caller,omitempty" jsonschema:"description=Include file/line/function in output,default=true"`
+		LogStartup         bool                            `yaml:"log_startup,omitempty" jsonschema:"description=Log 'Grove binary started' on first init"`
+		File               *FileSinkSchemaConfig           `yaml:"file,omitempty" jsonschema:"description=File logging sink configuration"`
+		Format             *FormatSchemaConfig             `yaml:"format,omitempty" jsonschema:"description=Log output format settings"`
+		Groups             map[string][]string             `yaml:"groups,omitempty" jsonschema:"description=Named collections of component loggers for filtering"`
+		ComponentFiltering *ComponentFilteringSchemaConfig `yaml:"component_filtering,omitempty" jsonschema:"description=Rules for filtering logs by component"`
+		ShowCurrentProject *bool                           `yaml:"show_current_project,omitempty" jsonschema:"description=Always show logs from current project regardless of filters"`
 	}
 
 	type BaseConfig struct {
@@ -86,7 +92,7 @@ func GenerateSchemaWithThemeNames(themeNames []string) ([]byte, error) {
 		BuildAfter       []string                      `yaml:"build_after,omitempty" jsonschema:"description=Projects that must be built before this one" jsonschema_extras:"x-layer=project,x-priority=21"`
 		Notebooks        *NotebooksConfig              `yaml:"notebooks,omitempty" jsonschema:"description=Notebook configuration" jsonschema_extras:"x-layer=global,x-priority=2,x-important=true"`
 		Logging          *LoggingSchemaConfig          `yaml:"logging,omitempty" jsonschema:"description=Logging configuration" jsonschema_extras:"x-layer=global,x-priority=60"`
-		TUI              *TUISchemaConfig              `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
+		TUI              *TUIConfig                    `yaml:"tui,omitempty" jsonschema:"description=TUI appearance and behavior settings" jsonschema_extras:"x-layer=global,x-priority=50"`
 		Context          *ContextConfig                `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
 		Environment      *EnvironmentConfig            `yaml:"environment,omitempty" jsonschema:"description=Default environment provider configuration" jsonschema_extras:"x-layer=project,x-priority=25"`
 		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag" jsonschema_extras:"x-layer=project,x-priority=26"`
@@ -159,10 +165,10 @@ func GenerateSchemaWithThemeNames(themeNames []string) ([]byte, error) {
 	}
 
 	// 2b. Inject the closed theme enum from the theme registry.
-	// Path: $defs -> TUISchemaConfig -> properties -> theme
+	// Path: $defs -> TUIConfig -> properties -> theme
 	if len(themeNames) > 0 {
 		if defs := getMap(rawSchema, "$defs"); defs != nil {
-			if tui := getMap(defs, "TUISchemaConfig"); tui != nil {
+			if tui := getMap(defs, "TUIConfig"); tui != nil {
 				if props := getMap(tui, "properties"); props != nil {
 					if themeField := getMap(props, "theme"); themeField != nil {
 						enum := make([]interface{}, len(themeNames))

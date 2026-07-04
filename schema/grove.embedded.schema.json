@@ -1,5 +1,48 @@
 {
   "$defs": {
+    "AgentPaneConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "repaint_nudge": {
+          "default": true,
+          "description": "Automatically SIGWINCH-nudge agent panes after output bursts to heal rendering corruption",
+          "type": "boolean"
+        },
+        "term": {
+          "default": "xterm-256color",
+          "description": "TERM value for agent pane PTYs (e.g. screen-256color for the conservative tmux render path)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ComponentFilteringSchemaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "hide": {
+          "description": "Components/groups to hide from log output",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "only": {
+          "description": "Strict whitelist of components/groups to show (ignores show/hide)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "show": {
+          "description": "Components/groups to always show (overrides hide)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "ContextConfig": {
       "additionalProperties": false,
       "properties": {
@@ -117,6 +160,45 @@
       ],
       "type": "object"
     },
+    "FileSinkSchemaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable file logging",
+          "type": "boolean"
+        },
+        "format": {
+          "default": "json",
+          "description": "File log format: text or json",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "type": "string"
+        },
+        "level": {
+          "description": "Minimum log level for the file sink only (defaults to the console level; GROVE_LOG_LEVEL overrides both)",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "description": "Full path to the log file",
+          "type": "string"
+        },
+        "retention_days": {
+          "default": 14,
+          "description": "Days of dated log files to keep before the daemon sweeps them (0 = default of 14)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "FocusConfig": {
       "additionalProperties": false,
       "properties": {
@@ -150,6 +232,41 @@
           "maximum": 4,
           "minimum": 1,
           "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "FormatSchemaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "disable_component": {
+          "default": false,
+          "description": "Disable component name in log output",
+          "type": "boolean"
+        },
+        "disable_timestamp": {
+          "default": false,
+          "description": "Disable timestamp in log output",
+          "type": "boolean"
+        },
+        "preset": {
+          "description": "Log format preset: default (rich)/simple/json",
+          "enum": [
+            "default",
+            "simple",
+            "json"
+          ],
+          "type": "string"
+        },
+        "structured_to_stderr": {
+          "default": "auto",
+          "description": "When to send structured logs to stderr",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "type": "string"
         }
       },
       "type": "object"
@@ -223,7 +340,28 @@
       ],
       "type": "object"
     },
-    "KeybindingSectionSchemaConfig": {
+    "JobDetailConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "editor": {
+          "default": "e",
+          "description": "Key to jump to the editor tab",
+          "type": "string"
+        },
+        "logs": {
+          "default": "l",
+          "description": "Key to jump to the logs tab",
+          "type": "string"
+        },
+        "rules": {
+          "default": "r",
+          "description": "Key to jump to the cx rules tab",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "KeybindingSectionConfig": {
       "additionalProperties": {
         "items": {
           "type": "string"
@@ -232,42 +370,35 @@
       },
       "type": "object"
     },
-    "KeybindingsSchemaConfig": {
+    "KeybindingsConfig": {
       "additionalProperties": false,
       "properties": {
         "actions": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "Action keybindings (confirm"
         },
         "fold": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "Fold keybindings (open"
         },
         "navigation": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "Navigation keybindings (up"
         },
-        "overrides": {
-          "additionalProperties": {
-            "$ref": "#/$defs/KeybindingSectionSchemaConfig"
-          },
-          "description": "Per-TUI keybinding overrides (e.g.",
-          "type": "object"
-        },
         "search": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "Search keybindings (search"
         },
         "selection": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "Selection keybindings (select"
         },
         "system": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "System keybindings (quit"
         },
         "view": {
-          "$ref": "#/$defs/KeybindingSectionSchemaConfig",
+          "$ref": "#/$defs/KeybindingSectionConfig",
           "description": "View keybindings (switch_view"
         }
       },
@@ -276,6 +407,18 @@
     "LoggingSchemaConfig": {
       "additionalProperties": false,
       "properties": {
+        "component_filtering": {
+          "$ref": "#/$defs/ComponentFilteringSchemaConfig",
+          "description": "Rules for filtering logs by component"
+        },
+        "file": {
+          "$ref": "#/$defs/FileSinkSchemaConfig",
+          "description": "File logging sink configuration"
+        },
+        "format": {
+          "$ref": "#/$defs/FormatSchemaConfig",
+          "description": "Log output format settings"
+        },
         "groups": {
           "additionalProperties": {
             "items": {
@@ -288,7 +431,13 @@
         },
         "level": {
           "default": "info",
-          "description": "Minimum log level (debug",
+          "description": "Minimum log level (debug/info/warn/error)",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
           "type": "string"
         },
         "log_startup": {
@@ -303,13 +452,18 @@
         "show_current_project": {
           "description": "Always show logs from current project regardless of filters",
           "type": "boolean"
+        },
+        "system_level": {
+          "description": "Minimum log level for system/daemon logs (debug/info/warn/error)",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "type": "string"
         }
       },
-      "required": [
-        "level",
-        "report_caller",
-        "log_startup"
-      ],
       "type": "object"
     },
     "NoteTypeConfig": {
@@ -542,6 +696,55 @@
       },
       "type": "object"
     },
+    "PluginConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "description": "Arguments passed to the command",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "description": "Executable command to run",
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Working directory for the command",
+          "type": "string"
+        },
+        "env": {
+          "description": "Extra environment variables (KEY=VALUE)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "icon": {
+          "description": "Nerd font icon for the rail",
+          "type": "string"
+        },
+        "position": {
+          "default": "rail",
+          "description": "Panel position: rail (persistent) or ephemeral (on-demand)",
+          "enum": [
+            "rail",
+            "ephemeral"
+          ],
+          "type": "string"
+        },
+        "restart": {
+          "default": false,
+          "description": "Auto-restart plugin on exit",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
     "SearchPathConfig": {
       "additionalProperties": false,
       "properties": {
@@ -586,12 +789,61 @@
       },
       "type": "object"
     },
-    "TUISchemaConfig": {
+    "TUIConfig": {
       "additionalProperties": false,
       "properties": {
+        "action_key": {
+          "default": "ctrl+g",
+          "description": "Key chord that activates grove terminal actions (bubbletea key string)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "53"
+        },
+        "agent": {
+          "$ref": "#/$defs/AgentPaneConfig",
+          "description": "Native agent pane behavior",
+          "x-layer": "global",
+          "x-priority": "66"
+        },
+        "drawer_expanded": {
+          "default": false,
+          "description": "Start active sessions drawer expanded",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "63"
+        },
+        "drawer_orientation": {
+          "default": "right",
+          "description": "Active sessions drawer position",
+          "enum": [
+            "right",
+            "bottom"
+          ],
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "62"
+        },
+        "experimental_pages": {
+          "description": "List of experimental pages to enable (env",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-layer": "global",
+          "x-priority": "64"
+        },
         "focus": {
           "$ref": "#/$defs/FocusConfig",
-          "description": "BSP pane focus indicator configuration"
+          "description": "BSP pane focus indicator configuration",
+          "x-layer": "global",
+          "x-priority": "61"
+        },
+        "hide_splash_on_startup": {
+          "default": false,
+          "description": "Hide the treemux welcome splash on startup",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "67"
         },
         "icons": {
           "description": "Icon set to use: nerd or ascii",
@@ -600,35 +852,82 @@
             "ascii"
           ],
           "type": "string",
-          "x-important": true
+          "x-important": true,
+          "x-layer": "global",
+          "x-priority": "52"
+        },
+        "job_detail": {
+          "$ref": "#/$defs/JobDetailConfig",
+          "description": "Job detail pane tab keybindings",
+          "x-layer": "global",
+          "x-priority": "65"
         },
         "keybindings": {
-          "$ref": "#/$defs/KeybindingsSchemaConfig",
-          "description": "Custom keybinding overrides"
+          "$ref": "#/$defs/KeybindingsConfig",
+          "description": "Custom keybinding overrides",
+          "x-layer": "global",
+          "x-priority": "54"
+        },
+        "leader_key": {
+          "default": "ctrl+b",
+          "description": "Key chord that activates the leader/workspace switcher (bubbletea key string)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "53"
         },
         "nvim_embed": {
           "$ref": "#/$defs/NvimEmbedConfig",
-          "description": "Embedded Neovim configuration"
+          "description": "Embedded Neovim configuration",
+          "x-layer": "global",
+          "x-priority": "55",
+          "x-status": "alpha",
+          "x-status-message": "Experimental Neovim embedding",
+          "x-status-since": "v0.6.0",
+          "x-status-target": "v1.0"
         },
         "panels": {
           "$ref": "#/$defs/PanelConfig",
-          "description": "User-defined ephemeral panel keybindings"
+          "description": "User-defined ephemeral panel keybindings",
+          "x-layer": "global",
+          "x-priority": "58"
+        },
+        "plugins": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PluginConfig"
+          },
+          "description": "Process-based plugin panels",
+          "type": "object",
+          "x-layer": "global",
+          "x-priority": "60"
         },
         "preset": {
           "default": "vim",
-          "description": "Keybinding preset: vim (default) emacs or arrows",
+          "description": "Keybinding preset: vim (default)",
           "enum": [
             "vim",
             "emacs",
             "arrows"
           ],
           "type": "string",
-          "x-important": true
+          "x-important": true,
+          "x-layer": "global",
+          "x-priority": "50"
+        },
+        "shortcuts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Global shortcut key → navigate:panel.tab mappings for deep-link navigation",
+          "type": "object",
+          "x-layer": "global",
+          "x-priority": "56"
         },
         "sidebar_expanded": {
           "default": false,
           "description": "Start terminal sidebar expanded (icon + label) instead of icon-only",
-          "type": "boolean"
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "57"
         },
         "theme": {
           "description": "Color theme for terminal interfaces",
@@ -705,7 +1004,16 @@
             "tokyonight-storm"
           ],
           "type": "string",
-          "x-important": true
+          "x-important": true,
+          "x-layer": "global",
+          "x-priority": "51"
+        },
+        "vim_control_hjkl_pane_nav": {
+          "default": false,
+          "description": "Enable Ctrl+hjkl pane navigation (vim-tmux-navigator style)",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "59"
         }
       },
       "type": "object"
@@ -854,7 +1162,7 @@
       "x-priority": "23"
     },
     "tui": {
-      "$ref": "#/$defs/TUISchemaConfig",
+      "$ref": "#/$defs/TUIConfig",
       "description": "TUI appearance and behavior settings",
       "x-layer": "global",
       "x-priority": "50"
