@@ -22,6 +22,16 @@ func GetProjectFromNotebookPath(path string) (*WorkspaceNode, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	// Canonicalize (symlinks + on-disk case) so detection is
+	// spelling-independent: notebook membership is a string-prefix match, and
+	// a case-variant or symlink-aliased spelling of a notebook path (e.g.
+	// /Users/x/Notebooks/... for /Users/x/notebooks/...) must still resolve.
+	// FindNotebookRootFromConfig canonicalizes the configured root the same
+	// way, so both sides of the comparison share one deterministic spelling
+	// (which filepath.Rel in the workspace extraction also relies on).
+	if canonical, cerr := pathutil.CanonicalPath(absPath); cerr == nil {
+		absPath = canonical
+	}
 
 	// Load config for notebook definitions
 	cfg, _ := config.LoadDefault()
@@ -74,8 +84,14 @@ func FindNotebookRootFromConfig(absPath string, cfg *config.Config) (string, *co
 			continue
 		}
 
-		// Normalize paths for comparison
+		// Normalize paths for comparison. Canonicalization (symlinks +
+		// on-disk case) mirrors GetProjectFromNotebookPath's treatment of the
+		// queried path, so the prefix match cannot be defeated by a spelling
+		// variant on either side (config root or query).
 		rootDir = filepath.Clean(rootDir)
+		if canonical, cerr := pathutil.CanonicalPath(rootDir); cerr == nil {
+			rootDir = canonical
+		}
 
 		// Check if path is under this notebook's root
 		if strings.HasPrefix(absPath, rootDir+string(filepath.Separator)) || absPath == rootDir {
