@@ -149,6 +149,8 @@ var coreConfigKeys = map[string]bool{
 	"groves":            true,
 	"search_paths":      true,
 	"explicit_projects": true,
+	"commands":          true,
+	"test_scopes":       true,
 	"worktree":          true,
 	"_grove":            true, // Meta section for config metadata (priority, etc.)
 }
