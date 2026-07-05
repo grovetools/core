@@ -15,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/grovetools/core/tui/keymap"
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -39,9 +40,8 @@ type Model struct {
 	width           int
 	height          int
 	ready           bool
-	lastZPress      time.Time // For detecting zR/zM sequences
-	lastGPress      time.Time // For detecting gg sequence
-	renderedContent string    // Cached rendered content for direct display
+	sequence        *keymap.SequenceState // Multi-key chord state (gg, zR, zM)
+	renderedContent string                // Cached rendered content for direct display
 
 	// Search state
 	isSearching   bool
@@ -80,6 +80,7 @@ func New(data interface{}) Model {
 		searchInput:   ti,
 		currentResult: -1,
 		originalData:  data,
+		sequence:      keymap.NewSequenceState(),
 	}
 
 	if data != nil {
@@ -247,42 +248,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		keyStr := msg.String()
-
-		// Handle zR and zM sequences
-		if keyStr == "z" {
-			m.lastZPress = time.Now()
-			return m, nil
-		}
-
-		// Check for zR/zM within time window
-		if time.Since(m.lastZPress) < 500*time.Millisecond {
-			switch keyStr {
-			case "R", "shift+r":
-				// zR - expand all
-				m.expandAll()
-				m.lastZPress = time.Time{}
-				return m, nil
-			case "M", "shift+m":
-				// zM - collapse all
-				m.collapseAll()
-				m.lastZPress = time.Time{}
-				return m, nil
-			}
-		}
-
-		// Handle gg sequence (go to top)
-		if keyStr == "g" {
-			if time.Since(m.lastGPress) < 500*time.Millisecond {
-				// Double 'g' pressed - go to top
+		// Multi-key chords (gg, zR, zM) run through the shared sequence
+		// engine so the keymap can advertise real two-key bindings. A
+		// pending prefix (bare g/z) is swallowed; a completed chord
+		// dispatches; anything else clears the buffer and falls through
+		// to the single-key switch below.
+		if result, _ := m.sequence.Process(msg, m.keys.GotoTop, m.keys.ExpandAll, m.keys.CollapseAll); result == keymap.SequenceMatch {
+			buffer := m.sequence.Buffer()
+			switch {
+			case keymap.Matches(buffer, m.keys.GotoTop):
 				m.cursor = 0
 				m.updateContent()
-				m.lastGPress = time.Time{}
-				return m, nil
+			case keymap.Matches(buffer, m.keys.ExpandAll):
+				m.expandAll()
+			case keymap.Matches(buffer, m.keys.CollapseAll):
+				m.collapseAll()
 			}
-			m.lastGPress = time.Now()
+			m.sequence.Clear()
+			return m, nil
+		} else if result == keymap.SequencePending {
 			return m, nil
 		}
+		m.sequence.Clear()
 
 		switch {
 		case key.Matches(msg, m.keys.Search):
