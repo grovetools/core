@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -395,8 +396,18 @@ func NewLogger(component string) *logrus.Entry {
 		logger.SetFormatter(&TextFormatter{Config: logCfg.Format})
 	}
 
-	// Configure File Sink
-	if logCfg.File.Enabled {
+	// Configure File Sink.
+	//
+	// In `go test` binaries the IMPLICIT default sinks — the XDG
+	// system/workspace log files the daemon TUI's log view tails — are
+	// disabled. Executor-style tests run real job lifecycles in-process, and
+	// without this every `go test` run sprays lifecycle events ("Job
+	// launched/finished") and deliberate failure-path errors into the live
+	// log stream, where they read exactly like production traffic. Explicit
+	// destinations still work under test: GROVE_LOG_FILE and a configured
+	// File.Path are honored, so tests that want file logs can opt in.
+	fileSinkAllowed := os.Getenv("GROVE_LOG_FILE") != "" || logCfg.File.Path != "" || !IsTestBinary()
+	if logCfg.File.Enabled && fileSinkAllowed {
 		// pathFn derives the log file path for a point in time so the
 		// dateRotatingWriter can reopen date-patterned paths when the day
 		// changes. Fixed paths (env override, explicit config) never roll.
@@ -697,6 +708,24 @@ func (hook *FileHook) Fire(entry *logrus.Entry) error {
 // Levels returns the log levels that this hook will fire for.
 func (hook *FileHook) Levels() []logrus.Level {
 	return hook.LogLevels
+}
+
+// IsTestBinary reports whether this process is a `go test` binary. Compiled
+// test executables are named <pkg>.test (also on the cached-build path,
+// .../bNNN/<pkg>.test); as a fallback the testing package's registered
+// test.v flag is checked, which covers `go test -o` renames once flags are
+// registered. Deliberately dependency-free: importing the testing package
+// from production code would link it into every grove binary.
+//
+// Exported so other side-effecting subsystems (e.g. flow's job-completion
+// ntfy pushes) can refuse to touch production resources from plain unit
+// tests — only the tend e2e harness sandboxes XDG/config paths; `go test`
+// runs otherwise inherit the developer's real environment.
+func IsTestBinary() bool {
+	if strings.HasSuffix(os.Args[0], ".test") {
+		return true
+	}
+	return flag.Lookup("test.v") != nil
 }
 
 // expandPath expands tilde in file paths
