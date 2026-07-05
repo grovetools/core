@@ -1,6 +1,10 @@
 package jsontree
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"github.com/charmbracelet/bubbles/key"
+
+	"github.com/grovetools/core/tui/keymap"
+)
 
 // KeyMap defines the keybindings for the JSON tree viewer.
 type KeyMap struct {
@@ -43,7 +47,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("ctrl+d", "half page down"),
 		),
 		GotoTop: key.NewBinding(
-			key.WithKeys("g"),
+			key.WithKeys("gg"),
 			key.WithHelp("gg", "go to top"),
 		),
 		GotoEnd: key.NewBinding(
@@ -55,11 +59,11 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("space/l", "expand"),
 		),
 		ExpandAll: key.NewBinding(
-			key.WithKeys("z"),
+			key.WithKeys("zR"),
 			key.WithHelp("zR", "expand all"),
 		),
 		CollapseAll: key.NewBinding(
-			key.WithKeys("z"),
+			key.WithKeys("zM"),
 			key.WithHelp("zM", "collapse all"),
 		),
 		Back: key.NewBinding(
@@ -94,6 +98,24 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("V"),
 			key.WithHelp("V", "visual mode"),
 		),
+	}
+}
+
+// Compile-time guard: KeyMap satisfies the sectioned help/audit contract.
+// Value receiver — matches how Sections() is declared and how the component
+// passes the keymap to help/audit consumers.
+var _ keymap.SectionedKeyMap = KeyMap{}
+
+// Sections returns the grouped keybindings for structured help rendering and
+// the keymap-coverage audit. Only keys the component's Update actually handles
+// appear here.
+func (k KeyMap) Sections() []keymap.Section {
+	return []keymap.Section{
+		keymap.NavigationSection(k.Up, k.Down, k.HalfPageUp, k.HalfPageDown, k.GotoTop, k.GotoEnd),
+		keymap.NewSection("Tree", k.Toggle, k.Fold, k.ExpandAll, k.CollapseAll),
+		keymap.SearchSection(k.Search, k.NextResult, k.PrevResult),
+		keymap.NewSection("Yank", k.VisualMode, k.YankValue, k.YankAll),
+		keymap.SystemSection(k.Back),
 	}
 }
 
