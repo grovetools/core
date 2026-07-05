@@ -373,11 +373,13 @@ type FocusConfig struct {
 	// Style selects the focus indicator strategy: border (highlight
 	// separator cells adjacent to focused pane), gutter (1-col colored
 	// bar on left edge), or title (1-row colored header).
-	Style string `yaml:"style,omitempty" toml:"style,omitempty" jsonschema:"description=Focus indicator style,enum=border,enum=gutter,enum=title,default=border"`
+	Style string `yaml:"style,omitempty" toml:"style,omitempty" jsonschema:"description=Focus indicator style,enum=border,enum=gutter,enum=title,default=gutter"`
 	// ActiveColor is the color used for the focused pane's indicator.
-	ActiveColor string `yaml:"active_color,omitempty" toml:"active_color,omitempty" jsonschema:"description=Color for focused pane indicator,default=cyan"`
+	// "accent" tracks the active theme's accent role.
+	ActiveColor string `yaml:"active_color,omitempty" toml:"active_color,omitempty" jsonschema:"description=Color for focused pane indicator,default=accent"`
 	// InactiveColor is the color used for unfocused pane indicators.
-	InactiveColor string `yaml:"inactive_color,omitempty" toml:"inactive_color,omitempty" jsonschema:"description=Color for unfocused pane indicator,default=gray"`
+	// "none" hides the unfocused indicator entirely.
+	InactiveColor string `yaml:"inactive_color,omitempty" toml:"inactive_color,omitempty" jsonschema:"description=Color for unfocused pane indicator,default=none"`
 	// Thickness controls the width (for gutter) or height (for title) of the
 	// focus indicator in cells. Defaults to 1. For border style this is ignored.
 	Thickness int `yaml:"thickness,omitempty" toml:"thickness,omitempty" jsonschema:"description=Indicator thickness in cells,default=1,minimum=1,maximum=4"`

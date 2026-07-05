@@ -58,6 +58,9 @@ func (c Colors) ResolveColor(name string, fallback lipgloss.TerminalColor) lipgl
 		return c.Orange
 	case "cyan":
 		return c.Cyan
+	case "accent":
+		// Semantic accent role — mirrors the Accent style's foreground.
+		return c.Violet
 	case "blue":
 		return c.Blue
 	case "violet":
