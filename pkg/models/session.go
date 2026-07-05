@@ -60,6 +60,11 @@ type Session struct {
 	LiveCostUSD float64 `json:"live_cost_usd,omitempty" db:"-"`
 	ContextSize int64   `json:"context_size,omitempty" db:"-"`
 
+	// Model is the session's cost-dominant model (usage.Summary
+	// ModelBreakdown[0]), derived by the daemon alongside the live token
+	// fields above. Like them it is a throttled snapshot, not persisted.
+	Model string `json:"model,omitempty" db:"-"`
+
 	// Channel & Autonomous support
 	Channels        []string          `json:"channels,omitempty" db:"-"`
 	Autonomous      *AutonomousConfig `json:"autonomous,omitempty" db:"-"`
