@@ -1236,3 +1236,34 @@ func TestDeepMergeMaps_DeleteFieldFromInheritedBlock(t *testing.T) {
 		t.Errorf("expected api.env to be deleted, still present: %v", api["env"])
 	}
 }
+
+// TestMergeConfigs_TUIVimNavAndFocusThickness verifies that an override layer
+// carrying VimControlHjklPaneNav and Focus.Thickness survives mergeConfigs.
+// Both fields historically had no merge clause, so a value set in any override
+// layer (including the user's global override) was silently dropped.
+func TestMergeConfigs_TUIVimNavAndFocusThickness(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{Theme: "dark"}}
+	override := &Config{TUI: &TUIConfig{
+		VimControlHjklPaneNav: true,
+		Focus:                 &FocusConfig{Thickness: 2},
+	}}
+
+	merged := mergeConfigs(base, override)
+
+	if merged.TUI == nil {
+		t.Fatal("expected merged TUI config to be set")
+	}
+	if !merged.TUI.VimControlHjklPaneNav {
+		t.Error("vim_control_hjkl_pane_nav was dropped by mergeConfigs")
+	}
+	if merged.TUI.Focus == nil {
+		t.Fatal("expected merged focus config to be set")
+	}
+	if merged.TUI.Focus.Thickness != 2 {
+		t.Errorf("focus.thickness = %d, want 2 (dropped by mergeConfigs)", merged.TUI.Focus.Thickness)
+	}
+	// Base fields untouched by the override must still be present.
+	if merged.TUI.Theme != "dark" {
+		t.Errorf("theme = %q, want dark", merged.TUI.Theme)
+	}
+}
