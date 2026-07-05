@@ -439,6 +439,9 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.HideSplashOnStartup {
 			result.TUI.HideSplashOnStartup = true
 		}
+		if override.TUI.VimControlHjklPaneNav {
+			result.TUI.VimControlHjklPaneNav = true
+		}
 		if override.TUI.Panels != nil {
 			result.TUI.Panels = override.TUI.Panels
 		}
@@ -456,6 +459,9 @@ func mergeConfigs(base, override *Config) *Config {
 			}
 			if override.TUI.Focus.InactiveColor != "" {
 				result.TUI.Focus.InactiveColor = override.TUI.Focus.InactiveColor
+			}
+			if override.TUI.Focus.Thickness != 0 {
+				result.TUI.Focus.Thickness = override.TUI.Focus.Thickness
 			}
 			if override.TUI.Focus.DimInactive {
 				result.TUI.Focus.DimInactive = true
