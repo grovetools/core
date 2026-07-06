@@ -15,9 +15,14 @@ type SequenceState struct {
 	timeout    time.Duration
 }
 
-// NewSequenceState creates a new sequence state handler with a 1 second timeout.
+// NewSequenceState creates a new sequence state handler that waits
+// indefinitely for the next key (timeout 0 — the which-key / vim-`notimeout`
+// model). An armed chord only ever resolves via a match, an esc-cancel
+// (SequenceCancel), or a stray key that clears the buffer; it never silently
+// expires. Callers that want a timed arm (e.g. a lazy dd expiry) construct a
+// state with NewSequenceStateWithTimeout instead.
 func NewSequenceState() *SequenceState {
-	return NewSequenceStateWithTimeout(time.Second)
+	return NewSequenceStateWithTimeout(0)
 }
 
 // NewSequenceStateWithTimeout creates a new sequence state handler with a custom timeout.
@@ -68,6 +73,21 @@ func (s *SequenceState) Buffer() string {
 // IsPending returns true if there is content in the buffer.
 func (s *SequenceState) IsPending() bool {
 	return len(s.buffer) > 0
+}
+
+// PendingSince returns the timestamp of the most recent key appended to the
+// buffer. It is meaningful only while IsPending() and is the clock the
+// which-key show-delay reads (elapsed-since-arm), distinct from the
+// expire-timeout in Update. For a freshly-armed prefix this is when the prefix
+// was pressed.
+func (s *SequenceState) PendingSince() time.Time {
+	return s.lastUpdate
+}
+
+// PendingFor returns how long the current sequence has been armed, i.e. the
+// time since the last key was appended. Meaningful only while IsPending().
+func (s *SequenceState) PendingFor() time.Duration {
+	return time.Since(s.lastUpdate)
 }
 
 // Matches checks if the current buffer matches the binding.
@@ -127,6 +147,12 @@ const (
 	SequencePending
 	// SequenceMatch indicates a complete sequence match.
 	SequenceMatch
+	// SequenceCancel indicates an armed sequence was dismissed by esc while
+	// pending. The buffer has already been cleared; the caller should consume
+	// the key (close the which-key popup) and NOT fall through to its flat-key
+	// switch, where esc would otherwise match Back/Quit. Esc-when-not-pending is
+	// unaffected — it returns SequenceNone and routes normally.
+	SequenceCancel
 )
 
 // Process handles a key message and returns the result and matching binding index.
@@ -146,6 +172,13 @@ const (
 //	    // Handle single key or unknown
 //	}
 func (s *SequenceState) Process(msg tea.KeyMsg, bindings ...key.Binding) (SequenceResult, int) {
+	// Esc while a chord is armed dismisses it: clear the buffer and report
+	// SequenceCancel WITHOUT appending esc, so the caller consumes the key
+	// instead of letting it fall through to a Back/Quit match.
+	if wasPending := s.IsPending(); wasPending && msg.String() == "esc" {
+		s.Clear()
+		return SequenceCancel, -1
+	}
 	buffer := s.Update(msg)
 
 	// Check for exact match first
@@ -163,6 +196,11 @@ func (s *SequenceState) Process(msg tea.KeyMsg, bindings ...key.Binding) (Sequen
 
 // ProcessKey is like Process but takes a key string instead of tea.KeyMsg.
 func (s *SequenceState) ProcessKey(keyStr string, bindings ...key.Binding) (SequenceResult, int) {
+	// Esc while pending dismisses the armed chord — mirror Process (see there).
+	if wasPending := s.IsPending(); wasPending && keyStr == "esc" {
+		s.Clear()
+		return SequenceCancel, -1
+	}
 	buffer := s.UpdateKey(keyStr)
 
 	// Check for exact match first

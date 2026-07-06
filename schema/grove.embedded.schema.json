@@ -203,7 +203,7 @@
       "additionalProperties": false,
       "properties": {
         "active_color": {
-          "default": "cyan",
+          "default": "accent",
           "description": "Color for focused pane indicator",
           "type": "string"
         },
@@ -212,12 +212,12 @@
           "type": "boolean"
         },
         "inactive_color": {
-          "default": "gray",
+          "default": "none",
           "description": "Color for unfocused pane indicator",
           "type": "string"
         },
         "style": {
-          "default": "border",
+          "default": "gutter",
           "description": "Focus indicator style",
           "enum": [
             "border",
@@ -1014,6 +1014,13 @@
           "type": "boolean",
           "x-layer": "global",
           "x-priority": "59"
+        },
+        "whichkey_delay_ms": {
+          "default": 400,
+          "description": "Delay in milliseconds before the which-key chord popup appears (0 = immediate)",
+          "type": "integer",
+          "x-layer": "global",
+          "x-priority": "68"
         }
       },
       "type": "object"
