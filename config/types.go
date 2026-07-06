@@ -340,6 +340,14 @@ type TUIConfig struct {
 	// Agent configures native agent pane hosting (TERM override,
 	// automatic repaint nudges for renderer corruption healing).
 	Agent *AgentPaneConfig `yaml:"agent,omitempty" toml:"agent,omitempty" json:"agent,omitempty" jsonschema:"description=Native agent pane behavior" jsonschema_extras:"x-layer=global,x-priority=66"`
+
+	// WhichKeyDelayMs is the hold-time (milliseconds) a chord prefix must be
+	// armed before the which-key popup renders — the vim `timeoutlen` idiom, so
+	// a fast two-key chord (e.g. "vl") never flashes the popup. Pointer so
+	// "unset" is distinguishable from an explicit 0; nil falls back to the
+	// keymap.WhichKeyDelay default (400ms). 0 shows the popup immediately. This
+	// is the SHOW clock, distinct from the sequence EXPIRE timeout.
+	WhichKeyDelayMs *int `yaml:"whichkey_delay_ms,omitempty" toml:"whichkey_delay_ms,omitempty" json:"whichkey_delay_ms,omitempty" jsonschema:"description=Delay in milliseconds before the which-key chord popup appears (0 = immediate),default=400" jsonschema_extras:"x-layer=global,x-priority=68"`
 }
 
 // AgentPaneConfig controls how treemux hosts agent CLI panes (claude etc.).

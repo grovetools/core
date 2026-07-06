@@ -2,11 +2,35 @@ package keymap
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 
 	"github.com/grovetools/core/config"
 )
+
+// defaultWhichKeyDelay is the show-delay applied when the config leaves
+// [tui].whichkey_delay_ms unset: a chord prefix must be held this long before
+// the which-key popup renders. Chosen to swallow a fast two-key chord while
+// still surfacing the menu on a deliberate hold.
+const defaultWhichKeyDelay = 400 * time.Millisecond
+
+// WhichKeyDelay resolves the which-key popup SHOW delay from config. It reads
+// [tui].whichkey_delay_ms: nil/unset → defaultWhichKeyDelay (400ms); an
+// explicit 0 → 0 (show immediately); any positive value → that many
+// milliseconds. This is the "how long to hold the prefix before the popup
+// appears" clock, distinct from SequenceState's expire timeout. A nil cfg
+// yields the default.
+func WhichKeyDelay(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.TUI == nil || cfg.TUI.WhichKeyDelayMs == nil {
+		return defaultWhichKeyDelay
+	}
+	ms := *cfg.TUI.WhichKeyDelayMs
+	if ms < 0 {
+		return defaultWhichKeyDelay
+	}
+	return time.Duration(ms) * time.Millisecond
+}
 
 // Base contains the standard keybindings used across all Grove TUIs
 // Prioritizes vim-style navigation and standard actions

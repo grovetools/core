@@ -279,9 +279,87 @@ func TestCommonSequenceBindings(t *testing.T) {
 	}
 }
 
+// TestEscCancelsPending: esc while a chord is armed reports SequenceCancel and
+// clears the buffer without appending, so the caller consumes the dismiss key.
+func TestEscCancelsPending(t *testing.T) {
+	view := key.NewBinding(key.WithKeys("vl"))
+	s := NewSequenceState()
+
+	// Arm the "v" prefix.
+	if res, _ := s.ProcessKey("v", view); res != SequencePending {
+		t.Fatalf("arming 'v' = %v, want SequencePending", res)
+	}
+	if !s.IsPending() {
+		t.Fatal("expected pending after arming 'v'")
+	}
+
+	// Esc dismisses.
+	res, idx := s.ProcessKey("esc", view)
+	if res != SequenceCancel || idx != -1 {
+		t.Errorf("ProcessKey(esc while pending) = (%v,%d), want (SequenceCancel,-1)", res, idx)
+	}
+	if s.IsPending() || s.Buffer() != "" {
+		t.Errorf("buffer not cleared after esc-cancel: pending=%v buffer=%q", s.IsPending(), s.Buffer())
+	}
+}
+
+// TestEscNotPendingIsNone: esc with an empty buffer is an ordinary key — it
+// must NOT report SequenceCancel, so top-level esc (Back/Quit/close-pane) still
+// routes normally.
+func TestEscNotPendingIsNone(t *testing.T) {
+	view := key.NewBinding(key.WithKeys("vl"))
+	s := NewSequenceState()
+
+	res, idx := s.ProcessKey("esc", view)
+	if res != SequenceNone || idx != -1 {
+		t.Errorf("ProcessKey(esc while empty) = (%v,%d), want (SequenceNone,-1)", res, idx)
+	}
+}
+
+// TestDefaultNoExpiry: the default constructor waits indefinitely — an armed
+// chord survives past the old 1s timeout and the second key still completes it.
+func TestDefaultNoExpiry(t *testing.T) {
+	top := key.NewBinding(key.WithKeys("gg"))
+	s := NewSequenceState()
+
+	if res, _ := s.ProcessKey("g", top); res != SequencePending {
+		t.Fatalf("first 'g' = %v, want SequencePending", res)
+	}
+	// Exceed the former 1s default; with timeout 0 the buffer must not clear.
+	time.Sleep(1100 * time.Millisecond)
+	res, idx := s.ProcessKey("g", top)
+	if res != SequenceMatch || idx != 0 {
+		t.Errorf("second 'g' after >1s = (%v,%d), want (SequenceMatch,0)", res, idx)
+	}
+}
+
+// TestPendingSince: PendingSince/PendingFor expose the arm clock the which-key
+// show-delay reads.
+func TestPendingSince(t *testing.T) {
+	view := key.NewBinding(key.WithKeys("vl"))
+	s := NewSequenceState()
+
+	before := time.Now()
+	s.ProcessKey("v", view)
+	if !s.IsPending() {
+		t.Fatal("expected pending after arming 'v'")
+	}
+	since := s.PendingSince()
+	if since.Before(before) {
+		t.Errorf("PendingSince() = %v, want >= %v", since, before)
+	}
+	if d := s.PendingFor(); d < 0 {
+		t.Errorf("PendingFor() = %v, want >= 0", d)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if d := s.PendingFor(); d < 20*time.Millisecond {
+		t.Errorf("PendingFor() after 20ms sleep = %v, want >= 20ms", d)
+	}
+}
+
 func TestSequenceResult_String(t *testing.T) {
 	// Ensure the constants are distinct
-	results := []SequenceResult{SequenceNone, SequencePending, SequenceMatch}
+	results := []SequenceResult{SequenceNone, SequencePending, SequenceMatch, SequenceCancel}
 	seen := make(map[SequenceResult]bool)
 	for _, r := range results {
 		if seen[r] {
