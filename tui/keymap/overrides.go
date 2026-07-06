@@ -2,8 +2,6 @@ package keymap
 
 import (
 	"reflect"
-	"strings"
-	"unicode"
 
 	"github.com/charmbracelet/bubbles/key"
 
@@ -99,18 +97,13 @@ func ApplyTUIOverrides(cfg *config.Config, pkg, tui string, km interface{}) {
 }
 
 // camelToSnake converts a CamelCase string to snake_case.
+// It is a thin wrapper over toSnakeCase (acronym-aware): both the reflection
+// export path (MakeTUIInfo) and the override-key derivation
+// (applyOverridesRecursive) must agree on the advertised config handle, and
+// the acronym-aware form is the advertised one (e.g. ScrollTUILeft ->
+// scroll_tui_left, not scroll_t_u_i_left). Kept as a wrapper (rather than
+// deleting the symbol) so its two call sites stay textually unchanged.
 // Examples: ViewLogs -> view_logs, GoToTop -> go_to_top, HTTPServer -> http_server
 func camelToSnake(s string) string {
-	var result strings.Builder
-	for i, r := range s {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				result.WriteRune('_')
-			}
-			result.WriteRune(unicode.ToLower(r))
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	return result.String()
+	return toSnakeCase(s)
 }
