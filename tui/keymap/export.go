@@ -108,7 +108,10 @@ func MakeTUIInfo(name, pkg, description string, km SectionedKeyMap) TUIInfo {
 				continue
 			}
 			// Fallback: derive ConfigKey from the description (legacy behavior).
-			b.ConfigKey = toSnakeCase(strings.ReplaceAll(b.Description, " ", "_"))
+			// Descriptions can contain punctuation (e.g. "cycle mode
+			// (hybrid/fts/vector)"); sanitize so the registry always advertises
+			// a valid [a-z0-9_]+ override handle.
+			b.ConfigKey = sanitizeConfigKey(toSnakeCase(strings.ReplaceAll(b.Description, " ", "_")))
 		}
 	}
 
@@ -124,6 +127,26 @@ func MakeTUIInfo(name, pkg, description string, km SectionedKeyMap) TUIInfo {
 // camelToSnake to delegate here later is a no-op churn-free change.
 func ConfigKeyForField(name string) string {
 	return toSnakeCase(name)
+}
+
+// sanitizeConfigKey coerces a fallback-derived key into the [a-z0-9_] shape the
+// keys registry requires: any other rune (parentheses, slashes, etc.) collapses
+// to a single underscore, and leading/trailing underscores are trimmed. Only
+// the description-fallback path needs this; field-backed bindings already
+// produce valid snake_case via toSnakeCase over their field names.
+func sanitizeConfigKey(s string) string {
+	var sb strings.Builder
+	prevUnderscore := false
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			sb.WriteRune(r)
+			prevUnderscore = false
+		} else if !prevUnderscore {
+			sb.WriteRune('_')
+			prevUnderscore = true
+		}
+	}
+	return strings.Trim(sb.String(), "_")
 }
 
 // toSnakeCase converts a PascalCase or camelCase string to snake_case.
