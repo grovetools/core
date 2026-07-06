@@ -15,7 +15,7 @@ func TestCamelToSnake(t *testing.T) {
 	}{
 		{"ViewLogs", "view_logs"},
 		{"GoToTop", "go_to_top"},
-		{"HTTPServer", "h_t_t_p_server"}, // Edge case with consecutive caps
+		{"HTTPServer", "http_server"}, // Acronym run: camelToSnake now wraps toSnakeCase (acronym-aware)
 		{"Up", "up"},
 		{"PageUp", "page_up"},
 		{"ToggleFullscreen", "toggle_fullscreen"},
