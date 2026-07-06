@@ -115,6 +115,17 @@ func MakeTUIInfo(name, pkg, description string, km SectionedKeyMap) TUIInfo {
 	return info
 }
 
+// ConfigKeyForField converts a binding's CamelCase field Name to its
+// snake_case grove.toml ConfigKey. It is the single, acronym-aware converter
+// that hand-authored TUIInfo exports (e.g. treemux/tuimux, which have no
+// keymap.Base to reflect over) must use so their ConfigKeys match what
+// reflection-derived exports produce via MakeTUIInfo's camelToSnake path.
+// Its output already equals the post-unification target, so wiring
+// camelToSnake to delegate here later is a no-op churn-free change.
+func ConfigKeyForField(name string) string {
+	return toSnakeCase(name)
+}
+
 // toSnakeCase converts a PascalCase or camelCase string to snake_case.
 func toSnakeCase(s string) string {
 	var sb strings.Builder
