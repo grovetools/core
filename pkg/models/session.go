@@ -65,6 +65,15 @@ type Session struct {
 	// fields above. Like them it is a throttled snapshot, not persisted.
 	Model string `json:"model,omitempty" db:"-"`
 
+	// LiveChildren is the count of live background children (still-running
+	// subagents + background bash tasks + workflow runs + session crons) as of
+	// the most recent hook observation for this session. Like the live token
+	// fields it is a derived snapshot — never persisted (db:"-") — sourced from
+	// the hook SubagentStop background_tasks/session_crons snapshot via the
+	// dedicated "children_snapshot" WorkflowEvent. Zero (JSON-omitted) means "no
+	// known live children"; Status=="idle" && LiveChildren>0 is "idle-busy".
+	LiveChildren int `json:"live_children,omitempty" db:"-"`
+
 	// Channel & Autonomous support
 	Channels        []string          `json:"channels,omitempty" db:"-"`
 	Autonomous      *AutonomousConfig `json:"autonomous,omitempty" db:"-"`

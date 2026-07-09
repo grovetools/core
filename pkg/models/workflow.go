@@ -54,7 +54,35 @@ const (
 	// agent having a recorded result. Distinct from RunStale, which is
 	// reserved for session-ended-with-stragglers.
 	WorkflowRunCompleted WorkflowKind = "run_completed"
+	// WorkflowChildrenSnapshot carries a point-in-time live-background-child
+	// count (LiveChildren) for a session, forwarded from the hook SubagentStop
+	// background_tasks/session_crons snapshot. Unlike the other kinds it is
+	// NOT a per-agent lifecycle delta and mints no agent/run rows: the daemon
+	// only writes ev.LiveChildren onto the owning session and never persists
+	// the event (no boot replay). When hook-sourced it also carries
+	// LiveBashChildren — the authoritative live set of background *bash* jobs
+	// at that turn boundary — which the daemon reconciles into its bash-child
+	// bookkeeping (start new, clear absent) so "N bg" and the indented line
+	// cover bash too (F6).
+	WorkflowChildrenSnapshot WorkflowKind = "children_snapshot"
+	// WorkflowBashStarted announces a background bash job spawn, forwarded from
+	// the PostToolUse hook for a Bash tool whose tool_response carries a
+	// backgroundTaskId. AgentID is that id; Name is the command (the render
+	// title). This is the ONLY liveness signal for a session with NO subagent
+	// (which never fires SubagentStop), so bash there is visible from spawn and
+	// cleared only by the TTL floor — the accepted F6 reliability bound. It is
+	// never persisted (bash is ephemeral; a replayed start would fake liveness).
+	WorkflowBashStarted WorkflowKind = "bash_started"
 )
+
+// BashChildRef identifies one live background bash job in a children snapshot:
+// its harness id (background_tasks[].id == the PostToolUse backgroundTaskId)
+// and command (render title). Carried on WorkflowChildrenSnapshot events built
+// from a hook SubagentStop, whose background_tasks[] view is authoritative.
+type BashChildRef struct {
+	ID      string `json:"id"`
+	Command string `json:"command,omitempty"`
+}
 
 // WorkflowEvent source values.
 const (
@@ -101,10 +129,23 @@ type WorkflowEvent struct {
 	ResultSummary string `json:"result_summary,omitempty"`
 	// LastMessage is the agent's final assistant text
 	// (last_assistant_message at SubagentStop; not guaranteed).
-	LastMessage string    `json:"last_message,omitempty"`
-	Timestamp   time.Time `json:"timestamp"`
+	LastMessage string `json:"last_message,omitempty"`
+	// LiveChildren is the live-background-child count carried by a
+	// WorkflowChildrenSnapshot event (only meaningful for that kind). It is
+	// omitempty: a zero-count snapshot serializes without the field and decodes
+	// to 0 on the daemon, which assigns session.LiveChildren unconditionally so
+	// a zero snapshot correctly clears idle-busy.
+	LiveChildren int       `json:"live_children,omitempty"`
+	Timestamp    time.Time `json:"timestamp"`
 	// Source is WorkflowSourceHooks or WorkflowSourceJournal.
 	Source string `json:"source"`
+	// LiveBashChildren is the authoritative set of live background bash jobs a
+	// session owns at a turn boundary, set by hooks on a WorkflowChildrenSnapshot
+	// event from the SubagentStop background_tasks[] type=="shell" entries. The
+	// daemon treats a hook-sourced snapshot as authoritative: it starts/refreshes
+	// each listed bash child and marks any tracked bash child absent from the list
+	// completed. nil on daemon-derived snapshots (which never touch bash state).
+	LiveBashChildren []BashChildRef `json:"live_bash_children,omitempty"`
 }
 
 // WorkflowRunState is the aggregated snapshot of a single workflow run as
