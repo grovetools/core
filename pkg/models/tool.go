@@ -81,7 +81,16 @@ type Subagent struct {
 	ID string `json:"id" db:"id"`
 	// Name is the descriptive agent name (from meta.json "description" or
 	// workflow script "label:"). Best-effort enrichment; may be empty.
-	Name            string         `json:"name,omitempty" db:"name"`
+	Name string `json:"name,omitempty" db:"name"`
+	// AgentType is the spawn-source discriminator carried onto the durable
+	// record: the subagent type name (e.g. "Explore", "general-purpose") for
+	// Agent-tool spawns, "workflow-subagent" for workflow-spawned agents. Set
+	// by the daemon from WorkflowEvent.AgentType. Best-effort; may be empty on
+	// older payload variants. Derived-only (db:"-") — it is a live-render hint,
+	// not a persisted column, so it never touches the subagents table. The live
+	// drawer falls back to it as a title when Name/TaskDescription are both
+	// empty (a running child that has no meta.json yet still shows its type).
+	AgentType       string         `json:"agent_type,omitempty" db:"-"`
 	ParentSessionID string         `json:"parent_session_id" db:"parent_session_id"`
 	TaskDescription string         `json:"task_description" db:"task_description"`
 	TaskType        string         `json:"task_type" db:"task_type"` // search|implementation|debugging|analysis

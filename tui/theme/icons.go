@@ -71,6 +71,7 @@ const (
 	nerdIconGitRenamed            = "" // cod-diff_renamed (U+EAE0)
 	nerdIconGitPartiallyStaged    = "󰦒" // md-plus_minus (U+F0992)
 	nerdIconInbox                 = "󰚇" // md-inbox (U+F0687)
+	nerdIconBell                  = "󰂞" // md-bell (U+F009E)
 	nerdIconLightbulb             = "󰌵" // md-lightbulb (U+F0335)
 	nerdIconChevron               = "󰬪" // md-chevron_right_circle (U+F0B2A)
 	nerdIconMerge                 = "󰽜" // md-merge (U+F0F5C)
@@ -236,6 +237,7 @@ const (
 	asciiIconGitRenamed            = "R"     // Renamed file
 	asciiIconGitPartiallyStaged    = "±"     // Partially staged
 	asciiIconInbox                 = "[I]"   //  Inbox
+	asciiIconBell                  = "(!)"   //  Bell
 	asciiIconLightbulb             = "[*]"   //  Lightbulb
 	asciiIconChevron               = ">"     //  Chevron/prompt
 	asciiIconMerge                 = "><"    // Merge
@@ -401,6 +403,7 @@ var (
 	IconGitRenamed            string
 	IconGitPartiallyStaged    string
 	IconInbox                 string
+	IconBell                  string
 	IconLightbulb             string
 	IconChevron               string
 	IconMerge                 string
@@ -587,6 +590,7 @@ func init() {
 		IconGitRenamed = asciiIconGitRenamed
 		IconGitPartiallyStaged = asciiIconGitPartiallyStaged
 		IconInbox = asciiIconInbox
+		IconBell = asciiIconBell
 		IconLightbulb = asciiIconLightbulb
 		IconChevron = asciiIconChevron
 		IconMerge = asciiIconMerge
@@ -742,6 +746,7 @@ func init() {
 		IconGitRenamed = nerdIconGitRenamed
 		IconGitPartiallyStaged = nerdIconGitPartiallyStaged
 		IconInbox = nerdIconInbox
+		IconBell = nerdIconBell
 		IconLightbulb = nerdIconLightbulb
 		IconChevron = nerdIconChevron
 		IconMerge = nerdIconMerge
