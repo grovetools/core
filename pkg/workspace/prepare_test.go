@@ -218,6 +218,55 @@ func TestPrepare(t *testing.T) {
 		assert.Equal(t, resolvedFirst, resolvedAgain)
 	})
 
+	t.Run("container has no superrepo .git", func(t *testing.T) {
+		// Regression: an ecosystem worktree container must NOT be a git worktree
+		// of the ecosystem superrepo. A top-level .git makes the container track
+		// submodule gitlinks, forcing submodule bumps and blocking clean per-repo
+		// rebasing. Prepare must always build a synthetic container (a plain dir +
+		// grove.toml `workspaces = ["*"]`) whose members are the only git
+		// worktrees, for anchored AND non-anchored ecosystem worktrees alike.
+		sandboxXDG(t)
+
+		tempDir := resolveDir(t.TempDir())
+		repoDir := filepath.Join(tempDir, "eco-root")
+		require.NoError(t, os.MkdirAll(repoDir, 0o755))
+		setupTestRepo(t, repoDir)
+
+		// A real direct-child repo so the authoritative sibling setup can create a
+		// linked worktree for it.
+		memberDir := filepath.Join(repoDir, "member1")
+		require.NoError(t, os.MkdirAll(memberDir, 0o755))
+		setupTestRepo(t, memberDir)
+
+		ctx := context.Background()
+		opts := PrepareOptions{
+			GitRoot:           repoDir,
+			WorktreeName:      "no-superrepo",
+			BranchName:        "feature/no-superrepo",
+			SiblingWorkspaces: []string{"member1"},
+			UseXDGWorktrees:   true,
+		}
+
+		worktreePath, err := Prepare(ctx, opts)
+		require.NoError(t, err)
+
+		// THE regression assertion: no top-level .git in the container.
+		_, statErr := os.Stat(filepath.Join(worktreePath, ".git"))
+		assert.True(t, os.IsNotExist(statErr), "container must not have a top-level .git (superrepo worktree)")
+
+		// It IS a synthetic container: grove.toml with workspaces = ["*"].
+		groveToml, err := os.ReadFile(filepath.Join(worktreePath, "grove.toml"))
+		require.NoError(t, err)
+		assert.Contains(t, string(groveToml), `workspaces = ["*"]`)
+
+		// The member repo IS a linked git worktree (its .git is a gitdir FILE,
+		// not a directory), proving members carry the git state, not the container.
+		memberGit := filepath.Join(worktreePath, "member1", ".git")
+		info, err := os.Stat(memberGit)
+		require.NoError(t, err, "member repo should be checked out as a linked worktree")
+		assert.False(t, info.IsDir(), "member .git should be a gitdir file (linked worktree), not a directory")
+	})
+
 	t.Run("error cases", func(t *testing.T) {
 		ctx := context.Background()
 
