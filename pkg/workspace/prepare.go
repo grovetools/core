@@ -9,7 +9,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/grovetools/core/git"
 	"github.com/grovetools/core/pkg/claudetrust"
 	"github.com/grovetools/core/pkg/pitrust"
 	"github.com/grovetools/core/pkg/worktreeregistry"
@@ -27,40 +26,31 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		return "", fmt.Errorf("worktree name cannot be empty")
 	}
 
-	// Determine whether the source root is an ecosystem. This forks how the
-	// container is created: an ecosystem worktree's container IS a git worktree
-	// of the ecosystem root, whereas a standalone repo's container is a plain
-	// synthetic directory holding the repo as a subdir (the child's git worktree
-	// is created INTO it by SetupSubmodules). The synthetic root grove.toml with
-	// `workspaces = ["*"]` is what makes discovery classify the container as an
-	// ecosystem worktree (see classifyWorkspaceRoot in discover.go).
-	isEcosystem := false
-	if node, _ := GetProjectByPath(opts.GitRoot); node != nil {
-		isEcosystem = node.IsEcosystem()
-	}
-
+	// Every worktree container is a synthetic directory that holds its 1..N repos
+	// as subdirs, each checked out as its own linked git worktree by
+	// SetupSubmodules. The container itself has NO top-level .git — it is never a
+	// git worktree of the ecosystem superrepo, for anchored AND non-anchored
+	// ecosystem worktrees alike. This is deliberate: a superrepo worktree tracks
+	// submodule gitlinks, which forces submodule bumps and blocks clean per-repo
+	// rebasing (the whole point of this container shape). The synthetic root
+	// grove.toml with `workspaces = ["*"]` is what makes discovery classify the
+	// container as an ecosystem worktree (see classifyWorkspaceRoot in
+	// discover.go); the `.grove/workspace` marker's owner: key (written below)
+	// records whether the owner is the ecosystem root (non-anchored) or a
+	// sub-repo (anchored), which is how classification resolves the parent
+	// ecosystem (see GetProjectByPath in lookup.go).
 	target := ResolveNewWorktreePath(opts.GitRoot, opts.WorktreeName, opts.UseXDGWorktrees)
 
-	var worktreePath string
+	worktreePath := target
 	var created bool
-	if isEcosystem {
-		wm := git.NewWorktreeManager()
-		var err error
-		worktreePath, created, err = wm.GetOrPrepareWorktreeAt(ctx, opts.GitRoot, target, opts.BranchName)
-		if err != nil {
-			return "", fmt.Errorf("failed to prepare worktree: %w", err)
+	if _, statErr := os.Stat(worktreePath); os.IsNotExist(statErr) {
+		if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+			return "", fmt.Errorf("failed to create worktree container: %w", err)
 		}
-	} else {
-		worktreePath = target
-		if _, statErr := os.Stat(worktreePath); os.IsNotExist(statErr) {
-			if err := os.MkdirAll(worktreePath, 0o755); err != nil {
-				return "", fmt.Errorf("failed to create worktree container: %w", err)
-			}
-			if err := os.WriteFile(filepath.Join(worktreePath, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644); err != nil { //nolint:gosec // synthetic container config is not sensitive
-				return "", fmt.Errorf("failed to write synthetic grove.toml: %w", err)
-			}
-			created = true
+		if err := os.WriteFile(filepath.Join(worktreePath, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644); err != nil { //nolint:gosec // synthetic container config is not sensitive
+			return "", fmt.Errorf("failed to write synthetic grove.toml: %w", err)
 		}
+		created = true
 	}
 
 	// Only run setup logic for newly created worktrees
