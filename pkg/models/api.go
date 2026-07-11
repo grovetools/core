@@ -231,6 +231,13 @@ type JobInfo struct {
 	Error       string            `json:"error,omitempty"`
 	LogFilePath string            `json:"log_file_path,omitempty"`
 	PID         int               `json:"pid,omitempty"` // PHASE 2: Process ID for adoption on daemon restart
+
+	// Origin namespaces a job to the satellite it came from (M2 contract C6).
+	// Empty == local (every existing job). A non-empty value is the satellite's
+	// registry NAME, stamped laptop-side by the SatelliteCollector — it is
+	// deliberately OVERWRITTEN from whatever crossed the wire (including empty
+	// string), so a remote daemon cannot spoof another origin or claim "local".
+	Origin string `json:"origin,omitempty"`
 }
 
 // PlanRunOptions represents options for running an entire plan.
