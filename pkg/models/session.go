@@ -84,6 +84,14 @@ type Session struct {
 	LastSenderGroup string            `json:"last_sender_group,omitempty" db:"-"`
 	SignalTarget    string            `json:"signal_target,omitempty" db:"-"`
 
+	// Origin namespaces a session to the satellite it came from (M2 contract C6).
+	// Empty == local (every existing session). A non-empty value is the
+	// satellite's registry NAME, stamped laptop-side by the SatelliteCollector
+	// and OVERWRITTEN from the wire value (spoof-proofing, C6). Never persisted
+	// (db:"-") — remote sessions live only in the in-memory Store and must never
+	// enter the local sessions registry / crash-recovery machinery.
+	Origin string `json:"origin,omitempty" db:"-"`
+
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`
 	IsDeleted bool `json:"-" db:"is_deleted"` // Keep as internal field
