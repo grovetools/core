@@ -182,6 +182,18 @@ type SessionPatchRequest struct {
 
 // --- Job Runner API Types ---
 
+// PlanBundle carries a plan's on-disk identity across a satellite dispatch
+// (M2 contract C11). The laptop reads the local plan dir and ships the job
+// `.md`s + `.grove-plan.yml` + `rules/*` (never `.artifacts/` or the lease);
+// the satellite materializes them hash-idempotently onto its replica plan dir
+// before running (C12). Keys are plan-dir-relative paths; `[]byte` values
+// base64-encode natively over JSON.
+type PlanBundle struct {
+	Workspace string            `json:"workspace"`
+	PlanName  string            `json:"plan_name"`
+	Files     map[string][]byte `json:"files"`
+}
+
 // JobSubmitRequest represents a request to submit a job to the daemon.
 type JobSubmitRequest struct {
 	PlanDir     string            `json:"plan_dir"`
@@ -190,6 +202,17 @@ type JobSubmitRequest struct {
 	Timeout     string            `json:"timeout,omitempty"` // e.g., "30m"
 	Env         map[string]string `json:"env,omitempty"`
 	AgentTarget string            `json:"agent_target,omitempty"` // "native" or "tmux" — resolved by caller
+
+	// Satellite routes this submit to a registered satellite by registry NAME
+	// (M2 contract C11). It is laptop-side routing only: the local global
+	// daemon's handleJobs forwards the request to that satellite and CLEARS
+	// this field before re-submitting, so the satellite never sees it and
+	// cannot re-forward. Empty == ordinary local dispatch.
+	Satellite string `json:"satellite,omitempty"`
+
+	// PlanBundle, when non-nil, carries the plan's files so the satellite can
+	// materialize them onto its replica plan dir before running (C12).
+	PlanBundle *PlanBundle `json:"plan_bundle,omitempty"`
 }
 
 // JobSubmitResponse represents the response to a job submission.
