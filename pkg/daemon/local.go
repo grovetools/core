@@ -653,5 +653,13 @@ func (c *LocalClient) GetBootStatus(ctx context.Context) (*BootStatus, error) {
 	return &BootStatus{Done: true}, nil
 }
 
+// GetSatelliteStatuses requires the daemon: satellite federation lives in the
+// global daemon's ConnManager (M2 contract C10), so there is nothing to report
+// without it. ErrNotSupported lets callers (e.g. `grove status`) skip the
+// satellites section.
+func (c *LocalClient) GetSatelliteStatuses(ctx context.Context) (map[string]*models.SatelliteStatus, error) {
+	return nil, ErrNotSupported
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

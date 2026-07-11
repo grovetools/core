@@ -413,6 +413,18 @@ type Client interface {
 	// LocalClient has no daemon to boot, so it returns Done=true immediately.
 	GetBootStatus(ctx context.Context) (*BootStatus, error)
 
+	// --- Satellites ---
+
+	// GetSatelliteStatuses returns the laptop (global) daemon's per-satellite
+	// connection-health map, keyed by registry name (GET /api/satellites). This
+	// is a laptop-side READ surface federated from the Store's ConnManager
+	// reports (M2 contract C17); it is not a satellite inbound verb, so the
+	// direction invariant (C3) holds. RemoteClient hits the endpoint; a daemon
+	// predating it (404) yields errEndpointNotFound so callers (e.g. `grove
+	// status`) can soft-fail and skip the section. LocalClient has no ConnManager
+	// and returns ErrNotSupported.
+	GetSatelliteStatuses(ctx context.Context) (map[string]*models.SatelliteStatus, error)
+
 	// --- Claude Trust Seeding ---
 
 	// SeedTrust asks the (unsandboxed) daemon to pre-seed Claude Code
