@@ -241,6 +241,14 @@ func waitForDaemonReady(readyPipe *os.File, socketPath string, timeout time.Dura
 
 // tryConnect attempts to connect to the daemon socket.
 // Returns nil if connection fails.
+//
+// Satellite note (M2 contract C4): this factory only ever resolves LOCAL unix
+// sockets. Satellite-targeted clients deliberately BYPASS the factory —
+// daemon-side callers (P8 collector, P9 dispatch) construct them directly via
+// NewRemoteClientWithDialer with a dialer backed by
+// satellite.ConnManager.DialSatelliteSocket. Do not add satellite/registry
+// resolution to New()/tryConnect(); core cannot import the daemon-internal
+// satellite package, and the dial-injection seam is the intended boundary.
 func tryConnect(socketPath string) Client {
 	if _, err := os.Stat(socketPath); err != nil {
 		return nil
