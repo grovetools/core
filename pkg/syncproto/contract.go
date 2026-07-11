@@ -67,6 +67,7 @@ type Capabilities struct {
 	Search           bool     `json:"search,omitempty"`            // Server-side search (Phase 3)
 	MaxInlineSize    int64    `json:"max_inline_size,omitempty"`   // Largest document stored inline, in bytes (default 256KB)
 	BlobChunkSize    int64    `json:"blob_chunk_size,omitempty"`   // Fixed chunk size for the blob tier, in bytes (default 4MB)
+	MaxBlobSize      int64    `json:"max_blob_size,omitempty"`     // Largest single blob the server accepts, in bytes (0 = unadvertised)
 	Compression      []string `json:"compression,omitempty"`       // Supported blob compressions (e.g. "zstd")
 	ContentEncodings []string `json:"content_encodings,omitempty"` // Supported document content encodings
 }
