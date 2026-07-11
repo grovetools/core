@@ -259,6 +259,36 @@ func (c *RemoteClient) GetSessions(ctx context.Context) ([]*models.Session, erro
 	return sessions, nil
 }
 
+// GetSatelliteStatuses fetches the laptop daemon's per-satellite connection
+// health (GET /api/satellites, M2 contract C17). A 404 (groved predating this
+// endpoint) yields errEndpointNotFound so callers such as `grove status` can
+// soft-fail and skip the satellites section rather than erroring the command.
+func (c *RemoteClient) GetSatelliteStatuses(ctx context.Context) (map[string]*models.SatelliteStatus, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/satellites", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get satellite statuses from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var statuses map[string]*models.SatelliteStatus
+	if err := json.NewDecoder(resp.Body).Decode(&statuses); err != nil {
+		return nil, fmt.Errorf("failed to decode satellite statuses: %w", err)
+	}
+	return statuses, nil
+}
+
 // GetConfig returns the running configuration of the daemon.
 func (c *RemoteClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/config", nil)

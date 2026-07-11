@@ -321,6 +321,23 @@ type SystemInfo struct {
 	UpgradeAvailable bool `json:"upgrade_available"`
 }
 
+// SatelliteStatus is the daemon-API mirror of the store's internal
+// satellite connection-health payload (daemon store SatelliteStatusPayload).
+// The laptop (global) daemon's ConnManager reports one entry per configured
+// satellite, keyed by registry name; scoped daemons emit an empty set. It is a
+// laptop-side read surface (GET /api/satellites) consumed by `grove status` and
+// the `grove satellite status/list` noun (M2 contract C17) — not a satellite
+// inbound verb, so C3's direction invariant holds. JSON tags mirror the store
+// payload so the handler can serialize the store map without a translation
+// layer and the client decode straight into this type.
+type SatelliteStatus struct {
+	Name      string    `json:"name"`                 // registry name (federation Origin, stable across cattle recreations)
+	State     string    `json:"state"`                // "connected" | "backoff" | "disconnected"
+	Addr      string    `json:"addr,omitempty"`       // ssh_addr host:port
+	LastError string    `json:"last_error,omitempty"` // last dial/keepalive error, if any
+	Since     time.Time `json:"since"`                // when the current state was entered
+}
+
 // Helper method to parse time strings from API requests
 func ParseTimeString(timeStr string) (time.Time, error) {
 	// Try common time formats
