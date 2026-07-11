@@ -26,6 +26,14 @@ type RemoteClient struct {
 	httpClient    *http.Client
 	envHttpClient *http.Client // longer timeout for env up/down operations
 	socketPath    string
+	// dial is the transport seam (M2 contract C4). Every HTTP request and SSE
+	// stream this client makes dials through this field, so the socket path is
+	// no longer hardcoded at each call site. NewRemoteClient seeds it with the
+	// Unix-socket closure (behavior-preserving); NewRemoteClientWithDialer lets
+	// daemon-side callers (P8 collector, P9 dispatch) inject a dialer backed by
+	// ConnManager.DialSatelliteSocket so requests tunnel over an SSH
+	// direct-streamlocal channel to a remote groved socket.
+	dial func(ctx context.Context) (net.Conn, error)
 	// fallback is used when the daemon responds with 404 on endpoints it doesn't
 	// know about — typically because the running groved binary is older than the
 	// client and predates a newly-added endpoint. Rather than silently returning
@@ -48,18 +56,47 @@ var errMemoryEndpointMissing = errors.New("groved is running but lacks memory en
 
 // NewRemoteClient creates a new RemoteClient connected to the daemon socket.
 func NewRemoteClient(socketPath string) (*RemoteClient, error) {
-	// Create HTTP client that dials Unix socket
+	// Seed the dial abstraction with the Unix-socket closure (C4). This is the
+	// ONE remaining inline unix dial in this file; every request client and SSE
+	// stream routes through the c.dial field / newStreamTransport() helper.
+	dial := func(ctx context.Context) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", socketPath)
+	}
+	return newRemoteClient(socketPath, dial), nil
+}
+
+// NewRemoteClientWithDialer builds a RemoteClient whose entire HTTP/SSE
+// transport rides a caller-supplied dialer instead of the default Unix socket
+// (M2 contract C4). This is the P7/P8/P9 seam: satellite-targeted clients pass
+// a dialer backed by ConnManager.DialSatelliteSocket so requests tunnel over an
+// SSH direct-streamlocal channel to a remote groved socket. socketPath is left
+// empty — there is no local socket for these clients.
+func NewRemoteClientWithDialer(dial func(ctx context.Context) (net.Conn, error)) (*RemoteClient, error) {
+	return newRemoteClient("", dial), nil
+}
+
+// newRemoteClient is the shared constructor. It wires the long-lived
+// httpClient/envHttpClient transports through the c.dial field so the default
+// Unix path and injected dialers share exactly one code path.
+func newRemoteClient(socketPath string, dial func(ctx context.Context) (net.Conn, error)) *RemoteClient {
+	c := &RemoteClient{
+		socketPath: socketPath,
+		dial:       dial,
+		fallback:   NewLocalClient(),
+	}
+
+	// Create HTTP client that dials through the seam.
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", socketPath)
+			return c.dial(ctx)
 		},
 		DisableKeepAlives: false,
 		MaxIdleConns:      10,
 		IdleConnTimeout:   90 * time.Second,
 	}
 
-	client := &http.Client{
+	c.httpClient = &http.Client{
 		Transport: transport,
 		Timeout:   10 * time.Second,
 	}
@@ -70,17 +107,23 @@ func NewRemoteClient(socketPath string) (*RemoteClient, error) {
 	// cap. Real fix is streaming heartbeats from the daemon; until
 	// that lands we just bump the client-side deadline to 30m so
 	// realistic applies complete without tripping the timeout.
-	envClient := &http.Client{
+	c.envHttpClient = &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Minute,
 	}
 
-	return &RemoteClient{
-		httpClient:    client,
-		envHttpClient: envClient,
-		socketPath:    socketPath,
-		fallback:      NewLocalClient(),
-	}, nil
+	return c
+}
+
+// newStreamTransport builds the no-timeout HTTP transport used by every SSE
+// stream method. It routes DialContext through c.dial so streams honor an
+// injected dialer (satellite tunnels) exactly like the request client does.
+func (c *RemoteClient) newStreamTransport() *http.Transport {
+	return &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			return c.dial(dialCtx)
+		},
+	}
 }
 
 // baseURL is the dummy host used for Unix socket HTTP requests.
@@ -345,12 +388,7 @@ func (c *RemoteClient) StreamState(ctx context.Context) (<-chan StateUpdate, err
 	}
 
 	// Use a separate client with no timeout for streaming
-	streamTransport := &http.Transport{
-		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(dialCtx, "unix", c.socketPath)
-		},
-	}
+	streamTransport := c.newStreamTransport()
 	streamClient := &http.Client{
 		Transport: streamTransport,
 		Timeout:   0, // No timeout for streaming
@@ -420,12 +458,7 @@ func (c *RemoteClient) StreamWorkspaceHUD(ctx context.Context, path string) (<-c
 	}
 
 	// Use a separate client with no timeout for streaming.
-	streamTransport := &http.Transport{
-		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(dialCtx, "unix", c.socketPath)
-		},
-	}
+	streamTransport := c.newStreamTransport()
 	streamClient := &http.Client{
 		Transport: streamTransport,
 		Timeout:   0,
@@ -807,12 +840,7 @@ func (c *RemoteClient) StreamLogs(ctx context.Context, opts models.LogStreamOpti
 		return nil, fmt.Errorf("failed to create stream request: %w", err)
 	}
 
-	streamTransport := &http.Transport{
-		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(dialCtx, "unix", c.socketPath)
-		},
-	}
+	streamTransport := c.newStreamTransport()
 	streamClient := &http.Client{
 		Transport: streamTransport,
 		Timeout:   0,
@@ -872,12 +900,7 @@ func (c *RemoteClient) StreamJobLogs(ctx context.Context, jobID string) (<-chan 
 	}
 
 	// Use a separate client with no timeout for streaming
-	streamTransport := &http.Transport{
-		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(dialCtx, "unix", c.socketPath)
-		},
-	}
+	streamTransport := c.newStreamTransport()
 	streamClient := &http.Client{
 		Transport: streamTransport,
 		Timeout:   0, // No timeout for streaming
@@ -2193,12 +2216,7 @@ func (c *RemoteClient) StreamBuildEvents(ctx context.Context, jobID string) (<-c
 	}
 
 	// Use a separate client with no timeout for streaming
-	streamTransport := &http.Transport{
-		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(dialCtx, "unix", c.socketPath)
-		},
-	}
+	streamTransport := c.newStreamTransport()
 	streamClient := &http.Client{
 		Transport: streamTransport,
 		Timeout:   0, // No timeout for streaming
