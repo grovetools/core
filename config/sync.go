@@ -48,6 +48,11 @@ type SyncWorkspace struct {
 	// Excludes are additional path-prefix/glob exclusions applied on top of
 	// the protocol's default exclusion manifest.
 	Excludes []string `yaml:"excludes,omitempty" toml:"excludes,omitempty" jsonschema:"description=Additional exclusion globs for this workspace"`
+	// MaxFileSize caps the byte size of documents synced from this workspace;
+	// larger files are skipped by the client (0 = no limit). This is the
+	// per-workspace overlay on the big-file policy, distinct from the server's
+	// advertised blob ceiling.
+	MaxFileSize int64 `yaml:"max_file_size,omitempty" toml:"max_file_size,omitempty" jsonschema:"description=Files larger than this many bytes are not synced (0 = no limit)"`
 }
 
 // SyncConfig is the typed sync configuration. It is the schema for both
@@ -124,6 +129,9 @@ func (s *SyncConfig) Validate() error {
 		default:
 			return fmt.Errorf("sync workspace %q has invalid mode %q (expected %s, %s, or %s)",
 				ws.Name, ws.Mode, SyncModeFull, SyncModePlansOnly, SyncModeSearchOnly)
+		}
+		if ws.MaxFileSize < 0 {
+			return fmt.Errorf("sync workspace %q has negative max_file_size %d", ws.Name, ws.MaxFileSize)
 		}
 	}
 	for i, p := range s.Providers {
