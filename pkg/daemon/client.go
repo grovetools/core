@@ -425,6 +425,30 @@ type Client interface {
 	// and returns ErrNotSupported.
 	GetSatelliteStatuses(ctx context.Context) (map[string]*models.SatelliteStatus, error)
 
+	// --- Sync ---
+	// The /api/sync/* read surface is served on the 0600 unix socket only;
+	// scoped daemons proxy these routes to the global daemon (which owns
+	// sync.db), so no client-side special-casing is needed. RemoteClient hits
+	// the endpoints; a daemon predating them (404) yields errEndpointNotFound
+	// so callers can soft-fail and hide the sync surface. LocalClient has no
+	// sync.db and returns ErrNotSupported.
+
+	// GetSyncStatus returns the sync engine's headline status
+	// (GET /api/sync/status): enabled flag, document/outbox counters and
+	// per-workspace cursor + hydration progress. Enabled=false (with a nil
+	// error) means sync is not configured on the global daemon.
+	GetSyncStatus(ctx context.Context) (*models.SyncStatus, error)
+
+	// GetSyncOutbox returns the pending push queue in insertion order
+	// (GET /api/sync/outbox[?workspace=]). Empty workspace means all
+	// workspaces. Parked entries are included.
+	GetSyncOutbox(ctx context.Context, workspace string) ([]models.SyncOutboxEntry, error)
+
+	// GetSyncConflicts returns the recorded conflict artifacts
+	// (GET /api/sync/conflicts[?workspace=]). Empty workspace means all
+	// workspaces.
+	GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error)
+
 	// --- Claude Trust Seeding ---
 
 	// SeedTrust asks the (unsandboxed) daemon to pre-seed Claude Code

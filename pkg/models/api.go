@@ -335,7 +335,78 @@ type SatelliteStatus struct {
 	State     string    `json:"state"`                // "connected" | "backoff" | "disconnected"
 	Addr      string    `json:"addr,omitempty"`       // ssh_addr host:port
 	LastError string    `json:"last_error,omitempty"` // last dial/keepalive error, if any
+	Forward   string    `json:"forward,omitempty"`    // daemon-owned local sync forward, e.g. "active on 127.0.0.1:8788" or "port busy on ..."; empty when off
 	Since     time.Time `json:"since"`                // when the current state was entered
+}
+
+// SyncStatus mirrors the daemon's GET /api/sync/status payload
+// (daemon server syncStatusResponse). The route is served on the 0600 unix
+// socket only; scoped daemons proxy it to the global daemon, which owns
+// sync.db. Enabled=false means sync is not configured on the global daemon.
+type SyncStatus struct {
+	Enabled           bool   `json:"enabled"`
+	DBPath            string `json:"db_path,omitempty"`
+	OriginID          string `json:"origin_id,omitempty"`
+	Documents         int    `json:"documents"`
+	DocumentsDiverged int    `json:"documents_diverged"`
+	// OutboxPending is the TOTAL unsynced count, parked included;
+	// OutboxParked splits out the parked subset.
+	OutboxPending int                   `json:"outbox_pending"`
+	OutboxParked  int                   `json:"outbox_parked"`
+	Workspaces    []SyncWorkspaceStatus `json:"workspaces,omitempty"`
+}
+
+// SyncWorkspaceStatus is one workspace's sync cursor/hydration state inside
+// SyncStatus (daemon server syncWorkspaceStatus).
+type SyncWorkspaceStatus struct {
+	Name         string                 `json:"name"`
+	Cursor       int64                  `json:"cursor"`
+	LastSyncedAt time.Time              `json:"last_synced_at,omitzero"`
+	Hydration    *SyncHydrationProgress `json:"hydration,omitempty"`
+}
+
+// SyncHydrationProgress is a snapshot of one workspace's tree-walk reconcile
+// (daemon sync HydrationProgress). The first pass on an empty sync.db is
+// hydration; later passes catch whatever the live watcher missed.
+type SyncHydrationProgress struct {
+	Workspace   string    `json:"workspace"`
+	Running     bool      `json:"running"`
+	Scanned     int64     `json:"scanned"`
+	Enqueued    int64     `json:"enqueued"`
+	Quarantined int64     `json:"quarantined"`
+	StartedAt   time.Time `json:"started_at,omitzero"`
+	FinishedAt  time.Time `json:"finished_at,omitzero"`
+	FilesPerSec float64   `json:"files_per_sec"`
+}
+
+// SyncOutboxEntry is one entry of the daemon's GET /api/sync/outbox payload
+// (daemon server syncOutboxResponse): a change pending in the local push
+// queue. The payload body is deliberately omitted server-side.
+type SyncOutboxEntry struct {
+	ID          int64     `json:"id"`
+	DocumentID  string    `json:"document_id"`
+	Workspace   string    `json:"workspace"`
+	EventType   string    `json:"event_type"`
+	Path        string    `json:"path"`
+	PrevPath    string    `json:"prev_path,omitempty"`
+	ContentHash string    `json:"content_hash"`
+	CreatedAt   time.Time `json:"created_at"`
+	Parked      bool      `json:"parked,omitempty"`
+	Attempts    int       `json:"attempts,omitempty"`
+	NextRetryAt time.Time `json:"next_retry_at,omitzero"`
+	ParkReason  string    `json:"park_reason,omitempty"`
+}
+
+// SyncConflict is one entry of the daemon's GET /api/sync/conflicts payload
+// (daemon server syncConflictResponse): a conflict artifact on disk plus the
+// 3-way-merge base recovered from sync.db.
+type SyncConflict struct {
+	Workspace       string `json:"workspace"`
+	Path            string `json:"path"`        // original wire path of the conflicted document
+	DocumentID      string `json:"document_id"` // parsed from the artifact filename
+	Artifact        string `json:"artifact"`    // artifact filename, workspace-relative (slash form)
+	ArtifactContent string `json:"artifact_content"`
+	BaseContent     string `json:"base_content,omitempty"` // 3-way base from sync_documents, when resolvable
 }
 
 // Helper method to parse time strings from API requests
