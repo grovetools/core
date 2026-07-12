@@ -214,3 +214,35 @@ func TestPathNormalization(t *testing.T) {
 	// the helpers exist and round-trip.
 	assert.Equal(t, NormalizePath(LocalizePath("plans/x/y.md")), "plans/x/y.md")
 }
+
+// TestSyncEventMtimeWireFormat: the fidelity mtime round-trips through JSON,
+// and a zero mtime is omitted entirely (omitzero) so pre-mtime peers see an
+// unchanged wire shape — the backward-compatibility contract.
+func TestSyncEventMtimeWireFormat(t *testing.T) {
+	mtime := time.Date(2026, 7, 11, 9, 30, 0, 0, time.UTC)
+	ev := SyncEvent{Type: EventDocumentCreated, Workspace: "ws", Path: "a.md", Mtime: mtime}
+
+	data, err := json.Marshal(ev)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"mtime"`)
+
+	var decoded SyncEvent
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.True(t, decoded.Mtime.Equal(mtime))
+
+	// Zero mtime: omitted on events and snapshots alike.
+	data, err = json.Marshal(SyncEvent{Type: EventDocumentDeleted, Workspace: "ws", Path: "a.md"})
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"mtime"`)
+
+	snap := DocumentSnapshot{ID: "id", Path: "a.md", Version: 1, Hash: "h", Size: 1, Mtime: mtime}
+	data, err = json.Marshal(snap)
+	require.NoError(t, err)
+	var decodedSnap DocumentSnapshot
+	require.NoError(t, json.Unmarshal(data, &decodedSnap))
+	assert.True(t, decodedSnap.Mtime.Equal(mtime))
+
+	data, err = json.Marshal(DocumentSnapshot{ID: "id", Path: "a.md"})
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"mtime"`)
+}
