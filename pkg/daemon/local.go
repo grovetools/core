@@ -661,5 +661,22 @@ func (c *LocalClient) GetSatelliteStatuses(ctx context.Context) (map[string]*mod
 	return nil, ErrNotSupported
 }
 
+// GetSyncStatus requires the daemon: sync.db lives in the global daemon, so
+// there is nothing to report without it. ErrNotSupported lets callers hide
+// the sync surface.
+func (c *LocalClient) GetSyncStatus(ctx context.Context) (*models.SyncStatus, error) {
+	return nil, ErrNotSupported
+}
+
+// GetSyncOutbox requires the daemon (see GetSyncStatus).
+func (c *LocalClient) GetSyncOutbox(ctx context.Context, workspace string) ([]models.SyncOutboxEntry, error) {
+	return nil, ErrNotSupported
+}
+
+// GetSyncConflicts requires the daemon (see GetSyncStatus).
+func (c *LocalClient) GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error) {
+	return nil, ErrNotSupported
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

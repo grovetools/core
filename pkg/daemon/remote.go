@@ -289,6 +289,105 @@ func (c *RemoteClient) GetSatelliteStatuses(ctx context.Context) (map[string]*mo
 	return statuses, nil
 }
 
+// GetSyncStatus fetches the sync engine's headline status (GET
+// /api/sync/status). The route is unix-socket-only; scoped daemons proxy it
+// to the global daemon, which owns sync.db — no client-side special-casing
+// needed. A 404 (groved predating the sync API) yields errEndpointNotFound so
+// callers can soft-fail and hide the sync surface.
+func (c *RemoteClient) GetSyncStatus(ctx context.Context) (*models.SyncStatus, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/sync/status", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sync status from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var status models.SyncStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, fmt.Errorf("failed to decode sync status: %w", err)
+	}
+	return &status, nil
+}
+
+// GetSyncOutbox fetches the pending push queue in insertion order (GET
+// /api/sync/outbox[?workspace=]). Empty workspace means all workspaces.
+// Parked entries are included. A daemon without sync configured answers 503,
+// surfaced as a plain error — callers should consult GetSyncStatus.Enabled
+// first.
+func (c *RemoteClient) GetSyncOutbox(ctx context.Context, workspace string) ([]models.SyncOutboxEntry, error) {
+	u := baseURL + "/api/sync/outbox"
+	if workspace != "" {
+		u += "?workspace=" + url.QueryEscape(workspace)
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sync outbox from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var entries []models.SyncOutboxEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to decode sync outbox: %w", err)
+	}
+	return entries, nil
+}
+
+// GetSyncConflicts fetches the recorded conflict artifacts (GET
+// /api/sync/conflicts[?workspace=]). Empty workspace means all workspaces.
+// Same 404/503 semantics as GetSyncOutbox.
+func (c *RemoteClient) GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error) {
+	u := baseURL + "/api/sync/conflicts"
+	if workspace != "" {
+		u += "?workspace=" + url.QueryEscape(workspace)
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sync conflicts from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var conflicts []models.SyncConflict
+	if err := json.NewDecoder(resp.Body).Decode(&conflicts); err != nil {
+		return nil, fmt.Errorf("failed to decode sync conflicts: %w", err)
+	}
+	return conflicts, nil
+}
+
 // GetConfig returns the running configuration of the daemon.
 func (c *RemoteClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/config", nil)
