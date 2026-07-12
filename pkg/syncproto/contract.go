@@ -134,6 +134,12 @@ type SyncEvent struct {
 	// ReceivedAt is the server-arrival timestamp; it defines ordering.
 	// Client timestamps are never compared.
 	ReceivedAt time.Time `json:"received_at,omitzero"`
+	// Mtime is the source file's modification time, captured client-side at
+	// enqueue. It is fidelity metadata ONLY — replicas restore it via
+	// os.Chtimes after writing — and is NEVER an ordering, OCC, or conflict
+	// input (the "client timestamps are never compared" invariant stands).
+	// Zero means unknown (old client/server): replicas keep the write time.
+	Mtime time.Time `json:"mtime,omitzero"`
 }
 
 // PushRequest is a batched client→server upload of local changes for one
@@ -197,6 +203,10 @@ type DocumentSnapshot struct {
 	Version int64  `json:"version"` // Current document version
 	Hash    string `json:"hash"`    // SHA-256 of current content (hex)
 	Size    int64  `json:"size"`    // Content size in bytes
+	// Mtime is the source file's modification time as last pushed (fidelity
+	// metadata only, never compared; zero = unknown). Snapshot hydration uses
+	// it to restore mtimes on freshly materialized replicas.
+	Mtime time.Time `json:"mtime,omitzero"`
 }
 
 // SnapshotManifest is the resumable snapshot form: the full document listing
