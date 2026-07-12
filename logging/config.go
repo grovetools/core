@@ -75,6 +75,17 @@ type Config struct {
 	// Format configures the appearance of the log output.
 	Format FormatConfig `yaml:"format" toml:"format" jsonschema:"description=Log output format settings" jsonschema_extras:"x-layer=global,x-priority=75"`
 
+	// StructuredPrettyFields, if true, embeds the console-rendered form of
+	// each unified log entry into its structured record as pretty_ansi
+	// (styled) and pretty_text (ANSI-stripped) fields, for log viewers that
+	// want to replay the exact styled console line (`core logs
+	// --format=pretty`, the TUI log detail pane). Off by default: the fields
+	// add roughly 10% to log volume and cost a lipgloss render plus an ANSI
+	// strip per entry, and viewers fall back to msg when they are absent.
+	// The GROVE_LOG_PRETTY_FIELDS environment variable (true/false)
+	// overrides this setting.
+	StructuredPrettyFields bool `yaml:"structured_pretty_fields,omitempty" toml:"structured_pretty_fields,omitempty" jsonschema:"description=Embed rendered pretty_ansi/pretty_text fields in structured log entries (adds ~10% log volume; GROVE_LOG_PRETTY_FIELDS overrides),default=false" jsonschema_extras:"x-layer=global,x-priority=79"`
+
 	// Groups defines named collections of component loggers for easy filtering.
 	// Example:
 	//   groups:

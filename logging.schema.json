@@ -187,6 +187,13 @@
       "x-layer": "global",
       "x-priority": "75"
     },
+    "structured_pretty_fields": {
+      "type": "boolean",
+      "description": "Embed rendered pretty_ansi/pretty_text fields in structured log entries (adds ~10% log volume; GROVE_LOG_PRETTY_FIELDS overrides)",
+      "default": false,
+      "x-layer": "global",
+      "x-priority": "79"
+    },
     "groups": {
       "additionalProperties": {
         "items": {

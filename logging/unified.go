@@ -24,6 +24,11 @@ type UnifiedLogger struct {
 	// prettyLevel is the resolved console level; entries more verbose than
 	// this skip the pretty output path (structured sinks are unaffected).
 	prettyLevel logrus.Level
+	// prettyFields mirrors the resolved structured_pretty_fields option
+	// (see Config.StructuredPrettyFields / GROVE_LOG_PRETTY_FIELDS). When
+	// false — the default — structured entries omit the rendered
+	// pretty_ansi/pretty_text fields.
+	prettyFields bool
 }
 
 // NewUnifiedLogger creates a new unified logger for a specific component.
@@ -36,10 +41,11 @@ func NewUnifiedLogger(component string) *UnifiedLogger {
 	structured.Logger.SetReportCaller(false)
 
 	return &UnifiedLogger{
-		component:   component,
-		pretty:      NewPrettyLogger(),
-		structured:  structured,
-		prettyLevel: ConsoleLevel(),
+		component:    component,
+		pretty:       NewPrettyLogger(),
+		structured:   structured,
+		prettyLevel:  ConsoleLevel(),
+		prettyFields: PrettyFieldsEnabled(),
 	}
 }
 
@@ -239,27 +245,56 @@ func isDualEmit(entry *logrus.Entry) bool {
 // Log executes the log entry, writing to both outputs based on configuration.
 // This is the terminal method that must be called for the log to be written.
 func (e *LogEntry) Log(ctx context.Context) {
-	// Compute the pretty output once (used by both logPretty and logStructured)
-	prettyOutput := e.computePrettyOutput()
+	// Gate on the sink levels before doing ANY formatting work.
+	//
+	// emitPretty: the console/pretty path, gated at the resolved console
+	// level (logrus levels are numerically inverted: Debug=5 > Info=4, so
+	// "more verbose" means a larger value).
+	//
+	// emitStructured: the logrus pipeline (console echo + file sinks). The
+	// logrus logger level is the most verbose of all its sinks (see
+	// NewLogger), so IsLevelEnabled is exactly "some structured sink would
+	// accept this entry".
+	emitPretty := !e.structOnly && e.level <= e.logger.prettyLevel
+	emitStructured := !e.prettyOnly && e.logger.structured.Logger.IsLevelEnabled(e.level)
+	if !emitPretty && !emitStructured {
+		return
+	}
 
-	// Pretty output (to context writer -> CLI + job.log), gated at the
-	// resolved console level (logrus levels are numerically inverted:
-	// Debug=5 > Info=4, so "more verbose" means a larger value).
+	// Render the pretty line only when something will consume it: the
+	// console, or the structured pretty fields when opted in via
+	// structured_pretty_fields / GROVE_LOG_PRETTY_FIELDS.
+	includePrettyFields := emitStructured && e.logger.prettyFields
+	var prettyOutput string
+	if emitPretty || includePrettyFields {
+		prettyOutput = e.computePrettyOutput()
+	}
+
+	// Pretty output (to context writer -> CLI + job.log).
 	// Add extra newline for visual spacing between log entries in TUI
-	emittedPretty := !e.structOnly && e.level <= e.logger.prettyLevel
-	if emittedPretty {
+	if emitPretty {
 		writer := GetWriter(ctx)
 		fmt.Fprintf(writer, "%s\n\n", prettyOutput)
 	}
 
 	// Structured output (to workspace log + core logs)
-	if !e.prettyOnly {
-		e.logStructured(prettyOutput, emittedPretty)
+	if emitStructured {
+		e.logStructured(prettyOutput, emitPretty, includePrettyFields)
 	}
 }
 
+// prettyRenderObserver, when non-nil, is invoked each time
+// computePrettyOutput renders a pretty line. Test-only instrumentation for
+// asserting that entries below every sink level do no rendering work; never
+// set outside tests.
+var prettyRenderObserver func()
+
 // computePrettyOutput generates the styled output string.
 func (e *LogEntry) computePrettyOutput() string {
+	if prettyRenderObserver != nil {
+		prettyRenderObserver()
+	}
+
 	var output string
 	if e.prettyMsg != "" {
 		// Use custom styled message provided via .Pretty()
@@ -309,7 +344,10 @@ func (e *LogEntry) computePrettyOutput() string {
 // indicates the message was already written to the console via the pretty
 // path; such entries are marked so the console output can skip the raw
 // duplicate when stderr is piped (file sinks always receive them).
-func (e *LogEntry) logStructured(prettyOutput string, emittedPretty bool) {
+// includePrettyFields embeds the rendered pretty output into the entry's
+// fields (opt-in via structured_pretty_fields / GROVE_LOG_PRETTY_FIELDS);
+// prettyOutput is only meaningful when it is true.
+func (e *LogEntry) logStructured(prettyOutput string, emittedPretty, includePrettyFields bool) {
 	// Capture the actual caller (skip: 0=logStructured, 1=Log, 2=actual call site)
 	// Since we disabled ReportCaller in NewUnifiedLogger, we can use "file" and "func"
 	// directly without collision - same fields as regular log calls use.
@@ -323,11 +361,14 @@ func (e *LogEntry) logStructured(prettyOutput string, emittedPretty bool) {
 		e.fields["func"] = funcName
 	}
 
-	// Add both pretty output versions for viewer flexibility
+	// Optionally add both pretty output versions for viewer flexibility
+	// (opt-in: they add ~10% to log volume and viewers fall back to msg).
 	// pretty_ansi: with ANSI escape codes (can be rendered in terminals)
 	// pretty_text: stripped of ANSI (clean text for display/search)
-	e.fields["pretty_ansi"] = prettyOutput
-	e.fields["pretty_text"] = ansiRegex.ReplaceAllString(prettyOutput, "")
+	if includePrettyFields {
+		e.fields["pretty_ansi"] = prettyOutput
+		e.fields["pretty_text"] = ansiRegex.ReplaceAllString(prettyOutput, "")
+	}
 
 	entry := e.logger.structured.WithFields(e.fields)
 	if emittedPretty {

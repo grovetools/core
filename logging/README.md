@@ -44,6 +44,7 @@ Add a `logging` section to your `grove.yml`:
 logging:
   level: info              # debug, info, warn, error
   report_caller: false     # Include file:line:function in logs
+  structured_pretty_fields: false  # Embed rendered pretty_ansi/pretty_text in structured entries (opt-in; ~10% log volume)
   file:
     enabled: true
     path: ~/.grove/logs/grove.log
@@ -57,6 +58,7 @@ logging:
 
 - `GROVE_LOG_LEVEL`: Set the minimum log level (debug, info, warn, error)
 - `GROVE_LOG_CALLER`: Set to "true" to include file, line, and function information
+- `GROVE_LOG_PRETTY_FIELDS`: Set to "true"/"false" to override `structured_pretty_fields` (embed the console-rendered `pretty_ansi`/`pretty_text` fields in structured log entries; off by default — viewers like `core logs --format=pretty` and the TUI log detail pane fall back to `msg` when absent)
 
 ### Version Information Logging
 
