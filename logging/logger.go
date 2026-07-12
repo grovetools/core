@@ -299,6 +299,42 @@ func ConsoleLevel() logrus.Level {
 	return resolvedConsoleLevel
 }
 
+// resolvedPrettyFields caches whether structured entries should embed the
+// rendered pretty_ansi/pretty_text fields, as resolved by the most recent
+// NewLogger call. Like the console level, this is process-wide.
+var (
+	resolvedPrettyFields   = false
+	resolvedPrettyFieldsMu sync.RWMutex
+)
+
+func setResolvedPrettyFields(enabled bool) {
+	resolvedPrettyFieldsMu.Lock()
+	resolvedPrettyFields = enabled
+	resolvedPrettyFieldsMu.Unlock()
+}
+
+// PrettyFieldsEnabled reports whether unified log entries embed their
+// rendered pretty_ansi/pretty_text forms into structured output, as resolved
+// by the most recent NewLogger call (false — the default — before any logger
+// has been created). See Config.StructuredPrettyFields.
+func PrettyFieldsEnabled() bool {
+	resolvedPrettyFieldsMu.RLock()
+	defer resolvedPrettyFieldsMu.RUnlock()
+	return resolvedPrettyFields
+}
+
+// resolvePrettyFields resolves whether structured entries embed the rendered
+// pretty fields: GROVE_LOG_PRETTY_FIELDS env (true/false) >
+// structured_pretty_fields config > off.
+func resolvePrettyFields(logCfg *Config) bool {
+	if env := os.Getenv("GROVE_LOG_PRETTY_FIELDS"); env != "" {
+		if v, err := strconv.ParseBool(env); err == nil {
+			return v
+		}
+	}
+	return logCfg.StructuredPrettyFields
+}
+
 // parseLevelOrInfo parses a level string, falling back to info.
 func parseLevelOrInfo(s string) logrus.Level {
 	level, err := logrus.ParseLevel(s)
@@ -377,6 +413,7 @@ func NewLogger(component string) *logrus.Entry {
 	consoleLevel, fileLevel := resolveLevels(&logCfg, currentScope)
 	logger.SetLevel(mostVerbose(consoleLevel, fileLevel))
 	setResolvedConsoleLevel(consoleLevel)
+	setResolvedPrettyFields(resolvePrettyFields(&logCfg))
 
 	// Configure Caller Reporting
 	if os.Getenv("GROVE_LOG_CALLER") == "true" || logCfg.ReportCaller {
@@ -750,6 +787,7 @@ func Reset() {
 	currentProjectOnce = sync.Once{}
 	currentProjectName = ""
 	setResolvedConsoleLevel(logrus.InfoLevel)
+	setResolvedPrettyFields(false)
 
 	scopeMu.Lock()
 	activeScope = ScopeWorkspace

@@ -413,3 +413,165 @@ type testError struct {
 func (e *testError) Error() string {
 	return e.msg
 }
+
+// captureHook records every logrus entry fired through a logger so tests can
+// inspect the structured fields.
+type captureHook struct {
+	entries []*logrus.Entry
+}
+
+func (h *captureHook) Levels() []logrus.Level { return logrus.AllLevels }
+
+func (h *captureHook) Fire(e *logrus.Entry) error {
+	h.entries = append(h.entries, e)
+	return nil
+}
+
+// countPrettyRenders installs a render observer for the duration of the test
+// and returns a pointer to the running count.
+func countPrettyRenders(t *testing.T) *int {
+	t.Helper()
+	renders := new(int)
+	prettyRenderObserver = func() { *renders++ }
+	t.Cleanup(func() { prettyRenderObserver = nil })
+	return renders
+}
+
+// newIsolatedUnifiedLogger resets the logging package state and builds a
+// fresh unified logger with deterministic sink levels (GROVE_LOG_LEVEL=info
+// overrides both the console and file levels regardless of ambient config).
+func newIsolatedUnifiedLogger(t *testing.T, component, prettyFieldsEnv string) *UnifiedLogger {
+	t.Helper()
+	t.Setenv("GROVE_LOG_LEVEL", "info")
+	t.Setenv("GROVE_LOG_PRETTY_FIELDS", prettyFieldsEnv)
+	Reset()
+	t.Cleanup(Reset)
+	return NewUnifiedLogger(component)
+}
+
+func TestLogBelowAllSinksDoesNoPrettyRender(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-below-sinks", "")
+	renders := countPrettyRenders(t)
+
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	var buf bytes.Buffer
+	ctx := WithWriter(context.Background(), &buf)
+
+	// Console and file sinks are both at info: a debug entry clears nothing.
+	ulog.Debug("invisible detail").Field("key", "value").Log(ctx)
+
+	if *renders != 0 {
+		t.Errorf("expected 0 pretty renders for a below-all-sinks entry, got %d", *renders)
+	}
+	if got := buf.String(); got != "" {
+		t.Errorf("expected no pretty output, got %q", got)
+	}
+	if len(hook.entries) != 0 {
+		t.Errorf("expected no structured entries, got %d", len(hook.entries))
+	}
+}
+
+func TestStructuredOmitsPrettyFieldsByDefault(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-pretty-fields-off", "")
+
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	var buf bytes.Buffer
+	ctx := WithWriter(context.Background(), &buf)
+	ulog.Info("hello fields").Log(ctx)
+
+	if len(hook.entries) != 1 {
+		t.Fatalf("expected 1 structured entry, got %d", len(hook.entries))
+	}
+	data := hook.entries[0].Data
+	if v, ok := data["pretty_ansi"]; ok {
+		t.Errorf("expected pretty_ansi to be omitted by default, got %q", v)
+	}
+	if v, ok := data["pretty_text"]; ok {
+		t.Errorf("expected pretty_text to be omitted by default, got %q", v)
+	}
+	// The console line is still rendered and written.
+	if !strings.Contains(buf.String(), "hello fields") {
+		t.Errorf("expected console output to contain the message, got %q", buf.String())
+	}
+}
+
+func TestStructuredIncludesPrettyFieldsWhenEnabled(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-pretty-fields-on", "true")
+	renders := countPrettyRenders(t)
+
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	var buf bytes.Buffer
+	ctx := WithWriter(context.Background(), &buf)
+	ulog.Success("job done").Log(ctx)
+
+	if len(hook.entries) != 1 {
+		t.Fatalf("expected 1 structured entry, got %d", len(hook.entries))
+	}
+	data := hook.entries[0].Data
+	prettyAnsi, ok := data["pretty_ansi"].(string)
+	if !ok || prettyAnsi == "" {
+		t.Errorf("expected non-empty pretty_ansi when the flag is on, got %v", data["pretty_ansi"])
+	}
+	prettyText, ok := data["pretty_text"].(string)
+	if !ok || !strings.Contains(prettyText, "job done") {
+		t.Errorf("expected pretty_text to contain the message, got %v", data["pretty_text"])
+	}
+	if strings.Contains(prettyText, "\x1b[") {
+		t.Errorf("expected pretty_text to be ANSI-free, got %q", prettyText)
+	}
+	// The pretty line is rendered exactly once even though both the console
+	// and the structured fields consume it.
+	if *renders != 1 {
+		t.Errorf("expected exactly 1 pretty render, got %d", *renders)
+	}
+}
+
+func TestConsoleOutputUnchangedByPrettyFieldGating(t *testing.T) {
+	render := func(prettyFieldsEnv string) string {
+		ulog := newIsolatedUnifiedLogger(t, "test-console-bytes-"+prettyFieldsEnv, prettyFieldsEnv)
+		var buf bytes.Buffer
+		ctx := WithWriter(context.Background(), &buf)
+		ulog.Warn("disk almost full").Field("free_mb", 12).Log(ctx)
+		return buf.String()
+	}
+
+	off := render("false")
+	on := render("true")
+	if off != on {
+		t.Errorf("console output must be byte-identical regardless of the pretty-fields flag:\noff=%q\non =%q", off, on)
+	}
+	if !strings.Contains(off, "disk almost full") {
+		t.Errorf("expected console output to contain the message, got %q", off)
+	}
+}
+
+func TestStructuredOnlyBelowConsoleLevelStillReachesSinks(t *testing.T) {
+	// An info-level StructuredOnly entry must keep reaching structured sinks
+	// after the early-out gate, and must not render pretty output when the
+	// pretty fields are off (the default).
+	ulog := newIsolatedUnifiedLogger(t, "test-structonly-gate", "")
+	renders := countPrettyRenders(t)
+
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	var buf bytes.Buffer
+	ctx := WithWriter(context.Background(), &buf)
+	ulog.Info("audit record").StructuredOnly().Log(ctx)
+
+	if len(hook.entries) != 1 {
+		t.Fatalf("expected 1 structured entry, got %d", len(hook.entries))
+	}
+	if got := buf.String(); got != "" {
+		t.Errorf("expected no pretty output for StructuredOnly, got %q", got)
+	}
+	if *renders != 0 {
+		t.Errorf("expected 0 pretty renders for StructuredOnly with pretty fields off, got %d", *renders)
+	}
+}
