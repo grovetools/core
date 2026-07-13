@@ -97,6 +97,7 @@ type CapabilitiesRequest struct {
 type CapabilitiesResponse struct {
 	ServerName      string       `json:"server_name"`              // e.g. "grove-syncd"
 	ServerVersion   string       `json:"server_version,omitempty"` // Server build version
+	ServerEpoch     string       `json:"server_epoch,omitempty"`   // Server database identity, minted on first open; a changed epoch means the server store was recreated and push-only clients must re-push their full document set (empty = pre-epoch server)
 	ProtocolVersion int          `json:"protocol_version"`         // Negotiated version for this connection
 	Capabilities    Capabilities `json:"capabilities"`             // Feature set
 	Error           string       `json:"error,omitempty"`          // Set when negotiation fails (e.g. no common version)
