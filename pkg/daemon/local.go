@@ -661,6 +661,13 @@ func (c *LocalClient) GetSatelliteStatuses(ctx context.Context) (map[string]*mod
 	return nil, ErrNotSupported
 }
 
+// ReloadSatellites requires the daemon (see GetSatelliteStatuses): there is no
+// ConnManager to reload without one. ErrNotSupported lets `grove satellite
+// up`/`down` fall back to the manual reload instruction.
+func (c *LocalClient) ReloadSatellites(ctx context.Context) (*models.SatelliteReloadSummary, error) {
+	return nil, ErrNotSupported
+}
+
 // GetSyncStatus requires the daemon: sync.db lives in the global daemon, so
 // there is nothing to report without it. ErrNotSupported lets callers hide
 // the sync surface.

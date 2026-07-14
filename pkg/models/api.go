@@ -339,6 +339,18 @@ type SatelliteStatus struct {
 	Since     time.Time `json:"since"`                // when the current state was entered
 }
 
+// SatelliteReloadSummary mirrors the daemon's POST /api/satellites/reload
+// response (daemon satellite ReloadSummary): what the registry hot-reload did,
+// by satellite name. `grove satellite up`/`down` POST the endpoint as their
+// final step and print this summary; a daemon predating the endpoint (404)
+// falls back to the manual "reload the daemon" instruction.
+type SatelliteReloadSummary struct {
+	Added     []string `json:"added"`
+	Removed   []string `json:"removed"`
+	Changed   []string `json:"changed"`
+	Unchanged []string `json:"unchanged"`
+}
+
 // SyncStatus mirrors the daemon's GET /api/sync/status payload
 // (daemon server syncStatusResponse). The route is served on the 0600 unix
 // socket only; scoped daemons proxy it to the global daemon, which owns

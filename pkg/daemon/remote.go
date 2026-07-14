@@ -289,6 +289,39 @@ func (c *RemoteClient) GetSatelliteStatuses(ctx context.Context) (map[string]*mo
 	return statuses, nil
 }
 
+// ReloadSatellites asks the daemon to hot-reload its satellite registry from
+// disk (POST /api/satellites/reload) and returns the applied delta. A 404
+// (groved predating the endpoint) yields errEndpointNotFound so callers such
+// as `grove satellite up`/`down` can soft-fail to the manual "reload the
+// daemon" instruction; other non-200s surface the daemon's message (the
+// endpoint 4xxes on scoped daemons and when satellites are disabled).
+func (c *RemoteClient) ReloadSatellites(ctx context.Context) (*models.SatelliteReloadSummary, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/satellites/reload", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload satellites on daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("daemon returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var summary models.SatelliteReloadSummary
+	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+		return nil, fmt.Errorf("failed to decode satellite reload summary: %w", err)
+	}
+	return &summary, nil
+}
+
 // GetSyncStatus fetches the sync engine's headline status (GET
 // /api/sync/status). The route is unix-socket-only; scoped daemons proxy it
 // to the global daemon, which owns sync.db — no client-side special-casing

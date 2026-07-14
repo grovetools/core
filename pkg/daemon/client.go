@@ -425,6 +425,15 @@ type Client interface {
 	// and returns ErrNotSupported.
 	GetSatelliteStatuses(ctx context.Context) (map[string]*models.SatelliteStatus, error)
 
+	// ReloadSatellites asks the global daemon to hot-reload its satellite
+	// registry from disk (POST /api/satellites/reload) and returns what
+	// changed. `grove satellite up`/`down` call it as their final step so the
+	// ConnManager picks up the new/removed entry without a daemon restart.
+	// RemoteClient hits the endpoint; a daemon predating it (404) yields an
+	// error so callers can fall back to the manual reload instruction.
+	// LocalClient has no ConnManager and returns ErrNotSupported.
+	ReloadSatellites(ctx context.Context) (*models.SatelliteReloadSummary, error)
+
 	// --- Sync ---
 	// The /api/sync/* read surface is served on the 0600 unix socket only;
 	// scoped daemons proxy these routes to the global daemon (which owns
