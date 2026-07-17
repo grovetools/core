@@ -255,6 +255,61 @@ func TestSetupSubmodules(t *testing.T) {
 		assert.False(t, info.IsDir(), "local-sub/.git should be a worktree pointer file")
 	})
 
+	t.Run("symlinked ecosystem root maps direct-child siblings", func(t *testing.T) {
+		// Regression for the EqualFold-vs-realpath bug: discovery records a
+		// member's raw path spelling (through a symlinked ancestor, e.g. /var/...)
+		// while the ecosystem root is derived from git as a realpath (/private/var/...).
+		// The old direct-child filter used strings.EqualFold, which matched NOTHING
+		// under a symlinked root and silently dropped every sibling. With the
+		// pathutil.ComparePaths filter the member maps and its worktree is created.
+		//
+		// NOTE: repos is nil here on purpose, so the ONLY route for the member into
+		// the project set is the direct-child filter (the len(repos)>0 authoritative
+		// path is not taken). Before the fix this yields an empty project set and a
+		// silent early return; after the fix the member is created.
+		tempDir := t.TempDir()
+
+		// Build a deterministic symlink: realDir holds the real tree; symDir is a
+		// symlink to it. gitRoot is passed as the REAL spelling (as git reports),
+		// discovery gets the SYMLINK spelling.
+		realDir := filepath.Join(tempDir, "real")
+		require.NoError(t, os.MkdirAll(realDir, 0o755))
+		symDir := filepath.Join(tempDir, "sym")
+		require.NoError(t, os.Symlink(realDir, symDir))
+
+		ecoRootReal := filepath.Join(realDir, "eco")
+		require.NoError(t, os.MkdirAll(ecoRootReal, 0o755))
+		initGitRepo(t, ecoRootReal)
+		require.NoError(t, os.WriteFile(filepath.Join(ecoRootReal, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644))
+		commitFiles(t, ecoRootReal, "ecosystem root")
+
+		memberReal := filepath.Join(ecoRootReal, "member")
+		require.NoError(t, os.MkdirAll(memberReal, 0o755))
+		initGitRepo(t, memberReal)
+		require.NoError(t, os.WriteFile(filepath.Join(memberReal, "README.md"), []byte("member"), 0o644))
+		commitFiles(t, memberReal, "member initial")
+
+		// Discovery keeps the symlink spelling: <symDir>/eco/member. Its parent
+		// dir (<symDir>/eco) differs textually from the realpath'd ecosystem root
+		// (<realDir>/eco) but is the SAME physical directory.
+		memberSym := filepath.Join(symDir, "eco", "member")
+		mockProvider := createMockProvider(map[string]string{
+			"member": memberSym,
+		})
+
+		worktreePath := filepath.Join(tempDir, "container")
+		createWorktree(t, ecoRootReal, worktreePath, "feature-branch")
+
+		err := SetupSubmodules(ctx, worktreePath, ecoRootReal, "feature-branch", nil, mockProvider)
+		require.NoError(t, err)
+
+		// The sibling must have mapped and been created as a linked worktree.
+		memberWt := filepath.Join(worktreePath, "member")
+		info, statErr := os.Stat(filepath.Join(memberWt, ".git"))
+		require.NoError(t, statErr, "member sibling must map under a symlinked ecosystem root and be created")
+		assert.False(t, info.IsDir(), "member/.git should be a linked-worktree pointer file")
+	})
+
 	t.Run("handle missing submodules", func(t *testing.T) {
 		// Create temporary directories
 		tempDir := t.TempDir()
