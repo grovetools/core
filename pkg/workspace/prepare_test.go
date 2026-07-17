@@ -267,6 +267,38 @@ func TestPrepare(t *testing.T) {
 		assert.False(t, info.IsDir(), "member .git should be a gitdir file (linked worktree), not a directory")
 	})
 
+	t.Run("failed setup removes poisoned worktree dir", func(t *testing.T) {
+		// Regression for the "second run silently succeeds with a broken container"
+		// bug. When SetupSubmodules fails, Prepare must delete the half-provisioned
+		// container it created so a retry starts clean. Otherwise the leftover dir
+		// survives, the next Prepare sees it (created==false), SKIPS setup, and
+		// returns a silently-incomplete worktree with no error.
+		tempDir := resolveDir(t.TempDir())
+		repoDir := filepath.Join(tempDir, "eco-root")
+		require.NoError(t, os.MkdirAll(repoDir, 0o755))
+		setupTestRepo(t, repoDir)
+
+		ctx := context.Background()
+		opts := PrepareOptions{
+			GitRoot:      repoDir,
+			WorktreeName: "poisoned-workspace",
+			BranchName:   "feature/poisoned",
+			// Explicitly request a sibling that exists nowhere (no direct-child
+			// dir, no .gitmodules entry). SetupSubmodules hard-errors on it, so
+			// Prepare must fail AND leave no leftover container.
+			SiblingWorkspaces: []string{"ghost-repo"},
+		}
+
+		_, err := Prepare(ctx, opts)
+		require.Error(t, err, "Prepare must fail when a requested sibling cannot be set up")
+
+		// The poisoned container must be gone so a retry re-enters the created==true
+		// path and re-runs setup, rather than skipping it on a stale dir.
+		target := ResolveNewWorktreePath(repoDir, "poisoned-workspace", false)
+		_, statErr := os.Stat(target)
+		assert.True(t, os.IsNotExist(statErr), "failed Prepare must remove the poisoned worktree container")
+	})
+
 	t.Run("error cases", func(t *testing.T) {
 		ctx := context.Background()
 

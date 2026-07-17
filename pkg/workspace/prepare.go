@@ -73,6 +73,15 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		}
 
 		if err := SetupSubmodules(ctx, worktreePath, opts.GitRoot, opts.BranchName, opts.SiblingWorkspaces, provider, setupHandlers...); err != nil {
+			// Remove the poisoned, half-provisioned container before returning.
+			// Without this, the empty/partial dir survives on disk; the NEXT
+			// Prepare sees it via os.Stat (created==false), SKIPS SetupSubmodules
+			// entirely, and returns a silently-incomplete worktree with no error —
+			// the exact "second run succeeds with a broken container" bug. We only
+			// created worktreePath in THIS call (created==true here), so removing
+			// it is safe; any member linked-worktrees left inside are cleared by
+			// the pre-add `git worktree prune` on the next attempt.
+			_ = os.RemoveAll(worktreePath)
 			// Propagate hard: an explicitly-requested sibling repo that can't be
 			// set up means the resulting worktree would be silently incomplete
 			// (a non-ecosystem or missing-repo worktree). Fail loudly so the

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // SetupSubmodules creates linked worktrees for ecosystem sub-projects.
@@ -83,10 +85,14 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		// ecosystem root. For a non-anchored ecosystem-root create this is gitRoot;
 		// for an anchored create (gitRoot is a sub-repo) it is the owning ecosystem
 		// root, so members are still discovered.
-		// Use case-insensitive comparison for macOS where /Users/x/Code and
-		// /Users/x/code refer to the same directory but have different cases
-		// depending on how the path was resolved.
-		if strings.EqualFold(filepath.Dir(localPath), rootEcosystemPath) {
+		//
+		// Compare via pathutil.ComparePaths, NOT strings.EqualFold: discovery keeps
+		// the raw path spelling (e.g. /var/...) while the ecosystem root is derived
+		// from git and may be a realpath (/private/var/...). A plain EqualFold then
+		// matches NOTHING under a symlinked root and silently drops every sibling
+		// repo. ComparePaths resolves symlinks AND normalizes case (macOS
+		// /Users/x/Code vs /Users/x/code), covering both failure modes.
+		if same, _ := pathutil.ComparePaths(filepath.Dir(localPath), rootEcosystemPath); same {
 			// Use filepath.Base instead of filepath.Rel since we already know
 			// it's a direct child. filepath.Rel fails when paths differ only
 			// in case (common on macOS case-insensitive filesystems).
@@ -201,6 +207,20 @@ func SetupSubmodules(ctx context.Context, worktreePath, gitRoot, branchName stri
 		// dir that does not exist, and historically fell through to an arbitrary
 		// checkout — the root cause of the Frankenstein-mix bug.
 		mainProjectPath := filepath.Join(rootEcosystemPath, projectPath)
+
+		// Prefer discovery's raw spelling for this member when it resolves to the
+		// same physical location. rootEcosystemPath may be a realpath (/private/var)
+		// while discovery recorded the raw spelling (/var); joining the realpath
+		// would cascade the symlink-resolved form into the `git worktree add` source
+		// and later os.Stat/provider checks. Recovering localPath keeps the source
+		// path consistent with the rest of grove (registry/discovery). Gated on a
+		// same-physical-path check so anchor/sub-repo cases (where the member does
+		// NOT live at <root>/<name>) fall through untouched to the resolvers below.
+		if localPath, ok := localWorkspaces[projectName]; ok {
+			if same, _ := pathutil.ComparePaths(mainProjectPath, localPath); same {
+				mainProjectPath = localPath
+			}
+		}
 
 		// Skip if worktree already exists at target
 		if _, err := os.Stat(filepath.Join(targetPath, ".git")); err == nil {
