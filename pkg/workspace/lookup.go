@@ -56,11 +56,64 @@ func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
 		}
 	}
 
+	// A command may be run from a cwd that lives INSIDE a notebook's own
+	// storage tree (e.g. ~/notebooks/grovetools/workspaces/<ws>/inbox). That
+	// tree is often its own git repo, so the upward workspace walk classifies
+	// it as a NonGroveRepo and no configured grove spatially contains it —
+	// bestMatchNotebook is empty and we would otherwise fall back to the global
+	// default notebook, resolving paths to a DIFFERENT (usually stale) notebook
+	// root than the one that actually holds this content. Prefer the notebook
+	// whose configured root_dir contains the node's path so resolution is
+	// cwd-independent: browsing a notebook's storage resolves to that notebook.
+	if bestMatchNotebook == "" {
+		bestMatchNotebook = matchNotebookByRootDir(node.Path, cfg)
+	}
+
 	if bestMatchNotebook != "" {
 		node.NotebookName = bestMatchNotebook
 	} else {
 		node.NotebookName = defaultNotebook
 	}
+}
+
+// matchNotebookByRootDir returns the name of the configured notebook whose
+// root_dir contains targetPath (longest/most-specific match wins), or "" if
+// none do. This recognizes when a path is inside a notebook's own storage tree.
+func matchNotebookByRootDir(targetPath string, cfg *config.Config) string {
+	if cfg == nil || cfg.Notebooks == nil || cfg.Notebooks.Definitions == nil {
+		return ""
+	}
+
+	normalizedTargetPath, err := pathutil.NormalizeForLookup(targetPath)
+	if err != nil {
+		normalizedTargetPath = targetPath
+	}
+
+	var bestMatchRoot string
+	var bestMatchNotebook string
+
+	for name, nb := range cfg.Notebooks.Definitions {
+		if nb == nil || nb.RootDir == "" {
+			continue
+		}
+		rootDir, err := filepath.Abs(expandPath(nb.RootDir))
+		if err != nil {
+			continue
+		}
+		normalizedRoot, err := pathutil.NormalizeForLookup(rootDir)
+		if err != nil {
+			normalizedRoot = rootDir
+		}
+
+		if normalizedTargetPath == normalizedRoot || strings.HasPrefix(normalizedTargetPath, normalizedRoot+string(filepath.Separator)) {
+			if len(normalizedRoot) > len(bestMatchRoot) {
+				bestMatchRoot = normalizedRoot
+				bestMatchNotebook = name
+			}
+		}
+	}
+
+	return bestMatchNotebook
 }
 
 // matchGroveNotebook returns the notebook of the most specific (longest path
