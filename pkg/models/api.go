@@ -151,6 +151,9 @@ type ChannelStatusResponse struct {
 	SignalRestartCount   int             `json:"signal_restart_count"`
 	SignalLastRestart    *time.Time      `json:"signal_last_restart,omitempty"`
 	SignalIsAlive        bool            `json:"signal_is_alive"`
+	SignalEnabled        bool            `json:"signal_enabled"`
+	SignalStopped        bool            `json:"signal_stopped,omitempty"`
+	SignalLastError      string          `json:"signal_last_error,omitempty"`
 	LastInboundTimestamp *time.Time      `json:"last_inbound_timestamp,omitempty"`
 	RecentInbound        []InboundRecord `json:"recent_inbound,omitempty"`
 }
