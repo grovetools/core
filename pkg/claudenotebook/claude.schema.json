@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/grovetools/core/pkg/claudenotebook/claude-config",
+  "_comment": "Config-TUI schema for the [claude] grove.toml extension. Handwritten mirror of ClaudeConfig in core/pkg/claudenotebook/config.go (yaml/toml tag names + jsonschema descriptions) — keep in sync when adding fields there. Composed into grove's Configuration Editor via grove/tools/config-schema-generator/fragments.json; the root 'claude' property is titled 'Agent Settings' (the sidebar label, applied via configui's display-name override).",
+  "type": "object",
+  "title": "Grove Agent Settings",
+  "description": "Schema for the 'claude' extension in grove.toml.",
+  "properties": {
+    "claude": {
+      "type": "object",
+      "title": "Agent Settings",
+      "description": "Claude Code agent settings grove propagates into each workspace/worktree's .claude/settings.local.json (permissions, sandbox, model, plugins, folder-trust).",
+      "x-layer": "ecosystem",
+      "x-priority": "150",
+      "x-important": true,
+      "properties": {
+        "permissions": {
+          "type": "object",
+          "description": "Claude Code permissions configuration",
+          "properties": {
+            "allow": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "List of Claude Code permission rules to allow without prompting"
+            },
+            "deny": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "List of Claude Code permission rules to deny"
+            },
+            "defaultMode": {
+              "type": "string",
+              "description": "Claude Code default permission mode; commonly default, acceptEdits, plan, bypassPermissions, or auto; free-form passthrough, empty means unset"
+            }
+          }
+        },
+        "sandbox": {
+          "type": "object",
+          "description": "Claude Code sandbox configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable OS-level sandboxing of tool calls"
+            },
+            "failIfUnavailable": {
+              "type": "boolean",
+              "description": "Fail if sandboxing is requested but unavailable"
+            },
+            "autoAllowBashIfSandboxed": {
+              "type": "boolean",
+              "description": "Auto-allow Bash commands when sandboxed"
+            },
+            "allowUnsandboxedCommands": {
+              "type": "boolean",
+              "description": "When false, ignore the Bash dangerouslyDisableSandbox escape hatch so every command must run sandboxed"
+            },
+            "excludedCommands": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Named commands allowed to run unsandboxed (the vetted replacement for the blanket per-call escape hatch)"
+            },
+            "filesystem": {
+              "type": "object",
+              "description": "Filesystem sandbox configuration",
+              "properties": {
+                "allowWrite": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Directories the sandbox allows writing to"
+                },
+                "denyWrite": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Paths the OS sandbox forbids writing to (Bash/child-process writes), enforced even under bypassPermissions"
+                },
+                "denyRead": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Paths the OS sandbox forbids reading from"
+                }
+              }
+            },
+            "network": {
+              "type": "object",
+              "description": "Network sandbox configuration",
+              "properties": {
+                "allowedDomains": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Domains the sandbox allows network access to"
+                },
+                "allowUnixSockets": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Unix-domain socket paths the sandbox allows connecting to (connect-only, per path)"
+                },
+                "allowAllUnixSockets": {
+                  "type": "boolean",
+                  "description": "When true, allow connecting AND binding unix-domain sockets at any path (coarse; opens docker.sock/SSH/GPG agents)"
+                },
+                "allowLocalBinding": {
+                  "type": "boolean",
+                  "description": "When true, allow binding localhost TCP ports"
+                }
+              }
+            }
+          }
+        },
+        "inherit": {
+          "type": "boolean",
+          "description": "When false, this block's arrays replace (rather than union with) lower cascade layers"
+        },
+        "allowGroveTools": {
+          "type": "boolean",
+          "description": "When true, allow all canonical grove ecosystem CLIs (grove, flow, cx, nb, ...) via Bash rules for both the installed tool and its worktree-built ./bin binary"
+        },
+        "protectConfig": {
+          "type": "boolean",
+          "description": "When true, deny sandbox+native writes to grove config files so a sandboxed agent cannot edit the config that sandboxes it; false actively strips those grove-owned entries"
+        },
+        "manageTrust": {
+          "type": "boolean",
+          "description": "When true, grove manages Claude folder-trust in ~/.claude.json (seed on worktree creation, prune orphans on daemon reconcile); opt-in, default off"
+        },
+        "autoMode": {
+          "type": "object",
+          "description": "Claude Code auto-mode classifier sections consulted by the auto permission mode",
+          "properties": {
+            "allow": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Auto-mode allow section; use \"$defaults\" to splice in Claude's built-ins"
+            },
+            "soft_deny": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Auto-mode soft_deny section; use \"$defaults\" to splice in Claude's built-ins"
+            },
+            "environment": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Auto-mode environment section; use \"$defaults\" to splice in Claude's built-ins"
+            },
+            "hard_deny": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Auto-mode hard_deny section; use \"$defaults\" to splice in Claude's built-ins"
+            }
+          }
+        },
+        "useAutoModeDuringPlan": {
+          "type": "boolean",
+          "description": "When true, apply the auto-mode classifier during plan mode to auto-approve safe read-only calls"
+        },
+        "model": {
+          "type": "string",
+          "description": "Claude Code model (alias like opus/sonnet or a full model ID); free-form passthrough, empty means unset"
+        },
+        "effortLevel": {
+          "type": "string",
+          "description": "Claude Code reasoning effort level (e.g. high, medium, low); free-form passthrough, empty means unset"
+        },
+        "editorMode": {
+          "type": "string",
+          "description": "Claude Code editor mode (e.g. vim, normal); free-form passthrough, empty means unset"
+        },
+        "tui": {
+          "type": "string",
+          "description": "Claude Code tui setting (terminal UI selector); free-form passthrough, empty means unset"
+        },
+        "skipDangerousModePermissionPrompt": {
+          "type": "boolean",
+          "description": "When true, skip Claude Code's confirmation prompt for the dangerous bypass mode (useful for headless agents)"
+        },
+        "skipWorkflowUsageWarning": {
+          "type": "boolean",
+          "description": "When true, skip Claude Code's workflow usage warning"
+        },
+        "agentPushNotifEnabled": {
+          "type": "boolean",
+          "description": "When true, enable Claude Code push notifications for agent sessions"
+        },
+        "enabledPlugins": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" },
+          "description": "Claude Code enabledPlugins map (plugin identifier -> enabled); merged per key across layers"
+        }
+      }
+    }
+  }
+}

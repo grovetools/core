@@ -99,6 +99,47 @@ type ClaudeConfig struct {
 	// defaultMode — it does NOT enforce Claude's "no effect unless auto" cross-field
 	// rule (not grove's job). Pointer distinguishes unset (nil) from explicit false.
 	UseAutoModeDuringPlan *bool `yaml:"useAutoModeDuringPlan" toml:"useAutoModeDuringPlan" jsonschema:"description=When true, apply the auto-mode classifier during plan mode to auto-approve safe read-only calls (has no effect in Claude unless defaultMode allows auto)"`
+	// Model sets Claude Code's top-level `model` (an alias like "opus"/"sonnet"
+	// or a full model ID). Scalar: root-wins gap-fill like
+	// Permissions.DefaultMode; empty means unset (the key is not written, so an
+	// existing user value is never clobbered). Free-form passthrough on purpose
+	// (no enum): Claude adds models over time and grove writes the value
+	// verbatim.
+	Model string `yaml:"model" toml:"model" jsonschema:"description=Claude Code model (alias like opus/sonnet or a full model ID); free-form passthrough, empty means unset"`
+	// EffortLevel sets Claude Code's top-level `effortLevel` reasoning-effort
+	// knob (e.g. high, medium, low). Scalar: root-wins gap-fill; empty means
+	// unset. Free-form passthrough like Model.
+	EffortLevel string `yaml:"effortLevel" toml:"effortLevel" jsonschema:"description=Claude Code reasoning effort level (e.g. high, medium, low); free-form passthrough, empty means unset"`
+	// EditorMode sets Claude Code's top-level `editorMode` (e.g. vim, normal).
+	// Scalar: root-wins gap-fill; empty means unset. Free-form passthrough like
+	// Model.
+	EditorMode string `yaml:"editorMode" toml:"editorMode" jsonschema:"description=Claude Code editor mode (e.g. vim, normal); free-form passthrough, empty means unset"`
+	// TUI sets Claude Code's top-level `tui` key (terminal UI selector). Scalar:
+	// root-wins gap-fill; empty means unset. Free-form passthrough like Model.
+	TUI string `yaml:"tui" toml:"tui" jsonschema:"description=Claude Code tui setting (terminal UI selector); free-form passthrough, empty means unset"`
+	// SkipDangerousModePermissionPrompt maps to Claude's top-level
+	// skipDangerousModePermissionPrompt bool: skip the interactive confirmation
+	// shown when entering the dangerous bypass mode (useful for headless
+	// dispatched agents that would otherwise stall on the prompt). Pointer
+	// distinguishes unset (nil) from explicit false; root-wins gap-fill like the
+	// sandbox bools. Counts in IsEmpty (it maps to a written settings key).
+	SkipDangerousModePermissionPrompt *bool `yaml:"skipDangerousModePermissionPrompt" toml:"skipDangerousModePermissionPrompt" jsonschema:"description=When true, skip Claude Code's confirmation prompt for the dangerous bypass mode (useful for headless agents)"`
+	// SkipWorkflowUsageWarning maps to Claude's top-level
+	// skipWorkflowUsageWarning bool. Pointer distinguishes unset (nil) from
+	// explicit false; root-wins gap-fill like the sandbox bools. Counts in
+	// IsEmpty.
+	SkipWorkflowUsageWarning *bool `yaml:"skipWorkflowUsageWarning" toml:"skipWorkflowUsageWarning" jsonschema:"description=When true, skip Claude Code's workflow usage warning"`
+	// AgentPushNotifEnabled maps to Claude's top-level agentPushNotifEnabled
+	// bool (push notifications for agent sessions). Pointer distinguishes unset
+	// (nil) from explicit false; root-wins gap-fill like the sandbox bools.
+	// Counts in IsEmpty.
+	AgentPushNotifEnabled *bool `yaml:"agentPushNotifEnabled" toml:"agentPushNotifEnabled" jsonschema:"description=When true, enable Claude Code push notifications for agent sessions"`
+	// EnabledPlugins maps to Claude's top-level enabledPlugins object
+	// (plugin identifier -> enabled bool). Merged per key across layers like the
+	// arrays (union of keys; root wins when both layers set the same key), and
+	// replaced wholesale by an inherit=false layer. The seeder writes it per key
+	// too, preserving user-added plugin entries.
+	EnabledPlugins map[string]bool `yaml:"enabledPlugins" toml:"enabledPlugins" jsonschema:"description=Claude Code enabledPlugins map (plugin identifier -> enabled); merged per key across layers"`
 }
 
 // ClaudePermissions holds the permissions.* settings.
@@ -205,6 +246,10 @@ type ClaudeSandboxFilesystem struct {
 	// appends grove-owned config-file paths here; user-authored DenyWrite entries
 	// are preserved and never stripped.
 	DenyWrite []string `yaml:"denyWrite" toml:"denyWrite" jsonschema:"description=Paths the OS sandbox forbids writing to (Bash/child-process writes), enforced even under bypassPermissions"`
+	// DenyRead is a list of paths the OS sandbox forbids reading from (the read
+	// side complement to DenyWrite; JSON key sandbox.filesystem.denyRead on the
+	// ccsettings read side). Unioned across layers like AllowWrite/DenyWrite.
+	DenyRead []string `yaml:"denyRead" toml:"denyRead" jsonschema:"description=Paths the OS sandbox forbids reading from"`
 }
 
 // ClaudeSandboxNetwork holds the sandbox.network.* settings.
@@ -249,12 +294,21 @@ func (c *ClaudeConfig) IsEmpty() bool {
 		len(c.Sandbox.ExcludedCommands) == 0 &&
 		len(c.Sandbox.Filesystem.AllowWrite) == 0 &&
 		len(c.Sandbox.Filesystem.DenyWrite) == 0 &&
+		len(c.Sandbox.Filesystem.DenyRead) == 0 &&
 		len(c.Sandbox.Network.AllowedDomains) == 0 &&
 		len(c.Sandbox.Network.AllowUnixSockets) == 0 &&
 		c.Sandbox.Network.AllowAllUnixSockets == nil &&
 		c.Sandbox.Network.AllowLocalBinding == nil &&
 		c.AutoMode.isEmpty() &&
-		c.UseAutoModeDuringPlan == nil
+		c.UseAutoModeDuringPlan == nil &&
+		c.Model == "" &&
+		c.EffortLevel == "" &&
+		c.EditorMode == "" &&
+		c.TUI == "" &&
+		c.SkipDangerousModePermissionPrompt == nil &&
+		c.SkipWorkflowUsageWarning == nil &&
+		c.AgentPushNotifEnabled == nil &&
+		len(c.EnabledPlugins) == 0
 }
 
 // ShouldSeed reports whether this config carries any signal the seeder must act
@@ -305,6 +359,7 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 		c.Permissions.Deny = append([]string(nil), other.Permissions.Deny...)
 		c.Sandbox.Filesystem.AllowWrite = append([]string(nil), other.Sandbox.Filesystem.AllowWrite...)
 		c.Sandbox.Filesystem.DenyWrite = append([]string(nil), other.Sandbox.Filesystem.DenyWrite...)
+		c.Sandbox.Filesystem.DenyRead = append([]string(nil), other.Sandbox.Filesystem.DenyRead...)
 		c.Sandbox.Network.AllowedDomains = append([]string(nil), other.Sandbox.Network.AllowedDomains...)
 		c.Sandbox.Network.AllowUnixSockets = append([]string(nil), other.Sandbox.Network.AllowUnixSockets...)
 		c.Sandbox.ExcludedCommands = append([]string(nil), other.Sandbox.ExcludedCommands...)
@@ -312,11 +367,15 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 		// classifier, clearing c's when other has none) — same clean-slate rule as
 		// the permission/sandbox arrays above.
 		c.AutoMode = cloneAutoMode(other.AutoMode)
+		// enabledPlugins is accumulated data like the arrays, so an
+		// inherit=false layer replaces it wholesale (clone; nil clears).
+		c.EnabledPlugins = cloneBoolMap(other.EnabledPlugins)
 	} else {
 		c.Permissions.Allow = unionStrings(c.Permissions.Allow, other.Permissions.Allow)
 		c.Permissions.Deny = unionStrings(c.Permissions.Deny, other.Permissions.Deny)
 		c.Sandbox.Filesystem.AllowWrite = unionStrings(c.Sandbox.Filesystem.AllowWrite, other.Sandbox.Filesystem.AllowWrite)
 		c.Sandbox.Filesystem.DenyWrite = unionStrings(c.Sandbox.Filesystem.DenyWrite, other.Sandbox.Filesystem.DenyWrite)
+		c.Sandbox.Filesystem.DenyRead = unionStrings(c.Sandbox.Filesystem.DenyRead, other.Sandbox.Filesystem.DenyRead)
 		c.Sandbox.Network.AllowedDomains = unionStrings(c.Sandbox.Network.AllowedDomains, other.Sandbox.Network.AllowedDomains)
 		c.Sandbox.Network.AllowUnixSockets = unionStrings(c.Sandbox.Network.AllowUnixSockets, other.Sandbox.Network.AllowUnixSockets)
 		c.Sandbox.ExcludedCommands = unionStrings(c.Sandbox.ExcludedCommands, other.Sandbox.ExcludedCommands)
@@ -334,6 +393,10 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 			c.AutoMode.Environment = unionStrings(c.AutoMode.Environment, other.AutoMode.Environment)
 			c.AutoMode.HardDeny = unionStrings(c.AutoMode.HardDeny, other.AutoMode.HardDeny)
 		}
+		// enabledPlugins: union of keys with root winning when both layers set
+		// the same key — the map analog of the array union above (and of the raw
+		// cascade's per-key map recursion in core/config deepMergeMapsUnion).
+		c.EnabledPlugins = unionBoolMap(c.EnabledPlugins, other.EnabledPlugins)
 	}
 
 	// For booleans, other (member) fills in gaps only if c (root) is nil.
@@ -392,6 +455,32 @@ func (c *ClaudeConfig) Merge(other *ClaudeConfig) {
 	if c.UseAutoModeDuringPlan == nil && other.UseAutoModeDuringPlan != nil {
 		c.UseAutoModeDuringPlan = other.UseAutoModeDuringPlan
 	}
+	// Model/EffortLevel/EditorMode/TUI: root-wins-gap scalar strings (empty =
+	// unset), mirroring Permissions.DefaultMode above. Scalars, so never
+	// unioned; outside the array branch, so inherit=false does not clear them.
+	if c.Model == "" && other.Model != "" {
+		c.Model = other.Model
+	}
+	if c.EffortLevel == "" && other.EffortLevel != "" {
+		c.EffortLevel = other.EffortLevel
+	}
+	if c.EditorMode == "" && other.EditorMode != "" {
+		c.EditorMode = other.EditorMode
+	}
+	if c.TUI == "" && other.TUI != "" {
+		c.TUI = other.TUI
+	}
+	// The top-level bools (skip prompts / push notifications): root-wins
+	// gap-fill like the sandbox bools.
+	if c.SkipDangerousModePermissionPrompt == nil && other.SkipDangerousModePermissionPrompt != nil {
+		c.SkipDangerousModePermissionPrompt = other.SkipDangerousModePermissionPrompt
+	}
+	if c.SkipWorkflowUsageWarning == nil && other.SkipWorkflowUsageWarning != nil {
+		c.SkipWorkflowUsageWarning = other.SkipWorkflowUsageWarning
+	}
+	if c.AgentPushNotifEnabled == nil && other.AgentPushNotifEnabled != nil {
+		c.AgentPushNotifEnabled = other.AgentPushNotifEnabled
+	}
 }
 
 // cloneAutoMode returns a deep copy of an autoMode classifier (nil-safe), so a
@@ -407,6 +496,37 @@ func cloneAutoMode(a *ClaudeAutoMode) *ClaudeAutoMode {
 		Environment: append([]string(nil), a.Environment...),
 		HardDeny:    append([]string(nil), a.HardDeny...),
 	}
+}
+
+// cloneBoolMap returns a copy of a plugin-enable map (nil-safe: nil and empty
+// both yield nil), so a merged config never aliases another layer's map. Used
+// by Merge's inherit=false clean-slate path.
+func cloneBoolMap(m map[string]bool) map[string]bool {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+// unionBoolMap returns the union of two bool maps with a's entries winning on
+// key collision (root-wins, matching the scalar gap-fills). The result never
+// aliases b; it aliases a only when b contributes nothing.
+func unionBoolMap(a, b map[string]bool) map[string]bool {
+	if len(b) == 0 {
+		return a
+	}
+	out := make(map[string]bool, len(a)+len(b))
+	for k, v := range b {
+		out[k] = v
+	}
+	for k, v := range a {
+		out[k] = v
+	}
+	return out
 }
 
 // unionStrings returns the union of two string slices, preserving order
