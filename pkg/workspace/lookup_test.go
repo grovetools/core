@@ -421,3 +421,19 @@ func TestGetProjectByPath_WithEcosystemWorktrees(t *testing.T) {
 		assert.Empty(t, node.ParentEcosystemPath)
 	})
 }
+
+func TestGetProjectByPath_MangledGroveConfig(t *testing.T) {
+	// A container-like directory whose grove.toml fails to parse must yield a
+	// loud, actionable error mentioning the file — not walk past it and
+	// classify against some ancestor (which downstream callers would treat as
+	// "no context here" and widen their discovery scope).
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "grove.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("workspaces = [\"*\"\n"), 0o644))
+
+	node, err := GetProjectByPath(dir)
+	require.Error(t, err, "mangled grove.toml must produce an error")
+	assert.Nil(t, node)
+	assert.Contains(t, err.Error(), "invalid grove config")
+	assert.Contains(t, err.Error(), "grove.toml", "error must name the broken config file")
+}

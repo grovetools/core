@@ -288,3 +288,37 @@ func TestDiscoverAll_NestedEcosystem_NoMisattribution(t *testing.T) {
 	assert.NotEqual(t, outerEco, innerWtProj.WorktreeOwnerPath,
 		"worktree must NOT be misattributed to the outer ecosystem")
 }
+
+func TestClassifyWorkspaceRoot_MangledConfig(t *testing.T) {
+	// A worktree-container-like directory: grove.toml exists but is
+	// unparseable, and there is no top-level .git. This must surface a loud
+	// error naming the file — NOT be silently demoted to typeUnknown, which
+	// would make a broken ecosystem look like "no ecosystem here" and let
+	// callers fall back to machine-wide discovery.
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "grove.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("workspaces = [\"*\"\n"), 0o644))
+
+	dirType, cfg, err := classifyWorkspaceRoot(dir)
+	require.Error(t, err, "mangled grove.toml must produce an error")
+	assert.Contains(t, err.Error(), cfgPath, "error must name the broken config file")
+	assert.Equal(t, typeUnknown, dirType)
+	assert.Nil(t, cfg)
+}
+
+func TestClassifyWorkspaceRoot_NoConfigStaysSilent(t *testing.T) {
+	// A directory with no grove config at all must classify without error.
+	dir := t.TempDir()
+
+	dirType, cfg, err := classifyWorkspaceRoot(dir)
+	require.NoError(t, err)
+	assert.Equal(t, typeUnknown, dirType)
+	assert.Nil(t, cfg)
+
+	// With a .git directory it becomes a non-grove repo, still without error.
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+	dirType, cfg, err = classifyWorkspaceRoot(dir)
+	require.NoError(t, err)
+	assert.Equal(t, typeNonGroveRepo, dirType)
+	assert.Nil(t, cfg)
+}

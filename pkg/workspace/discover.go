@@ -72,7 +72,7 @@ const (
 // (.grove-worktrees). That special case is handled separately by the walker.
 func classifyWorkspaceRoot(path string) (directoryType, *config.Config, error) {
 	// Use the helper to find any valid grove config file
-	_, cfg, err := findGroveConfig(path)
+	cfgPath, cfg, err := findGroveConfig(path)
 	if err == nil {
 		// A config file was found and loaded successfully.
 		// Check if it's an ecosystem (has workspaces key)
@@ -81,6 +81,14 @@ func classifyWorkspaceRoot(path string) (directoryType, *config.Config, error) {
 		}
 		// It's a project
 		return typeProject, cfg, nil
+	}
+
+	// A grove config file exists but failed to load. Surface the parse error
+	// loudly instead of silently demoting the directory to unknown — silent
+	// demotion makes a broken ecosystem look like "no ecosystem here" and lets
+	// callers fall back to much wider discovery scopes.
+	if cfgPath != "" {
+		return typeUnknown, nil, fmt.Errorf("invalid grove config %s: %w", cfgPath, err)
 	}
 
 	// Check for .git to classify as Non-Grove Directory

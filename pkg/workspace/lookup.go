@@ -251,8 +251,11 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		// Use the centralized classifier to check if this directory is a workspace root
 		dirType, cfg, err := classifyWorkspaceRoot(current)
 		if err != nil {
-			// Log but continue on classification errors
-			logrus.Warnf("Error classifying directory %s: %v", current, err)
+			// The classifier only errors when a grove config exists but cannot
+			// be loaded. Fail loudly: walking past a broken config would
+			// misclassify the workspace (or its parents) and silently widen
+			// the scope callers operate on.
+			return nil, err
 		}
 
 		if dirType == typeProject || dirType == typeEcosystem || dirType == typeNonGroveRepo {
