@@ -152,6 +152,7 @@ var coreConfigKeys = map[string]bool{
 	"commands":          true,
 	"test_scopes":       true,
 	"worktree":          true,
+	"onboarding":        true,
 	"_grove":            true, // Meta section for config metadata (priority, etc.)
 }
 

@@ -642,6 +642,25 @@
       },
       "type": "object"
     },
+    "OnboardingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "completed": {
+          "default": false,
+          "description": "First-run onboarding finished; treemux no longer enters the setup takeover on startup",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "90"
+        },
+        "last_step": {
+          "description": "Step ID the onboarding flow last persisted (resume marker; cleared on completion)",
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "91"
+        }
+      },
+      "type": "object"
+    },
     "PanelBindingConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1139,6 +1158,12 @@
       "x-important": true,
       "x-layer": "global",
       "x-priority": "2"
+    },
+    "onboarding": {
+      "$ref": "#/$defs/OnboardingConfig",
+      "description": "First-run onboarding progress (completed marker + resume step)",
+      "x-layer": "global",
+      "x-priority": "90"
     },
     "search_paths": {
       "additionalProperties": {
