@@ -71,8 +71,6 @@ func (m Model) View() string {
 	}
 
 	th := core_theme.DefaultTheme
-	bar := m.RenderTabBar()
-
 	active := m.pages[m.activePage]
 
 	// If the active page supplies a footer, use it. This lets pages
@@ -104,7 +102,10 @@ func (m Model) View() string {
 	// are known, so any footer pins to the bottom of the pane.
 	if m.height > 0 {
 		pad := m.cfg.OuterPadding
-		headerRows := tabBarHeight
+		headerRows := 0
+		if !m.cfg.HideTabBar {
+			headerRows += tabBarHeight
+		}
 		if m.cfg.ShowTitleRow {
 			headerRows++
 		}
@@ -131,8 +132,11 @@ func (m Model) View() string {
 			Render(body)
 	}
 
-	// Compose: tab bar → blank spacer → [title] → body → [footer].
-	parts := []string{bar, ""}
+	// Compose: [tab bar → blank spacer] → [title] → body → [footer].
+	var parts []string
+	if !m.cfg.HideTabBar {
+		parts = append(parts, m.RenderTabBar(), "")
+	}
 	if m.cfg.ShowTitleRow {
 		title := " "
 		if t, ok := active.(PageWithTitle); ok {

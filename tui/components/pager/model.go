@@ -35,6 +35,11 @@ type Config struct {
 	// reserved rows are subtracted from SubSize so sub-models size
 	// their bodies correctly.
 	FooterHeight int
+	// HideTabBar suppresses the tab bar (and its spacer row) entirely,
+	// returning those rows to the body. For single-page embeddings
+	// (grove's onboarding step pages) where tab chrome is noise; the
+	// tab-jump and cycle keys are naturally inert with one page.
+	HideTabBar bool
 }
 
 // KeyMap is the bindings the pager consumes: 1-9 jumps + [/] cycle.
@@ -141,7 +146,10 @@ func (m Model) Config() Config { return m.cfg }
 // outer padding. Hosts should subtract this from their available
 // height when forwarding a WindowSizeMsg.
 func (m Model) ChromeRows() int {
-	rows := tabBarHeight
+	rows := 0
+	if !m.cfg.HideTabBar {
+		rows += tabBarHeight
+	}
 	if m.cfg.ShowTitleRow {
 		rows++
 	}
