@@ -203,7 +203,7 @@
       "additionalProperties": false,
       "properties": {
         "active_color": {
-          "default": "accent",
+          "default": "cyan",
           "description": "Color for focused pane indicator",
           "type": "string"
         },
