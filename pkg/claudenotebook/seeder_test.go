@@ -40,6 +40,32 @@ func worktreeAllowWrite(t *testing.T, wt string) string {
 	return canon
 }
 
+// cacheAllowWrite returns the default build-cache entries the seeder auto-adds
+// to sandbox.filesystem.allowWrite alongside the worktree root (the Go module
+// cache honoring GOPATH, plus the npm cache), computed the same way the seeder
+// does so assertions hold on any machine.
+func cacheAllowWrite(t *testing.T) []string {
+	t.Helper()
+	home, homeErr := os.UserHomeDir()
+	var out []string
+	goPath := ""
+	if env := os.Getenv("GOPATH"); env != "" {
+		if list := filepath.SplitList(env); len(list) > 0 {
+			goPath = list[0]
+		}
+	}
+	if goPath == "" && homeErr == nil {
+		goPath = filepath.Join(home, "go")
+	}
+	if goPath != "" {
+		out = append(out, filepath.Join(goPath, "pkg", "mod"))
+	}
+	if homeErr == nil {
+		out = append(out, filepath.Join(home, ".npm"))
+	}
+	return out
+}
+
 const settingsRel = ".claude/settings.local.json"
 
 // readSettings reads and parses .claude/settings.local.json under worktree.
@@ -105,8 +131,9 @@ func TestSeedNotebookDirs_MissingFileCreated(t *testing.T) {
 
 	root := readSettings(t, wt)
 	assert.ElementsMatch(t, []string{d1, d2}, additionalDirs(t, root))
-	// allowWrite carries the notebook dirs PLUS the auto-added worktree root.
-	assert.ElementsMatch(t, []string{d1, d2, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root))
+	// allowWrite carries the notebook dirs PLUS the auto-added worktree root and
+	// build-cache defaults.
+	assert.ElementsMatch(t, append([]string{d1, d2, worktreeAllowWrite(t, wt)}, cacheAllowWrite(t)...), allowWriteDirs(t, root))
 	assertNoTmpLeak(t, wt)
 }
 
@@ -147,8 +174,9 @@ func TestSeedNotebookDirs_PreservesAndAppends(t *testing.T) {
 	assert.Contains(t, allowRules(t, root), "Bash")
 	// User entries preserved AND notebook dir appended in both arrays.
 	assert.ElementsMatch(t, []string{userRead, nb}, additionalDirs(t, root))
-	// User write entry + notebook dir + auto-added worktree root all coexist.
-	assert.ElementsMatch(t, []string{userWrite, nb, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root))
+	// User write entry + notebook dir + auto-added worktree root + build-cache
+	// defaults all coexist.
+	assert.ElementsMatch(t, append([]string{userWrite, nb, worktreeAllowWrite(t, wt)}, cacheAllowWrite(t)...), allowWriteDirs(t, root))
 	assertNoTmpLeak(t, wt)
 }
 
@@ -163,8 +191,9 @@ func TestSeedNotebookDirs_DedupSortDropEmpty(t *testing.T) {
 	root := readSettings(t, wt)
 	// Sorted + deduped + no empties.
 	assert.Equal(t, []string{a, b}, additionalDirs(t, root))
-	// allowWrite is the sorted notebook dirs plus the auto-added worktree root.
-	assert.ElementsMatch(t, []string{a, b, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root))
+	// allowWrite is the sorted notebook dirs plus the auto-added worktree root
+	// and build-cache defaults.
+	assert.ElementsMatch(t, append([]string{a, b, worktreeAllowWrite(t, wt)}, cacheAllowWrite(t)...), allowWriteDirs(t, root))
 }
 
 // (d) Malformed JSON -> returns error, file left byte-for-byte unchanged.
@@ -243,8 +272,9 @@ func TestSeedNotebookDirs_Idempotent(t *testing.T) {
 
 	root := readSettings(t, wt)
 	assert.Equal(t, []string{nb}, additionalDirs(t, root), "no duplicate on re-seed")
-	// The auto-added worktree root is also idempotent (no duplicate on re-seed).
-	assert.ElementsMatch(t, []string{nb, worktreeAllowWrite(t, wt)}, allowWriteDirs(t, root), "no duplicate on re-seed")
+	// The auto-added worktree root and build-cache defaults are also idempotent
+	// (no duplicate on re-seed).
+	assert.ElementsMatch(t, append([]string{nb, worktreeAllowWrite(t, wt)}, cacheAllowWrite(t)...), allowWriteDirs(t, root), "no duplicate on re-seed")
 }
 
 // allowRules returns the permissions.allow string array (or empty if absent).
@@ -474,6 +504,33 @@ func TestSeedSettings_AllowGroveToolsExpansion(t *testing.T) {
 
 	rules := allowRules(t, readSettings(t, wt))
 	for _, want := range []string{"Bash(grove:*)", "Bash(flow:*)", "Bash(groved:*)", "Bash(aglogs:*)", "Bash(nb:*)"} {
+		assert.Contains(t, rules, want)
+	}
+	assertNoTmpLeak(t, wt)
+}
+
+// (4b) allowGroveTools also expands worktree-relative built-binary forms
+// (Bash(./<repo>/bin/<tool>:*)), including the tools whose repo directory
+// differs from the CLI name (aglogs->agentlogs, groved->daemon, ...).
+func TestSeedSettings_AllowGroveToolsWorktreeBinForms(t *testing.T) {
+	wt := t.TempDir()
+
+	cfg := &claudenotebook.ClaudeConfig{AllowGroveTools: boolPtr(true)}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	rules := allowRules(t, readSettings(t, wt))
+	for _, want := range []string{
+		// repo == tool name
+		"Bash(./grove/bin/grove:*)",
+		"Bash(./flow/bin/flow:*)",
+		"Bash(./nb/bin/nb:*)",
+		// irregular tool -> repo mappings
+		"Bash(./agentlogs/bin/aglogs:*)",
+		"Bash(./daemon/bin/groved:*)",
+		"Bash(./sync/bin/grove-syncd:*)",
+		"Bash(./grove.nvim/bin/grove-nvim:*)",
+		"Bash(./cloud/bin/grove-env-cloud:*)",
+	} {
 		assert.Contains(t, rules, want)
 	}
 	assertNoTmpLeak(t, wt)
@@ -759,9 +816,10 @@ func TestSeedSettings_ArrayUnionDedupe(t *testing.T) {
 	allowRules := stringSliceAt(t, root, "permissions", "allow")
 	assert.ElementsMatch(t, []string{"ExistingRule", "NewRule"}, allowRules)
 
-	// Check sandbox.network.allowedDomains - should have both, no duplicates.
+	// Check sandbox.network.allowedDomains - should have both, no duplicates,
+	// plus the default npm registry that rides any emitted network allowlist.
 	domains := stringSliceAt(t, root, "sandbox", "network", "allowedDomains")
-	assert.ElementsMatch(t, []string{"existing.com", "new.com"}, domains)
+	assert.ElementsMatch(t, []string{"existing.com", "new.com", "registry.npmjs.org"}, domains)
 }
 
 // TestSeedSettings_GateOff tests that GROVE_SEED_CLAUDE_SETTINGS=off skips
@@ -1562,4 +1620,190 @@ func TestSeedSettings_AutoModeAndLockMalformedNoOp(t *testing.T) {
 	require.NoError(t, rerr)
 	assert.Equal(t, bad, after, "malformed file must be left untouched")
 	assertNoTmpLeak(t, wt)
+}
+
+// ============================================================================
+// Build-cache allowlist defaults + npm registry domain (sandbox gap fixes)
+// ============================================================================
+
+// TestSeedSettings_CacheAllowWriteDefaults confirms every seed — even a
+// notebook-dirs-only seed with a nil config — auto-adds the Go module cache
+// (honoring GOPATH) and the npm cache to sandbox.filesystem.allowWrite, so
+// sandboxed `go build` / npm installs can populate their caches.
+func TestSeedSettings_CacheAllowWriteDefaults(t *testing.T) {
+	sandboxHome(t)
+	t.Setenv("GOPATH", "")
+	wt := t.TempDir()
+
+	require.NoError(t, claudenotebook.SeedNotebookDirs(wt, []string{"/Users/dev/notebooks/core"}))
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	allowWrite := allowWriteDirs(t, readSettings(t, wt))
+	assert.Contains(t, allowWrite, filepath.Join(home, "go", "pkg", "mod"))
+	assert.Contains(t, allowWrite, filepath.Join(home, ".npm"))
+}
+
+// TestSeedSettings_CacheAllowWriteHonorsGOPATH confirms the Go module cache
+// default follows the first GOPATH list entry when GOPATH is set.
+func TestSeedSettings_CacheAllowWriteHonorsGOPATH(t *testing.T) {
+	sandboxHome(t)
+	goPath := t.TempDir()
+	t.Setenv("GOPATH", goPath+string(os.PathListSeparator)+"/elsewhere/go")
+	wt := t.TempDir()
+
+	require.NoError(t, claudenotebook.SeedNotebookDirs(wt, []string{"/Users/dev/notebooks/core"}))
+
+	allowWrite := allowWriteDirs(t, readSettings(t, wt))
+	assert.Contains(t, allowWrite, filepath.Join(goPath, "pkg", "mod"))
+	assert.NotContains(t, allowWrite, "/elsewhere/go/pkg/mod", "only the first GOPATH entry is used")
+}
+
+// TestSeedSettings_NpmRegistryDomainDefault confirms registry.npmjs.org is
+// added to sandbox.network.allowedDomains whenever grove manages the sandbox
+// (enabled set), unioned with any configured domains, and NOT emitted when the
+// config carries no sandbox/network signal at all.
+func TestSeedSettings_NpmRegistryDomainDefault(t *testing.T) {
+	t.Run("sandbox enabled, no configured domains", func(t *testing.T) {
+		wt := t.TempDir()
+		cfg := &claudenotebook.ClaudeConfig{
+			Sandbox: claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)},
+		}
+		require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+		domains := stringSliceAt(t, readSettings(t, wt), "sandbox", "network", "allowedDomains")
+		assert.Contains(t, domains, "registry.npmjs.org")
+	})
+
+	t.Run("unioned and deduped with configured domains", func(t *testing.T) {
+		wt := t.TempDir()
+		cfg := &claudenotebook.ClaudeConfig{
+			Sandbox: claudenotebook.ClaudeSandbox{
+				Enabled: boolPtr(true),
+				Network: claudenotebook.ClaudeSandboxNetwork{
+					AllowedDomains: []string{"api.github.com", "registry.npmjs.org"},
+				},
+			},
+		}
+		require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+		domains := stringSliceAt(t, readSettings(t, wt), "sandbox", "network", "allowedDomains")
+		assert.ElementsMatch(t, []string{"api.github.com", "registry.npmjs.org"}, domains)
+	})
+
+	t.Run("no sandbox signal -> no network section", func(t *testing.T) {
+		wt := t.TempDir()
+		cfg := &claudenotebook.ClaudeConfig{
+			Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
+		}
+		require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+		root := readSettings(t, wt)
+		if sb, ok := root["sandbox"].(map[string]any); ok {
+			_, hasNetwork := sb["network"]
+			assert.False(t, hasNetwork, "a permissions-only config must not create sandbox.network")
+		}
+	})
+}
+
+// ============================================================================
+// Top-level scalar/bool/plugin settings + denyRead (managed-fields expansion)
+// ============================================================================
+
+// stringAt returns the string value at a nested path.
+func stringAt(t *testing.T, root map[string]any, path ...string) string {
+	t.Helper()
+	cur := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := cur[key].(map[string]any)
+		require.Truef(t, ok, "expected object at %q", key)
+		cur = child
+	}
+	val, ok := cur[path[len(path)-1]].(string)
+	require.Truef(t, ok, "expected string at %q", path[len(path)-1])
+	return val
+}
+
+// TestSeedSettings_NewManagedFieldsWritten confirms the expanded managed
+// fields round-trip into settings.local.json under their exact JSON keys:
+// model/effortLevel/editorMode/tui, the three top-level bools, enabledPlugins,
+// and sandbox.filesystem.denyRead.
+func TestSeedSettings_NewManagedFieldsWritten(t *testing.T) {
+	wt := t.TempDir()
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Model:                             "opus",
+		EffortLevel:                       "high",
+		EditorMode:                        "vim",
+		TUI:                               "auto",
+		SkipDangerousModePermissionPrompt: boolPtr(true),
+		SkipWorkflowUsageWarning:          boolPtr(true),
+		AgentPushNotifEnabled:             boolPtr(false),
+		EnabledPlugins:                    map[string]bool{"acme@marketplace": true},
+		Sandbox: claudenotebook.ClaudeSandbox{
+			Filesystem: claudenotebook.ClaudeSandboxFilesystem{
+				DenyRead: []string{"/Users/dev/secrets"},
+			},
+		},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	assert.Equal(t, "opus", stringAt(t, root, "model"))
+	assert.Equal(t, "high", stringAt(t, root, "effortLevel"))
+	assert.Equal(t, "vim", stringAt(t, root, "editorMode"))
+	assert.Equal(t, "auto", stringAt(t, root, "tui"))
+	assert.True(t, boolAt(t, root, "skipDangerousModePermissionPrompt"))
+	assert.True(t, boolAt(t, root, "skipWorkflowUsageWarning"))
+	assert.False(t, boolAt(t, root, "agentPushNotifEnabled"))
+	assert.True(t, boolAt(t, root, "enabledPlugins", "acme@marketplace"))
+	assert.ElementsMatch(t, []string{"/Users/dev/secrets"},
+		stringSliceAt(t, root, "sandbox", "filesystem", "denyRead"))
+	assertNoTmpLeak(t, wt)
+}
+
+// TestSeedSettings_NewManagedFieldsAbsentNoOp confirms an empty/nil set of the
+// new fields writes none of their keys (no clobber of unset values).
+func TestSeedSettings_NewManagedFieldsAbsentNoOp(t *testing.T) {
+	wt := t.TempDir()
+
+	cfg := &claudenotebook.ClaudeConfig{
+		Permissions: claudenotebook.ClaudePermissions{Allow: []string{"Bash(git:*)"}},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	for _, key := range []string{
+		"model", "effortLevel", "editorMode", "tui",
+		"skipDangerousModePermissionPrompt", "skipWorkflowUsageWarning",
+		"agentPushNotifEnabled", "enabledPlugins",
+	} {
+		_, present := root[key]
+		assert.Falsef(t, present, "unset field %q must not be written", key)
+	}
+}
+
+// TestSeedSettings_EnabledPluginsMergesPerKey confirms enabledPlugins merges
+// per key: user-added plugin entries survive, grove.toml overwrites the keys
+// it sets.
+func TestSeedSettings_EnabledPluginsMergesPerKey(t *testing.T) {
+	wt := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, ".claude"), 0o755))
+
+	seed := map[string]any{
+		"enabledPlugins": map[string]any{
+			"user@plug":   true,
+			"acme@shared": false,
+		},
+	}
+	data, err := json.MarshalIndent(seed, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, settingsRel), data, 0o644))
+
+	cfg := &claudenotebook.ClaudeConfig{
+		EnabledPlugins: map[string]bool{"acme@shared": true, "grove@plug": true},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	assert.True(t, boolAt(t, root, "enabledPlugins", "user@plug"), "user entry preserved")
+	assert.True(t, boolAt(t, root, "enabledPlugins", "acme@shared"), "grove.toml wins per key")
+	assert.True(t, boolAt(t, root, "enabledPlugins", "grove@plug"), "grove entry added")
 }

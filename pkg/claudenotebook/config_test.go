@@ -582,3 +582,189 @@ func TestDecode_MergeSubTableIgnored(t *testing.T) {
 		t.Errorf("expected allow decoded alongside ignored merge sub-table, got %v", cfg.Permissions.Allow)
 	}
 }
+
+// ============================================================================
+// Expanded managed fields (model/effortLevel/editorMode/tui, top-level bools,
+// enabledPlugins, sandbox.filesystem.denyRead)
+// ============================================================================
+
+// TestMerge_ScalarSettingsGapFill confirms the four new scalar strings are
+// root-wins-gap scalars like defaultMode: a member fills an empty root slot,
+// and an explicit root value wins.
+func TestMerge_ScalarSettingsGapFill(t *testing.T) {
+	t.Run("member fills empty root", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{Model: "opus", EffortLevel: "high", EditorMode: "vim", TUI: "auto"}
+		root.Merge(member)
+		if root.Model != "opus" || root.EffortLevel != "high" || root.EditorMode != "vim" || root.TUI != "auto" {
+			t.Errorf("expected member to fill empty root scalars, got %+v", root)
+		}
+	})
+
+	t.Run("root wins over member", func(t *testing.T) {
+		root := &ClaudeConfig{Model: "sonnet", EffortLevel: "low", EditorMode: "normal", TUI: "plain"}
+		member := &ClaudeConfig{Model: "opus", EffortLevel: "high", EditorMode: "vim", TUI: "auto"}
+		root.Merge(member)
+		if root.Model != "sonnet" || root.EffortLevel != "low" || root.EditorMode != "normal" || root.TUI != "plain" {
+			t.Errorf("expected explicit root scalars to win, got %+v", root)
+		}
+	})
+}
+
+// TestMerge_TopLevelBoolsGapFill confirms the three new top-level bools follow
+// the sandbox-bool root-wins gap-fill.
+func TestMerge_TopLevelBoolsGapFill(t *testing.T) {
+	t.Run("member fills nil root", func(t *testing.T) {
+		root := &ClaudeConfig{}
+		member := &ClaudeConfig{
+			SkipDangerousModePermissionPrompt: boolPtr(true),
+			SkipWorkflowUsageWarning:          boolPtr(true),
+			AgentPushNotifEnabled:             boolPtr(true),
+		}
+		root.Merge(member)
+		if root.SkipDangerousModePermissionPrompt == nil || !*root.SkipDangerousModePermissionPrompt ||
+			root.SkipWorkflowUsageWarning == nil || !*root.SkipWorkflowUsageWarning ||
+			root.AgentPushNotifEnabled == nil || !*root.AgentPushNotifEnabled {
+			t.Errorf("expected member to fill nil root bools, got %+v", root)
+		}
+	})
+
+	t.Run("explicit root false wins", func(t *testing.T) {
+		root := &ClaudeConfig{SkipDangerousModePermissionPrompt: boolPtr(false)}
+		member := &ClaudeConfig{SkipDangerousModePermissionPrompt: boolPtr(true)}
+		root.Merge(member)
+		if root.SkipDangerousModePermissionPrompt == nil || *root.SkipDangerousModePermissionPrompt {
+			t.Errorf("expected explicit root false to win, got %v", root.SkipDangerousModePermissionPrompt)
+		}
+	})
+}
+
+// TestMerge_EnabledPluginsUnion confirms enabledPlugins unions per key with
+// root winning on collision, and is replaced wholesale under inherit=false.
+func TestMerge_EnabledPluginsUnion(t *testing.T) {
+	t.Run("union per key, root wins collisions", func(t *testing.T) {
+		root := &ClaudeConfig{EnabledPlugins: map[string]bool{"shared@p": false, "root@p": true}}
+		member := &ClaudeConfig{EnabledPlugins: map[string]bool{"shared@p": true, "member@p": true}}
+		root.Merge(member)
+		want := map[string]bool{"shared@p": false, "root@p": true, "member@p": true}
+		if !reflect.DeepEqual(root.EnabledPlugins, want) {
+			t.Errorf("expected %v, got %v", want, root.EnabledPlugins)
+		}
+	})
+
+	t.Run("inherit=false replaces wholesale", func(t *testing.T) {
+		root := &ClaudeConfig{EnabledPlugins: map[string]bool{"root@p": true}}
+		member := &ClaudeConfig{Inherit: boolPtr(false), EnabledPlugins: map[string]bool{"member@p": true}}
+		root.Merge(member)
+		want := map[string]bool{"member@p": true}
+		if !reflect.DeepEqual(root.EnabledPlugins, want) {
+			t.Errorf("expected wholesale replace to %v, got %v", want, root.EnabledPlugins)
+		}
+	})
+
+	t.Run("inherit=false with no member map clears", func(t *testing.T) {
+		root := &ClaudeConfig{EnabledPlugins: map[string]bool{"root@p": true}}
+		member := &ClaudeConfig{Inherit: boolPtr(false)}
+		root.Merge(member)
+		if len(root.EnabledPlugins) != 0 {
+			t.Errorf("expected cleared map, got %v", root.EnabledPlugins)
+		}
+	})
+}
+
+// TestMerge_DenyReadUnion confirms sandbox.filesystem.denyRead unions like the
+// other filesystem arrays and is replaced wholesale under inherit=false.
+func TestMerge_DenyReadUnion(t *testing.T) {
+	t.Run("union by default", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{Filesystem: ClaudeSandboxFilesystem{DenyRead: []string{"/a", "/shared"}}}}
+		member := &ClaudeConfig{Sandbox: ClaudeSandbox{Filesystem: ClaudeSandboxFilesystem{DenyRead: []string{"/shared", "/b"}}}}
+		root.Merge(member)
+		want := []string{"/a", "/shared", "/b"}
+		if !reflect.DeepEqual(root.Sandbox.Filesystem.DenyRead, want) {
+			t.Errorf("expected union %v, got %v", want, root.Sandbox.Filesystem.DenyRead)
+		}
+	})
+
+	t.Run("inherit=false replaces wholesale", func(t *testing.T) {
+		root := &ClaudeConfig{Sandbox: ClaudeSandbox{Filesystem: ClaudeSandboxFilesystem{DenyRead: []string{"/root-only"}}}}
+		member := &ClaudeConfig{Inherit: boolPtr(false), Sandbox: ClaudeSandbox{Filesystem: ClaudeSandboxFilesystem{DenyRead: []string{"/member-only"}}}}
+		root.Merge(member)
+		if !reflect.DeepEqual(root.Sandbox.Filesystem.DenyRead, []string{"/member-only"}) {
+			t.Errorf("expected wholesale replace, got %v", root.Sandbox.Filesystem.DenyRead)
+		}
+	})
+}
+
+// TestNewManagedFieldsInIsEmpty confirms each new field counts as content in
+// IsEmpty (they all map to written settings keys, unlike the lone flags).
+func TestNewManagedFieldsInIsEmpty(t *testing.T) {
+	cases := map[string]*ClaudeConfig{
+		"model":                             {Model: "opus"},
+		"effortLevel":                       {EffortLevel: "high"},
+		"editorMode":                        {EditorMode: "vim"},
+		"tui":                               {TUI: "auto"},
+		"skipDangerousModePermissionPrompt": {SkipDangerousModePermissionPrompt: boolPtr(false)},
+		"skipWorkflowUsageWarning":          {SkipWorkflowUsageWarning: boolPtr(false)},
+		"agentPushNotifEnabled":             {AgentPushNotifEnabled: boolPtr(false)},
+		"enabledPlugins":                    {EnabledPlugins: map[string]bool{"p@m": true}},
+		"denyRead":                          {Sandbox: ClaudeSandbox{Filesystem: ClaudeSandboxFilesystem{DenyRead: []string{"/x"}}}},
+	}
+	for name, cfg := range cases {
+		if cfg.IsEmpty() {
+			t.Errorf("expected config with only %s set to be non-empty", name)
+		}
+	}
+}
+
+// TestDecode_NewManagedFieldsRoundTrip confirms the new fields decode from a
+// grove.toml [claude] block through the same toml -> mapstructure path
+// UnmarshalExtension uses.
+func TestDecode_NewManagedFieldsRoundTrip(t *testing.T) {
+	src := `
+model = "opus"
+effortLevel = "high"
+editorMode = "vim"
+tui = "auto"
+skipDangerousModePermissionPrompt = true
+skipWorkflowUsageWarning = false
+agentPushNotifEnabled = true
+
+[enabledPlugins]
+"acme@marketplace" = true
+
+[sandbox.filesystem]
+denyRead = ["/Users/dev/secrets"]
+`
+	var raw map[string]interface{}
+	if err := toml.Unmarshal([]byte(src), &raw); err != nil {
+		t.Fatalf("toml unmarshal: %v", err)
+	}
+
+	var cfg ClaudeConfig
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{Result: &cfg, TagName: "yaml"})
+	if err != nil {
+		t.Fatalf("new decoder: %v", err)
+	}
+	if err := decoder.Decode(raw); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if cfg.Model != "opus" || cfg.EffortLevel != "high" || cfg.EditorMode != "vim" || cfg.TUI != "auto" {
+		t.Errorf("scalar fields did not round-trip: %+v", cfg)
+	}
+	if cfg.SkipDangerousModePermissionPrompt == nil || !*cfg.SkipDangerousModePermissionPrompt {
+		t.Errorf("expected skipDangerousModePermissionPrompt=true, got %v", cfg.SkipDangerousModePermissionPrompt)
+	}
+	if cfg.SkipWorkflowUsageWarning == nil || *cfg.SkipWorkflowUsageWarning {
+		t.Errorf("expected skipWorkflowUsageWarning=false, got %v", cfg.SkipWorkflowUsageWarning)
+	}
+	if cfg.AgentPushNotifEnabled == nil || !*cfg.AgentPushNotifEnabled {
+		t.Errorf("expected agentPushNotifEnabled=true, got %v", cfg.AgentPushNotifEnabled)
+	}
+	if !reflect.DeepEqual(cfg.EnabledPlugins, map[string]bool{"acme@marketplace": true}) {
+		t.Errorf("expected enabledPlugins decoded, got %v", cfg.EnabledPlugins)
+	}
+	if !reflect.DeepEqual(cfg.Sandbox.Filesystem.DenyRead, []string{"/Users/dev/secrets"}) {
+		t.Errorf("expected denyRead decoded, got %v", cfg.Sandbox.Filesystem.DenyRead)
+	}
+}

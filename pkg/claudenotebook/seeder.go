@@ -246,6 +246,16 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 	}
 	mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, []string{wtForWrite})
 
+	// Default build-cache allowWrite entries, riding the same always-on merge as
+	// the worktree root above: the Go module cache (~/go/pkg/mod, honoring
+	// GOPATH) and the npm cache (~/.npm) live in $HOME, OUTSIDE every worktree,
+	// so under an enabled sandbox ordinary builds fail hard — `go build` cannot
+	// populate ~/go/pkg/mod/cache/download ("operation not permitted") and npm
+	// installs cannot write ~/.npm. Absolute paths, matching the worktree-root /
+	// notebook-dir convention; harmless when the sandbox is off; additive and
+	// dedup-safe via mergeStringArray like every other allowWrite entry.
+	mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, defaultCacheAllowWrite())
+
 	// Merge ClaudeConfig fields (only if gate is open and config is non-empty).
 	if hasConfig {
 		// permissions.allow (config rules plus, when allowGroveTools is set, the
@@ -297,6 +307,26 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 		// unless defaultMode allows auto" cross-field rule.
 		mergeBool(root, []string{"useAutoModeDuringPlan"}, cfg.UseAutoModeDuringPlan)
 
+		// Top-level scalar passthroughs (model / effortLevel / editorMode / tui):
+		// only written when non-empty so an unset field never clobbers a user's
+		// existing value; an explicit grove.toml value OVERWRITES, same as
+		// defaultMode.
+		mergeString(root, []string{"model"}, cfg.Model)
+		mergeString(root, []string{"effortLevel"}, cfg.EffortLevel)
+		mergeString(root, []string{"editorMode"}, cfg.EditorMode)
+		mergeString(root, []string{"tui"}, cfg.TUI)
+
+		// Top-level bools (skip prompts / push notifications). nil = no-op;
+		// explicit values OVERWRITE like the sandbox bools.
+		mergeBool(root, []string{"skipDangerousModePermissionPrompt"}, cfg.SkipDangerousModePermissionPrompt)
+		mergeBool(root, []string{"skipWorkflowUsageWarning"}, cfg.SkipWorkflowUsageWarning)
+		mergeBool(root, []string{"agentPushNotifEnabled"}, cfg.AgentPushNotifEnabled)
+
+		// enabledPlugins (top-level object, plugin id -> bool). Merged per key:
+		// user-added plugin entries are preserved, grove.toml wins on the keys it
+		// sets — the map analog of mergeStringArray + mergeBool.
+		mergeBoolMap(root, []string{"enabledPlugins"}, cfg.EnabledPlugins)
+
 		// sandbox booleans (only write if non-nil)
 		mergeBool(root, []string{"sandbox", "enabled"}, cfg.Sandbox.Enabled)
 		mergeBool(root, []string{"sandbox", "failIfUnavailable"}, cfg.Sandbox.FailIfUnavailable)
@@ -319,9 +349,18 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 			mergeStringArray(root, []string{"sandbox", "excludedCommands"}, cfg.Sandbox.ExcludedCommands)
 		}
 
-		// sandbox.network.allowedDomains
-		if len(cfg.Sandbox.Network.AllowedDomains) > 0 {
-			mergeStringArray(root, []string{"sandbox", "network", "allowedDomains"}, cfg.Sandbox.Network.AllowedDomains)
+		// sandbox.network.allowedDomains (config domains plus the default npm
+		// registry). Whenever a sandbox network section is being emitted — grove
+		// manages the sandbox (enabled set, true OR false) or the config already
+		// carries an allowlist — registry.npmjs.org is added so npm installs
+		// work under the sandbox's network boundary. Additive and dedup-safe
+		// like every other domain entry.
+		domains := append([]string(nil), cfg.Sandbox.Network.AllowedDomains...)
+		if cfg.Sandbox.Enabled != nil || len(domains) > 0 {
+			domains = append(domains, "registry.npmjs.org")
+		}
+		if len(domains) > 0 {
+			mergeStringArray(root, []string{"sandbox", "network", "allowedDomains"}, domains)
 		}
 
 		// sandbox.network.allowUnixSockets (connect-only socket paths; unioned
@@ -383,6 +422,11 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 		}
 		if len(cfg.Sandbox.Filesystem.DenyWrite) > 0 {
 			mergeStringArray(root, []string{"sandbox", "filesystem", "denyWrite"}, cfg.Sandbox.Filesystem.DenyWrite)
+		}
+		// sandbox.filesystem.denyRead (read-side complement to denyWrite; a plain
+		// additive config array, not part of the protectConfig add/strip).
+		if len(cfg.Sandbox.Filesystem.DenyRead) > 0 {
+			mergeStringArray(root, []string{"sandbox", "filesystem", "denyRead"}, cfg.Sandbox.Filesystem.DenyRead)
 		}
 	}
 
@@ -511,10 +555,40 @@ func denyRulesForPath(p protectedPath) []string {
 	}
 }
 
-// groveToolBashRules returns a Bash(<name>:*) allow rule for each canonical
-// grove ecosystem CLI. These are the real [binary].name values from the
+// defaultCacheAllowWrite returns the build-cache directories every seeded
+// settings file gets in sandbox.filesystem.allowWrite: the Go module cache
+// (GOPATH/pkg/mod — first GOPATH list entry when set, else ~/go/pkg/mod) and
+// the npm cache (~/.npm). Absolute paths, matching the worktree-root /
+// notebook-dir convention. Anything unresolvable (no home dir, empty GOPATH)
+// is simply omitted.
+func defaultCacheAllowWrite() []string {
+	home, homeErr := os.UserHomeDir()
+	var out []string
+	goPath := ""
+	if env := os.Getenv("GOPATH"); env != "" {
+		if list := filepath.SplitList(env); len(list) > 0 {
+			goPath = list[0]
+		}
+	}
+	if goPath == "" && homeErr == nil {
+		goPath = filepath.Join(home, "go")
+	}
+	if goPath != "" {
+		out = append(out, filepath.Join(goPath, "pkg", "mod"))
+	}
+	if homeErr == nil {
+		out = append(out, filepath.Join(home, ".npm"))
+	}
+	return out
+}
+
+// groveToolBashRules returns the allow rules for each canonical grove
+// ecosystem CLI: a PATH form Bash(<name>:*) plus a worktree-relative built
+// form Bash(./<repo>/bin/<name>:*), so an agent can invoke both the installed
+// tool and the binary it just built inside the worktree (./flow/bin/flow …)
+// without a prompt. The names are the real [binary].name values from the
 // ecosystem's grove.toml files — several differ from their repo directory
-// names (e.g. aglogs, groved). This list is hardcoded because this is a LEAF
+// names (see groveToolRepoDirs). This list is hardcoded because this is a LEAF
 // package that must not import core/config or core/pkg/workspace.
 func groveToolBashRules() []string {
 	tools := []string{
@@ -523,11 +597,34 @@ func groveToolBashRules() []string {
 		"skills", "aglogs", "grove-env-cloud", "grove-syncd",
 		"git-viewer", "treemux", "tuimux", "grove-nvim",
 	}
-	rules := make([]string, len(tools))
-	for i, t := range tools {
-		rules[i] = "Bash(" + t + ":*)"
+	rules := make([]string, 0, len(tools)*2)
+	for _, t := range tools {
+		rules = append(rules, "Bash("+t+":*)")
+	}
+	for _, t := range tools {
+		rules = append(rules, "Bash(./"+groveToolRepoDir(t)+"/bin/"+t+":*)")
 	}
 	return rules
+}
+
+// groveToolRepoDirs maps the CLIs whose [binary].name differs from their repo
+// directory to that directory (verified against each repo Makefile's
+// BINARY_NAME). Tools absent from this map live in a repo named after the tool.
+var groveToolRepoDirs = map[string]string{
+	"aglogs":          "agentlogs",
+	"grove-syncd":     "sync",
+	"grove-nvim":      "grove.nvim",
+	"grove-env-cloud": "cloud",
+	"groved":          "daemon",
+}
+
+// groveToolRepoDir returns the ecosystem repo directory that builds the given
+// CLI (default: the tool's own name).
+func groveToolRepoDir(tool string) string {
+	if repo, ok := groveToolRepoDirs[tool]; ok {
+		return repo
+	}
+	return tool
 }
 
 // isGateOff returns true if the given env var is set to "0", "false", or "off".
@@ -558,6 +655,36 @@ func mergeBool(root map[string]any, path []string, val *bool) {
 		parent = child
 	}
 	parent[path[len(path)-1]] = *val
+}
+
+// mergeBoolMap walks/creates the nested object path in root and sets each key
+// of vals on the leaf object. Only fires when vals is non-empty. Existing leaf
+// keys not named in vals are preserved (user plugin entries survive); keys in
+// vals are OVERWRITTEN per key, mirroring mergeBool. A non-object leaf is
+// replaced with a fresh object, like mergeStringArray's malformed-shape rule.
+func mergeBoolMap(root map[string]any, path []string, vals map[string]bool) {
+	if len(vals) == 0 {
+		return
+	}
+	// Descend to the parent object of the leaf key, creating objects as needed.
+	parent := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := parent[key].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			parent[key] = child
+		}
+		parent = child
+	}
+	leafKey := path[len(path)-1]
+	leaf, ok := parent[leafKey].(map[string]any)
+	if !ok {
+		leaf = map[string]any{}
+		parent[leafKey] = leaf
+	}
+	for k, v := range vals {
+		leaf[k] = v
+	}
 }
 
 // mergeString walks/creates the nested object path in root and sets the leaf
