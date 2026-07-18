@@ -2,6 +2,7 @@ package theme
 
 import (
 	"os"
+	"strings"
 
 	"github.com/grovetools/core/config"
 )
@@ -510,7 +511,10 @@ var (
 // step with the icon set.
 var ASCIIIcons bool
 
-// init function determines which icon set to use
+// init determines which icon set to use at process start: the GROVE_ICONS
+// environment variable wins, then the config file's tui.icons, then the
+// Nerd Font default. The actual loading lives in applyIcons so the set can
+// also be switched at runtime via SetIcons.
 func init() {
 	useASCII := false
 
@@ -525,6 +529,23 @@ func init() {
 		}
 	}
 
+	applyIcons(useASCII)
+}
+
+// SetIcons re-runs the icon loader for the given mode ("ascii" selects the
+// ASCII set; anything else, e.g. "nerd" or "", selects the Nerd Font set),
+// swapping every exported Icon* package variable in place. Views that read
+// the icon variables at render time pick the new set up on their next
+// frame — no restart required. Callers that cache icon strings must
+// re-render/refresh themselves after calling this.
+func SetIcons(mode string) {
+	applyIcons(strings.EqualFold(strings.TrimSpace(mode), "ascii"))
+}
+
+// applyIcons loads the requested icon set into the exported Icon* variables
+// and records the choice in ASCIIIcons. Shared by init (env/config
+// detection) and SetIcons (runtime switching).
+func applyIcons(useASCII bool) {
 	ASCIIIcons = useASCII
 
 	if useASCII {

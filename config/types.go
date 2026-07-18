@@ -383,8 +383,9 @@ type FocusConfig struct {
 	// bar on left edge), or title (1-row colored header).
 	Style string `yaml:"style,omitempty" toml:"style,omitempty" jsonschema:"description=Focus indicator style,enum=border,enum=gutter,enum=title,default=gutter"`
 	// ActiveColor is the color used for the focused pane's indicator.
-	// "accent" tracks the active theme's accent role.
-	ActiveColor string `yaml:"active_color,omitempty" toml:"active_color,omitempty" jsonschema:"description=Color for focused pane indicator,default=accent"`
+	// Named theme colors ("cyan", "accent", …) and hex literals are
+	// accepted; the shipped default is "cyan".
+	ActiveColor string `yaml:"active_color,omitempty" toml:"active_color,omitempty" jsonschema:"description=Color for focused pane indicator,default=cyan"`
 	// InactiveColor is the color used for unfocused pane indicators.
 	// "none" hides the unfocused indicator entirely.
 	InactiveColor string `yaml:"inactive_color,omitempty" toml:"inactive_color,omitempty" jsonschema:"description=Color for unfocused pane indicator,default=none"`
