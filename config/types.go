@@ -584,6 +584,19 @@ type WorktreeConfig struct {
 	Layout string `yaml:"layout,omitempty" toml:"layout,omitempty" jsonschema:"description=Worktree layout: xdg (XDG data dir) or legacy (in-repo .grove-worktrees),enum=xdg,enum=legacy"`
 }
 
+// OnboardingConfig tracks the first-run onboarding flow's persistent state,
+// written to the user-global layer (~/.config/grove/grove.toml). A nil
+// section reads as not-completed (treemux boots into the setup takeover);
+// all consumers must be nil-safe.
+type OnboardingConfig struct {
+	// Completed marks the flow finished; treemux stops entering the
+	// takeover on startup (re-runnable via `treemux start --onboard`).
+	Completed bool `yaml:"completed,omitempty" toml:"completed,omitempty" jsonschema:"description=First-run onboarding finished; treemux no longer enters the setup takeover on startup,default=false" jsonschema_extras:"x-layer=global,x-priority=90"`
+	// LastStep is the resume marker for a mid-run quit; cleared when the
+	// flow completes.
+	LastStep string `yaml:"last_step,omitempty" toml:"last_step,omitempty" jsonschema:"description=Step ID the onboarding flow last persisted (resume marker; cleared on completion)" jsonschema_extras:"x-layer=global,x-priority=91"`
+}
+
 // TestScopeConfig defines a smart test triggering scope
 type TestScopeConfig struct {
 	Name      string   `yaml:"name" toml:"name" jsonschema:"description=Name of the test scope"`
@@ -616,6 +629,8 @@ type Config struct {
 
 	Worktree *WorktreeConfig `yaml:"worktree,omitempty" toml:"worktree,omitempty" jsonschema:"description=Git worktree settings (layout)"`
 
+	Onboarding *OnboardingConfig `yaml:"onboarding,omitempty" toml:"onboarding,omitempty" jsonschema:"description=First-run onboarding progress (completed marker + resume step)"`
+
 	// Extensions captures all other top-level keys for extensibility.
 	Extensions map[string]interface{} `yaml:",inline" toml:"-" jsonschema:"-"`
 }
@@ -641,6 +656,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Commands         map[string]string             `yaml:"commands,omitempty"`
 		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty"`
 		Worktree         *WorktreeConfig               `yaml:"worktree,omitempty"`
+		Onboarding       *OnboardingConfig             `yaml:"onboarding,omitempty"`
 		Extensions       map[string]interface{}        `yaml:",inline"`
 
 		// --- Legacy Fields for Backward Compatibility ---
@@ -671,6 +687,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Commands = raw.Commands
 	c.TestScopes = raw.TestScopes
 	c.Worktree = raw.Worktree
+	c.Onboarding = raw.Onboarding
 	c.Extensions = raw.Extensions
 
 	// Handle backward compatibility for `search_paths` -> `groves`

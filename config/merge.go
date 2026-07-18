@@ -410,6 +410,21 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge onboarding state. Or-style: a later layer can mark the flow
+	// completed or move the resume marker, but a zero-value overlay never
+	// un-completes it (same idiom as the bool merges in the TUI block).
+	if override.Onboarding != nil {
+		if result.Onboarding == nil {
+			result.Onboarding = &OnboardingConfig{}
+		}
+		if override.Onboarding.Completed {
+			result.Onboarding.Completed = true
+		}
+		if override.Onboarding.LastStep != "" {
+			result.Onboarding.LastStep = override.Onboarding.LastStep
+		}
+	}
+
 	// Merge TUI configuration
 	if override.TUI != nil {
 		if result.TUI == nil {

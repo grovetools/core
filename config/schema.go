@@ -101,6 +101,7 @@ func GenerateSchemaWithThemeNames(themeNames []string) ([]byte, error) {
 		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery" jsonschema_extras:"x-layer=global,x-priority=5"`
 		Commands         map[string]string             `yaml:"commands,omitempty" jsonschema:"description=Command overrides per verb (e.g. build check fmt lint)" jsonschema_extras:"x-layer=project,x-priority=22"`
 		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty" jsonschema:"description=Smart test triggering scopes" jsonschema_extras:"x-layer=project,x-priority=23"`
+		Onboarding       *OnboardingConfig             `yaml:"onboarding,omitempty" jsonschema:"description=First-run onboarding progress (completed marker + resume step)" jsonschema_extras:"x-layer=global,x-priority=90"`
 	}
 
 	schema := r.Reflect(&BaseConfig{})
