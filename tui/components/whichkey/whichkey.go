@@ -138,6 +138,33 @@ func OverlayCenter(base, popup string, width int) string {
 	return strings.Join(baseLines, "\n")
 }
 
+// OverlayBottom composites a popup onto the BOTTOM rows of base — each covered
+// row replaced by a full-width horizontally-centered popup line so no ANSI
+// escape is ever cut (the whole-row swap OverlayCenter uses, anchored bottom
+// instead of center). base keeps its height, so the popup never pushes a footer
+// off-screen — the failure mode when the popup was stacked as an extra section.
+// rule, when non-empty, is drawn full-width on the row directly above the popup
+// as a docked-panel separator. If the popup is at least as tall as base it falls
+// back to OverlayCenter (no rule). This is the which-key placement every Grove
+// TUI shares; it supersedes the earlier centered-only overlay (rejected in UX
+// review as a band spliced across the middle of the page).
+func OverlayBottom(base, popup, rule string) string {
+	baseLines := strings.Split(base, "\n")
+	popupLines := strings.Split(popup, "\n")
+	width := lipgloss.Width(base)
+	if len(popupLines) >= len(baseLines) {
+		return OverlayCenter(base, popup, width)
+	}
+	start := len(baseLines) - len(popupLines)
+	if rule != "" && start-1 >= 0 {
+		baseLines[start-1] = rule
+	}
+	for i, pl := range popupLines {
+		baseLines[start+i] = lipgloss.PlaceHorizontal(width, lipgloss.Center, pl)
+	}
+	return strings.Join(baseLines, "\n")
+}
+
 // RenderKeyGroups renders a complete which-key popup: an Orange title header,
 // the groups packed into up to two columns, inside a rounded border. maxW/maxH
 // bound the block (maxH truncates overflow with a marker; chords are small so

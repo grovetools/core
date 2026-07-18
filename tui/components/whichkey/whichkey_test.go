@@ -121,3 +121,51 @@ func TestMaxHeightTruncation(t *testing.T) {
 		t.Errorf("expected popup height bounded by maxH=8, got %d lines:\n%s", got, out)
 	}
 }
+
+// TestOverlayBottom pins the two properties that keep a which-key popup on-screen
+// and low: the overlay does NOT grow base's line count (so it can never push a
+// footer past the terminal), the popup lands on the BOTTOM rows, and the rule is
+// drawn on the row directly above the popup band. Ported from flow-status's
+// overlayWhichKeyBottom test when the primitive was promoted into core.
+func TestOverlayBottom(t *testing.T) {
+	base := strings.Join([]string{
+		"row0", "row1", "row2", "row3", "row4",
+		"row5", "row6", "row7", "row8", "row9",
+	}, "\n")
+	popup := strings.Join([]string{"POPUP-A", "POPUP-B", "POPUP-C"}, "\n")
+	rule := strings.Repeat("-", 12)
+
+	out := OverlayBottom(base, popup, rule)
+	lines := strings.Split(out, "\n")
+
+	if len(lines) != 10 {
+		t.Fatalf("overlay changed height: got %d lines, want 10 (base height)", len(lines))
+	}
+	// The rule replaces the row directly above the popup (row 6).
+	if !strings.Contains(lines[6], "----") {
+		t.Errorf("expected rule on row 6, got %q", lines[6])
+	}
+	// Top rows untouched (row 6 becomes the rule, rows 7-9 the popup).
+	for i := 0; i < 6; i++ {
+		if !strings.Contains(lines[i], "row"+string(rune('0'+i))) {
+			t.Errorf("top row %d was disturbed: %q", i, lines[i])
+		}
+	}
+	// Popup occupies the bottom 3 rows.
+	for i, want := range []string{"POPUP-A", "POPUP-B", "POPUP-C"} {
+		if !strings.Contains(lines[7+i], want) {
+			t.Errorf("bottom row %d = %q, want to contain %q", 7+i, lines[7+i], want)
+		}
+	}
+}
+
+// TestOverlayBottomTallPopupFallsBackToCenter: a popup at least as tall as base
+// degenerates to the OverlayCenter fallback (no rule row).
+func TestOverlayBottomTallPopupFallsBackToCenter(t *testing.T) {
+	base := strings.Join([]string{"a", "b", "c"}, "\n")
+	popup := strings.Join([]string{"P0", "P1", "P2", "P3"}, "\n")
+	out := OverlayBottom(base, popup, strings.Repeat("-", 4))
+	if out != popup {
+		t.Errorf("tall popup should fall back to OverlayCenter (popup replaces base), got:\n%s", out)
+	}
+}
