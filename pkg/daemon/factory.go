@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -170,10 +172,25 @@ func NewPaired(dir string, pairPID int) Client {
 
 func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	scope, socketPath, pidPath := resolveScopedTargets(resolvedDir)
+	clearConnectDiagnosis()
 
 	// Try to connect to existing daemon
-	if client := tryConnect(socketPath); client != nil {
+	client, dialErr := tryConnectDiag(socketPath)
+	if client != nil {
 		return client
+	}
+
+	// The socket file exists but connect() was denied (EPERM/EACCES) — the
+	// sandbox signature (e.g. Claude Code's Seatbelt denies unix-socket
+	// connect while os.Stat succeeds). The daemon is almost certainly alive
+	// but unreachable from this process, so spawning a replacement would just
+	// strand a duplicate groved on every invocation. Skip auto-start, record
+	// why for callers (LastConnectDiagnosis), and fall back to LocalClient.
+	// A dead daemon's stale socket (ECONNREFUSED) still takes the spawn path
+	// below, unchanged.
+	if isPermissionDenied(dialErr) {
+		recordConnectDiagnosis(socketPath, dialErr)
+		return NewLocalClient()
 	}
 
 	// Daemon not running, try to auto-start it for this scope. autoStartDaemon
@@ -250,21 +267,85 @@ func waitForDaemonReady(readyPipe *os.File, socketPath string, timeout time.Dura
 // resolution to New()/tryConnect(); core cannot import the daemon-internal
 // satellite package, and the dial-injection seam is the intended boundary.
 func tryConnect(socketPath string) Client {
+	client, _ := tryConnectDiag(socketPath)
+	return client
+}
+
+// tryConnectDiag is tryConnect plus a diagnosis: when the socket file EXISTS
+// but the dial fails, the dial error is returned alongside the nil client so
+// callers can distinguish a dead daemon (ECONNREFUSED on a stale socket) from
+// one that is alive but unreachable from this process (EPERM/EACCES under the
+// Claude Code sandbox). A missing socket file returns (nil, nil).
+func tryConnectDiag(socketPath string) (Client, error) {
 	if _, err := os.Stat(socketPath); err != nil {
-		return nil
+		return nil, nil
 	}
 
 	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	conn.Close()
 
 	client, err := NewRemoteClient(socketPath)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	return client
+	return client, nil
+}
+
+// isPermissionDenied reports whether a dial error carries the sandbox
+// signature: connect(2) rejected with EPERM or EACCES ("operation not
+// permitted") while the socket file itself stats fine. errors.Is walks the
+// *net.OpError → *os.SyscallError → syscall.Errno chain.
+func isPermissionDenied(err error) bool {
+	return err != nil &&
+		(errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES))
+}
+
+// ConnectDiagnosis describes why the most recent auto-start factory call in
+// this process fell back to LocalClient without spawning a daemon.
+type ConnectDiagnosis struct {
+	// SocketPath is the daemon socket the factory tried to reach.
+	SocketPath string
+	// Err is the dial error that aborted the connect.
+	Err error
+	// PermissionDenied is true when Err is EPERM/EACCES — the sandbox
+	// signature (daemon likely alive but unreachable from this process).
+	PermissionDenied bool
+}
+
+var (
+	connectDiagMu   sync.Mutex
+	lastConnectDiag *ConnectDiagnosis
+)
+
+func clearConnectDiagnosis() {
+	connectDiagMu.Lock()
+	defer connectDiagMu.Unlock()
+	lastConnectDiag = nil
+}
+
+func recordConnectDiagnosis(socketPath string, err error) {
+	connectDiagMu.Lock()
+	defer connectDiagMu.Unlock()
+	lastConnectDiag = &ConnectDiagnosis{
+		SocketPath:       socketPath,
+		Err:              err,
+		PermissionDenied: isPermissionDenied(err),
+	}
+}
+
+// LastConnectDiagnosis returns why the most recent NewWithAutoStart-family
+// call fell back to LocalClient, or nil when no diagnosis was recorded (the
+// connect succeeded, or it failed for a reason the factory handles by
+// spawning). Callers that got a client with IsRunning() == false consult this
+// to explain the fallback — e.g. flow telling a sandboxed user that the
+// daemon is alive but connect() was denied, rather than "daemon not running".
+func LastConnectDiagnosis() *ConnectDiagnosis {
+	connectDiagMu.Lock()
+	defer connectDiagMu.Unlock()
+	return lastConnectDiag
 }
 
 // tryConnectWithRetry attempts to connect with exponential backoff.
