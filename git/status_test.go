@@ -375,6 +375,77 @@ func TestGetChangedFilesSinceRefEmptyRef(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestGetChangedFilesInRange covers the commit-to-commit diff used by the
+// per-job review scope: only what the range's commits changed is listed —
+// working-tree edits made after the end commit must not appear — and the
+// numstat churn is merged per file.
+func TestGetChangedFilesInRange(t *testing.T) {
+	tempDir := t.TempDir()
+	setupGitRepo(t, tempDir)
+
+	revParse := func() string {
+		cmd := exec.Command("git", "rev-parse", "HEAD")
+		cmd.Dir = tempDir
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+
+	// Commit 1: the range start.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "keep.txt"), []byte("one\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "gone.txt"), []byte("delete me\n"), 0o644))
+	runGitCommand(t, tempDir, "add", "keep.txt", "gone.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "base")
+	start := revParse()
+
+	// Commit 2: modify, add, delete — the range end.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "keep.txt"), []byte("one\ntwo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "added.txt"), []byte("new\n"), 0o644))
+	runGitCommand(t, tempDir, "rm", "gone.txt")
+	runGitCommand(t, tempDir, "add", "keep.txt", "added.txt")
+	runGitCommand(t, tempDir, "commit", "-m", "job work")
+	end := revParse()
+
+	// A working-tree edit AFTER the end commit must not leak into the range.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "keep.txt"), []byte("one\ntwo\nthree\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "untracked.txt"), []byte("later\n"), 0o644))
+
+	files, err := GetChangedFilesInRange(tempDir, start, end)
+	require.NoError(t, err)
+
+	byPath := make(map[string]FileStatus)
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+
+	require.Len(t, files, 3)
+	require.Contains(t, byPath, "keep.txt")
+	assert.Equal(t, 'M', byPath["keep.txt"].Working)
+	assert.Equal(t, 1, byPath["keep.txt"].LinesAdded)
+	assert.Equal(t, 0, byPath["keep.txt"].LinesDeleted)
+
+	require.Contains(t, byPath, "added.txt")
+	assert.Equal(t, 'A', byPath["added.txt"].Working)
+	assert.Equal(t, 1, byPath["added.txt"].LinesAdded)
+
+	require.Contains(t, byPath, "gone.txt")
+	assert.Equal(t, 'D', byPath["gone.txt"].Working)
+	assert.Equal(t, 1, byPath["gone.txt"].LinesDeleted)
+
+	assert.NotContains(t, byPath, "untracked.txt")
+}
+
+// TestGetChangedFilesInRangeEmptyRef guards the caller-bug rule shared with
+// GetChangedFilesSinceRef: empty endpoints error instead of silently diffing.
+func TestGetChangedFilesInRangeEmptyRef(t *testing.T) {
+	if _, err := GetChangedFilesInRange(t.TempDir(), "", "HEAD"); err == nil {
+		t.Error("empty start ref should error")
+	}
+	if _, err := GetChangedFilesInRange(t.TempDir(), "HEAD", ""); err == nil {
+		t.Error("empty end ref should error")
+	}
+}
+
 // TestGetChangedFilesUntrackedNewDir guards the -uall behavior: a new file in a
 // directory that does not yet contain any tracked files must surface as the file
 // itself, not as a collapsed `dir/` record. Without --untracked-files=all git

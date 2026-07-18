@@ -460,6 +460,39 @@ func GetChangedFilesSinceRef(repoPath, ref string) ([]FileStatus, error) {
 	return files, nil
 }
 
+// GetChangedFilesInRange returns the per-file change list between two commits —
+// `git diff a..b`, i.e. what the commits after a up to and including b changed.
+// Unlike GetChangedFilesSinceRef the working tree is not involved: both
+// endpoints are historical refs, which is what per-job review needs (the
+// working tree may have moved past the job's end commit). Empty endpoints are
+// caller bugs, mirroring the SinceRef rule.
+func GetChangedFilesInRange(repoPath, a, b string) ([]FileStatus, error) {
+	if a == "" || b == "" {
+		return nil, fmt.Errorf("GetChangedFilesInRange: empty ref (a=%q, b=%q)", a, b)
+	}
+
+	rangeSpec := a + ".." + b
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--name-status", "-z", rangeSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	output, err := execCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff %s: %w, output: %s", rangeSpec, err, string(output))
+	}
+
+	files := parseDiffNameStatusZ(string(output))
+
+	// Per-file churn for the same commit range: a single numstat pass against
+	// the identical a..b spec, mirroring how SinceRef applies its numstat.
+	applyNumstat(files, getNumstatZ(repoPath, rangeSpec))
+
+	return files, nil
+}
+
 // parseDiffNameStatusZ parses NUL-delimited `git diff --name-status -z` output
 // into a flat list of FileStatus. Unlike porcelain status there is no separate
 // staged/working pair — diff emits a single status code per path — so Working
