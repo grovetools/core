@@ -87,6 +87,22 @@ const (
 	SettingDomainIcons             = "icons"              // [tui] icons (live apply lands with theme.SetIcons)
 )
 
+// KeyCaptureMsg is emitted by an embedded TUI's key-capture widget (the
+// grove config Keys page) to arm (Active true) or disarm (Active false) the
+// host's capture-next-keystroke mode. While armed the host must deliver the
+// next raw tea.KeyMsg to the focused panel BEFORE its own chord/global key
+// routing (tuimux's leader/action interception happens at the top of Update,
+// so without this the currently-bound chord could never be re-captured — see
+// the A2 correction in plans/treemux-splash/30-design-appearance-keys.md).
+// The host mode is single-shot: it self-clears after forwarding one key, so
+// a widget re-arms per captured chord. Standalone CLIs have no handler —
+// the message is inert and the widget captures keys through the normal
+// bubbletea delivery path. Defined here (not in tuimux/embed) alongside
+// SettingAppliedMsg, its emitting sibling on the curated-config channel.
+type KeyCaptureMsg struct {
+	Active bool
+}
+
 const (
 	AgentSplitOpen  = tuimux_embed.AgentSplitOpen
 	AgentSplitClose = tuimux_embed.AgentSplitClose
