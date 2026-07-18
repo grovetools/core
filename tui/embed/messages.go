@@ -6,7 +6,10 @@
 // This package re-exports them via Go type aliases for backward compatibility.
 package embed
 
-import tuimux_embed "github.com/grovetools/tuimux/embed"
+import (
+	"github.com/grovetools/core/config"
+	tuimux_embed "github.com/grovetools/tuimux/embed"
+)
 
 type (
 	DoneMsg                      = tuimux_embed.DoneMsg
@@ -52,6 +55,37 @@ type SwitchWorkspaceRequestMsg struct {
 	Path       string
 	FocusPanel string
 }
+
+// SettingAppliedMsg is emitted by the embedded grove config TUI after a
+// curated setting has been persisted to the global config layer and the
+// layered config reloaded. Hosts (treemux) switch on Domain to hot-apply
+// the change via their existing setters; standalone CLIs simply ignore it.
+//
+// Domain names the live-apply seam, not the TOML key (one domain may cover
+// several keys, e.g. "focus" covers all of [tui.focus]). Config is the
+// freshly merged layered.Final so handlers read the new effective values
+// without re-loading. Defined here (not re-exported from tuimux/embed)
+// because it carries a core config type — same pattern as
+// SwitchWorkspaceRequestMsg above.
+type SettingAppliedMsg struct {
+	Domain string
+	Config *config.Config
+}
+
+// Live-apply domains for SettingAppliedMsg.Domain. The emitting side (grove
+// curated Setting.ApplyDomain) and the treemux handler both reference these
+// so the contract cannot drift. Startup-only settings (e.g. [tui]
+// hide_splash_on_startup) have no domain and emit nothing.
+const (
+	SettingDomainFocus             = "focus"              // [tui.focus] style/colors/thickness
+	SettingDomainLeaderKey         = "leader_key"         // [tui] leader_key
+	SettingDomainActionKey         = "action_key"         // [tui] action_key
+	SettingDomainVimPaneNav        = "vim_pane_nav"       // [tui] vim_control_hjkl_pane_nav
+	SettingDomainDrawerOrientation = "drawer_orientation" // [tui] drawer_orientation
+	SettingDomainDrawerExpanded    = "drawer_expanded"    // [tui] drawer_expanded
+	SettingDomainSidebarExpanded   = "sidebar_expanded"   // [tui] sidebar_expanded
+	SettingDomainIcons             = "icons"              // [tui] icons (live apply lands with theme.SetIcons)
+)
 
 const (
 	AgentSplitOpen  = tuimux_embed.AgentSplitOpen
