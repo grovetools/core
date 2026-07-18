@@ -251,6 +251,11 @@ func generateTableKeys() []string {
 }
 
 // SuggestAlternatives finds unbound keys similar to the requested one.
+// Every suggestion carries at least one modifier: callers ask about chords
+// and hotkeys, and a bare letter is never a sensible alternative — the
+// shell/tmux layers the stack checks don't bind bare letters, so an
+// unmodified base would always look "free" while being useless (and would
+// steal plain typing if actually bound).
 func (s *Stack) SuggestAlternatives(key string, count int, layers ...Layer) []string {
 	normalizedKey := Normalize(key, "")
 	suggestions := make([]string, 0)
@@ -258,8 +263,8 @@ func (s *Stack) SuggestAlternatives(key string, count int, layers ...Layer) []st
 	// Extract the base key (letter/number) and modifiers
 	base, mods := parseModifiers(normalizedKey)
 
-	// Try different modifier combinations
-	modifierCombos := []string{"", "C-", "M-", "C-M-", "S-"}
+	// Try different modifier combinations — never the bare, unmodified base.
+	modifierCombos := []string{"C-", "M-", "C-M-", "S-"}
 	for _, mod := range modifierCombos {
 		if mod == mods {
 			continue // Skip the same modifier
@@ -273,12 +278,17 @@ func (s *Stack) SuggestAlternatives(key string, count int, layers ...Layer) []st
 		}
 	}
 
-	// Also suggest nearby letters
+	// Also suggest nearby letters, keeping the input's modifiers — or C-
+	// when the input had none, so the modifier rule still holds.
 	if len(base) == 1 && base[0] >= 'A' && base[0] <= 'Z' {
+		nearbyMods := mods
+		if nearbyMods == "" {
+			nearbyMods = "C-"
+		}
 		nearby := []byte{base[0] - 1, base[0] + 1}
 		for _, b := range nearby {
 			if b >= 'A' && b <= 'Z' {
-				candidate := mods + string(b)
+				candidate := nearbyMods + string(b)
 				if !s.isKeyBound(candidate, layers...) {
 					suggestions = append(suggestions, candidate)
 					if len(suggestions) >= count {
