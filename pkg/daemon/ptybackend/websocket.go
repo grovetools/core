@@ -32,6 +32,15 @@ type WebSocketBackend struct {
 	mu   sync.Mutex
 	conn *websocket.Conn
 
+	// lastRows/lastCols hold the most recent size requested via Resize,
+	// whether or not the send succeeded. A resize sent while the socket is
+	// down would otherwise be lost forever — the daemon PTY keeps its stale
+	// (often creation-default) size and the client's terminal mirror
+	// disagrees with it, rendering a shrunken/mangled pane. reconnect()
+	// replays this size after every successful re-dial.
+	lastRows uint16
+	lastCols uint16
+
 	readMu     sync.Mutex
 	currentMsg io.Reader
 
@@ -185,6 +194,13 @@ func (b *WebSocketBackend) Close() error {
 
 // Resize sends a resize control message to the daemon PTY.
 func (b *WebSocketBackend) Resize(rows, cols uint16) error {
+	b.mu.Lock()
+	b.lastRows, b.lastCols = rows, cols
+	b.mu.Unlock()
+	return b.sendResize(rows, cols)
+}
+
+func (b *WebSocketBackend) sendResize(rows, cols uint16) error {
 	msg := controlMessage{Type: "resize", Rows: rows, Cols: cols}
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -273,6 +289,15 @@ func (b *WebSocketBackend) reconnect() error {
 
 		if err := b.dial(); err == nil {
 			ulog.Debug("PTY reconnect SUCCEEDED").Field("pty_id", b.sessionID).Field("attempt", i+1).StructuredOnly().Log(ctx)
+			// Replay the last requested size: any resize sent while the
+			// socket was down was silently lost, and no host layer retries
+			// an unchanged size on its own.
+			b.mu.Lock()
+			rows, cols := b.lastRows, b.lastCols
+			b.mu.Unlock()
+			if rows > 0 && cols > 0 {
+				_ = b.sendResize(rows, cols)
+			}
 			return nil
 		} else {
 			ulog.Debug("PTY reconnect dial failed").Field("pty_id", b.sessionID).Field("attempt", i+1).Field("err", err.Error()).StructuredOnly().Log(ctx)
