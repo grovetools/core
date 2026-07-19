@@ -335,7 +335,7 @@ type SystemInfo struct {
 // layer and the client decode straight into this type.
 type SatelliteStatus struct {
 	Name      string    `json:"name"`                 // registry name (federation Origin, stable across cattle recreations)
-	State     string    `json:"state"`                // "connected" | "backoff" | "disconnected"
+	State     string    `json:"state"`                // "connected" | "backoff" | "disconnected" | "exec-only" (kind=exec satellite: no groved to dial)
 	Addr      string    `json:"addr,omitempty"`       // ssh_addr host:port
 	LastError string    `json:"last_error,omitempty"` // last dial/keepalive error, if any
 	Forward   string    `json:"forward,omitempty"`    // daemon-owned local sync forward, e.g. "active on 127.0.0.1:8788" or "port busy on ..."; empty when off
