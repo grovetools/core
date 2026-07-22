@@ -206,6 +206,29 @@ func (c *RemoteClient) GetNoteCounts(ctx context.Context) (map[string]*models.No
 // the daemon and returns the raw JSON body. The caller decodes into its
 // own plan type (typically flow's orchestration.Plan) — see the Client
 // interface comment for why the payload type doesn't live here.
+func (c *RemoteClient) GetPlanIndex(ctx context.Context) (*models.PlanIndexSnapshot, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/plan-index", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan index from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotSupported
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	var snapshot models.PlanIndexSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		return nil, fmt.Errorf("failed to decode plan index: %w", err)
+	}
+	return &snapshot, nil
+}
+
 func (c *RemoteClient) GetPlansRaw(ctx context.Context, planDir string) ([]byte, error) {
 	reqURL := baseURL + "/api/plans?dir=" + url.QueryEscape(planDir)
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)

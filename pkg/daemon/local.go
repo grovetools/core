@@ -72,6 +72,12 @@ func (c *LocalClient) GetPlansRaw(ctx context.Context, planDir string) ([]byte, 
 	return nil, nil
 }
 
+// GetPlanIndex has no local equivalent: Flow owns the explicitly-labelled
+// disk fallback so this client must not perform an implicit expensive scan.
+func (c *LocalClient) GetPlanIndex(ctx context.Context) (*models.PlanIndexSnapshot, error) {
+	return nil, ErrNotSupported
+}
+
 // GetSessions returns active sessions from all sources.
 // This uses the comprehensive DiscoverAll function which aggregates:
 // - Interactive sessions (from ~/.grove/hooks/sessions)

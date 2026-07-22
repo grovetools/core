@@ -82,6 +82,10 @@ type Client interface {
 	// scan.
 	GetPlansRaw(ctx context.Context, planDir string) ([]byte, error)
 
+	// GetPlanIndex returns the daemon's reconciled portfolio snapshot. Clients
+	// re-fetch it after reconnect and whenever an SSE revision gap is observed.
+	GetPlanIndex(ctx context.Context) (*models.PlanIndexSnapshot, error)
+
 	// GetNoteCounts returns aggregated note counts indexed by workspace name.
 	GetNoteCounts(ctx context.Context) (map[string]*models.NoteCounts, error)
 
@@ -542,4 +546,8 @@ type StateUpdate struct {
 	// on every other update type — it rides the same struct as workspace and
 	// session updates, so consumers must gate on UpdateType == "boot_phase".
 	BootPhase *BootStatus `json:"boot_phase,omitempty"`
+	// PlanIndex carries revisioned portfolio deltas. It is typed rather than
+	// hidden in Payload so consumers can reliably detect revision gaps.
+	PlanIndex         *models.PlanIndexDelta    `json:"plan_index,omitempty"`
+	PlanIndexSnapshot *models.PlanIndexSnapshot `json:"plan_index_snapshot,omitempty"`
 }
