@@ -159,6 +159,59 @@ func TestRenderOverlayGatedByDelay(t *testing.T) {
 	}
 }
 
+// TestRenderOverlayAvailExpandsShortFrame pins the embed-mode fix: a namespace
+// taller than the frame renders in full when the viewport has room. The frame is
+// a short content block (an embedded page), the namespace has 11 members; the
+// frame-clamped RenderOverlay truncates with a marker, while RenderOverlayAvail
+// with the viewport height lists every entry, pads the frame only as far as the
+// popup needs, and never exceeds the viewport.
+func TestRenderOverlayAvailExpandsShortFrame(t *testing.T) {
+	var bindings []key.Binding
+	descs := []string{
+		"alpha", "bravo", "charlie", "delta", "echo", "foxtrot",
+		"golf", "hotel", "india", "juliett", "kilo",
+	}
+	for i, d := range descs {
+		k := "v" + string(rune('a'+i))
+		bindings = append(bindings, key.NewBinding(key.WithKeys(k), key.WithHelp(k, d)))
+	}
+	h := NewWhichKeyHost(nil, Namespace{Prefix: "v", Label: "View", Bindings: bindings})
+	h.Delay = 0
+	h.ProcessChord(runeMsg("v"))
+
+	frame := strings.Join([]string{
+		"row0", "row1", "row2", "row3", "row4",
+		"row5", "row6", "row7", "row8", "row9", "row10",
+	}, "\n")
+	width := 200
+	th := *theme.DefaultTheme
+
+	// Frame-clamped path (the old behavior): 11 rows in an 11-line frame truncate.
+	clamped := h.RenderOverlay(frame, width, th)
+	if !strings.Contains(clamped, "esc to close") {
+		t.Fatalf("frame-clamped overlay should truncate an 11-row namespace in an 11-line frame:\n%s", clamped)
+	}
+
+	// Viewport-aware path: every entry renders, no truncation marker.
+	out := h.RenderOverlayAvail(frame, width, 50, th)
+	for _, d := range descs {
+		if !strings.Contains(out, d) {
+			t.Errorf("viewport-aware overlay missing entry %q:\n%s", d, out)
+		}
+	}
+	if strings.Contains(out, "esc to close") {
+		t.Errorf("viewport-aware overlay should not truncate when the viewport has room:\n%s", out)
+	}
+	if got := len(strings.Split(out, "\n")); got > 50 {
+		t.Errorf("overlay height %d exceeds the 50-row viewport", got)
+	}
+
+	// availH <= 0 falls back to the frame-height clamp.
+	if got := h.RenderOverlayAvail(frame, width, 0, th); got != clamped {
+		t.Errorf("availH=0 should match the frame-clamped RenderOverlay output")
+	}
+}
+
 // TestFooterHintImmediate: a flat prefix produces an immediate (undelayed) hint;
 // idle produces none.
 func TestFooterHintImmediate(t *testing.T) {

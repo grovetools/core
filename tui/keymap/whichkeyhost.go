@@ -193,7 +193,26 @@ func (h WhichKeyHost) ProcessChord(msg tea.KeyMsg, extra ...key.Binding) (ChordR
 // rule directly above it, so it reads as a docked panel just above the footer and
 // keeps frame's height fixed. It falls back to a centered overlay only when the
 // popup is taller than the frame (OverlayBottom's internal degenerate case).
+//
+// The popup height is clamped to the frame's own line count — correct only when
+// the frame fills the viewport. A TUI whose frame is a bare content block (an
+// embedded page) should call RenderOverlayAvail with its viewport height instead,
+// or a namespace taller than its content truncates despite ample screen space.
 func (h WhichKeyHost) RenderOverlay(frame string, width int, t theme.Theme) string {
+	return h.RenderOverlayAvail(frame, width, 0, t)
+}
+
+// RenderOverlayAvail is RenderOverlay with the vertical budget made explicit:
+// availH is the viewport height the popup may occupy (typically the model's
+// tea.WindowSizeMsg height; <= 0 means unknown, falling back to the frame-height
+// clamp). An embedded page's frame is often just its content block — far shorter
+// than the terminal — so clamping the popup to the frame height truncated
+// namespaces that had ample room on screen. Truncation therefore honors
+// max(frame height, availH), and when the fitting popup outgrows the frame the
+// frame is padded with trailing blank rows (never past availH) so OverlayBottom
+// docks the whole popup instead of degenerating to the popup-replaces-frame
+// fallback.
+func (h WhichKeyHost) RenderOverlayAvail(frame string, width, availH int, t theme.Theme) string {
 	if !h.PopupVisible() {
 		return frame
 	}
@@ -202,9 +221,21 @@ func (h WhichKeyHost) RenderOverlay(frame string, width int, t theme.Theme) stri
 		return frame
 	}
 	frameLines := len(strings.Split(frame, "\n"))
+	maxH := frameLines
+	if availH > maxH {
+		maxH = availH
+	}
 	// The namespace title is the popup header; the rows render under an untitled
 	// group so the "View (v…)" label doesn't print twice (header + group title).
-	popup := whichkey.RenderKeyGroups(group.Title, []whichkey.KeyGroup{{Title: "", Rows: group.Rows}}, t, width, frameLines)
+	popup := whichkey.RenderKeyGroups(group.Title, []whichkey.KeyGroup{{Title: "", Rows: group.Rows}}, t, width, maxH)
+	// +1 keeps a row above the popup free for the rule.
+	if need := len(strings.Split(popup, "\n")) + 1; need > frameLines && availH > frameLines {
+		pad := need
+		if pad > availH {
+			pad = availH
+		}
+		frame += strings.Repeat("\n", pad-frameLines)
+	}
 	rule := t.Muted.Render(strings.Repeat("─", width))
 	return whichkey.OverlayBottom(frame, popup, rule)
 }
