@@ -97,6 +97,14 @@ func runFakeGroved() {
 // path: the first spawn passes --ready-at=bind, the (fake) old binary rejects
 // it and dies, and the factory must respawn once WITHOUT the flag and land a
 // working RemoteClient — never falling back to LocalClient.
+func TestSuppressStartNoticeOption(t *testing.T) {
+	var opts autoStartOptions
+	SuppressStartNotice()(&opts)
+	if !opts.suppressStartNotice {
+		t.Fatal("SuppressStartNotice did not suppress daemon spawn output")
+	}
+}
+
 func TestEarlyReadyRespawnsOnOldBinary(t *testing.T) {
 	tmp := t.TempDir()
 

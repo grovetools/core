@@ -115,8 +115,9 @@ func NewWithAutoStart(dir ...string) Client {
 // autoStartOptions collects the tunables for an auto-starting client factory.
 // Zero value = today's behavior (paired to nothing, default boot ordering).
 type autoStartOptions struct {
-	pairPID    int
-	earlyReady bool
+	pairPID             int
+	earlyReady          bool
+	suppressStartNotice bool
 }
 
 // Option customizes NewWithAutoStartOpts.
@@ -136,6 +137,14 @@ func EarlyReady() Option {
 // (see NewPaired). No-op when the daemon is already running.
 func PairWith(pairPID int) Option {
 	return func(o *autoStartOptions) { o.pairPID = pairPID }
+}
+
+// SuppressStartNotice prevents an auto-start notice from being written to
+// stderr. Full-screen TUI callers use this for reconnect attempts because
+// out-of-band terminal output corrupts Bubble Tea's active screen. Daemon
+// startup remains available through the structured daemon.factory log.
+func SuppressStartNotice() Option {
+	return func(o *autoStartOptions) { o.suppressStartNotice = true }
 }
 
 // NewWithAutoStartOpts is the option-taking form of NewWithAutoStart. It exists
@@ -198,7 +207,7 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	// (via --ready-fd); groved closes it after the socket is bound, giving us
 	// a deterministic EOF to wait on instead of polling with a guessed window.
 	// On pipe-setup failure readyPipe is nil and we fall back to plain polling.
-	readyPipe, exited, ok := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, opts.earlyReady)
+	readyPipe, exited, ok := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, opts.earlyReady, opts.suppressStartNotice)
 	if !ok {
 		return NewLocalClient()
 	}
@@ -217,7 +226,7 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	if opts.earlyReady {
 		select {
 		case <-exited:
-			readyPipe2, _, ok2 := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, false)
+			readyPipe2, _, ok2 := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, false, opts.suppressStartNotice)
 			if ok2 {
 				if client := waitForDaemonReady(readyPipe2, socketPath, readyHandshakeTimeout); client != nil {
 					return client
@@ -379,7 +388,7 @@ func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Du
 // idle. Empty scope falls through to groved's own unscoped defaults. When
 // pairPID > 0, --pair-with-pid is added so the daemon exits when that
 // parent process dies.
-func autoStartDaemon(scope, socketPath, pidPath string, pairPID int, earlyReady bool) (readyPipe *os.File, exited <-chan struct{}, ok bool) {
+func autoStartDaemon(scope, socketPath, pidPath string, pairPID int, earlyReady, suppressStartNotice bool) (readyPipe *os.File, exited <-chan struct{}, ok bool) {
 	// Diagnostic: log the caller stack so we can trace which tool is
 	// triggering a scoped-daemon auto-spawn. View with:
 	//   core logs --component daemon.factory -f
@@ -495,7 +504,9 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int, earlyReady 
 		// Scoped daemons are spawned with --auto-shutdown (see args above).
 		notice += "; exits after 2m idle"
 	}
-	fmt.Fprintln(os.Stderr, notice)
+	if !suppressStartNotice {
+		fmt.Fprintln(os.Stderr, notice)
+	}
 
 	// Don't wait for the process - let it run in background. Closing exitedCh
 	// on Wait() lets newAutoStart distinguish "old binary rejected the flag and
