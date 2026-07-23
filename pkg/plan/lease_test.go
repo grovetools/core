@@ -33,6 +33,27 @@ func TestLeaseRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLeaseRejectsIncompleteOrUnknownClaims(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteLease(dir, Lease{}); err == nil {
+		t.Fatal("WriteLease accepted an incomplete claim")
+	}
+	for name, body := range map[string]string{
+		"missing holder": "job_id: job-1\nacquired_at: 2026-01-01T00:00:00Z\nttl: 1h\n",
+		"unknown field":  "holder_origin: sat\njob_id: job-1\nacquired_at: 2026-01-01T00:00:00Z\nttl: 1h\ntoken: secret\n",
+		"zero ttl":       "holder_origin: sat\njob_id: job-1\nacquired_at: 2026-01-01T00:00:00Z\nttl: 0s\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(LeasePath(dir), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := ReadLease(dir); err == nil || got != nil {
+				t.Fatalf("ReadLease = (%+v, %v), want fail-closed error", got, err)
+			}
+		})
+	}
+}
+
 func TestLeaseAbsentIsNilNotError(t *testing.T) {
 	got, err := ReadLease(t.TempDir())
 	if err != nil {
