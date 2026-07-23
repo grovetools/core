@@ -437,3 +437,31 @@ func TestGetProjectByPath_MangledGroveConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid grove config")
 	assert.Contains(t, err.Error(), "grove.toml", "error must name the broken config file")
 }
+
+func TestGetProjectByPath_StandaloneOwnerContainer(t *testing.T) {
+	// A unified (synthetic grove.toml) container whose owner is a STANDALONE
+	// repo — no ecosystem config anywhere above it — must still classify as an
+	// ecosystem worktree rooted at the owner repo. The prior fallback left the
+	// node a KindEcosystemRoot named after the container, so the container
+	// basename (the plan name) masqueraded as the workspace name and every
+	// generated plan's qualified plan dir came out as
+	// workspaces/<plan>/plans/<plan> — a binding mismatch for a healthy plan.
+	t.Setenv("GROVE_HOME", t.TempDir())
+	root := normalizePath(t, t.TempDir())
+
+	owner := filepath.Join(root, "alpha-repo")
+	require.NoError(t, os.MkdirAll(filepath.Join(owner, ".git"), 0o755))
+
+	container := filepath.Join(owner, ".grove-worktrees", "alpha-view")
+	require.NoError(t, os.MkdirAll(filepath.Join(container, ".grove"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(container, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644))
+	marker := "branch: alpha-view\nplan: alpha-view\nowner: " + owner + "\necosystem: true\n"
+	require.NoError(t, os.WriteFile(filepath.Join(container, ".grove", "workspace"), []byte(marker), 0o644))
+
+	node, err := GetProjectByPath(container)
+	require.NoError(t, err)
+	assert.Equal(t, KindEcosystemWorktree, node.Kind)
+	assert.Equal(t, owner, node.ParentProjectPath)
+	assert.Equal(t, owner, node.RootEcosystemPath, "origin root must be the owner repo, not the container")
+	assert.Equal(t, "alpha-view", node.Name)
+}

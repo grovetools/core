@@ -339,7 +339,18 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 		}
 		rootEcosystemPath := findRootEcosystemPath(rootSearchStart)
 		if rootEcosystemPath == "" {
-			rootEcosystemPath = foundRootPath
+			// A standalone-repo owner has no ecosystem config anywhere above
+			// it, so the upward walk finds nothing. The origin root is then
+			// the owner repo itself — falling back to the container would
+			// leave the node classified as an EcosystemRoot named after the
+			// container, making the container basename (the plan name)
+			// masquerade as the workspace name downstream (notebook plans
+			// dirs, plan-binding qualification).
+			if ownerPath != "" {
+				rootEcosystemPath = ownerPath
+			} else {
+				rootEcosystemPath = foundRootPath
+			}
 		}
 
 		// Find immediate parent ecosystem if this is a worktree. The owner's

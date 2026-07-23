@@ -70,7 +70,26 @@ func ResolveTarget(ref string) (*ResolvedTarget, error) {
 
 	if entry.Plan != "" {
 		target.PlanDir = ResolvePlanDir(target.WorkspaceRoot, entry.Plan)
+		if target.PlanDir == "" && entry.Owner != "" {
+			// The container-rooted derivation needs the container on disk
+			// (workspace classification stats it), so a deleted container
+			// would leave the entry unqualifiable and its plan binding would
+			// collapse to "unbound" instead of surfacing "missing container".
+			// Derive through the owner's origin instead: containers are
+			// ecosystem-shaped, so the plan is qualified by the owner's root
+			// ecosystem when it sits inside one, else the owner repo itself.
+			target.PlanDir = ResolvePlanDir(ownerOriginRoot(entry.Owner), entry.Plan)
+		}
 	}
 
 	return target, nil
+}
+
+// ownerOriginRoot resolves the origin root a worktree owner qualifies plans
+// under: the owner's root ecosystem when there is one, else the owner itself.
+func ownerOriginRoot(owner string) string {
+	if node, err := workspace.GetProjectByPath(owner); err == nil && node.RootEcosystemPath != "" {
+		return node.RootEcosystemPath
+	}
+	return owner
 }
