@@ -135,6 +135,33 @@ func TestSeedTrust_NoPathsNoOp(t *testing.T) {
 	}
 }
 
+func TestSeedTrustForConfigDir_SeparatesStockAndGroveAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, dir := range []string{".pi", ".grove-agent"} {
+		if err := os.MkdirAll(filepath.Join(home, dir, "agent"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := SeedTrust("/stock"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SeedTrustForConfigDir(".grove-agent", "/product"); err != nil {
+		t.Fatal(err)
+	}
+	stock := readTrust(t, filepath.Join(home, ".pi", "agent", "trust.json"))
+	product := readTrust(t, filepath.Join(home, ".grove-agent", "agent", "trust.json"))
+	if stock["/stock"] != true || stock["/product"] != nil {
+		t.Fatalf("stock trust crossed profiles: %#v", stock)
+	}
+	if product["/product"] != true || product["/stock"] != nil {
+		t.Fatalf("grove-agent trust crossed profiles: %#v", product)
+	}
+	if err := SeedTrustForConfigDir("../escape", "/x"); err == nil {
+		t.Fatal("expected invalid config directory rejection")
+	}
+}
+
 func TestSeedTrust_SortedKeys(t *testing.T) {
 	trustPath := setupHome(t, true)
 	if err := SeedTrust("/z/last", "/a/first"); err != nil {
