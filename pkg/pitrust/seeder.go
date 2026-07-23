@@ -62,6 +62,16 @@ const trustEnvVar = "GROVE_PRESEED_PI_TRUST"
 // at worktree creation, before any pi process for that path exists, so the
 // race window is effectively empty.
 func SeedTrust(paths ...string) error {
+	return SeedTrustForConfigDir(".pi", paths...)
+}
+
+// SeedTrustForConfigDir seeds one Pi-family runtime without crossing into a
+// sibling product's store. configDirName must be a single hidden HOME entry,
+// such as .pi or .grove-agent.
+func SeedTrustForConfigDir(configDirName string, paths ...string) error {
+	if configDirName == "" || filepath.Base(configDirName) != configDirName || !strings.HasPrefix(configDirName, ".") {
+		return fmt.Errorf("invalid Pi config directory name %q", configDirName)
+	}
 	switch os.Getenv(trustEnvVar) {
 	case "0", "false", "off":
 		return nil
@@ -74,7 +84,7 @@ func SeedTrust(paths ...string) error {
 	if err != nil {
 		return fmt.Errorf("locate home dir: %w", err)
 	}
-	agentDir := filepath.Join(home, ".pi", "agent")
+	agentDir := filepath.Join(home, configDirName, "agent")
 	if _, statErr := os.Stat(agentDir); os.IsNotExist(statErr) {
 		// pi isn't set up on this machine; do not create its config tree.
 		return nil

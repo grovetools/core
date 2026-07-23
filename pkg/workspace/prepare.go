@@ -206,6 +206,9 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 			if seedErr := pitrust.SeedTrust(piPath); seedErr != nil {
 				fmt.Printf("Warning: failed to pre-seed pi trust: %v\n", seedErr)
 			}
+			if seedErr := pitrust.SeedTrustForConfigDir(".grove-agent", piPath); seedErr != nil {
+				fmt.Printf("Warning: failed to pre-seed grove-agent trust: %v\n", seedErr)
+			}
 		}
 
 		// Seed the worktree's .claude/settings.local.json with the union of
