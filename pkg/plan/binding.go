@@ -111,7 +111,7 @@ func resolvePlanBindings(requests []BindingRequest, entries []*worktreeregistry.
 				continue
 			}
 			sameName++
-			if target := targets[entry]; target != nil && NewPlanKey(target.PlanDir) == key {
+			if target := targets[entry]; target != nil && samePlanDir(target.PlanDir, key.PlanDir) {
 				qualified = append(qualified, entry)
 			}
 		}
@@ -154,4 +154,16 @@ func resolvePlanBindings(requests []BindingRequest, entries []*worktreeregistry.
 		out[key.String()] = binding
 	}
 	return out
+}
+
+// samePlanDir compares plan identities through the canonical path normalizer.
+// Registry enrichment commonly returns a symlink-resolved spelling (for
+// example /private/tmp on macOS) while the daemon index retains the configured
+// plans-directory spelling. Those are one qualified plan, not a mismatch.
+func samePlanDir(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	equal, err := pathutil.ComparePaths(left, right)
+	return err == nil && equal
 }

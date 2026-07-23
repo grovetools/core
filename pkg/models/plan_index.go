@@ -10,6 +10,7 @@ type PlanSummary struct {
 	WorkspaceRoot   string         `json:"workspace_root,omitempty"`
 	PlansDir        string         `json:"plans_dir,omitempty"`
 	Lifecycle       string         `json:"lifecycle"`
+	Archived        bool           `json:"archived,omitempty"`
 	Selected        bool           `json:"selected"`
 	Worktree        string         `json:"worktree,omitempty"`
 	Anchor          string         `json:"anchor,omitempty"`

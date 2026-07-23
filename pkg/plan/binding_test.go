@@ -40,6 +40,32 @@ func TestResolvePlanBindingsQualifiesDuplicateSlugs(t *testing.T) {
 	}
 }
 
+func TestResolvePlanBindingsAcceptsCanonicalPlanDirSpelling(t *testing.T) {
+	root := t.TempDir()
+	realPlans := filepath.Join(root, "real", "plans")
+	if err := os.MkdirAll(filepath.Join(realPlans, "feature"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(filepath.Join(root, "real"), alias); err != nil {
+		t.Fatal(err)
+	}
+	container := filepath.Join(root, "feature")
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	requested := filepath.Join(alias, "plans", "feature")
+	resolved := filepath.Join(realPlans, "feature")
+	got := resolvePlanBindings(
+		[]BindingRequest{{PlanDir: requested, ConfiguredWorktree: "feature"}},
+		[]*worktreeregistry.Entry{{AbsPath: container, Plan: "feature"}},
+		func(string) (*ResolvedTarget, error) { return &ResolvedTarget{PlanDir: resolved}, nil },
+	)
+	if binding := got[NewPlanKey(requested).String()]; binding.Health != BindingValid {
+		t.Fatalf("canonical spellings did not bind: %+v", binding)
+	}
+}
+
 func TestResolvePlanBindingsHealth(t *testing.T) {
 	root := t.TempDir()
 	planDir := filepath.Join(root, "plans", "feature")
