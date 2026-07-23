@@ -13,6 +13,7 @@ type PlanSummary struct {
 	Archived        bool           `json:"archived,omitempty"`
 	Selected        bool           `json:"selected"`
 	Worktree        string         `json:"worktree,omitempty"`
+	WorktreePath    string         `json:"worktree_path,omitempty"` // Qualified live container; empty unless binding is valid.
 	Anchor          string         `json:"anchor,omitempty"`
 	Repositories    []string       `json:"repositories,omitempty"`
 	JobCounts       map[string]int `json:"job_counts,omitempty"`
