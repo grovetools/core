@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -64,9 +65,14 @@ func (l *Lease) Expired() bool {
 	return time.Now().After(l.AcquiredAt.Add(l.TTL))
 }
 
-// WriteLease writes the lease into planDir/.grove-lease.yml, overwriting any
-// existing lease. The 0o600 mode matches how flow's loader persists plan files.
+// WriteLease atomically writes planDir/.grove-lease.yml, overwriting any
+// existing lease. Atomic replacement prevents a crash from turning a live
+// execution claim into a truncated file. The 0o600 mode matches how flow's
+// loader persists plan files.
 func WriteLease(planDir string, l Lease) error {
+	if err := l.Validate(); err != nil {
+		return fmt.Errorf("invalid lease: %w", err)
+	}
 	out := leaseOnDisk{
 		HolderOrigin: l.HolderOrigin,
 		JobID:        l.JobID,
@@ -77,8 +83,29 @@ func WriteLease(planDir string, l Lease) error {
 	if err != nil {
 		return fmt.Errorf("marshaling lease: %w", err)
 	}
-	if err := os.WriteFile(LeasePath(planDir), data, 0o600); err != nil {
-		return fmt.Errorf("writing lease: %w", err)
+	tmp, err := os.CreateTemp(planDir, ".grove-lease-*.tmp")
+	if err != nil {
+		return fmt.Errorf("creating staged lease: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("setting staged lease mode: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("writing staged lease: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("syncing staged lease: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing staged lease: %w", err)
+	}
+	if err := os.Rename(tmpPath, LeasePath(planDir)); err != nil {
+		return fmt.Errorf("activating lease: %w", err)
 	}
 	return nil
 }
@@ -94,7 +121,9 @@ func ReadLease(planDir string) (*Lease, error) {
 		return nil, fmt.Errorf("reading lease: %w", err)
 	}
 	var on leaseOnDisk
-	if err := yaml.Unmarshal(data, &on); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&on); err != nil {
 		return nil, fmt.Errorf("parsing lease: %w", err)
 	}
 	l := &Lease{
@@ -109,7 +138,28 @@ func ReadLease(planDir string) (*Lease, error) {
 		}
 		l.TTL = ttl
 	}
+	if err := l.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid lease: %w", err)
+	}
 	return l, nil
+}
+
+// Validate rejects incomplete claims. Treating an incomplete on-disk lease as
+// expired would silently reopen a plan for concurrent mutation.
+func (l Lease) Validate() error {
+	if l.HolderOrigin == "" {
+		return errors.New("holder_origin is required")
+	}
+	if l.JobID == "" {
+		return errors.New("job_id is required")
+	}
+	if l.AcquiredAt.IsZero() {
+		return errors.New("acquired_at is required")
+	}
+	if l.TTL <= 0 {
+		return errors.New("ttl must be positive")
+	}
+	return nil
 }
 
 // RemoveLease deletes planDir/.grove-lease.yml. A missing file is not an error.
