@@ -70,16 +70,18 @@ type NoteCounts struct {
 
 // PlanStats holds statistics about grove-flow plans.
 type PlanStats struct {
-	TotalPlans int    `json:"total_plans"`
-	ActivePlan string `json:"active_plan"`
-	Running    int    `json:"running"`
-	Pending    int    `json:"pending"`
-	Completed  int    `json:"completed"`
-	Failed     int    `json:"failed"`
-	Todo       int    `json:"todo"`
-	Hold       int    `json:"hold"`
-	Abandoned  int    `json:"abandoned"`
-	PlanStatus string `json:"plan_status,omitempty"` // Status of the plan itself (e.g., "hold", "finished")
+	TotalPlans        int    `json:"total_plans"`
+	ActivePlan        string `json:"active_plan"`
+	Running           int    `json:"running"`
+	Pending           int    `json:"pending"`
+	Completed         int    `json:"completed"`
+	Failed            int    `json:"failed"`
+	Todo              int    `json:"todo"`
+	Hold              int    `json:"hold"`
+	Abandoned         int    `json:"abandoned"`
+	PlanStatus        string `json:"plan_status,omitempty"` // Status of the explicitly associated plan.
+	AssociatedPlan    string `json:"associated_plan,omitempty"`
+	AssociatedPlanDir string `json:"associated_plan_dir,omitempty"`
 }
 
 // ReleaseInfo holds release tag and commit information.
