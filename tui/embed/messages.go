@@ -21,6 +21,8 @@ type (
 	EditFinishedMsg              = tuimux_embed.EditFinishedMsg
 	PreviewRequestMsg            = tuimux_embed.PreviewRequestMsg
 	OpenAgentSessionMsg          = tuimux_embed.OpenAgentSessionMsg
+	GitOperation                 = tuimux_embed.GitOperation
+	OpenGitRequest               = tuimux_embed.OpenGitRequest
 	SwitchTabMsg                 = tuimux_embed.SwitchTabMsg
 	NavigateMsg                  = tuimux_embed.NavigateMsg
 	CloseRequestMsg              = tuimux_embed.CloseRequestMsg
@@ -106,4 +108,8 @@ type KeyCaptureMsg struct {
 const (
 	AgentSplitOpen  = tuimux_embed.AgentSplitOpen
 	AgentSplitClose = tuimux_embed.AgentSplitClose
+
+	GitOperationInspect    = tuimux_embed.GitOperationInspect
+	GitOperationUpdateOnly = tuimux_embed.GitOperationUpdateOnly
+	GitOperationLand       = tuimux_embed.GitOperationLand
 )
