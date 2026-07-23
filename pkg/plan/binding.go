@@ -50,6 +50,10 @@ type PlanBinding struct {
 	WorkspaceRoot string
 	PlanName      string
 	Reason        string
+	// Repos is the registry-recorded member list of the bound container. It
+	// lets action-target expansion enumerate checkouts from the qualified
+	// registry identity when canonical discovery cannot see the container.
+	Repos []string
 }
 
 func (b PlanBinding) Valid() bool { return b.Health == BindingValid }
@@ -105,19 +109,43 @@ func resolvePlanBindings(requests []BindingRequest, entries []*worktreeregistry.
 		}
 		binding.PlanName = filepath.Base(key.PlanDir)
 		var qualified []*worktreeregistry.Entry
+		var absent []*worktreeregistry.Entry
 		var sameName int
 		for _, entry := range entries {
 			if entry == nil || entry.IsArchived() || entry.Plan != binding.PlanName {
 				continue
 			}
 			sameName++
-			if target := targets[entry]; target != nil && samePlanDir(target.PlanDir, key.PlanDir) {
+			target := targets[entry]
+			if containerAbsent(entry.AbsPath) {
+				// Container-absent entries are classified BEFORE the qualification
+				// and config-agreement comparisons: without the container on disk
+				// the qualified plan dir may be underivable and the configured
+				// worktree may already have been cleaned up, so those checks would
+				// collapse a deleted container into unbound/mismatch. Attribute the
+				// entry to this plan unless its derived identity positively names
+				// another workspace's plan.
+				if target == nil || target.PlanDir == "" || samePlanDir(target.PlanDir, key.PlanDir) {
+					absent = append(absent, entry)
+				}
+				continue
+			}
+			if target != nil && samePlanDir(target.PlanDir, key.PlanDir) {
 				qualified = append(qualified, entry)
 			}
 		}
 		switch len(qualified) {
 		case 0:
-			if sameName > 0 {
+			if len(absent) > 0 {
+				sort.Slice(absent, func(i, j int) bool { return absent[i].AbsPath < absent[j].AbsPath })
+				entry := absent[0]
+				binding.RegistryID = pathutil.WorktreeID(entry.AbsPath)
+				binding.ContainerPath = entry.AbsPath
+				if target := targets[entry]; target != nil {
+					binding.WorkspaceRoot = target.WorkspaceRoot
+				}
+				binding.Health, binding.Reason = BindingMissing, "registered container is unavailable"
+			} else if sameName > 0 {
 				binding.Health, binding.Reason = BindingMismatch, "same-named registry entries belong to other workspaces"
 			} else if req.ConfiguredWorktree != "" {
 				binding.Reason = "configured worktree is not registered"
@@ -128,6 +156,7 @@ func resolvePlanBindings(requests []BindingRequest, entries []*worktreeregistry.
 			entry := qualified[0]
 			binding.RegistryID = pathutil.WorktreeID(entry.AbsPath)
 			binding.ContainerPath = entry.AbsPath
+			binding.Repos = append([]string(nil), entry.Repos...)
 			if target := targets[entry]; target != nil {
 				binding.WorkspaceRoot = target.WorkspaceRoot
 			}
@@ -137,8 +166,6 @@ func resolvePlanBindings(requests []BindingRequest, entries []*worktreeregistry.
 			case req.ConfiguredWorktree != filepath.Base(entry.AbsPath):
 				binding.Health = BindingMismatch
 				binding.Reason = fmt.Sprintf("configured worktree %q does not match container %q", req.ConfiguredWorktree, filepath.Base(entry.AbsPath))
-			case func() bool { info, statErr := os.Stat(entry.AbsPath); return statErr != nil || !info.IsDir() }():
-				binding.Health, binding.Reason = BindingMissing, "registered container is unavailable"
 			default:
 				binding.Health = BindingValid
 			}
@@ -154,6 +181,13 @@ func resolvePlanBindings(requests []BindingRequest, entries []*worktreeregistry.
 		out[key.String()] = binding
 	}
 	return out
+}
+
+// containerAbsent reports whether a registered container path is gone from
+// disk (or is not a directory).
+func containerAbsent(path string) bool {
+	info, err := os.Stat(path)
+	return err != nil || !info.IsDir()
 }
 
 // samePlanDir compares plan identities through the canonical path normalizer.

@@ -69,16 +69,21 @@ func ResolveTarget(ref string) (*ResolvedTarget, error) {
 	}
 
 	if entry.Plan != "" {
-		target.PlanDir = ResolvePlanDir(target.WorkspaceRoot, entry.Plan)
-		if target.PlanDir == "" && entry.Owner != "" {
-			// The container-rooted derivation needs the container on disk
-			// (workspace classification stats it), so a deleted container
-			// would leave the entry unqualifiable and its plan binding would
-			// collapse to "unbound" instead of surfacing "missing container".
+		if entry.Owner != "" && containerAbsent(entry.AbsPath) {
+			// The container-rooted derivation needs the container on disk (its
+			// .grove/workspace marker is what classifies the owner), so a
+			// deleted container either derives nothing or mis-derives from the
+			// container basename — collapsing the plan binding into
+			// unbound/mismatch instead of surfacing "missing container".
 			// Derive through the owner's origin instead: containers are
 			// ecosystem-shaped, so the plan is qualified by the owner's root
 			// ecosystem when it sits inside one, else the owner repo itself.
 			target.PlanDir = ResolvePlanDir(ownerOriginRoot(entry.Owner), entry.Plan)
+		} else {
+			target.PlanDir = ResolvePlanDir(target.WorkspaceRoot, entry.Plan)
+			if target.PlanDir == "" && entry.Owner != "" {
+				target.PlanDir = ResolvePlanDir(ownerOriginRoot(entry.Owner), entry.Plan)
+			}
 		}
 	}
 

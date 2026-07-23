@@ -85,3 +85,72 @@ func TestResolvePlanBindingsHealth(t *testing.T) {
 }
 
 func mkdirAll(path string) error { return os.MkdirAll(path, 0o755) }
+
+// TestResolvePlanBindingsMissingContainerBeatsConfigDrift covers the
+// retained-metadata deleted-container shape: the registry still names the
+// container, but the container is gone from disk and the plan config's
+// worktree may already have been cleaned up. Container absence must be
+// detected BEFORE the qualification/config-agreement comparisons, so the
+// binding surfaces the distinct "missing container" health instead of
+// collapsing into unbound or binding mismatch.
+func TestResolvePlanBindingsMissingContainerBeatsConfigDrift(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, "workspaces", "alpha-repo", "plans", "missing-view")
+	gone := filepath.Join(root, "alpha-repo", ".grove-worktrees", "missing-view")
+	resolver := func(path string) (*ResolvedTarget, error) {
+		return &ResolvedTarget{ContainerPath: path, PlanDir: planDir}, nil
+	}
+	entries := []*worktreeregistry.Entry{{AbsPath: gone, Owner: filepath.Join(root, "alpha-repo"), Plan: "missing-view"}}
+
+	// Config still names the worktree: missing, not mismatch.
+	got := resolvePlanBindings([]BindingRequest{{PlanDir: planDir, ConfiguredWorktree: "missing-view"}}, entries, resolver)
+	if binding := got[NewPlanKey(planDir).String()]; binding.Health != BindingMissing || binding.ContainerPath != gone {
+		t.Fatalf("configured worktree: %+v", binding)
+	}
+
+	// Config already cleaned (no worktree): still missing, never the
+	// "registry has a container but plan config is unbound" mismatch.
+	got = resolvePlanBindings([]BindingRequest{{PlanDir: planDir}}, entries, resolver)
+	if binding := got[NewPlanKey(planDir).String()]; binding.Health != BindingMissing {
+		t.Fatalf("cleaned config: %+v", binding)
+	}
+
+	// A gone container whose derived identity is underivable (no plan dir)
+	// still attributes to the only same-named plan and surfaces missing.
+	blind := func(path string) (*ResolvedTarget, error) { return &ResolvedTarget{ContainerPath: path}, nil }
+	got = resolvePlanBindings([]BindingRequest{{PlanDir: planDir}}, entries, blind)
+	if binding := got[NewPlanKey(planDir).String()]; binding.Health != BindingMissing {
+		t.Fatalf("underivable identity: %+v", binding)
+	}
+}
+
+// TestResolvePlanBindingsMissingContainerStaysQualified proves a deleted
+// container positively belonging to ANOTHER workspace's same-named plan does
+// not leak "missing container" into this plan, and that plans with no entry at
+// all keep their distinct unbound state.
+func TestResolvePlanBindingsMissingContainerStaysQualified(t *testing.T) {
+	root := t.TempDir()
+	alphaPlan := filepath.Join(root, "workspaces", "alpha-repo", "plans", "view")
+	betaPlan := filepath.Join(root, "workspaces", "beta-repo", "plans", "view")
+	goneBeta := filepath.Join(root, "beta-repo", ".grove-worktrees", "view")
+	resolver := func(path string) (*ResolvedTarget, error) {
+		return &ResolvedTarget{ContainerPath: path, PlanDir: betaPlan}, nil
+	}
+	entries := []*worktreeregistry.Entry{{AbsPath: goneBeta, Owner: filepath.Join(root, "beta-repo"), Plan: "view"}}
+
+	got := resolvePlanBindings([]BindingRequest{
+		{PlanDir: alphaPlan, ConfiguredWorktree: "view"},
+		{PlanDir: betaPlan, ConfiguredWorktree: "view"},
+		{PlanDir: filepath.Join(root, "workspaces", "alpha-repo", "plans", "solo")},
+	}, entries, resolver)
+
+	if binding := got[NewPlanKey(alphaPlan).String()]; binding.Health != BindingMismatch {
+		t.Fatalf("alpha must not adopt beta's gone container: %+v", binding)
+	}
+	if binding := got[NewPlanKey(betaPlan).String()]; binding.Health != BindingMissing {
+		t.Fatalf("beta: %+v", binding)
+	}
+	if binding := got[NewPlanKey(filepath.Join(root, "workspaces", "alpha-repo", "plans", "solo")).String()]; binding.Health != BindingUnbound {
+		t.Fatalf("solo: %+v", binding)
+	}
+}
