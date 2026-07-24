@@ -117,7 +117,11 @@ const (
 	nerdIconNotebook = "󰠮" // md-notebook (U+F082E)
 	nerdIconDocs     = "󰡯" // md-file_question (U+F086F)
 	nerdIconGear     = "󰒓" // md-cog (U+F0493)
-	nerdIconConfig   = ""  // seti-config (U+E615)
+	// nerdIconConfig used to be an EMPTY literal — the seti-config (U+E615)
+	// glyph its comment advertised never made it into the file, so every
+	// IconConfig call site (treemux's Config rail panel) rendered a blank
+	// slot. Now a cog wheel, same glyph as nerdIconGear.
+	nerdIconConfig   = "󰒓" // md-cog (U+F0493)
 	nerdIconKeyboard = "󰌌" // md-keyboard (U+F030C)
 	nerdIconLock     = "󰌾" // md-lock (U+F033E)
 
