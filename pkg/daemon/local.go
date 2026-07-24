@@ -341,6 +341,17 @@ func (c *LocalClient) GetWorkflowSnapshot(ctx context.Context) (*models.Workflow
 	return nil, ErrWorkflowSnapshotUnavailable
 }
 
+// ErrSubjobDaemonUnavailable identifies daemon-only subjob transport failures.
+var ErrSubjobDaemonUnavailable = errors.New("subjob monitoring requires the grove daemon")
+
+func (c *LocalClient) PublishSubjobEvent(ctx context.Context, event models.SubjobEvent) error {
+	return ErrSubjobDaemonUnavailable
+}
+
+func (c *LocalClient) GetSubjobSnapshot(ctx context.Context, planKey, parentJobID string) (*models.SubjobSnapshot, error) {
+	return nil, ErrSubjobDaemonUnavailable
+}
+
 // EnvUp returns an error since built-in environment providers require the daemon.
 func (c *LocalClient) EnvUp(ctx context.Context, req env.EnvRequest) (*env.EnvResponse, error) {
 	return nil, errors.New("built-in environment providers require the grove daemon; start groved first")

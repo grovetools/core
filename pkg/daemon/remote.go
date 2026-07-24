@@ -47,6 +47,9 @@ type RemoteClient struct {
 // fall back to LocalClient or surface an informative error.
 var errEndpointNotFound = errors.New("daemon endpoint not found (stale groved binary?)")
 
+// ErrSubjobDaemonUpgradeRequired means groved predates the subjob API.
+var ErrSubjobDaemonUpgradeRequired = errors.New("groved upgrade required for subjob monitoring")
+
 // errMemoryEndpointMissing is surfaced by the memory RemoteClient methods
 // when the daemon socket is reachable but the /api/memory/* routes 404.
 // That means groved is running but predates the memory HTTP API — the
@@ -1275,6 +1278,59 @@ func (c *RemoteClient) GetWorkflowSnapshot(ctx context.Context) (*models.Workflo
 	var snapshot models.WorkflowSnapshot
 	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
 		return nil, fmt.Errorf("failed to decode workflow snapshot: %w", err)
+	}
+	return &snapshot, nil
+}
+
+// PublishSubjobEvent sends one derived subjob lifecycle event to groved.
+func (c *RemoteClient) PublishSubjobEvent(ctx context.Context, event models.SubjobEvent) error {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("marshal subjob event: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/subjobs/event", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create subjob event request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("publish subjob event: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrSubjobDaemonUpgradeRequired
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// GetSubjobSnapshot fetches the exact plan/parent materialized view.
+func (c *RemoteClient) GetSubjobSnapshot(ctx context.Context, planKey, parentJobID string) (*models.SubjobSnapshot, error) {
+	q := url.Values{"plan_key": {planKey}, "parent_job_id": {parentJobID}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/subjobs?"+q.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("create subjob snapshot request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get subjob snapshot: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrSubjobDaemonUpgradeRequired
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	var snapshot models.SubjobSnapshot
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&snapshot); err != nil {
+		return nil, fmt.Errorf("decode subjob snapshot: %w", err)
+	}
+	if snapshot.Reports == nil {
+		snapshot.Reports = make(map[string]*models.SubjobState)
 	}
 	return &snapshot, nil
 }

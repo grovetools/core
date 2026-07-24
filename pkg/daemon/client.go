@@ -150,6 +150,12 @@ type Client interface {
 	// file-based workflow monitoring.
 	GetWorkflowSnapshot(ctx context.Context) (*models.WorkflowSnapshot, error)
 
+	// PublishSubjobEvent records a Flow child report lifecycle transition.
+	PublishSubjobEvent(ctx context.Context, event models.SubjobEvent) error
+
+	// GetSubjobSnapshot returns daemon state filtered to one plan and parent.
+	GetSubjobSnapshot(ctx context.Context, planKey, parentJobID string) (*models.SubjobSnapshot, error)
+
 	// --- Session Lifecycle Management ---
 	// These methods enable race-free session tracking by allowing:
 	// 1. Pre-registration of intent before agent launch (flow)
