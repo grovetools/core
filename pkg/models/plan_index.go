@@ -24,6 +24,7 @@ type PlanSummary struct {
 	Anchor          string          `json:"anchor,omitempty"`
 	Repositories    []string        `json:"repositories,omitempty"`
 	Notes           string          `json:"notes,omitempty"`
+	NoteCount       int             `json:"note_count,omitempty"`
 	JobCounts       map[string]int  `json:"job_counts,omitempty"`
 	GitStatus       *git.StatusInfo `json:"git_status,omitempty"` // Daemon-cached coarse row state; live detail is fetched separately.
 	RunningSessions int             `json:"running_sessions"`
