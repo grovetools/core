@@ -13,19 +13,19 @@ import (
 
 // RepoTarget is one repository checkout in a qualified plan container.
 type RepoTarget struct {
-	Name string
-	Path string
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 // PlanActionTarget is the fully-resolved, CWD-independent input to plan actions.
 // PlanDir comes from the daemon plan index; the remaining identity is derived
 // through the qualified registry binding and canonical workspace discovery.
 type PlanActionTarget struct {
-	PlanDir       string
-	WorkspaceRoot string
-	RegistryID    string
-	ContainerPath string
-	Repos         []RepoTarget
+	PlanDir       string       `json:"planDir"`
+	WorkspaceRoot string       `json:"workspaceRoot,omitempty"`
+	RegistryID    string       `json:"registryId,omitempty"`
+	ContainerPath string       `json:"containerPath"`
+	Repos         []RepoTarget `json:"repos"`
 }
 
 // ResolvePlanActionTarget expands a valid qualified binding into a complete
