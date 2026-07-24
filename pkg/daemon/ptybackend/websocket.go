@@ -21,6 +21,25 @@ type controlMessage struct {
 	Code int    `json:"code,omitempty"`
 }
 
+// AttachHistoryMode selects how the daemon hydrates a newly attached terminal.
+type AttachHistoryMode string
+
+const (
+	// AttachHistoryRaw replays the daemon's bounded raw byte history. This is
+	// the compatibility default and preserves shell scrollback.
+	AttachHistoryRaw AttachHistoryMode = "raw"
+	// AttachHistoryNone starts with live output only. It is safe for
+	// differential-rendered TUIs because an arbitrary raw-ring boundary cannot
+	// be mistaken for a terminal checkpoint.
+	AttachHistoryNone AttachHistoryMode = "none"
+)
+
+// AttachOptions controls initial and reconnect hydration.
+type AttachOptions struct {
+	HistoryMode    AttachHistoryMode
+	RedrawOnAttach bool
+}
+
 // WebSocketBackend streams PTY I/O over a WebSocket connection to a daemon's
 // /api/pty/attach/{id} endpoint. Binary frames carry raw PTY output/input;
 // text frames carry JSON control messages (resize, exit).
@@ -41,6 +60,12 @@ type WebSocketBackend struct {
 	lastRows uint16
 	lastCols uint16
 
+	// needsRedraw is set for replay-free initial attachments and reconnects.
+	// The next known size is nudged and restored, forcing fullscreen TUIs to
+	// emit a self-contained repaint instead of relying on truncated raw history.
+	needsRedraw    bool
+	redrawOnAttach bool
+
 	readMu     sync.Mutex
 	currentMsg io.Reader
 
@@ -52,15 +77,37 @@ type WebSocketBackend struct {
 	exitCode      int
 }
 
-// NewWebSocketBackend dials the daemon PTY attach endpoint and returns a ready backend.
+// NewWebSocketBackend dials the daemon PTY attach endpoint and returns a ready
+// backend using compatibility raw-history hydration.
 func NewWebSocketBackend(sessionID, socketPath string) (*WebSocketBackend, error) {
+	return NewWebSocketBackendWithOptions(sessionID, socketPath, AttachOptions{})
+}
+
+// NewReplaySafeWebSocketBackend attaches without replaying the daemon's raw
+// history ring and forces a redraw once the pane dimensions are known. Use it
+// for differential-rendered agent TUIs; shells should keep raw history.
+func NewReplaySafeWebSocketBackend(sessionID, socketPath string) (*WebSocketBackend, error) {
+	return NewWebSocketBackendWithOptions(sessionID, socketPath, AttachOptions{
+		HistoryMode:    AttachHistoryNone,
+		RedrawOnAttach: true,
+	})
+}
+
+// NewWebSocketBackendWithOptions dials with explicit hydration behavior.
+func NewWebSocketBackendWithOptions(sessionID, socketPath string, opts AttachOptions) (*WebSocketBackend, error) {
 	ulog := grovelogging.NewUnifiedLogger("ptybackend")
 
+	wsURL := "ws://unix/api/pty/attach/" + sessionID
+	if opts.HistoryMode == AttachHistoryNone {
+		wsURL += "?history=none"
+	}
 	b := &WebSocketBackend{
-		sessionID:  sessionID,
-		socketPath: socketPath,
-		wsURL:      "ws://unix/api/pty/attach/" + sessionID,
-		closed:     make(chan struct{}),
+		sessionID:      sessionID,
+		socketPath:     socketPath,
+		wsURL:          wsURL,
+		closed:         make(chan struct{}),
+		needsRedraw:    opts.RedrawOnAttach,
+		redrawOnAttach: opts.RedrawOnAttach,
 	}
 
 	if err := b.dial(); err != nil {
@@ -192,12 +239,36 @@ func (b *WebSocketBackend) Close() error {
 	return b.closeErr
 }
 
-// Resize sends a resize control message to the daemon PTY.
+// Resize sends a resize control message to the daemon PTY. A replay-free
+// attachment nudges one row and restores the requested size the first time;
+// the resulting SIGWINCH pair makes fullscreen TUIs produce a clean redraw.
 func (b *WebSocketBackend) Resize(rows, cols uint16) error {
 	b.mu.Lock()
 	b.lastRows, b.lastCols = rows, cols
+	redraw := b.needsRedraw
 	b.mu.Unlock()
+
+	if redraw {
+		return b.sendRedraw(rows, cols)
+	}
 	return b.sendResize(rows, cols)
+}
+
+func (b *WebSocketBackend) sendRedraw(rows, cols uint16) error {
+	nudgeRows := rows - 1
+	if rows <= 1 {
+		nudgeRows = rows + 1
+	}
+	if err := b.sendResize(nudgeRows, cols); err != nil {
+		return err
+	}
+	if err := b.sendResize(rows, cols); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	b.needsRedraw = false
+	b.mu.Unlock()
+	return nil
 }
 
 func (b *WebSocketBackend) sendResize(rows, cols uint16) error {
@@ -291,12 +362,19 @@ func (b *WebSocketBackend) reconnect() error {
 			ulog.Debug("PTY reconnect SUCCEEDED").Field("pty_id", b.sessionID).Field("attempt", i+1).StructuredOnly().Log(ctx)
 			// Replay the last requested size: any resize sent while the
 			// socket was down was silently lost, and no host layer retries
-			// an unchanged size on its own.
+			// an unchanged size on its own. Replay-free clients also force a
+			// full redraw because output emitted while disconnected was missed.
 			b.mu.Lock()
 			rows, cols := b.lastRows, b.lastCols
+			redraw := b.redrawOnAttach
+			b.needsRedraw = redraw
 			b.mu.Unlock()
 			if rows > 0 && cols > 0 {
-				_ = b.sendResize(rows, cols)
+				if redraw {
+					_ = b.sendRedraw(rows, cols)
+				} else {
+					_ = b.sendResize(rows, cols)
+				}
 			}
 			return nil
 		} else {
