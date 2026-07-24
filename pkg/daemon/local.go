@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -26,6 +27,10 @@ import (
 type LocalClient struct {
 	logger *logrus.Logger
 }
+
+// All LocalClient instances in a process mutate the same nav sessions file.
+// Serialize their read-modify-write cycles just as the daemon HTTP server does.
+var localNavBindingsMu sync.Mutex
 
 // NewLocalClient creates a new LocalClient.
 func NewLocalClient() *LocalClient {
@@ -424,6 +429,9 @@ func (c *LocalClient) GetNavBindings(ctx context.Context) (*models.NavSessionsFi
 
 // UpdateNavGroup updates a single group in the sessions.yml file directly.
 func (c *LocalClient) UpdateNavGroup(ctx context.Context, group string, state models.NavGroupState) error {
+	localNavBindingsMu.Lock()
+	defer localNavBindingsMu.Unlock()
+
 	file, err := c.GetNavBindings(ctx)
 	if err != nil {
 		return err
@@ -443,6 +451,9 @@ func (c *LocalClient) UpdateNavGroup(ctx context.Context, group string, state mo
 
 // UpdateNavLockedKeys updates the locked keys in the sessions.yml file directly.
 func (c *LocalClient) UpdateNavLockedKeys(ctx context.Context, keys []string) error {
+	localNavBindingsMu.Lock()
+	defer localNavBindingsMu.Unlock()
+
 	file, err := c.GetNavBindings(ctx)
 	if err != nil {
 		return err
@@ -454,6 +465,9 @@ func (c *LocalClient) UpdateNavLockedKeys(ctx context.Context, keys []string) er
 
 // SetNavLastAccessedGroup updates the last-accessed group in the sessions.yml file directly.
 func (c *LocalClient) SetNavLastAccessedGroup(ctx context.Context, group string) error {
+	localNavBindingsMu.Lock()
+	defer localNavBindingsMu.Unlock()
+
 	file, err := c.GetNavBindings(ctx)
 	if err != nil {
 		return err
@@ -469,10 +483,37 @@ func (c *LocalClient) writeNavBindings(file *models.NavSessionsFile) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal sessions: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(sessionsPath), 0o755); err != nil {
+	dir := filepath.Dir(sessionsPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create nav state directory: %w", err)
 	}
-	return os.WriteFile(sessionsPath, data, 0o644) //nolint:gosec // nav session state is not sensitive
+
+	// Replace atomically so daemon/watch readers never observe truncated YAML.
+	tmp, err := os.CreateTemp(dir, ".sessions-*.yml.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary sessions file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0o644); err != nil { //nolint:gosec // nav session state is not sensitive
+		_ = tmp.Close()
+		return fmt.Errorf("failed to set sessions permissions: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("failed to write sessions: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("failed to sync sessions: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close sessions: %w", err)
+	}
+	if err := os.Rename(tmpPath, sessionsPath); err != nil {
+		return fmt.Errorf("failed to replace sessions: %w", err)
+	}
+	return nil
 }
 
 // GetNavConfig loads the static nav config from the grove config files
