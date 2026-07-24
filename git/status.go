@@ -390,12 +390,23 @@ func LocalMainBranch(repoPath string) string {
 	return ""
 }
 
+// IsDetachedHead reports whether a branch name coming out of a status probe
+// represents a detached HEAD rather than a real branch. The representation
+// varies by source: `git status --porcelain=v2` reports the literal
+// "(detached)", `git rev-parse --abbrev-ref HEAD` reports "HEAD", and a blank
+// name means no branch could be resolved at all. Every preflight gate that
+// refuses to mutate a detached checkout must go through this single predicate
+// so no representation slips past.
+func IsDetachedHead(branch string) bool {
+	return branch == "" || branch == "HEAD" || branch == "(detached)"
+}
+
 // HasRemoteBranch reports whether origin/<branch> exists in the repo — i.e.
 // the branch has been pushed. It runs `git show-ref --verify --quiet
 // refs/remotes/origin/<branch>`, the same probe LocalMainBranch uses for local
-// refs. A blank or "HEAD" branch name (detached) is never remote-tracked.
+// refs. A detached branch name is never remote-tracked.
 func HasRemoteBranch(repoPath, branch string) bool {
-	if branch == "" || branch == "HEAD" {
+	if IsDetachedHead(branch) {
 		return false
 	}
 	cmdBuilder := command.NewSafeBuilder()

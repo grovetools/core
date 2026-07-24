@@ -630,3 +630,37 @@ func TestGetStatus(t *testing.T) {
 		assert.Equal(t, 1, status.BehindCount, "Should be 1 behind remote")
 	})
 }
+
+// TestIsDetachedHead pins every branch representation a detached HEAD can take
+// across status probes: porcelain v2 reports the literal "(detached)",
+// rev-parse --abbrev-ref reports "HEAD", and a blank name means no branch was
+// resolvable. Real branch names must never be classified as detached.
+func TestIsDetachedHead(t *testing.T) {
+	cases := map[string]bool{
+		"":           true,
+		"HEAD":       true,
+		"(detached)": true,
+		"main":       false,
+		"master":     false,
+		"feature/x":  false,
+	}
+	for branch, want := range cases {
+		assert.Equal(t, want, IsDetachedHead(branch), "branch %q", branch)
+	}
+}
+
+// TestGetStatusDetachedHeadRepresentation guards the porcelain v2 contract the
+// preflight gates depend on: a detached checkout's Branch is reported as the
+// literal "(detached)" and IsDetachedHead must recognize it.
+func TestGetStatusDetachedHeadRepresentation(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "base.txt"), []byte("base"), 0o644))
+	runGitCommand(t, dir, "add", ".")
+	runGitCommand(t, dir, "commit", "-m", "base")
+	runGitCommand(t, dir, "checkout", "--detach")
+
+	status, err := GetStatus(dir)
+	require.NoError(t, err)
+	assert.True(t, IsDetachedHead(status.Branch), "detached Branch %q must be classified detached", status.Branch)
+}
