@@ -56,6 +56,10 @@ type (
 type SwitchWorkspaceRequestMsg struct {
 	Path       string
 	FocusPanel string
+	// FocusTabIndex optionally deep-links into a tab of FocusPanel after the
+	// workspace switch. HasFocusTab distinguishes tab zero from no request.
+	FocusTabIndex int
+	HasFocusTab   bool
 }
 
 // SettingAppliedMsg is emitted by the embedded grove config TUI after a
