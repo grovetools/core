@@ -211,7 +211,7 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	if !ok {
 		return NewLocalClient()
 	}
-	if client := waitForDaemonReady(readyPipe, socketPath, readyHandshakeTimeout); client != nil {
+	if client := waitForDaemonReady(readyPipe, exited, socketPath, readyHandshakeTimeout); client != nil {
 		return client
 	}
 
@@ -226,9 +226,9 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	if opts.earlyReady {
 		select {
 		case <-exited:
-			readyPipe2, _, ok2 := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, false, opts.suppressStartNotice)
+			readyPipe2, exited2, ok2 := autoStartDaemon(scope, socketPath, pidPath, opts.pairPID, false, opts.suppressStartNotice)
 			if ok2 {
-				if client := waitForDaemonReady(readyPipe2, socketPath, readyHandshakeTimeout); client != nil {
+				if client := waitForDaemonReady(readyPipe2, exited2, socketPath, readyHandshakeTimeout); client != nil {
 					return client
 				}
 			}
@@ -248,21 +248,62 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 // generous ceiling before giving up.
 const readyHandshakeTimeout = 30 * time.Second
 
-// waitForDaemonReady blocks until the spawned daemon signals readiness by
-// closing its end of readyPipe (EOF on Read), or timeout elapses. In either
-// case, a short connect cushion runs afterward to absorb the microseconds
-// between OnReady firing and Serve actually accepting.
+// readyPollInterval is the cadence of connect attempts while a freshly
+// spawned daemon boots. Startup retries must be fast and dense: the daemon's
+// socket binds the instant boot completes, and every extra idle interval here
+// is felt directly as TUI "connecting…" time.
+const readyPollInterval = 100 * time.Millisecond
+
+// exitedGracePeriod bounds how much longer we keep polling after the spawned
+// child exits without us having connected. A child that lost the pidfile race
+// exits immediately while the winning daemon may still be binding, so a short
+// dense-retry window is kept; a genuinely failed spawn then falls back to
+// LocalClient quickly instead of sitting out the full handshake timeout.
+const exitedGracePeriod = 2 * time.Second
+
+// waitForDaemonReady polls the socket with dense connect attempts until the
+// spawned daemon accepts, the child dies (short grace period), or timeout
+// elapses.
 //
-// readyPipe may be nil when the caller couldn't set up a pipe; in that case
-// the function falls through to the cushion directly.
-func waitForDaemonReady(readyPipe *os.File, socketPath string, timeout time.Duration) Client {
+// The readiness pipe is deliberately only drained in the background, never
+// awaited: the connect attempts themselves are the readiness signal. An older
+// groved can leak its ready-fd write end into long-lived boot children (the
+// scoped tuimux daemon), in which case pipe EOF NEVER arrives even though the
+// socket bound seconds ago — blocking on the pipe turned every such boot into
+// a full-timeout stall for the whole TUI.
+//
+// readyPipe may be nil when the caller couldn't set up a pipe; exited may be
+// nil when the caller has no child-exit signal.
+func waitForDaemonReady(readyPipe *os.File, exited <-chan struct{}, socketPath string, timeout time.Duration) Client {
 	if readyPipe != nil {
-		defer readyPipe.Close()
-		_ = readyPipe.SetReadDeadline(time.Now().Add(timeout))
-		buf := make([]byte, 1)
-		_, _ = readyPipe.Read(buf)
+		go func() {
+			defer readyPipe.Close()
+			_ = readyPipe.SetReadDeadline(time.Now().Add(timeout))
+			buf := make([]byte, 1)
+			_, _ = readyPipe.Read(buf)
+		}()
 	}
-	return tryConnectWithRetry(socketPath, 5, 50*time.Millisecond)
+
+	deadline := time.Now().Add(timeout)
+	for {
+		if client := tryConnect(socketPath); client != nil {
+			return client
+		}
+		if time.Now().After(deadline) {
+			return nil
+		}
+		select {
+		case <-exited:
+			// Child is gone; clamp the remaining wait to a short grace window
+			// for a racing sibling daemon that may still be binding.
+			graceDeadline := time.Now().Add(exitedGracePeriod)
+			if graceDeadline.Before(deadline) {
+				deadline = graceDeadline
+			}
+			exited = nil
+		case <-time.After(readyPollInterval):
+		}
+	}
 }
 
 // tryConnect attempts to connect to the daemon socket.
@@ -355,22 +396,6 @@ func LastConnectDiagnosis() *ConnectDiagnosis {
 	connectDiagMu.Lock()
 	defer connectDiagMu.Unlock()
 	return lastConnectDiag
-}
-
-// tryConnectWithRetry attempts to connect with exponential backoff.
-func tryConnectWithRetry(socketPath string, maxRetries int, initialDelay time.Duration) Client {
-	delay := initialDelay
-	for i := 0; i < maxRetries; i++ {
-		time.Sleep(delay)
-		if client := tryConnect(socketPath); client != nil {
-			return client
-		}
-		delay = delay * 2 // Exponential backoff
-		if delay > time.Second {
-			delay = time.Second // Cap at 1 second
-		}
-	}
-	return nil
 }
 
 // autoStartDaemon attempts to start the daemon in the background for the
