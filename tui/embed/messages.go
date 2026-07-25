@@ -64,6 +64,13 @@ type SwitchWorkspaceRequestMsg struct {
 	HasFocusTab   bool
 }
 
+// FocusPanelNone is a sentinel SwitchWorkspaceRequestMsg.FocusPanel value
+// requesting a workspace switch WITHOUT moving panel focus. Hosts that see it
+// must skip their focus-panel step (including the "" → shell default) so the
+// emitting panel keeps focus — e.g. the hooks session browser focusing a
+// workspace while the user keeps navigating the session tree.
+const FocusPanelNone = "none"
+
 // SettingAppliedMsg is emitted by the embedded grove config TUI after a
 // curated setting has been persisted to the global config layer and the
 // layered config reloaded. Hosts (treemux) switch on Domain to hot-apply
