@@ -179,6 +179,7 @@ func (c *LocalClient) RegisterSessionIntent(ctx context.Context, intent SessionI
 
 	metadata := sessions.SessionMetadata{
 		SessionID:        intent.JobID,
+		ParentJobID:      intent.ParentJobID,
 		Provider:         intent.Provider,
 		PID:              0, // Not yet known
 		WorkingDirectory: intent.WorkDir,

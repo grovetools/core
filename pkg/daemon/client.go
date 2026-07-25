@@ -23,8 +23,9 @@ var ErrNotSupported = errors.New("operation not supported by this daemon client"
 // This enables race-free session tracking by pre-registering before the agent process exists.
 type SessionIntent struct {
 	JobID       string `json:"job_id"`
-	Provider    string `json:"provider"`      // "claude", "codex", "opencode"
-	JobFilePath string `json:"job_file_path"` // Path to the job markdown file
+	ParentJobID string `json:"parent_job_id,omitempty"` // Flow ownership lineage; not a dependency
+	Provider    string `json:"provider"`                // "claude", "codex", "opencode"
+	JobFilePath string `json:"job_file_path"`           // Path to the job markdown file
 	PlanName    string `json:"plan_name"`
 	Title       string `json:"title"`
 	WorkDir     string `json:"work_dir"`

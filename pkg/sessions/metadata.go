@@ -18,6 +18,7 @@ type SessionMetadata struct {
 	TranscriptPath   string    `json:"transcript_path,omitempty"`
 	Type             string    `json:"type,omitempty"`
 	JobID            string    `json:"job_id,omitempty"`
+	ParentJobID      string    `json:"parent_job_id,omitempty"`
 	JobTitle         string    `json:"job_title,omitempty"`
 	PlanName         string    `json:"plan_name,omitempty"`
 	JobFilePath      string    `json:"job_file_path,omitempty"`

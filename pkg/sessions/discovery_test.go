@@ -69,6 +69,35 @@ func TestRecoverSessionsForScope(t *testing.T) {
 	}
 }
 
+func TestRecoverSessionsPropagatesParentJobID(t *testing.T) {
+	t.Setenv("GROVE_HOME", t.TempDir())
+
+	reg, err := NewFileSystemRegistry()
+	if err != nil {
+		t.Fatalf("NewFileSystemRegistry: %v", err)
+	}
+	if err := reg.Register(SessionMetadata{
+		SessionID:       "child-job",
+		ClaudeSessionID: "native-child",
+		ParentJobID:     "parent-job",
+		Provider:        "pi",
+		PID:             os.Getpid(),
+	}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	got, err := RecoverSessions()
+	if err != nil {
+		t.Fatalf("RecoverSessions: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("RecoverSessions returned %d sessions, want 1", len(got))
+	}
+	if got[0].ParentJobID != "parent-job" {
+		t.Errorf("ParentJobID = %q, want parent-job", got[0].ParentJobID)
+	}
+}
+
 func TestResolveClaudeSessionDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

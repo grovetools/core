@@ -36,6 +36,9 @@ type Session struct {
 	PlanDirectory string `json:"plan_directory,omitempty" db:"plan_directory"`
 	JobTitle      string `json:"job_title,omitempty" db:"job_title"`
 	JobFilePath   string `json:"job_file_path,omitempty" db:"job_file_path"`
+	// ParentJobID is ownership lineage for dynamically spawned Flow jobs. It is
+	// not a scheduling dependency and is not persisted in the legacy session DB.
+	ParentJobID string `json:"parent_job_id,omitempty" db:"-"`
 
 	// ClaudeSessionID stores the original UUID of a claude_code session when it's
 	// managed by a grove-flow interactive_agent job.

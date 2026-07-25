@@ -134,6 +134,7 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 			LastActivity:     time.Now(),
 			IsTest:           false,
 			JobTitle:         metadata.JobTitle,
+			ParentJobID:      metadata.ParentJobID,
 			PlanName:         metadata.PlanName,
 			JobFilePath:      metadata.JobFilePath,
 			Provider:         metadata.Provider,
