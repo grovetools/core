@@ -50,6 +50,8 @@ type (
 	NavBindingsUpdatedMsg        = tuimux_embed.NavBindingsUpdatedMsg
 	AppendContextRuleMsg         = tuimux_embed.AppendContextRuleMsg
 	SplitAgentRequestMsg         = tuimux_embed.SplitAgentRequestMsg
+	AgentInjectRequestMsg        = tuimux_embed.AgentInjectRequestMsg
+	AgentInjectResultMsg         = tuimux_embed.AgentInjectResultMsg
 )
 
 // SwitchWorkspaceRequestMsg is emitted by embedded TUIs to request a workspace switch.
