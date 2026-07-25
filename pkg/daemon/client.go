@@ -122,6 +122,13 @@ type Client interface {
 	// For RemoteClient, this signals the daemon to immediately re-discover workspaces.
 	Refresh(ctx context.Context) error
 
+	// RefreshPaths triggers a synchronous, scoped git re-scan of just the given
+	// workspace paths and returns the fresh enriched workspaces. Unknown paths
+	// are silently skipped by the daemon. Unlike Refresh, this is bounded to a
+	// handful of repos so callers can block on it at reveal time (~100-200ms).
+	// For LocalClient, this is a no-op returning nil, nil.
+	RefreshPaths(ctx context.Context, paths []string) ([]*models.EnrichedWorkspace, error)
+
 	// IsRunning returns true if the daemon is available and responding.
 	IsRunning() bool
 

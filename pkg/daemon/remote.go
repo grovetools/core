@@ -566,6 +566,38 @@ func (c *RemoteClient) Refresh(ctx context.Context) error {
 	return nil
 }
 
+// RefreshPaths triggers a synchronous, scoped git re-scan of just the given
+// workspace paths and returns the fresh enriched workspaces from the response
+// body. Unknown paths are silently skipped by the daemon.
+func (c *RemoteClient) RefreshPaths(ctx context.Context, paths []string) ([]*models.EnrichedWorkspace, error) {
+	body, err := json.Marshal(map[string]any{"paths": paths})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal refresh request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/refresh", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to trigger scoped refresh: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var workspaces []*models.EnrichedWorkspace
+	if err := json.NewDecoder(resp.Body).Decode(&workspaces); err != nil {
+		return nil, fmt.Errorf("failed to decode refreshed workspaces: %w", err)
+	}
+	return workspaces, nil
+}
+
 // StreamState subscribes to real-time state updates via Server-Sent Events (SSE).
 // Returns a channel that receives updates. The channel is closed when the context is cancelled
 // or the connection is lost.

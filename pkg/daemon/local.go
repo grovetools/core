@@ -121,6 +121,12 @@ func (c *LocalClient) Refresh(ctx context.Context) error {
 	return nil // No-op in local mode
 }
 
+// RefreshPaths is a no-op for LocalClient since there's no daemon cache to
+// refresh; callers fall back to their own live git path.
+func (c *LocalClient) RefreshPaths(ctx context.Context, paths []string) ([]*models.EnrichedWorkspace, error) {
+	return nil, nil // No-op in local mode
+}
+
 // SeedTrust hard-fails for LocalClient: privileged trust seeding only makes
 // sense when delegated to a live, unsandboxed daemon. Reaching LocalClient
 // means no daemon is listening on the dialed scope — and since this fallback is
