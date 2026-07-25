@@ -144,8 +144,17 @@ func (m Model) Config() Config { return m.cfg }
 // ChromeRows returns the total vertical space the pager reserves for
 // chrome: tab bar + optional title row + footer slot + top/bottom
 // outer padding. Hosts should subtract this from their available
-// height when forwarding a WindowSizeMsg.
+// height when forwarding a WindowSizeMsg. The footer slot is the
+// active page's (see PageWithFooterHeight), falling back to
+// Config.FooterHeight.
 func (m Model) ChromeRows() int {
+	return m.ChromeRowsFor(m.Active())
+}
+
+// ChromeRowsFor is ChromeRows for an arbitrary page, so the pager can
+// size every tab against its own footer reservation rather than the
+// active one's.
+func (m Model) ChromeRowsFor(p Page) int {
 	rows := 0
 	if !m.cfg.HideTabBar {
 		rows += tabBarHeight
@@ -153,9 +162,22 @@ func (m Model) ChromeRows() int {
 	if m.cfg.ShowTitleRow {
 		rows++
 	}
-	rows += m.cfg.FooterHeight
+	rows += m.footerRowsFor(p)
 	rows += m.cfg.OuterPadding[0] + m.cfg.OuterPadding[2]
 	return rows
+}
+
+// footerRowsFor returns the footer rows reserved for p: its own
+// declared height when it implements PageWithFooterHeight, otherwise
+// the shared Config.FooterHeight.
+func (m Model) footerRowsFor(p Page) int {
+	if fh, ok := p.(PageWithFooterHeight); ok {
+		if n := fh.FooterHeight(); n > 0 {
+			return n
+		}
+		return 0
+	}
+	return m.cfg.FooterHeight
 }
 
 // ChromeCols returns the horizontal space consumed by outer padding.
@@ -167,8 +189,14 @@ func (m Model) ChromeCols() int {
 // sub-models so their bodies fit inside the pager's body region
 // after all chrome is subtracted. Bounds are clamped to >= 1.
 func (m Model) SubSize(termW, termH int) tea.WindowSizeMsg {
+	return m.SubSizeFor(m.Active(), termW, termH)
+}
+
+// SubSizeFor is SubSize for an arbitrary page. Pages that reserve a
+// different footer height than the active one get their own geometry.
+func (m Model) SubSizeFor(p Page, termW, termH int) tea.WindowSizeMsg {
 	w := termW - m.ChromeCols()
-	h := termH - m.ChromeRows()
+	h := termH - m.ChromeRowsFor(p)
 	if w < 1 {
 		w = 1
 	}

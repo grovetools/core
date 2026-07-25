@@ -74,3 +74,15 @@ type PageWithFooter interface {
 	Page
 	Footer() string
 }
+
+// PageWithFooterHeight is an optional extension a Page can implement to
+// override Config.FooterHeight for itself. Config.FooterHeight is a
+// single reservation shared by every tab, so it has to be sized for the
+// tallest footer in the set; a page that renders its own footer inside
+// its body (or none at all) would otherwise lose those rows to blank
+// space. Returning 0 hands the whole reservation back to the body.
+// Negative values are treated as 0.
+type PageWithFooterHeight interface {
+	Page
+	FooterHeight() int
+}

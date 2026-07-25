@@ -110,10 +110,11 @@ func (m Model) View() string {
 			headerRows++
 		}
 		// Use rendered footer height when present, otherwise fall
-		// back to the static Config.FooterHeight so hosts that
-		// render their own footer externally still get correct
-		// body sizing.
-		footerRows := m.cfg.FooterHeight
+		// back to the active page's reservation (its own via
+		// PageWithFooterHeight, else the static Config.FooterHeight)
+		// so hosts that render their own footer externally still get
+		// correct body sizing.
+		footerRows := m.footerRowsFor(active)
 		if m.footer != "" {
 			footerRows = lipgloss.Height(m.footer)
 		}

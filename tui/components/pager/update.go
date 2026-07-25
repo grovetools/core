@@ -22,10 +22,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		adjusted := m.SubSize(msg.Width, msg.Height)
+		// Each page is sized against its own chrome: a page that
+		// reserves fewer footer rows (PageWithFooterHeight) gets them
+		// back as body height.
 		for _, p := range m.pages {
-			p.SetSize(adjusted.Width, adjusted.Height)
+			a := m.SubSizeFor(p, msg.Width, msg.Height)
+			p.SetSize(a.Width, a.Height)
 		}
+		adjusted := m.SubSizeFor(m.pages[m.activePage], msg.Width, msg.Height)
 		updated, cmd := m.pages[m.activePage].Update(adjusted)
 		m.pages[m.activePage] = updated
 		return m, cmd
