@@ -87,6 +87,41 @@ func GetCxEcosystemPath() (string, error) {
 	return filepath.Join(dataDir, "cx"), nil
 }
 
+// ManagedReposRoot returns the directory holding cx-managed bare clones and
+// their worktrees (<data>/cx/repos). Empty string if the data dir cannot be
+// determined.
+func ManagedReposRoot() string {
+	cxPath, err := GetCxEcosystemPath()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cxPath, "repos")
+}
+
+// IsManagedPath reports whether path lies inside the cx-managed external
+// repository store (<data>/cx/repos/...) — i.e. a bare clone or one of its
+// checked-out worktrees created by `cx repo add` / `cx repo audit`.
+//
+// These checkouts are ephemeral and machine-named (the worktree directory is
+// a commit-hash prefix), so callers that would otherwise treat any git repo as
+// a user workspace — notably cx's notebook-scoped context artifact paths —
+// use this to keep their artifacts inside the repo store instead.
+func IsManagedPath(path string) bool {
+	root := ManagedReposRoot()
+	if root == "" || path == "" {
+		return false
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func NewManager() (*Manager, error) {
 	cxPath, err := GetCxEcosystemPath()
 	if err != nil {
