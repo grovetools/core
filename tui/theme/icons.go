@@ -75,6 +75,7 @@ const (
 	nerdIconBell                  = "󰂞" // md-bell (U+F009E)
 	nerdIconLightbulb             = "󰌵" // md-lightbulb (U+F0335)
 	nerdIconChevron               = "󰬪" // md-chevron_right_circle (U+F0B2A)
+	nerdIconChevronDown           = "󰬦" // md-chevron_down_circle (U+F0B26)
 	nerdIconMerge                 = "󰽜" // md-merge (U+F0F5C)
 	nerdIconHome                  = "󰋜" // md-home (U+F02DC)
 	nerdIconRobot                 = "󰚩" // md-robot (U+F06A9)
@@ -246,6 +247,7 @@ const (
 	asciiIconBell                  = "(!)"   //  Bell
 	asciiIconLightbulb             = "[*]"   //  Lightbulb
 	asciiIconChevron               = ">"     //  Chevron/prompt
+	asciiIconChevronDown           = "v"     //  Expanded chevron
 	asciiIconMerge                 = "><"    // Merge
 	asciiIconHome                  = "[H]"   // Home
 	asciiIconRobot                 = "[R]"   // Robot
@@ -413,6 +415,7 @@ var (
 	IconBell                  string
 	IconLightbulb             string
 	IconChevron               string
+	IconChevronDown           string
 	IconMerge                 string
 	IconHome                  string
 	IconRobot                 string
@@ -621,6 +624,7 @@ func applyIcons(useASCII bool) {
 		IconBell = asciiIconBell
 		IconLightbulb = asciiIconLightbulb
 		IconChevron = asciiIconChevron
+		IconChevronDown = asciiIconChevronDown
 		IconMerge = asciiIconMerge
 		IconHome = asciiIconHome
 		IconRobot = asciiIconRobot
@@ -778,6 +782,7 @@ func applyIcons(useASCII bool) {
 		IconBell = nerdIconBell
 		IconLightbulb = nerdIconLightbulb
 		IconChevron = nerdIconChevron
+		IconChevronDown = nerdIconChevronDown
 		IconMerge = nerdIconMerge
 		IconHome = nerdIconHome
 		IconRobot = nerdIconRobot
