@@ -94,6 +94,87 @@
       },
       "type": "object"
     },
+    "DrawerNodeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "first": {
+          "$ref": "#/$defs/DrawerNodeConfig",
+          "description": "First split child"
+        },
+        "pane": {
+          "description": "Pane name for a leaf node",
+          "type": "string"
+        },
+        "ratio": {
+          "description": "Fraction allocated to the first child",
+          "type": "number"
+        },
+        "second": {
+          "$ref": "#/$defs/DrawerNodeConfig",
+          "description": "Second split child"
+        },
+        "split": {
+          "description": "Split direction",
+          "enum": [
+            "auto",
+            "horizontal",
+            "vertical"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "DrawerPageConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "delete": {
+          "description": "Remove this page from inherited configuration",
+          "type": "boolean"
+        },
+        "icon": {
+          "description": "Named icon used for the page",
+          "type": "string"
+        },
+        "key": {
+          "description": "Action sub-key for this page; none explicitly unbinds it",
+          "type": "string"
+        },
+        "layout": {
+          "$ref": "#/$defs/DrawerNodeConfig",
+          "description": "Recursive BSP layout for the page"
+        }
+      },
+      "type": "object"
+    },
+    "DrawerViewsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cycle_key": {
+          "description": "Action sub-key used to cycle drawer pages; none disables it",
+          "type": "string"
+        },
+        "default_page": {
+          "description": "Drawer page selected at startup",
+          "type": "string"
+        },
+        "page_order": {
+          "description": "Ordered drawer page names",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pages": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DrawerPageConfig"
+          },
+          "description": "Named drawer page definitions",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "EnvironmentConfig": {
       "additionalProperties": false,
       "properties": {
@@ -823,6 +904,12 @@
           "description": "Native agent pane behavior",
           "x-layer": "global",
           "x-priority": "66"
+        },
+        "drawer": {
+          "$ref": "#/$defs/DrawerViewsConfig",
+          "description": "Named global drawer pages and their layouts",
+          "x-layer": "global",
+          "x-priority": "63"
         },
         "drawer_expanded": {
           "default": false,
