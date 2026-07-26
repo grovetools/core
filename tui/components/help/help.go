@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grovetools/core/tui/keymap"
 	"github.com/grovetools/core/tui/theme"
@@ -16,15 +18,18 @@ import (
 
 // Model represents an embeddable help component
 type Model struct {
-	Keys       interface{} // Can be keymap.Base or any extended keymap
-	ShowAll    bool
-	Width      int
-	Height     int
-	Theme      *theme.Theme
-	CustomHelp [][]key.Binding // Additional custom key bindings to display
-	Title      string          // Title for the full help view
-	Legend     string          // Optional legend text to display under the title
-	viewport   viewport.Model
+	Keys            interface{} // Can be keymap.Base or any extended keymap
+	ShowAll         bool
+	Width           int
+	Height          int
+	Theme           *theme.Theme
+	CustomHelp      [][]key.Binding // Additional custom key bindings to display
+	Title           string          // Title for the full help view
+	Legend          string          // Optional legend text to display under the title
+	viewport        viewport.Model
+	search          textinput.Model
+	matchCount      int
+	renderedContent string
 }
 
 // New creates a new help model with default settings
@@ -33,11 +38,17 @@ func New(keys interface{}) Model {
 	// Disable mouse events for the viewport by default, as it can interfere
 	// with the main application's mouse handling.
 	vp.MouseWheelEnabled = false
+
+	search := textinput.New()
+	search.Prompt = "Search: " + theme.IconSearch + " "
+	search.CharLimit = 128
+
 	return Model{
 		Keys:     keys,
 		ShowAll:  false,
 		Theme:    theme.DefaultTheme,
 		viewport: vp,
+		search:   search,
 	}
 }
 
@@ -55,22 +66,58 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.ShowAll {
-			// Get standard keys for closing the view
+			// Search owns every key while focused, just like search in the list
+			// TUIs. Escape preserves the query and returns focus to help; Enter
+			// accepts it. A later Escape clears the preserved query.
+			if m.search.Focused() {
+				switch msg.Type {
+				case tea.KeyEsc, tea.KeyEnter:
+					m.search.Blur()
+					return m, nil
+				}
+				before := m.search.Value()
+				m.search, cmd = m.search.Update(msg)
+				if m.search.Value() != before {
+					m.setViewportContent()
+					m.scrollToFirstMatch()
+				}
+				return m, cmd
+			}
+
+			if msg.String() == "/" {
+				m.search.CursorEnd()
+				cmd = m.search.Focus()
+				m.setViewportContent()
+				return m, cmd
+			}
+			if msg.Type == tea.KeyEsc && m.search.Value() != "" {
+				m.search.SetValue("")
+				m.setViewportContent()
+				m.viewport.GotoTop()
+				return m, nil
+			}
+
+			// Get standard keys for closing the view.
 			helpBinding := m.getHelpBinding()
 			quitBinding := m.getQuitBinding()
 
-			// Close on help, quit, or escape keys
 			if key.Matches(msg, helpBinding) || key.Matches(msg, quitBinding) || msg.Type == tea.KeyEsc {
 				m.Toggle()
 				return m, nil
 			}
 
-			// Pass all other messages to the viewport for scrolling
+			// Pass all other messages to the viewport for scrolling.
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
 		}
 	}
 
+	// Forward cursor blink/focus messages while the input is active. Key
+	// messages return from the focused branch above.
+	if m.ShowAll && m.search.Focused() {
+		m.search, cmd = m.search.Update(msg)
+		return m, cmd
+	}
 	return m, nil
 }
 
@@ -96,6 +143,21 @@ func (m Model) View() string {
 
 			indicatorStyle := m.Theme.Muted.Align(lipgloss.Right).Width(m.viewport.Width)
 			content = lipgloss.JoinVertical(lipgloss.Right, content, indicatorStyle.Render(indicator))
+		}
+
+		if m.search.Focused() || m.search.Value() != "" {
+			searchView := m.search.View()
+			if !m.search.Focused() {
+				searchView = m.search.Prompt + m.search.Value() + "█"
+			}
+			if m.search.Value() != "" {
+				label := fmt.Sprintf("%d matches", m.matchCount)
+				if m.matchCount == 0 {
+					label = "no matches"
+				}
+				searchView += m.Theme.Muted.Render("  •  " + label)
+			}
+			content = lipgloss.JoinVertical(lipgloss.Left, searchView, content)
 		}
 
 		// Render the viewport, centered on the screen to create a modal effect.
@@ -186,6 +248,7 @@ func (m *Model) setViewportContent() {
 		}
 	}
 
+	m.matchCount = 0
 	content := m.renderHelpContent(sections, helpGroups, verticalMargin, horizontalMargin, gutterWidth)
 	if content == "" && !hasKeymap {
 		// Keys implements neither Sections() nor FullHelp() (and no custom
@@ -193,11 +256,18 @@ func (m *Model) setViewportContent() {
 		// overlay so the misconfiguration is diagnosable.
 		content = m.Theme.Muted.Render("(no keymap registered)")
 	}
+	m.renderedContent = content
 	m.viewport.SetContent(content)
 
-	// Set viewport dimensions with a margin. Reserve 1 line for the scroll indicator.
+	// Set viewport dimensions with a margin. Reserve one line for the scroll
+	// indicator and another while the search bar is visible.
 	m.viewport.Width = lipgloss.Width(content)
-	m.viewport.Height = m.Height - verticalMargin - 1
+	searchRows := 0
+	if m.search.Focused() || m.search.Value() != "" {
+		searchRows = 1
+	}
+	m.viewport.Height = max(1, m.Height-verticalMargin-1-searchRows)
+	m.search.Width = max(1, m.Width-16)
 }
 
 // renderHelpContent renders help content, preferring multi-column layout when
@@ -322,9 +392,16 @@ func (m *Model) collectSectionBlocks(sections []keymap.Section, groups [][]key.B
 			keyStr := binding.Help().Key
 			desc := binding.Help().Desc
 			if keyStr != "" && desc != "" {
+				rowKeyStyle := keyStyle
+				rowDescStyle := m.Theme.Muted.Italic(true)
+				if m.bindingMatches(keyStr, desc) {
+					m.matchCount++
+					rowKeyStyle = rowKeyStyle.Background(m.Theme.Colors.SelectedBackground)
+					rowDescStyle = rowDescStyle.Background(m.Theme.Colors.SelectedBackground).Foreground(m.Theme.Colors.LightText)
+				}
 				rows = append(rows, []string{
-					keyStyle.Render(keyStr),
-					m.Theme.Muted.Italic(true).Render(desc),
+					rowKeyStyle.Render(keyStr),
+					rowDescStyle.Render(desc),
 				})
 			}
 		}
@@ -351,9 +428,16 @@ func (m *Model) collectSectionBlocks(sections []keymap.Section, groups [][]key.B
 			if keyStr == "" && desc != "" {
 				sectionName = desc
 			} else if keyStr != "" && desc != "" {
+				rowKeyStyle := keyStyle
+				rowDescStyle := m.Theme.Muted.Italic(true)
+				if m.bindingMatches(keyStr, desc) {
+					m.matchCount++
+					rowKeyStyle = rowKeyStyle.Background(m.Theme.Colors.SelectedBackground)
+					rowDescStyle = rowDescStyle.Background(m.Theme.Colors.SelectedBackground).Foreground(m.Theme.Colors.LightText)
+				}
 				rows = append(rows, []string{
-					keyStyle.Render(keyStr),
-					m.Theme.Muted.Italic(true).Render(desc),
+					rowKeyStyle.Render(keyStr),
+					rowDescStyle.Render(desc),
 				})
 			}
 		}
@@ -441,6 +525,30 @@ func getSectionIcon(name string) string {
 }
 
 // getHelpBinding retrieves the help keybinding from the model's Keys interface.
+func (m *Model) bindingMatches(keyStr, desc string) bool {
+	query := strings.ToLower(strings.TrimSpace(m.search.Value()))
+	return query != "" && strings.Contains(strings.ToLower(keyStr+" "+desc), query)
+}
+
+// scrollToFirstMatch brings the first highlighted binding into view.
+func (m *Model) scrollToFirstMatch() {
+	query := strings.ToLower(strings.TrimSpace(m.search.Value()))
+	if query == "" || m.matchCount == 0 {
+		m.viewport.GotoTop()
+		return
+	}
+	for lineNumber, line := range strings.Split(m.renderedContent, "\n") {
+		if strings.Contains(strings.ToLower(ansi.Strip(line)), query) {
+			offset := lineNumber - m.viewport.Height/2
+			if offset < 0 {
+				offset = 0
+			}
+			m.viewport.SetYOffset(offset)
+			return
+		}
+	}
+}
+
 func (m *Model) getHelpBinding() key.Binding {
 	switch k := m.Keys.(type) {
 	case keymap.Base:
@@ -469,6 +577,10 @@ func (m *Model) Toggle() {
 	if m.ShowAll {
 		m.setViewportContent()
 		m.viewport.GotoTop()
+	} else {
+		m.search.Blur()
+		m.search.SetValue("")
+		m.matchCount = 0
 	}
 }
 
@@ -495,11 +607,7 @@ type Builder struct {
 
 // NewBuilder creates a new help builder
 func NewBuilder() *Builder {
-	return &Builder{
-		model: Model{
-			Theme: theme.DefaultTheme,
-		},
-	}
+	return &Builder{model: New(nil)}
 }
 
 // WithKeys sets the keymap
