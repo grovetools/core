@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime/debug"
 	"strconv"
 	"sync"
 	"syscall"
@@ -414,17 +413,12 @@ func LastConnectDiagnosis() *ConnectDiagnosis {
 // pairPID > 0, --pair-with-pid is added so the daemon exits when that
 // parent process dies.
 func autoStartDaemon(scope, socketPath, pidPath string, pairPID int, earlyReady, suppressStartNotice bool) (readyPipe *os.File, exited <-chan struct{}, ok bool) {
-	// Diagnostic: log the caller stack so we can trace which tool is
-	// triggering a scoped-daemon auto-spawn. View with:
-	//   core logs --component daemon.factory -f
-	// Temporary — remove once the "unexpected scoped daemon on treemux
-	// start" investigation concludes.
+	// View with: core logs --component daemon.factory -f
 	ulog := logging.NewUnifiedLogger("daemon.factory")
 	ulog.Debug("daemon auto-start").
 		Field("scope", scope).
 		Field("socket", socketPath).
 		Field("pidfile", pidPath).
-		Field("stack", string(debug.Stack())).
 		StructuredOnly().
 		Log(context.Background())
 

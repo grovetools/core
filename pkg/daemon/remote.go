@@ -2258,6 +2258,15 @@ func (c *RemoteClient) SubmitAgentCaptureResponse(ctx context.Context, jobID, te
 // --- Daemon PTY Management ---
 
 func (c *RemoteClient) CreatePTY(ctx context.Context, req PTYCreateRequest) (*PTYSessionInfo, error) {
+	// Daemon-owned PTYs inherit the DAEMON's environ, not the caller's — the
+	// same trap treemux already works around for GROVE_THEME on editor panes.
+	// A host UI publishes its transport endpoint with os.Setenv, which reaches
+	// nothing when every pane is a daemon-spawned grandchild, so the endpoint
+	// has to ride the create request instead. Without this, a hosted flow
+	// launching a native agent sees no host endpoint and falls back to
+	// scope routing, stranding the session on a daemon the host never streams.
+	req.Env = withHostSocketEnv(req.Env)
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal pty create request: %w", err)
