@@ -33,8 +33,11 @@ func ExtractHeadings(lines []string) []Heading {
 			continue
 		}
 
-		trimmed := strings.TrimSpace(line)
-		marker := fenceMarker(trimmed)
+		fenceLine, validFenceIndent := fenceContent(line)
+		marker := byte(0)
+		if validFenceIndent {
+			marker = fenceMarker(strings.TrimSpace(fenceLine))
+		}
 		if fence != 0 {
 			if marker == fence {
 				fence = 0
@@ -79,6 +82,20 @@ func ExtractHeadings(lines []string) []Heading {
 
 func trimCR(line string) string {
 	return strings.TrimSuffix(line, "\r")
+}
+
+// fenceContent accepts CommonMark's 0-3 leading spaces. Tabs and 4+ spaces
+// belong to indented-code syntax, which ExtractHeadings deliberately does not
+// interpret as fenced code in v1.
+func fenceContent(line string) (string, bool) {
+	indent := 0
+	for indent < len(line) && line[indent] == ' ' {
+		indent++
+	}
+	if indent > 3 || (indent < len(line) && line[indent] == '\t') {
+		return "", false
+	}
+	return line[indent:], true
 }
 
 func fenceMarker(trimmed string) byte {

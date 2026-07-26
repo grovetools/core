@@ -55,6 +55,21 @@ func TestExtractHeadingsV1Syntax(t *testing.T) {
 			want:  []Heading{{Level: 3, Text: "Real", Line: 6}},
 		},
 		{
+			name:  "fences accept zero through three spaces",
+			input: "```\n# fake zero\n```\n ~~~\n# fake one\n ~~~\n  ```\n# fake two\n  ```\n   ~~~\n# fake three\n   ~~~\n# Real\n",
+			want:  []Heading{{Level: 1, Text: "Real", Line: 13}},
+		},
+		{
+			name:  "four-space pseudo fences are outside v1",
+			input: "    ```\n# Real\n    ```\n",
+			want:  []Heading{{Level: 1, Text: "Real", Line: 2}},
+		},
+		{
+			name:  "tab-indented pseudo fences are outside v1",
+			input: "\t~~~\n# Real\n\t~~~\n",
+			want:  []Heading{{Level: 1, Text: "Real", Line: 2}},
+		},
+		{
 			name:  "CRLF tolerance",
 			input: "---\r\ntitle: x\r\n---\r\n  ## Windows ##\r\n",
 			want:  []Heading{{Level: 2, Text: "Windows", Line: 4}},
