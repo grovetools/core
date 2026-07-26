@@ -481,10 +481,11 @@ func (m *Model) renderSectionBox(title, icon string, rows [][]string) string {
 	}
 
 	titleText := fmt.Sprintf("%s %s", sectionIcon, title)
+	// The table's hidden top border already supplies one blank row below the
+	// section title; adding a style margin here would double that spacing.
 	titleStyle := lipgloss.NewStyle().
 		Foreground(m.Theme.Colors.Orange).
-		Italic(true).
-		MarginBottom(1)
+		Italic(true)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
