@@ -98,6 +98,49 @@ func TestRecoverSessionsPropagatesParentJobID(t *testing.T) {
 	}
 }
 
+// A daemon restart must not lose the transcript path recorded at session
+// confirmation: the session collector only resolves a transcript when
+// TranscriptPath is empty, and that resolution cannot succeed for agent-owned
+// session directories (pi/flow), so a dropped path silently kills live token
+// tracking for the recovered session.
+func TestRecoverSessionsPropagatesTranscriptPath(t *testing.T) {
+	t.Setenv("GROVE_HOME", t.TempDir())
+
+	const transcript = "/Users/u/.grove/flow/plans/p/jobs/job-1/transcript.jsonl"
+
+	reg, err := NewFileSystemRegistry()
+	if err != nil {
+		t.Fatalf("NewFileSystemRegistry: %v", err)
+	}
+	if err := reg.Register(SessionMetadata{
+		SessionID:       "pi-job",
+		ClaudeSessionID: "native-pi",
+		Provider:        "pi",
+		Type:            "interactive_agent",
+		TranscriptPath:  transcript,
+		PID:             os.Getpid(),
+	}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	got, err := RecoverSessions()
+	if err != nil {
+		t.Fatalf("RecoverSessions: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("RecoverSessions returned %d sessions, want 1", len(got))
+	}
+	if got[0].TranscriptPath != transcript {
+		t.Errorf("TranscriptPath = %q, want %q", got[0].TranscriptPath, transcript)
+	}
+	if got[0].Provider != "pi" {
+		t.Errorf("Provider = %q, want pi", got[0].Provider)
+	}
+	if got[0].Type != "interactive_agent" {
+		t.Errorf("Type = %q, want interactive_agent", got[0].Type)
+	}
+}
+
 func TestResolveClaudeSessionDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

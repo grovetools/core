@@ -139,6 +139,12 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 			JobFilePath:      metadata.JobFilePath,
 			Provider:         metadata.Provider,
 			PtyID:            metadata.PtyID,
+			// The transcript path is persisted at session confirmation and must
+			// survive a daemon restart: without it the daemon's session
+			// collector falls back to job-ID transcript resolution, which cannot
+			// succeed for agent-owned session dirs, so live token tracking dies
+			// for the recovered session after a few wasted corpus scans.
+			TranscriptPath: metadata.TranscriptPath,
 		}
 
 		sessions = append(sessions, session)
