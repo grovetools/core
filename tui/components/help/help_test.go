@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/grovetools/core/tui/keymap"
 )
@@ -131,6 +132,28 @@ func TestHelp_SearchHighlightsAndScrollsToBinding(t *testing.T) {
 type legacySearchKeys struct{ bindings []key.Binding }
 
 func (k legacySearchKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k.bindings} }
+
+func TestHelp_SearchDoesNotReflowLayout(t *testing.T) {
+	m := New(sectionedKeys{})
+	m.SetSize(80, 20)
+	m.Toggle()
+	beforeWidth := lipgloss.Width(m.renderedContent)
+	beforeHeight := lipgloss.Height(m.renderedContent)
+	beforeViewportHeight := m.viewport.Height
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("alpha")})
+
+	if got := lipgloss.Width(m.renderedContent); got != beforeWidth {
+		t.Fatalf("search changed help layout width: got %d, want %d", got, beforeWidth)
+	}
+	if got := lipgloss.Height(m.renderedContent); got != beforeHeight {
+		t.Fatalf("search changed help layout height: got %d, want %d", got, beforeHeight)
+	}
+	if m.viewport.Height != beforeViewportHeight {
+		t.Fatalf("search changed viewport height: got %d, want %d", m.viewport.Height, beforeViewportHeight)
+	}
+}
 
 func TestHelp_SearchEscapePreservesThenClears(t *testing.T) {
 	m := New(legacyKeys{})

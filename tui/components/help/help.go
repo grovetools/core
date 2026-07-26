@@ -145,8 +145,12 @@ func (m Model) View() string {
 			content = lipgloss.JoinVertical(lipgloss.Right, content, indicatorStyle.Render(indicator))
 		}
 
+		// The search row is always reserved, even when inactive. Keeping the
+		// viewport and modal at fixed heights prevents opening search from
+		// shifting or reflowing the help layout.
+		searchView := " "
 		if m.search.Focused() || m.search.Value() != "" {
-			searchView := m.search.View()
+			searchView = m.search.View()
 			if !m.search.Focused() {
 				searchView = m.search.Prompt + m.search.Value() + "█"
 			}
@@ -157,8 +161,8 @@ func (m Model) View() string {
 				}
 				searchView += m.Theme.Muted.Render("  •  " + label)
 			}
-			content = lipgloss.JoinVertical(lipgloss.Left, searchView, content)
 		}
+		content = lipgloss.JoinVertical(lipgloss.Left, searchView, content)
 
 		// Render the viewport, centered on the screen to create a modal effect.
 		return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, content)
@@ -259,14 +263,10 @@ func (m *Model) setViewportContent() {
 	m.renderedContent = content
 	m.viewport.SetContent(content)
 
-	// Set viewport dimensions with a margin. Reserve one line for the scroll
-	// indicator and another while the search bar is visible.
+	// Set viewport dimensions with a margin. Always reserve one line each for
+	// the scroll indicator and search row so activating search cannot reflow.
 	m.viewport.Width = lipgloss.Width(content)
-	searchRows := 0
-	if m.search.Focused() || m.search.Value() != "" {
-		searchRows = 1
-	}
-	m.viewport.Height = max(1, m.Height-verticalMargin-1-searchRows)
+	m.viewport.Height = max(1, m.Height-verticalMargin-2)
 	m.search.Width = max(1, m.Width-16)
 }
 
@@ -582,6 +582,12 @@ func (m *Model) Toggle() {
 		m.search.SetValue("")
 		m.matchCount = 0
 	}
+}
+
+// IsTextEntryActive reports whether help search owns keyboard input. Hosts
+// with global letter/tab shortcuts must stand down while this is true.
+func (m Model) IsTextEntryActive() bool {
+	return m.ShowAll && m.search.Focused()
 }
 
 // SetSize sets the dimensions of the help view
