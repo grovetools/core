@@ -84,7 +84,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return m, cmd
 			}
 
-			if msg.String() == "/" {
+			if msg.String() == "/" || (msg.String() == "i" && m.search.Value() != "") {
 				m.search.CursorEnd()
 				cmd = m.search.Focus()
 				m.setViewportContent()
@@ -162,6 +162,10 @@ func (m Model) View() string {
 				searchView += m.Theme.Muted.Render("  •  " + label)
 			}
 		}
+		// textinput pads to its configured Width. Clamp the complete row to
+		// the help content width so focusing search cannot widen the modal and
+		// pull its previously centered columns toward the left edge.
+		searchView = ansi.Truncate(searchView, m.viewport.Width, "")
 		content = lipgloss.JoinVertical(lipgloss.Left, searchView, content)
 
 		// Render the viewport, centered on the screen to create a modal effect.
@@ -267,7 +271,9 @@ func (m *Model) setViewportContent() {
 	// the scroll indicator and search row so activating search cannot reflow.
 	m.viewport.Width = lipgloss.Width(content)
 	m.viewport.Height = max(1, m.Height-verticalMargin-2)
-	m.search.Width = max(1, m.Width-16)
+	promptWidth := lipgloss.Width(m.search.Prompt)
+	const matchLabelWidth = 18 // "  •  " plus a practical match-count label
+	m.search.Width = max(1, m.viewport.Width-promptWidth-matchLabelWidth)
 }
 
 // renderHelpContent renders help content, preferring multi-column layout when

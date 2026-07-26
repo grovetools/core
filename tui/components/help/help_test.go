@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grovetools/core/tui/keymap"
 )
@@ -140,6 +141,7 @@ func TestHelp_SearchDoesNotReflowLayout(t *testing.T) {
 	beforeWidth := lipgloss.Width(m.renderedContent)
 	beforeHeight := lipgloss.Height(m.renderedContent)
 	beforeViewportHeight := m.viewport.Height
+	beforeSectionColumn := lineColumnContaining(m.View(), "Testing")
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("alpha")})
@@ -153,6 +155,19 @@ func TestHelp_SearchDoesNotReflowLayout(t *testing.T) {
 	if m.viewport.Height != beforeViewportHeight {
 		t.Fatalf("search changed viewport height: got %d, want %d", m.viewport.Height, beforeViewportHeight)
 	}
+	if got := lineColumnContaining(m.View(), "Testing"); got != beforeSectionColumn {
+		t.Fatalf("search shifted help content horizontally: got column %d, want %d", got, beforeSectionColumn)
+	}
+}
+
+func lineColumnContaining(view, needle string) int {
+	for _, line := range strings.Split(view, "\n") {
+		plain := ansi.Strip(line)
+		if column := strings.Index(plain, needle); column >= 0 {
+			return column
+		}
+	}
+	return -1
 }
 
 func TestHelp_SearchEscapePreservesThenClears(t *testing.T) {
@@ -165,6 +180,11 @@ func TestHelp_SearchEscapePreservesThenClears(t *testing.T) {
 	if m.search.Focused() || m.search.Value() != "legacy" || !m.ShowAll {
 		t.Fatal("first escape should blur search while preserving its query")
 	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	if !m.search.Focused() || m.search.Value() != "legacy" {
+		t.Fatal("i should re-enter a blurred active search")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.search.Value() != "" || !m.ShowAll {
 		t.Fatal("second escape should clear search without closing help")
