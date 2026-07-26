@@ -11,6 +11,11 @@ type NavConfig struct {
 	// uses the top-level nav.prefix and is included here so callers do not
 	// need a separate special case.
 	Groups map[string]NavGroupConfig `json:"groups"`
+
+	// AvailableKeys preserves the user-configured nav shortcut order. Session
+	// bindings are maps, so consumers need this list to render the keymap in
+	// the same ergonomic order as nav key manage rather than alphabetically.
+	AvailableKeys []string `json:"available_keys,omitempty"`
 }
 
 // NavGroupConfig is the per-group static configuration exposed to clients.

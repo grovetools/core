@@ -546,8 +546,9 @@ func (c *LocalClient) GetNavConfig(ctx context.Context) (*models.NavConfig, erro
 	}
 
 	var navCfg struct {
-		Prefix string `toml:"prefix" yaml:"prefix"`
-		Groups map[string]struct {
+		Prefix        string   `toml:"prefix" yaml:"prefix"`
+		AvailableKeys []string `toml:"available_keys" yaml:"available_keys"`
+		Groups        map[string]struct {
 			Prefix string `toml:"prefix" yaml:"prefix"`
 		} `toml:"groups" yaml:"groups"`
 	}
@@ -555,7 +556,10 @@ func (c *LocalClient) GetNavConfig(ctx context.Context) (*models.NavConfig, erro
 	// return a valid (possibly empty) config rather than failing the call.
 	_ = cfg.UnmarshalExtension("nav", &navCfg)
 
-	result := &models.NavConfig{Groups: make(map[string]models.NavGroupConfig)}
+	result := &models.NavConfig{
+		Groups:        make(map[string]models.NavGroupConfig),
+		AvailableKeys: append([]string(nil), navCfg.AvailableKeys...),
+	}
 
 	defaultPrefix := navCfg.Prefix
 	if defaultPrefix == "" {
