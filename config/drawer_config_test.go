@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
@@ -87,8 +86,8 @@ func TestDrawerConfigMerge(t *testing.T) {
 		}}}}
 
 		got := mergeConfigs(base, override).TUI.Drawer.Pages["sessions"]
-		if got != overridePage {
-			t.Fatalf("page replacement did not retain the override definition")
+		if got == overridePage {
+			t.Fatal("merged page aliases override definition")
 		}
 		if got.Key != "" || got.Layout != nil {
 			t.Fatalf("whole-page replacement retained base fields: %#v", got)
@@ -130,6 +129,57 @@ func TestDrawerConfigMerge(t *testing.T) {
 			t.Fatalf("non-nil empty page_order did not replace base: %#v", got.PageOrder)
 		}
 	})
+
+	t.Run("merged drawer owns retained and replacement data", func(t *testing.T) {
+		base := &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+			PageOrder: []string{"base"},
+			Pages: map[string]*DrawerPageConfig{
+				"base": {Key: "B", Layout: &DrawerNodeConfig{Split: "horizontal", First: layout("left"), Second: layout("right")}},
+			},
+		}}}
+		override := &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+			PageOrder: []string{"override"},
+			Pages: map[string]*DrawerPageConfig{
+				"override": {Key: "O", Layout: &DrawerNodeConfig{Split: "vertical", First: layout("top"), Second: layout("bottom")}},
+			},
+		}}}
+
+		got := mergeConfigs(base, override).TUI.Drawer
+		got.PageOrder[0] = "merged"
+		got.Pages["base"].Layout.First.Pane = "merged-left"
+		got.Pages["override"].Layout.Second.Pane = "merged-bottom"
+		if override.TUI.Drawer.PageOrder[0] != "override" || base.TUI.Drawer.Pages["base"].Layout.First.Pane != "left" || override.TUI.Drawer.Pages["override"].Layout.Second.Pane != "bottom" {
+			t.Fatal("mutating merged drawer changed an input")
+		}
+
+		base.TUI.Drawer.Pages["base"].Layout.Second.Pane = "input-right"
+		override.TUI.Drawer.Pages["override"].Layout.First.Pane = "input-top"
+		if got.Pages["base"].Layout.Second.Pane != "right" || got.Pages["override"].Layout.First.Pane != "top" {
+			t.Fatal("mutating an input changed the merged drawer")
+		}
+
+		retainedOrder := mergeConfigs(base, &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{}}}).TUI.Drawer.PageOrder
+		retainedOrder[0] = "retained-merged"
+		if base.TUI.Drawer.PageOrder[0] != "base" {
+			t.Fatal("retained base page order aliases merged result")
+		}
+	})
+
+	t.Run("later page replaces delete and nil pages survive", func(t *testing.T) {
+		base := &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{Pages: map[string]*DrawerPageConfig{
+			"restored": {Delete: true}, "invalid": nil,
+		}}}}
+		override := &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{Pages: map[string]*DrawerPageConfig{
+			"restored": {Key: "R"},
+		}}}}
+		got := mergeConfigs(base, override).TUI.Drawer.Pages
+		if got["restored"] == nil || got["restored"].Delete || got["restored"].Key != "R" {
+			t.Fatalf("later page did not replace delete marker: %#v", got["restored"])
+		}
+		if page, ok := got["invalid"]; !ok || page != nil {
+			t.Fatalf("nil page was not retained: %#v", got)
+		}
+	})
 }
 
 func TestDrawerConfigAbsentRemainsNil(t *testing.T) {
@@ -145,7 +195,14 @@ func TestDrawerConfigAbsentRemainsNil(t *testing.T) {
 	}
 }
 
-func TestDrawerConfigRecursiveJSONSchemaSmoke(t *testing.T) {
+func TestDrawerConfigAbsentRemainsNilThroughMerge(t *testing.T) {
+	got := mergeConfigs(&Config{}, &Config{})
+	if got.TUI != nil {
+		t.Fatalf("untouched merged TUI = %#v, want nil", got.TUI)
+	}
+}
+
+func TestDrawerConfigRecursiveJSONSchema(t *testing.T) {
 	schema, err := GenerateSchema()
 	if err != nil {
 		t.Fatalf("generate schema with recursive drawer nodes: %v", err)
@@ -154,10 +211,35 @@ func TestDrawerConfigRecursiveJSONSchemaSmoke(t *testing.T) {
 	if err := json.Unmarshal(schema, &decoded); err != nil {
 		t.Fatalf("generated schema is invalid JSON: %v", err)
 	}
-	text := string(schema)
-	for _, want := range []string{`"drawer"`, `"DrawerNodeConfig"`, `"first"`, `"second"`} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("generated schema missing recursive drawer marker %s", want)
+	mapAt := func(parent map[string]interface{}, key string) map[string]interface{} {
+		t.Helper()
+		value, ok := parent[key].(map[string]interface{})
+		if !ok {
+			t.Fatalf("schema key %q = %#v, want object", key, parent[key])
 		}
+		return value
+	}
+	defs := mapAt(decoded, "$defs")
+	tuiProps := mapAt(mapAt(mapAt(defs, "TUIConfig"), "properties"), "drawer")
+	if tuiProps["$ref"] != "#/$defs/DrawerViewsConfig" {
+		t.Fatalf("drawer ref = %#v", tuiProps["$ref"])
+	}
+	drawerProps := mapAt(mapAt(defs, "DrawerViewsConfig"), "properties")
+	pages := mapAt(drawerProps, "pages")
+	if pages["type"] != "object" || mapAt(pages, "additionalProperties")["$ref"] != "#/$defs/DrawerPageConfig" {
+		t.Fatalf("pages does not accept arbitrary DrawerPageConfig values: %#v", pages)
+	}
+	pageProps := mapAt(mapAt(defs, "DrawerPageConfig"), "properties")
+	if mapAt(pageProps, "layout")["$ref"] != "#/$defs/DrawerNodeConfig" {
+		t.Fatalf("layout ref = %#v", pageProps["layout"])
+	}
+	nodeProps := mapAt(mapAt(defs, "DrawerNodeConfig"), "properties")
+	for _, child := range []string{"first", "second"} {
+		if mapAt(nodeProps, child)["$ref"] != "#/$defs/DrawerNodeConfig" {
+			t.Fatalf("%s is not recursive: %#v", child, nodeProps[child])
+		}
+	}
+	if got, want := mapAt(nodeProps, "split")["enum"], []interface{}{"auto", "horizontal", "vertical"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("split enum = %#v, want %#v", got, want)
 	}
 }

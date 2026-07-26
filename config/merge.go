@@ -374,6 +374,43 @@ func recordMapProvenance(m map[string]interface{}, sourceLabel, prefix string, p
 	}
 }
 
+func cloneDrawerNode(node *DrawerNodeConfig) *DrawerNodeConfig {
+	if node == nil {
+		return nil
+	}
+	cloned := *node
+	cloned.First = cloneDrawerNode(node.First)
+	cloned.Second = cloneDrawerNode(node.Second)
+	return &cloned
+}
+
+func cloneDrawerPage(page *DrawerPageConfig) *DrawerPageConfig {
+	if page == nil {
+		return nil
+	}
+	cloned := *page
+	cloned.Layout = cloneDrawerNode(page.Layout)
+	return &cloned
+}
+
+func cloneDrawerViews(drawer *DrawerViewsConfig) *DrawerViewsConfig {
+	if drawer == nil {
+		return nil
+	}
+	cloned := *drawer
+	if drawer.PageOrder != nil {
+		cloned.PageOrder = make([]string, len(drawer.PageOrder))
+		copy(cloned.PageOrder, drawer.PageOrder)
+	}
+	if drawer.Pages != nil {
+		cloned.Pages = make(map[string]*DrawerPageConfig, len(drawer.Pages))
+		for name, page := range drawer.Pages {
+			cloned.Pages[name] = cloneDrawerPage(page)
+		}
+	}
+	return &cloned
+}
+
 // mergeConfigs merges override configuration into base
 func mergeConfigs(base, override *Config) *Config {
 	result := *base
@@ -462,16 +499,9 @@ func mergeConfigs(base, override *Config) *Config {
 			if result.TUI.Drawer == nil {
 				result.TUI.Drawer = &DrawerViewsConfig{}
 			} else {
-				// Copy before modifying so the merge does not mutate the base
-				// drawer or its page map.
-				copied := *result.TUI.Drawer
-				if result.TUI.Drawer.Pages != nil {
-					copied.Pages = make(map[string]*DrawerPageConfig, len(result.TUI.Drawer.Pages))
-					for name, page := range result.TUI.Drawer.Pages {
-						copied.Pages[name] = page
-					}
-				}
-				result.TUI.Drawer = &copied
+				// Drawer values are owned by the merged result: clone retained
+				// pages, order, and recursive layouts before applying overlays.
+				result.TUI.Drawer = cloneDrawerViews(result.TUI.Drawer)
 			}
 			if override.TUI.Drawer.CycleKey != "" {
 				result.TUI.Drawer.CycleKey = override.TUI.Drawer.CycleKey
@@ -480,14 +510,15 @@ func mergeConfigs(base, override *Config) *Config {
 				result.TUI.Drawer.DefaultPage = override.TUI.Drawer.DefaultPage
 			}
 			if override.TUI.Drawer.PageOrder != nil {
-				result.TUI.Drawer.PageOrder = override.TUI.Drawer.PageOrder
+				result.TUI.Drawer.PageOrder = make([]string, len(override.TUI.Drawer.PageOrder))
+				copy(result.TUI.Drawer.PageOrder, override.TUI.Drawer.PageOrder)
 			}
 			if override.TUI.Drawer.Pages != nil {
 				if result.TUI.Drawer.Pages == nil {
 					result.TUI.Drawer.Pages = make(map[string]*DrawerPageConfig, len(override.TUI.Drawer.Pages))
 				}
 				for name, page := range override.TUI.Drawer.Pages {
-					result.TUI.Drawer.Pages[name] = page
+					result.TUI.Drawer.Pages[name] = cloneDrawerPage(page)
 				}
 			}
 		}
