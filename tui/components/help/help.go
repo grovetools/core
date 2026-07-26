@@ -166,7 +166,10 @@ func (m Model) View() string {
 		// the help content width so focusing search cannot widen the modal and
 		// pull its previously centered columns toward the left edge.
 		searchView = ansi.Truncate(searchView, m.viewport.Width, "")
-		content = lipgloss.JoinVertical(lipgloss.Left, searchView, content)
+		// Keep one row between search and the help title. This places the
+		// search affordance a line higher without changing spacing when it
+		// gains or loses focus.
+		content = lipgloss.JoinVertical(lipgloss.Left, searchView, " ", content)
 
 		// Render the viewport, centered on the screen to create a modal effect.
 		return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, content)
@@ -268,9 +271,10 @@ func (m *Model) setViewportContent() {
 	m.viewport.SetContent(content)
 
 	// Set viewport dimensions with a margin. Always reserve one line each for
-	// the scroll indicator and search row so activating search cannot reflow.
+	// the scroll indicator, search row, and search/title spacer so activating
+	// search cannot reflow.
 	m.viewport.Width = lipgloss.Width(content)
-	m.viewport.Height = max(1, m.Height-verticalMargin-2)
+	m.viewport.Height = max(1, m.Height-verticalMargin-3)
 	promptWidth := lipgloss.Width(m.search.Prompt)
 	const matchLabelWidth = 18 // "  •  " plus a practical match-count label
 	m.search.Width = max(1, m.viewport.Width-promptWidth-matchLabelWidth)
