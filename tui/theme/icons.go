@@ -114,6 +114,7 @@ const (
 
 	nerdIconSparkle  = "" // cod-sparkle (U+EC10)
 	nerdIconCode     = "" // fa-code (U+F121)
+	nerdIconTool     = "󱁤" // md-tools (U+F1064)
 	nerdIconNotebook = "󰠮" // md-notebook (U+F082E)
 	nerdIconDocs     = "󰡯" // md-file_question (U+F086F)
 	nerdIconGear     = "󰒓" // md-cog (U+F0493)
@@ -284,6 +285,7 @@ const (
 
 	asciiIconSparkle  = "[+]" // New
 	asciiIconCode     = "</>" // Code
+	asciiIconTool     = "[t]" // Tool call
 	asciiIconNotebook = "[N]" // Notebook
 	asciiIconDocs     = "[D]" // Docs
 	asciiIconGear     = "[G]" // Gear/Settings
@@ -450,6 +452,7 @@ var (
 
 	IconSparkle  string
 	IconCode     string
+	IconTool     string
 	IconNotebook string
 	IconDocs     string
 	IconGear     string
@@ -654,6 +657,7 @@ func applyIcons(useASCII bool) {
 		IconNoteInProgress = asciiIconNoteInProgress
 		IconSparkle = asciiIconSparkle
 		IconCode = asciiIconCode
+		IconTool = asciiIconTool
 		IconNotebook = asciiIconNotebook
 		IconDocs = asciiIconDocs
 		IconGear = asciiIconGear
@@ -810,6 +814,7 @@ func applyIcons(useASCII bool) {
 		IconNoteInProgress = nerdIconNoteInProgress
 		IconSparkle = nerdIconSparkle
 		IconCode = nerdIconCode
+		IconTool = nerdIconTool
 		IconNotebook = nerdIconNotebook
 		IconDocs = nerdIconDocs
 		IconGear = nerdIconGear

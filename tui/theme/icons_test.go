@@ -30,6 +30,9 @@ func TestSetIconsLiveSwitch(t *testing.T) {
 	if IconPlan != asciiIconPlan {
 		t.Errorf("SetIcons(\"ascii\"): IconPlan = %q, want %q", IconPlan, asciiIconPlan)
 	}
+	if IconTool != asciiIconTool {
+		t.Errorf("SetIcons(\"ascii\"): IconTool = %q, want %q", IconTool, asciiIconTool)
+	}
 
 	SetIcons("nerd")
 	if ASCIIIcons {
@@ -40,6 +43,9 @@ func TestSetIconsLiveSwitch(t *testing.T) {
 	}
 	if IconPlan != nerdIconPlan {
 		t.Errorf("SetIcons(\"nerd\"): IconPlan = %q, want %q", IconPlan, nerdIconPlan)
+	}
+	if IconTool != nerdIconTool {
+		t.Errorf("SetIcons(\"nerd\"): IconTool = %q, want %q", IconTool, nerdIconTool)
 	}
 }
 
