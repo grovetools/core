@@ -332,6 +332,10 @@ type TUIConfig struct {
 	// Default: false (collapsed).
 	DrawerExpanded bool `yaml:"drawer_expanded,omitempty" toml:"drawer_expanded,omitempty" jsonschema:"description=Start active sessions drawer expanded,default=false" jsonschema_extras:"x-layer=global,x-priority=63"`
 
+	// Drawer configures the named pages shown in the global drawer. Nil keeps
+	// the built-in page configuration unchanged.
+	Drawer *DrawerViewsConfig `yaml:"drawer,omitempty" toml:"drawer,omitempty" json:"drawer,omitempty" jsonschema:"description=Named global drawer pages and their layouts" jsonschema_extras:"x-layer=global,x-priority=63"`
+
 	ExperimentalPages []string `yaml:"experimental_pages,omitempty" toml:"experimental_pages,omitempty" json:"experimental_pages,omitempty" jsonschema:"description=List of experimental pages to enable (env,memory,keymap,logs,inspector)" jsonschema_extras:"x-layer=global,x-priority=64"`
 
 	// JobDetail configures keybinds for the job detail tab wrapper.
@@ -348,6 +352,33 @@ type TUIConfig struct {
 	// keymap.WhichKeyDelay default (400ms). 0 shows the popup immediately. This
 	// is the SHOW clock, distinct from the sequence EXPIRE timeout.
 	WhichKeyDelayMs *int `yaml:"whichkey_delay_ms,omitempty" toml:"whichkey_delay_ms,omitempty" json:"whichkey_delay_ms,omitempty" jsonschema:"description=Delay in milliseconds before the which-key chord popup appears (0 = immediate),default=400" jsonschema_extras:"x-layer=global,x-priority=68"`
+}
+
+// DrawerViewsConfig configures named pages in the global drawer.
+type DrawerViewsConfig struct {
+	CycleKey    string                       `yaml:"cycle_key,omitempty" toml:"cycle_key,omitempty" json:"cycle_key,omitempty" jsonschema:"description=Action sub-key used to cycle drawer pages; none disables it"`
+	DefaultPage string                       `yaml:"default_page,omitempty" toml:"default_page,omitempty" json:"default_page,omitempty" jsonschema:"description=Drawer page selected at startup"`
+	PageOrder   []string                     `yaml:"page_order,omitempty" toml:"page_order,omitempty" json:"page_order,omitempty" jsonschema:"description=Ordered drawer page names"`
+	Pages       map[string]*DrawerPageConfig `yaml:"pages,omitempty" toml:"pages,omitempty" json:"pages,omitempty" jsonschema:"description=Named drawer page definitions"`
+}
+
+// DrawerPageConfig defines one named drawer page. A partial built-in page
+// inherits omitted fields during final resolution by the TUI host.
+type DrawerPageConfig struct {
+	Key    string            `yaml:"key,omitempty" toml:"key,omitempty" json:"key,omitempty" jsonschema:"description=Action sub-key for this page; none explicitly unbinds it"`
+	Icon   string            `yaml:"icon,omitempty" toml:"icon,omitempty" json:"icon,omitempty" jsonschema:"description=Named icon used for the page"`
+	Layout *DrawerNodeConfig `yaml:"layout,omitempty" toml:"layout,omitempty" json:"layout,omitempty" jsonschema:"description=Recursive BSP layout for the page"`
+	Delete bool              `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
+}
+
+// DrawerNodeConfig is either a Pane leaf or a split with First and Second
+// children. Shape and value validation is performed by the TUI host.
+type DrawerNodeConfig struct {
+	Pane   string            `yaml:"pane,omitempty" toml:"pane,omitempty" json:"pane,omitempty" jsonschema:"description=Pane name for a leaf node"`
+	Split  string            `yaml:"split,omitempty" toml:"split,omitempty" json:"split,omitempty" jsonschema:"description=Split direction,enum=auto,enum=horizontal,enum=vertical"`
+	Ratio  float64           `yaml:"ratio,omitempty" toml:"ratio,omitempty" json:"ratio,omitempty" jsonschema:"description=Fraction allocated to the first child"`
+	First  *DrawerNodeConfig `yaml:"first,omitempty" toml:"first,omitempty" json:"first,omitempty" jsonschema:"description=First split child"`
+	Second *DrawerNodeConfig `yaml:"second,omitempty" toml:"second,omitempty" json:"second,omitempty" jsonschema:"description=Second split child"`
 }
 
 // AgentPaneConfig controls how treemux hosts agent CLI panes (claude etc.).

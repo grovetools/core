@@ -429,6 +429,11 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.TUI != nil {
 		if result.TUI == nil {
 			result.TUI = &TUIConfig{}
+		} else {
+			// result starts as a shallow copy of base; detach the TUI before
+			// applying nested overrides so mergeConfigs does not mutate base.
+			copied := *result.TUI
+			result.TUI = &copied
 		}
 		if override.TUI.Icons != "" {
 			result.TUI.Icons = override.TUI.Icons
@@ -447,6 +452,44 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 		if override.TUI.NvimEmbed != nil {
 			result.TUI.NvimEmbed = override.TUI.NvimEmbed
+		}
+
+		// Drawer scalars use last-non-empty-wins, page_order uses
+		// last-non-nil-wins, and pages are replaced as whole definitions per
+		// key. Field-wise inheritance of built-in pages happens later in the
+		// TUI host, not between configuration layers.
+		if override.TUI.Drawer != nil {
+			if result.TUI.Drawer == nil {
+				result.TUI.Drawer = &DrawerViewsConfig{}
+			} else {
+				// Copy before modifying so the merge does not mutate the base
+				// drawer or its page map.
+				copied := *result.TUI.Drawer
+				if result.TUI.Drawer.Pages != nil {
+					copied.Pages = make(map[string]*DrawerPageConfig, len(result.TUI.Drawer.Pages))
+					for name, page := range result.TUI.Drawer.Pages {
+						copied.Pages[name] = page
+					}
+				}
+				result.TUI.Drawer = &copied
+			}
+			if override.TUI.Drawer.CycleKey != "" {
+				result.TUI.Drawer.CycleKey = override.TUI.Drawer.CycleKey
+			}
+			if override.TUI.Drawer.DefaultPage != "" {
+				result.TUI.Drawer.DefaultPage = override.TUI.Drawer.DefaultPage
+			}
+			if override.TUI.Drawer.PageOrder != nil {
+				result.TUI.Drawer.PageOrder = override.TUI.Drawer.PageOrder
+			}
+			if override.TUI.Drawer.Pages != nil {
+				if result.TUI.Drawer.Pages == nil {
+					result.TUI.Drawer.Pages = make(map[string]*DrawerPageConfig, len(override.TUI.Drawer.Pages))
+				}
+				for name, page := range override.TUI.Drawer.Pages {
+					result.TUI.Drawer.Pages[name] = page
+				}
+			}
 		}
 		// Bool fields need explicit clauses or an override layer's value is
 		// silently dropped (a false in an override can never un-set a true
