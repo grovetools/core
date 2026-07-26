@@ -145,34 +145,27 @@ func (m Model) View() string {
 			content = lipgloss.JoinVertical(lipgloss.Right, content, indicatorStyle.Render(indicator))
 		}
 
-		// The search row is always reserved, even when inactive. Keeping the
-		// viewport and modal at fixed heights prevents opening search from
-		// shifting or reflowing the help layout.
-		searchView := " "
-		if m.search.Focused() || m.search.Value() != "" {
-			searchView = m.search.View()
-			if !m.search.Focused() {
-				searchView = m.search.Prompt + m.search.Value() + "█"
-			}
-			if m.search.Value() != "" {
-				label := fmt.Sprintf("%d matches", m.matchCount)
-				if m.matchCount == 0 {
-					label = "no matches"
-				}
-				searchView += m.Theme.Muted.Render("  •  " + label)
-			}
+		// Center the help independently of search. When active, search is drawn
+		// into the already-empty row immediately above the title rather than
+		// being joined to the layout; this avoids both reflow and reserved blank
+		// rows while search is inactive.
+		placed := lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, content)
+		if !m.search.Focused() && m.search.Value() == "" {
+			return placed
 		}
-		// textinput pads to its configured Width. Clamp the complete row to
-		// the help content width so focusing search cannot widen the modal and
-		// pull its previously centered columns toward the left edge.
-		searchView = ansi.Truncate(searchView, m.viewport.Width, "")
-		// Keep one row between search and the help title. This places the
-		// search affordance a line higher without changing spacing when it
-		// gains or loses focus.
-		content = lipgloss.JoinVertical(lipgloss.Left, searchView, " ", content)
 
-		// Render the viewport, centered on the screen to create a modal effect.
-		return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, content)
+		searchView := m.search.View()
+		if !m.search.Focused() {
+			searchView = m.search.Prompt + m.search.Value() + "█"
+		}
+		if m.search.Value() != "" {
+			label := fmt.Sprintf("%d matches", m.matchCount)
+			if m.matchCount == 0 {
+				label = "no matches"
+			}
+			searchView += m.Theme.Muted.Render("  •  " + label)
+		}
+		return m.overlaySearchAboveTitle(placed, searchView)
 	}
 
 	// For the short view, get the appropriate key group
@@ -270,11 +263,10 @@ func (m *Model) setViewportContent() {
 	m.renderedContent = content
 	m.viewport.SetContent(content)
 
-	// Set viewport dimensions with a margin. Always reserve one line each for
-	// the scroll indicator, search row, and search/title spacer so activating
-	// search cannot reflow.
+	// Set viewport dimensions with a margin. Search overlays an existing blank
+	// row above the centered title, so it consumes no viewport rows.
 	m.viewport.Width = lipgloss.Width(content)
-	m.viewport.Height = max(1, m.Height-verticalMargin-3)
+	m.viewport.Height = max(1, m.Height-verticalMargin-1)
 	promptWidth := lipgloss.Width(m.search.Prompt)
 	const matchLabelWidth = 18 // "  •  " plus a practical match-count label
 	m.search.Width = max(1, m.viewport.Width-promptWidth-matchLabelWidth)
@@ -536,6 +528,32 @@ func getSectionIcon(name string) string {
 }
 
 // getHelpBinding retrieves the help keybinding from the model's Keys interface.
+func (m Model) overlaySearchAboveTitle(placed, searchView string) string {
+	titleText := m.Title
+	if titleText == "" {
+		titleText = "Help"
+	}
+	lines := strings.Split(placed, "\n")
+	targetLine, targetColumn := -1, -1
+	for i, line := range lines {
+		plain := ansi.Strip(line)
+		if column := strings.Index(plain, titleText); column >= 0 {
+			targetLine, targetColumn = i, column
+			break
+		}
+		if targetLine < 0 && strings.TrimSpace(plain) != "" {
+			targetLine = i
+			targetColumn = len(plain) - len(strings.TrimLeft(plain, " "))
+		}
+	}
+	if targetLine <= 0 {
+		return placed
+	}
+	available := max(1, m.Width-targetColumn)
+	lines[targetLine-1] = strings.Repeat(" ", targetColumn) + ansi.Truncate(searchView, available, "")
+	return strings.Join(lines, "\n")
+}
+
 func (m *Model) bindingMatches(keyStr, desc string) bool {
 	query := strings.ToLower(strings.TrimSpace(m.search.Value()))
 	return query != "" && strings.Contains(strings.ToLower(keyStr+" "+desc), query)
