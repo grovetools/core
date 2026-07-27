@@ -86,8 +86,11 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 					continue
 				}
 			}
+			// Drop only the recovery state. metadata.json is the job→transcript
+			// index and must outlive both the process and a wrong liveness
+			// reading; age-based cleanup is PurgeStaleSessions' job.
 			if registry != nil {
-				_ = registry.Unregister(dirName)
+				_ = registry.RemoveRecoveryFiles(dirName)
 			}
 			continue
 		}

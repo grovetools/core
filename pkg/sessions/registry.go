@@ -160,9 +160,29 @@ func (r *FileSystemRegistry) RemovePIDLock(sessionID string) error {
 	return nil
 }
 
-// Unregister removes the crash-recovery tracking files for a session.
-// This is called by the daemon when a session cleanly ends or is detected as dead.
-func (r *FileSystemRegistry) Unregister(sessionID string) error {
+// RemoveRecoveryFiles drops a session's crash-recovery state — today the
+// pid.lock — while preserving metadata.json. This is what a liveness sweep must
+// call when it decides a session's process is gone.
+//
+// metadata.json is the only index binding a Flow job to its native session and
+// transcript, and it is consumed long after the process exits (completion
+// evidence, transcript resolution, archival). Deleting it on a dead-PID reading
+// makes an irreversible decision from an admittedly unreliable signal: the
+// pid.lock PID can be stale through process forking, and an interactive agent
+// outlives the launcher whose PID was recorded. The index must therefore
+// survive both the process and a wrong guess about the process.
+//
+// Once pid.lock is gone RecoverSessions skips the session as no longer live, so
+// dropping it is sufficient to stop the record from resurrecting as running.
+func (r *FileSystemRegistry) RemoveRecoveryFiles(sessionID string) error {
+	return r.RemovePIDLock(sessionID)
+}
+
+// Purge deletes a session's entire registry directory, metadata.json included.
+// It destroys the job→transcript index, so it belongs only to a deliberate GC
+// with a retention policy (see PurgeStaleSessions) or to an explicit operator
+// action — never to a liveness sweep.
+func (r *FileSystemRegistry) Purge(sessionID string) error {
 	if sessionID == "" {
 		return nil
 	}
