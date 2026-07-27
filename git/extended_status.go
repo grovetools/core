@@ -18,11 +18,12 @@ type ExtendedGitStatus struct {
 }
 
 // GetExtendedStatus fetches detailed git status including line changes.
+//
+// There is deliberately no IsGitRepo pre-check: GetStatus is the authority for
+// "not a git repository" (it surfaces git's stderr diagnostic as an error), so
+// probing first would only add a redundant fork per call.
 func GetExtendedStatus(path string) (*ExtendedGitStatus, error) {
 	cleanPath := filepath.Clean(path)
-	if !IsGitRepo(cleanPath) {
-		return nil, fmt.Errorf("not a git repository: %s", path)
-	}
 
 	status, err := GetStatus(cleanPath)
 	if err != nil {
@@ -42,8 +43,15 @@ func GetExtendedStatus(path string) (*ExtendedGitStatus, error) {
 		status.BehindMainCount = behind
 	}
 
+	// The porcelain status already proves both numstat diffs would be empty
+	// when nothing is modified or staged (untracked files never appear in
+	// `git diff --numstat`), so skip both forks in that common clean case.
+	if status.ModifiedCount == 0 && status.StagedCount == 0 {
+		return extStatus, nil
+	}
+
 	cmdBuilder := command.NewSafeBuilder()
-	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--numstat")
+	cmd, err := cmdBuilder.Build(context.Background(), "git", "diff", "--ignore-submodules", "--numstat")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build diff command: %w", err)
 	}
@@ -55,7 +63,7 @@ func GetExtendedStatus(path string) (*ExtendedGitStatus, error) {
 		extStatus.LinesAdded, extStatus.LinesDeleted = parseNumstat(string(output))
 	}
 
-	cmd, err = cmdBuilder.Build(context.Background(), "git", "diff", "--cached", "--numstat")
+	cmd, err = cmdBuilder.Build(context.Background(), "git", "diff", "--cached", "--ignore-submodules", "--numstat")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build cached diff command: %w", err)
 	}

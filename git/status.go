@@ -2,13 +2,30 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/grovetools/core/command"
 )
+
+// gitOutputAndStderr combines a command's captured stdout with any stderr
+// recorded in an *exec.ExitError. Git prints its diagnostics ("fatal: not a
+// git repository", ...) to STDERR, which exec.Cmd.Output() never includes in
+// the returned bytes — it is only available via ExitError.Stderr — so message
+// sniffing must look at both streams.
+func gitOutputAndStderr(output []byte, err error) string {
+	text := string(output)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		text += string(exitErr.Stderr)
+	}
+	return text
+}
 
 // StatusInfo contains detailed git status information for a repository
 type StatusInfo struct {
@@ -81,7 +98,7 @@ func GetChangedFiles(path string) ([]FileStatus, error) {
 	execCmd.Dir = path
 	output, err := execCmd.Output()
 	if err != nil {
-		outputStr := string(output)
+		outputStr := gitOutputAndStderr(output, err)
 		if strings.Contains(outputStr, "not a git repository") {
 			return nil, fmt.Errorf("not a git repository: %s", path)
 		}
@@ -152,7 +169,7 @@ func lsFilesZ(path string, args ...string) ([]string, error) {
 	execCmd.Dir = path
 	output, err := execCmd.Output()
 	if err != nil {
-		outputStr := string(output)
+		outputStr := gitOutputAndStderr(output, err)
 		if strings.Contains(outputStr, "not a git repository") {
 			return nil, fmt.Errorf("not a git repository: %s", path)
 		}
@@ -561,12 +578,16 @@ func GetStatus(path string) (*StatusInfo, error) {
 	execCmd.Dir = path
 	output, err := execCmd.Output()
 	if err != nil {
-		// Check if it's not a git repository
-		outputStr := string(output)
+		// Check if it's not a git repository. Git prints this to stderr, so
+		// inspect the ExitError's captured stderr alongside stdout.
+		outputStr := gitOutputAndStderr(output, err)
 		if strings.Contains(outputStr, "not a git repository") {
 			return nil, fmt.Errorf("not a git repository: %s", path)
 		}
-		// This can happen in a new repo before the first commit. Return a valid but empty status.
+		// Defensive: porcelain v2 status actually succeeds in a repo before its
+		// first commit (reporting "# branch.oid (initial)"), but the
+		// human-readable "No commits yet" text lands on stdout of other status
+		// modes — keep handling it from either stream just in case.
 		if strings.Contains(outputStr, "No commits yet") {
 			// Try to get branch name separately for new repos
 			branchCmd, buildErr := cmdBuilder.Build(context.Background(), "git", "rev-parse", "--abbrev-ref", "HEAD")
@@ -655,41 +676,94 @@ func GetStatus(path string) (*StatusInfo, error) {
 }
 
 // GetCommitsDivergenceFromMain returns the number of commits a branch is ahead of and behind the local main/master branch.
+//
+// Results are cached per repo path, pinned to the HEAD and main SHAs resolved
+// directly from git's files (see divergence_cache.go): when neither SHA has
+// moved since the last call the cached counts are returned with zero forks.
 func GetCommitsDivergenceFromMain(repoPath, currentBranch string) (ahead, behind int) {
+	cleanPath := filepath.Clean(repoPath)
+	shas, resolved := resolveDivergenceSHAs(cleanPath, localMainRefCandidates)
+	if resolved {
+		if ahead, behind, ok := lookupDivergence(cleanPath, shas); ok {
+			return ahead, behind
+		}
+	}
+	ahead, behind, authoritative := divergenceFromMainForked(repoPath, currentBranch)
+	// Re-resolve after rev-list: refs may have moved while the subprocess was
+	// running. Also refuse to cache the main-branch shortcut when the caller's
+	// branch argument disagrees with the resolved endpoints.
+	if resolved && authoritative &&
+		(currentBranch != filepath.Base(shas.baseRef) || shas.headSHA == shas.baseSHA) {
+		storeDivergenceIfCurrent(cleanPath, localMainRefCandidates, shas, ahead, behind)
+	}
+	return ahead, behind
+}
+
+// divergenceFromMainForked is the fork-based divergence computation behind
+// GetCommitsDivergenceFromMain. authoritative is true when the result reflects
+// actual repo state (and is safe to cache), false when a fork failed.
+func divergenceFromMainForked(repoPath, currentBranch string) (ahead, behind int, authoritative bool) {
 	cmdBuilder := command.NewSafeBuilder()
 
 	// Determine if main or master exists (shared resolution).
 	mainBranch := LocalMainBranch(repoPath)
-	if mainBranch == "" || currentBranch == mainBranch {
-		return 0, 0
+	if mainBranch == "" {
+		return 0, 0, false
+	}
+	if currentBranch == mainBranch {
+		return 0, 0, true
 	}
 
 	// git rev-list --left-right --count main...HEAD
 	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-list", "--left-right", "--count", mainBranch+"...HEAD")
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	execCmd := cmd.Exec()
 	execCmd.Dir = repoPath
 	output, err := execCmd.Output()
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	parts := strings.Fields(string(output))
-	if len(parts) == 2 {
-		// output is: <behind> <ahead>
-		behind, _ = strconv.Atoi(parts[0])
-		ahead, _ = strconv.Atoi(parts[1])
+	if len(parts) != 2 {
+		return 0, 0, false
 	}
+	// output is: <behind> <ahead>
+	behind, _ = strconv.Atoi(parts[0])
+	ahead, _ = strconv.Atoi(parts[1])
 
-	return ahead, behind
+	return ahead, behind, true
 }
 
 // GetCommitsDivergenceFromRemoteMain returns the number of commits the local main/master branch
 // is ahead of and behind origin/main or origin/master.
+//
+// Results are cached per repo path exactly like GetCommitsDivergenceFromMain,
+// pinned to the filesystem-resolved HEAD and origin/{main,master} SHAs.
 func GetCommitsDivergenceFromRemoteMain(repoPath, currentBranch string) (ahead, behind int) {
+	cleanPath := filepath.Clean(repoPath)
+	shas, resolved := resolveDivergenceSHAs(cleanPath, remoteMainRefCandidates)
+	if resolved {
+		if ahead, behind, ok := lookupDivergence(cleanPath, shas); ok {
+			return ahead, behind
+		}
+	}
+	ahead, behind, authoritative := divergenceFromRemoteMainForked(repoPath)
+	if resolved && authoritative {
+		// As for local-main divergence, only cache a result if the endpoints
+		// still match the snapshot from before rev-list ran.
+		storeDivergenceIfCurrent(cleanPath, remoteMainRefCandidates, shas, ahead, behind)
+	}
+	return ahead, behind
+}
+
+// divergenceFromRemoteMainForked is the fork-based computation behind
+// GetCommitsDivergenceFromRemoteMain. authoritative is true when the result
+// reflects actual repo state (and is safe to cache), false when a fork failed.
+func divergenceFromRemoteMainForked(repoPath string) (ahead, behind int, authoritative bool) {
 	cmdBuilder := command.NewSafeBuilder()
 
 	// Check if origin/main or origin/master exists
@@ -709,30 +783,31 @@ func GetCommitsDivergenceFromRemoteMain(repoPath, currentBranch string) (ahead, 
 	}
 
 	if remoteRef == "" {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	// git rev-list --left-right --count HEAD...origin/main
 	cmd, err := cmdBuilder.Build(context.Background(), "git", "rev-list", "--left-right", "--count", "HEAD..."+remoteRef)
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	execCmd := cmd.Exec()
 	execCmd.Dir = repoPath
 	output, err := execCmd.Output()
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	parts := strings.Fields(string(output))
-	if len(parts) == 2 {
-		// output is: <ahead> <behind> (HEAD on left side)
-		ahead, _ = strconv.Atoi(parts[0])
-		behind, _ = strconv.Atoi(parts[1])
+	if len(parts) != 2 {
+		return 0, 0, false
 	}
+	// output is: <ahead> <behind> (HEAD on left side)
+	ahead, _ = strconv.Atoi(parts[0])
+	behind, _ = strconv.Atoi(parts[1])
 
-	return ahead, behind
+	return ahead, behind, true
 }
 
 // GetCommitsDivergence returns how far targetRef is ahead of and behind baseRef.

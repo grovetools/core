@@ -547,7 +547,10 @@ func (c *RemoteClient) IsRunning() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// Refresh triggers a re-scan of workspaces and enrichment data.
+// Refresh triggers all refreshable collectors. On a scoped daemon, ambient
+// git state is mirrored from the global daemon, so this bodyless call does not
+// trigger a scoped background/full git sweep; use RefreshPaths for explicit
+// synchronous git verification.
 func (c *RemoteClient) Refresh(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/refresh", nil)
 	if err != nil {
