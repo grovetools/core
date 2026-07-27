@@ -108,15 +108,22 @@ func New(dir ...string) Client {
 // If auto-start fails, it falls back to LocalClient gracefully.
 func NewWithAutoStart(dir ...string) Client {
 	resolvedDir := resolveDir(dir)
-	return newAutoStart(resolvedDir, autoStartOptions{})
+	return newAutoStart(resolvedDir, autoStartOptions{hostRedirect: true})
 }
 
 // autoStartOptions collects the tunables for an auto-starting client factory.
-// Zero value = today's behavior (paired to nothing, default boot ordering).
+// Zero value = paired to nothing, default boot ordering, no host redirect.
 type autoStartOptions struct {
 	pairPID             int
 	earlyReady          bool
 	suppressStartNotice bool
+	// hostRedirect lets the factory return a live UI-host daemon (env →
+	// registry, see ResolveSessionHostSocket) instead of SPAWNING a scoped
+	// daemon nothing would use. It only affects the spawn decision — a live
+	// scoped daemon always wins the initial dial. Plain constructors default
+	// it to true; callers that exist to spawn the scoped daemon itself
+	// (EarlyReady, PairWith, RequireScopedDaemon) switch it off.
+	hostRedirect bool
 }
 
 // Option customizes NewWithAutoStartOpts.
@@ -128,14 +135,32 @@ type Option func(*autoStartOptions)
 // binary is too old to understand the flag it exits immediately; the factory
 // detects that and respawns once without the flag before falling back to
 // LocalClient. Intended for treemux's cold-start splash.
+// EarlyReady implies RequireScopedDaemon: the caller is booting the daemon it
+// will pair its UI with, so redirecting to a host daemon would be a self-loop
+// (the caller usually IS the host).
 func EarlyReady() Option {
-	return func(o *autoStartOptions) { o.earlyReady = true }
+	return func(o *autoStartOptions) {
+		o.earlyReady = true
+		o.hostRedirect = false
+	}
 }
 
 // PairWith instructs the spawned daemon to shut down when pairPID exits
-// (see NewPaired). No-op when the daemon is already running.
+// (see NewPaired). No-op when the daemon is already running. Implies
+// RequireScopedDaemon: pairing semantics only exist on a fresh spawn.
 func PairWith(pairPID int) Option {
-	return func(o *autoStartOptions) { o.pairPID = pairPID }
+	return func(o *autoStartOptions) {
+		o.pairPID = pairPID
+		o.hostRedirect = false
+	}
+}
+
+// RequireScopedDaemon disables the UI-host redirect: even when a live host
+// daemon covers the resolved scope, the factory dials/spawns the genuinely
+// scoped daemon. For callers whose correctness depends on talking to the
+// per-scope groved (e.g. they are about to become that scope's host).
+func RequireScopedDaemon() Option {
+	return func(o *autoStartOptions) { o.hostRedirect = false }
 }
 
 // SuppressStartNotice prevents an auto-start notice from being written to
@@ -150,7 +175,7 @@ func SuppressStartNotice() Option {
 // so treemux can request EarlyReady() (and optionally PairWith) without adding
 // a new positional factory per combination.
 func NewWithAutoStartOpts(dir string, opts ...Option) Client {
-	var o autoStartOptions
+	o := autoStartOptions{hostRedirect: true}
 	for _, f := range opts {
 		f(&o)
 	}
@@ -164,7 +189,7 @@ func NewWithAutoStartOpts(dir string, opts ...Option) Client {
 // the daemon started here never self-terminates via --auto-shutdown because
 // autoStartDaemon omits that flag when scope is empty (see autoStartDaemon).
 func NewGlobalClient() Client {
-	return newAutoStart("", autoStartOptions{})
+	return newAutoStart("", autoStartOptions{hostRedirect: true})
 }
 
 // NewPaired works like NewWithAutoStart but instructs the spawned daemon to
@@ -175,6 +200,8 @@ func NewGlobalClient() Client {
 // Callers that need to guarantee pairing semantics must ensure no stale daemon
 // is running for the scope before invoking NewPaired.
 func NewPaired(dir string, pairPID int) Client {
+	// hostRedirect stays false: the caller exists to spawn the daemon it is
+	// pairing with, so a host redirect would defeat the pairing.
 	return newAutoStart(dir, autoStartOptions{pairPID: pairPID})
 }
 
@@ -199,6 +226,28 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	if isPermissionDenied(dialErr) {
 		recordConnectDiagnosis(socketPath, dialErr)
 		return NewLocalClient()
+	}
+
+	// Scoped daemon absent. If a live UI host covers this scope, ride its
+	// daemon instead of spawning one nothing will use (see plan perf-audit
+	// job 27). Env beats registry, mirroring NewSessionHostClient; a dead or
+	// undialable host falls through to the spawn path unchanged. The global
+	// scope (scope == "") never redirects: the global daemon typically IS the
+	// host daemon and must remain auto-startable (NewGlobalClient, proxy
+	// infra). The hostSock != socketPath guard prevents a self-loop when the
+	// resolved host socket is the scoped socket that just failed to dial.
+	if opts.hostRedirect && scope != "" {
+		if hostSock, viaHost := ResolveSessionHostSocket(resolvedDir); viaHost && hostSock != socketPath {
+			if client := tryConnect(hostSock); client != nil {
+				logging.NewUnifiedLogger("daemon.factory").
+					Debug("scoped daemon absent; using registered host daemon").
+					Field("scope", scope).
+					Field("host_socket", hostSock).
+					StructuredOnly().
+					Log(context.Background())
+				return client
+			}
+		}
 	}
 
 	// Daemon not running, try to auto-start it for this scope. autoStartDaemon
