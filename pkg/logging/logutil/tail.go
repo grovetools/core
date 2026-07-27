@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// Tailer cadences. drainInterval is how often an open file is polled for new
+// lines and sets the streaming latency floor. The other two govern directory
+// scans (ReadDir plus a stat per candidate), which groved multiplies by one
+// tailer per workspace — running those at the drain cadence made log tailing
+// the daemon's top syscall source. Rotation is daily, and a workspace that
+// starts logging only has to be noticed promptly, not instantly.
+const (
+	drainInterval         = 500 * time.Millisecond
+	rotationCheckInterval = 15 * time.Second
+	maxWaitInterval       = 60 * time.Second
+)
+
 // TailedLine represents a line of log output from a specific workspace.
 // WorkspacePath is set for workspace-scoped lines (empty for system logs)
 // so consumers that key on canonical paths (e.g. the embedded logs TUI
@@ -156,7 +168,7 @@ func TailFile(ctx context.Context, wsName, wsPath, path string, lineChan chan<- 
 			lineChan <- TailedLine{Workspace: wsName, WorkspacePath: wsPath, Line: strings.TrimSpace(line)}
 		}
 		if err == io.EOF {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(drainInterval)
 			continue
 		}
 		if err != nil {
@@ -175,7 +187,12 @@ func TailDirectory(ctx context.Context, wsName, wsPath, logsDir string, lineChan
 	var currentFile string
 	var f *os.File
 
-	// Wait for directory and files to appear.
+	// Wait for directory and files to appear. Most workspaces in a large
+	// portfolio never write a log at all, so this loop is where the majority
+	// of tailers live permanently; polling every drain interval turned that
+	// into a continuous storm of failing ReadDir calls. Back off instead —
+	// a workspace that starts logging is still picked up within a minute.
+	waitInterval := drainInterval
 	for {
 		select {
 		case <-ctx.Done():
@@ -190,7 +207,17 @@ func TailDirectory(ctx context.Context, wsName, wsPath, logsDir string, lineChan
 		if !follow {
 			return
 		}
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(waitInterval):
+		}
+		if waitInterval < maxWaitInterval {
+			waitInterval *= 2
+			if waitInterval > maxWaitInterval {
+				waitInterval = maxWaitInterval
+			}
+		}
 	}
 
 	f, err := os.Open(currentFile)
@@ -241,8 +268,16 @@ func TailDirectory(ctx context.Context, wsName, wsPath, logsDir string, lineChan
 	}
 	reader := bufio.NewReader(f)
 
-	checkInterval := time.NewTicker(500 * time.Millisecond)
+	checkInterval := time.NewTicker(drainInterval)
 	defer checkInterval.Stop()
+
+	// Rotation is checked on a much slower cadence than draining. Each check
+	// is a ReadDir plus a stat per candidate, and groved runs one tailer per
+	// workspace — at the drain cadence that was hundreds of directory scans a
+	// second across the portfolio, for files that rotate daily. Detecting a
+	// rotation late costs latency only: the drain above always runs the
+	// current file to EOF first, and the new file is read from its start.
+	lastRotationCheck := time.Now()
 
 	for {
 		select {
@@ -271,6 +306,10 @@ func TailDirectory(ctx context.Context, wsName, wsPath, logsDir string, lineChan
 		}
 
 		// Check for newer log file (daily rotation).
+		if time.Since(lastRotationCheck) < rotationCheckInterval {
+			continue
+		}
+		lastRotationCheck = time.Now()
 		latestFile, err := FindLatestLogFile(logsDir)
 		if err == nil && latestFile != currentFile {
 			f.Close()
