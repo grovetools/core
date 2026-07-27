@@ -1,6 +1,13 @@
 package theme
 
-import "testing"
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"strconv"
+	"strings"
+	"testing"
+)
 
 // TestSetIconsLiveSwitch pins the runtime icon-set switch: SetIcons("ascii")
 // swaps the exported icon variables to the ASCII set in-process (no restart),
@@ -71,5 +78,54 @@ func TestSetIconsModeNormalization(t *testing.T) {
 		if ASCIIIcons != tc.wantASCII {
 			t.Errorf("SetIcons(%q): ASCIIIcons = %v, want %v", tc.mode, ASCIIIcons, tc.wantASCII)
 		}
+	}
+}
+
+// TestNoIconLiteralIsBlank guards a bug class this file has now hit twice:
+// an icon constant whose comment advertises a glyph but whose literal is
+// empty, so every call site renders a blank slot and nothing fails loudly.
+// nerdIconConfig shipped that way, and so did nerdIconDiff. The literals are
+// invisible to reflection (package-level constants), so the source is parsed.
+func TestNoIconLiteralIsBlank(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "icons.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse icons.go: %v", err)
+	}
+	seen := 0
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range value.Names {
+				if !strings.HasPrefix(name.Name, "nerdIcon") && !strings.HasPrefix(name.Name, "asciiIcon") {
+					continue
+				}
+				if i >= len(value.Values) {
+					continue
+				}
+				lit, ok := value.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				glyph, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					t.Fatalf("%s: unquote %s: %v", name.Name, lit.Value, err)
+				}
+				seen++
+				if strings.TrimSpace(glyph) == "" {
+					t.Errorf("%s = %q: blank literal — the glyph its comment names is missing", name.Name, glyph)
+				}
+			}
+		}
+	}
+	if seen < 100 {
+		t.Fatalf("only %d icon constants inspected; the parse walk is not finding them", seen)
 	}
 }

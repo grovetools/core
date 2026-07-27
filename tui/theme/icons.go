@@ -63,7 +63,7 @@ const (
 	nerdIconPullRequestNewChanges = "" // cod-git_pull_request_new_changes (U+EC0C)
 	nerdIconGithubAction          = "" // cod-github_action (U+EAFF)
 	nerdIconGitCompare            = "" // dev-git_compare (U+E728)
-	nerdIconDiff                  = ""  // cod-diff (U+EAE1)
+	nerdIconDiff                  = "" // cod-diff (U+EAE1)
 	nerdIconGit                   = "󰊢" // md-git (U+F02A2)
 	nerdIconGitStaged             = "" // cod-pass (U+EBA4)
 	nerdIconGitModified           = "" // cod-diff_modified (U+EADE)
