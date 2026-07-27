@@ -377,6 +377,14 @@ type Client interface {
 	// the daemon to unblock a pending CaptureAgentPane request.
 	SubmitAgentCaptureResponse(ctx context.Context, jobID, text string) error
 
+	// SubmitAgentFinalOutput hands the daemon an agent pane's last screen
+	// text at the moment its PTY exits. Both live capture tiers need a
+	// running process and a mounted pane, so without this snapshot the
+	// output of an agent that died during startup — the case anyone
+	// actually captures for — is gone before the first capture arrives.
+	// The daemon retains it briefly and serves it as the capture fallback.
+	SubmitAgentFinalOutput(ctx context.Context, jobID, text string) error
+
 	// --- Daemon PTY Management ---
 
 	// CreatePTY requests the daemon to spawn a new PTY session.

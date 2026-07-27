@@ -668,6 +668,11 @@ func (c *LocalClient) SubmitAgentCaptureResponse(ctx context.Context, jobID, tex
 	return errors.New("native agent capture response requires the grove daemon")
 }
 
+// SubmitAgentFinalOutput returns an error since final-output retention lives in the daemon.
+func (c *LocalClient) SubmitAgentFinalOutput(ctx context.Context, jobID, text string) error {
+	return errors.New("native agent final output requires the grove daemon")
+}
+
 // --- Daemon PTY Management (not available in local mode) ---
 
 func (c *LocalClient) CreatePTY(ctx context.Context, req PTYCreateRequest) (*PTYSessionInfo, error) {

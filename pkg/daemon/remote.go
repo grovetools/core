@@ -2255,6 +2255,26 @@ func (c *RemoteClient) SubmitAgentCaptureResponse(ctx context.Context, jobID, te
 	return nil
 }
 
+// SubmitAgentFinalOutput retains a dying agent pane's last screen text on the
+// daemon so a later CaptureAgentPane can still explain the exit.
+func (c *RemoteClient) SubmitAgentFinalOutput(ctx context.Context, jobID, text string) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/agents/"+jobID+"/final_output", strings.NewReader(text))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("submit final output: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // --- Daemon PTY Management ---
 
 func (c *RemoteClient) CreatePTY(ctx context.Context, req PTYCreateRequest) (*PTYSessionInfo, error) {
