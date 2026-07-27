@@ -5,7 +5,8 @@ import "github.com/charmbracelet/lipgloss"
 // StatusIconAndStyle returns the appropriate icon and lipgloss style for a job/agent status.
 // This is the single source of truth for status icon/color mapping used by both flow and treemux.
 // Status strings include: "completed", "running", "failed", "blocked", "pending", "todo",
-// "hold", "abandoned", "needs_review", "pending_user", "idle", "stopped", "error", and others.
+// "hold", "abandoned", "needs_review", "pending_user", "idle", "stopped", "error",
+// "interrupted", and others.
 func StatusIconAndStyle(status string, theme *Theme) (icon string, style lipgloss.Style) {
 	switch status {
 	case "completed":
@@ -26,6 +27,12 @@ func StatusIconAndStyle(status string, theme *Theme) (icon string, style lipglos
 		return IconStatusHold, theme.Warning
 	case "abandoned":
 		return IconStatusAbandoned, theme.Muted
+	case "interrupted":
+		// A session whose process died before it finished. Terminal, but not a
+		// success and not an agent-reported failure — muted, like abandoned.
+		// Without this case it fell through to the pending clock, which reads
+		// as "still queued" for a session that is over.
+		return IconStatusInterrupted, theme.Muted
 	case "needs_review":
 		return IconStatusNeedsReview, theme.Info
 	case "idle", "stopped":

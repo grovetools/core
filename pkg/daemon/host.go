@@ -318,6 +318,20 @@ func NewSessionHostClient(dir string) Client {
 	return sessionHostClient(dir, tryConnect, func(d string) Client { return NewWithAutoStart(d) })
 }
 
+// NewSessionHostClientConnectOnly is NewSessionHostClient for callers that must
+// never SPAWN a daemon: the same host precedence (env endpoint → registered UI
+// host → scope resolution), but the final fallback is connect-only New(dir)
+// instead of NewWithAutoStart(dir).
+//
+// Terminal-state writers on failure paths use this. Ending a session that no
+// live daemon is tracking is a no-op worth skipping, not a reason to boot a
+// daemon just to tell it about a process that already died — but when a host IS
+// listening, its record must still be closed out, which plain New(dir) cannot
+// guarantee because it follows GROVE_SCOPE away from the host.
+func NewSessionHostClientConnectOnly(dir string) Client {
+	return sessionHostClient(dir, tryConnect, func(d string) Client { return New(d) })
+}
+
 // sessionHostClient is NewSessionHostClient's policy, with its two effectful
 // steps injected. Splitting them out lets the precedence be asserted without
 // dialing sockets or auto-starting a real groved from a test.
