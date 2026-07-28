@@ -433,6 +433,14 @@ type Client interface {
 	// GetSystemInfo returns the daemon's version and commit information.
 	GetSystemInfo(ctx context.Context) (*models.SystemInfo, error)
 
+	// GetSystemStats returns the daemon's live runtime + process-tree
+	// resource snapshot (GET /api/system/stats). A daemon predating the
+	// endpoint (404) yields an error satisfying IsEndpointNotFound so
+	// callers (e.g. `groved stats`) can render a targeted hint.
+	// LocalClient has no daemon process to report on and returns
+	// ErrNotSupported.
+	GetSystemStats(ctx context.Context) (*models.SystemStats, error)
+
 	// GetBootStatus returns the daemon's boot progress (GET /api/system/boot).
 	// RemoteClient hits the endpoint; a daemon that predates it (404) is
 	// reported as already booted (Done=true) so callers don't wait forever.

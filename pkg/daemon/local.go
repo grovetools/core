@@ -721,6 +721,12 @@ func (c *LocalClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, er
 	return nil, errors.New("system info requires the grove daemon; use daemon.NewWithAutoStart()")
 }
 
+// GetSystemStats returns ErrNotSupported: there is no daemon process whose
+// runtime or process subtree could be reported.
+func (c *LocalClient) GetSystemStats(ctx context.Context) (*models.SystemStats, error) {
+	return nil, ErrNotSupported
+}
+
 // GetBootStatus reports Done immediately: LocalClient means there is no daemon
 // process to boot, so there is nothing to wait on.
 func (c *LocalClient) GetBootStatus(ctx context.Context) (*BootStatus, error) {

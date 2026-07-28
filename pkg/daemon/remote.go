@@ -47,6 +47,12 @@ type RemoteClient struct {
 // fall back to LocalClient or surface an informative error.
 var errEndpointNotFound = errors.New("daemon endpoint not found (stale groved binary?)")
 
+// IsEndpointNotFound reports whether err means the daemon answered 404 on a
+// known endpoint — i.e. a stale groved binary that predates it. Exported so
+// out-of-package callers (e.g. `groved stats`) can render a targeted
+// "daemon predates <endpoint>" hint instead of a generic failure.
+func IsEndpointNotFound(err error) bool { return errors.Is(err, errEndpointNotFound) }
+
 // ErrSubjobDaemonUpgradeRequired means groved predates the subjob API.
 var ErrSubjobDaemonUpgradeRequired = errors.New("groved upgrade required for subjob monitoring")
 
@@ -2605,6 +2611,36 @@ func (c *RemoteClient) GetSystemInfo(ctx context.Context) (*models.SystemInfo, e
 		return nil, fmt.Errorf("failed to decode system info: %w", err)
 	}
 	return &info, nil
+}
+
+// GetSystemStats returns the daemon's live runtime + process-tree resource
+// snapshot from GET /api/system/stats. A daemon predating the endpoint (404)
+// yields errEndpointNotFound (check with IsEndpointNotFound).
+func (c *RemoteClient) GetSystemStats(ctx context.Context) (*models.SystemStats, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/system/stats", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system stats: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var stats models.SystemStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode system stats: %w", err)
+	}
+	return &stats, nil
 }
 
 // GetBootStatus returns the daemon's boot progress from GET /api/system/boot.
