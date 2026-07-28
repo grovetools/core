@@ -2353,6 +2353,41 @@ func (c *RemoteClient) ListPTYs(ctx context.Context) ([]PTYSessionInfo, error) {
 	return list, nil
 }
 
+// GetPTYResources returns the PTY daemon's resource snapshot from GET
+// /api/pty/resources. groved reverse-proxies that path verbatim to the
+// scope's tuimux daemon, which serves it as /api/resources; a tuimuxd
+// predating the endpoint 404s, yielding errEndpointNotFound (check with
+// IsEndpointNotFound) so callers can fall back to client-side sampling.
+func (c *RemoteClient) GetPTYResources(ctx context.Context, opts PTYResourcesOptions) (*models.PTYResources, error) {
+	url := baseURL + "/api/pty/resources"
+	if q := opts.query(); q != "" {
+		url += "?" + q
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get pty resources: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var res models.PTYResources
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, fmt.Errorf("decode pty resources: %w", err)
+	}
+	return &res, nil
+}
+
 func (c *RemoteClient) KillPTY(ctx context.Context, id string) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/pty/kill/"+id, nil)
 	if err != nil {

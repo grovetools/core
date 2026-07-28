@@ -727,6 +727,12 @@ func (c *LocalClient) GetSystemStats(ctx context.Context) (*models.SystemStats, 
 	return nil, ErrNotSupported
 }
 
+// GetPTYResources returns ErrNotSupported: LocalClient has no PTY daemon
+// whose sessions could be attributed.
+func (c *LocalClient) GetPTYResources(ctx context.Context, opts PTYResourcesOptions) (*models.PTYResources, error) {
+	return nil, ErrNotSupported
+}
+
 // GetBootStatus reports Done immediately: LocalClient means there is no daemon
 // process to boot, so there is nothing to wait on.
 func (c *LocalClient) GetBootStatus(ctx context.Context) (*BootStatus, error) {

@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/grovetools/core/pkg/env"
@@ -393,6 +394,18 @@ type Client interface {
 	// ListPTYs returns metadata for all active daemon PTY sessions.
 	ListPTYs(ctx context.Context) ([]PTYSessionInfo, error)
 
+	// GetPTYResources returns the PTY daemon's resource snapshot: per-PTY
+	// subtree CPU/RSS/proc-count rollups, the daemon's own process row, and
+	// the orphan audit (GET /api/pty/resources, proxied by groved to
+	// tuimuxd's /api/resources). Unlike client-side sampling, tuimuxd
+	// collects on an always-on cadence, so History predates the moment a
+	// human opened the inspector.
+	//
+	// A tuimuxd predating the endpoint (404) yields an error satisfying
+	// IsEndpointNotFound so callers can degrade to sampling `ps` themselves.
+	// LocalClient has no PTY daemon and returns ErrNotSupported.
+	GetPTYResources(ctx context.Context, opts PTYResourcesOptions) (*models.PTYResources, error)
+
 	// KillPTY terminates a daemon PTY session by ID.
 	KillPTY(ctx context.Context, id string) error
 
@@ -554,6 +567,28 @@ type PTYSessionInfo struct {
 	// orphaned). Plumbed from tuimux SessionMetadata for the inspector's
 	// idle-age column and leak sorting.
 	LastDetached time.Time `json:"last_detached,omitempty"`
+}
+
+// PTYResourcesOptions selects the optional, heavier sections of
+// GET /api/pty/resources. Both default to off: the base payload is one row
+// per PTY, which is what a summary table needs.
+type PTYResourcesOptions struct {
+	// Detail requests procs_detail: the flat subtree under each PTY.
+	Detail bool
+	// History requests the daemon's per-PTY CPU/RSS rings.
+	History bool
+}
+
+// query renders the options as a URL query string ("" when both are off).
+func (o PTYResourcesOptions) query() string {
+	var parts []string
+	if o.Detail {
+		parts = append(parts, "detail=1")
+	}
+	if o.History {
+		parts = append(parts, "history=1")
+	}
+	return strings.Join(parts, "&")
 }
 
 // StateUpdate represents an update pushed from the daemon to subscribers.
