@@ -124,6 +124,15 @@ type EnrichedWorkspace struct {
 	// uncomputed one. Key cache-hit/backfill on this, not ChangedFiles != nil.
 	// No omitempty: absent from an older daemon decodes false = safe fallback.
 	ChangedFilesComputed bool `json:"changed_files_computed"`
+	// GitLanding is the repo's rebase-preflight position — local-main
+	// divergence, origin-branch presence, behind-origin, last-commit time — all
+	// measured against the bases git.LandingState documents. It is what lets a
+	// consumer render a landing verdict that AGREES with the Rebase page without
+	// shelling out; GitStatus' AheadMainCount/BehindMainCount use a base that
+	// varies with the checkout and must not be used for that. Nil (or
+	// Computed=false, from an older daemon) means "not known yet" — render
+	// pending, never a confident zero.
+	GitLanding *git.LandingState `json:"git_landing,omitempty"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.
@@ -144,4 +153,7 @@ type WorkspaceDelta struct {
 	// *bool per the pointer convention above: nil = unchanged. Only the git
 	// delta builders set it, so non-git deltas leave the stored flag intact.
 	ChangedFilesComputed *bool `json:"changed_files_computed,omitempty"`
+	// GitLanding follows the pointer convention: nil = unchanged, so only the
+	// git delta builders ever replace the stored landing state.
+	GitLanding *git.LandingState `json:"git_landing,omitempty"`
 }
