@@ -236,3 +236,33 @@ func TestGetCommitsDivergenceFromRemoteMainCache(t *testing.T) {
 	assert.Equal(t, 2, ahead)
 	assert.Equal(t, 0, behind)
 }
+
+// TestDivergenceCacheStatsCountHitsAndMisses pins the counters the daemon
+// publishes as git.divergence_cache.* on /api/system/stats. A collapsing hit
+// rate is the earliest signal that git forks are about to dominate CPU again.
+func TestDivergenceCacheStatsCountHitsAndMisses(t *testing.T) {
+	h0, m0, _ := DivergenceCacheStats()
+
+	shas := divergenceSHAs{headSHA: "aaa", baseRef: "refs/heads/main", baseSHA: "bbb"}
+	path := t.TempDir()
+
+	if _, _, ok := lookupDivergence(path, shas); ok {
+		t.Fatal("unexpected hit on a cold cache")
+	}
+	storeDivergence(path, shas, 3, 4)
+	if _, _, ok := lookupDivergence(path, shas); !ok {
+		t.Fatal("expected a hit after storing")
+	}
+	// A moved endpoint invalidates: counted as a miss, not a hit.
+	if _, _, ok := lookupDivergence(path, divergenceSHAs{headSHA: "ccc", baseRef: "refs/heads/main", baseSHA: "bbb"}); ok {
+		t.Fatal("stale SHAs must not hit")
+	}
+
+	h1, m1, _ := DivergenceCacheStats()
+	if h1-h0 != 1 {
+		t.Errorf("hits delta = %d, want 1", h1-h0)
+	}
+	if m1-m0 != 2 {
+		t.Errorf("misses delta = %d, want 2", m1-m0)
+	}
+}

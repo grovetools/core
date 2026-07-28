@@ -37,6 +37,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // localMainRefCandidates / remoteMainRefCandidates mirror the branch probing
@@ -69,6 +70,25 @@ var (
 	divergenceCache   = make(map[string]divergenceEntry) // keyed by cleaned repo path
 )
 
+// Cache effectiveness counters. They live as package globals because the
+// cache itself does (there is no injectable type here, and GetExtendedStatus'
+// signature is on the hot path of every git sweep). The daemon reads them via
+// DivergenceCacheStats and publishes them on /api/system/stats: a collapsing
+// hit rate is the earliest signal that git status forks are about to dominate
+// daemon CPU again.
+var (
+	divergenceHits    atomic.Uint64
+	divergenceMisses  atomic.Uint64
+	divergenceWastedC atomic.Uint64
+)
+
+// DivergenceCacheStats reports the process-wide ahead/behind cache counters.
+// wasted counts forked computations that were discarded because a ref moved
+// while rev-list ran — work paid for and thrown away.
+func DivergenceCacheStats() (hits, misses, wasted uint64) {
+	return divergenceHits.Load(), divergenceMisses.Load(), divergenceWastedC.Load()
+}
+
 // lookupDivergence returns the cached counts for cleanPath if the entry was
 // computed from exactly the given SHAs (and the same base ref).
 func lookupDivergence(cleanPath string, shas divergenceSHAs) (ahead, behind int, ok bool) {
@@ -76,8 +96,10 @@ func lookupDivergence(cleanPath string, shas divergenceSHAs) (ahead, behind int,
 	defer divergenceCacheMu.Unlock()
 	e, ok := divergenceCache[cleanPath]
 	if !ok || e.divergenceSHAs != shas {
+		divergenceMisses.Add(1)
 		return 0, 0, false
 	}
+	divergenceHits.Add(1)
 	return e.ahead, e.behind, true
 }
 
@@ -98,6 +120,7 @@ func storeDivergence(cleanPath string, shas divergenceSHAs, ahead, behind int) {
 func storeDivergenceIfCurrent(cleanPath string, baseCandidates []string, before divergenceSHAs, ahead, behind int) bool {
 	after, ok := resolveDivergenceSHAs(cleanPath, baseCandidates)
 	if !ok || after != before {
+		divergenceWastedC.Add(1)
 		return false
 	}
 	storeDivergence(cleanPath, after, ahead, behind)

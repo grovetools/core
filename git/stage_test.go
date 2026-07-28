@@ -208,3 +208,54 @@ func TestGetBlobHashRejectsUnsafePath(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid file path")
 }
+
+// TestGetBlobHashesObservedReportsBatch pins the R3 observability surface:
+// the daemon attributes hash-object cost per repo from these numbers, and the
+// "largest offender" is what names the 60 GB file in a health warning.
+func TestGetBlobHashesObservedReportsBatch(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "small.go"), []byte("package main\n"), 0o644))
+	big := make([]byte, 64*1024)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "big.bin"), big, 0o644))
+
+	hashes, batch, err := GetBlobHashesObserved(dir,
+		[]string{"small.go", "big.bin", "gone.go", "../escape.go"})
+	require.NoError(t, err)
+
+	assert.Len(t, hashes, 2)
+	assert.Equal(t, 2, batch.Hashed)
+	// One missing path + one that fails validation.
+	assert.Equal(t, 2, batch.Skipped)
+	assert.Equal(t, 0, batch.NonRegular)
+	assert.Equal(t, "big.bin", batch.LargestPath)
+	assert.Equal(t, int64(64*1024), batch.LargestBytes)
+}
+
+// A batch that hashes nothing must still report why (all inputs skipped),
+// rather than looking like an idle no-op.
+func TestGetBlobHashesObservedAllSkipped(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+
+	hashes, batch, err := GetBlobHashesObserved(dir, []string{"gone.go", "also-gone.go"})
+	require.NoError(t, err)
+	assert.Empty(t, hashes)
+	assert.Equal(t, 0, batch.Hashed)
+	assert.Equal(t, 2, batch.Skipped)
+	assert.Zero(t, batch.LargestBytes)
+}
+
+// Non-regular files are COUNTED but still hashed: R3 only observes, and
+// filtering them is doc 50 Layer 1's behaviour change to make.
+func TestGetBlobHashesObservedCountsNonRegular(t *testing.T) {
+	dir := t.TempDir()
+	setupGitRepo(t, dir)
+
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "f.go"), []byte("package sub\n"), 0o644))
+
+	_, batch, _ := GetBlobHashesObserved(dir, []string{"sub"})
+	assert.Equal(t, 1, batch.NonRegular)
+}

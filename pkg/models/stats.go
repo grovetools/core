@@ -25,6 +25,13 @@ type SystemStats struct {
 	// Warnings lists active health-rule violations (R3, doc 50). Always
 	// non-nil ([] in JSON); empty until R3 wires the rules engine.
 	Warnings []HealthWarning `json:"warnings"`
+	// Budgets lists every evaluated resource-class budget (R3, doc 06),
+	// exceeded or not — the UI needs the headroom, not only the breach, and
+	// the CLI needs to show "3 budgets, 0 exceeded". Evaluation is
+	// SERVER-side so `groved stats --json`, an agent curling the socket and
+	// the inspector all read one verdict instead of three reimplementations
+	// of the thresholds. Always non-nil ([] in JSON).
+	Budgets []Budget `json:"budgets"`
 }
 
 // RuntimeStats reports the daemon's Go runtime state.
@@ -66,6 +73,28 @@ type ProcStat struct {
 	Comm   string  `json:"comm"`
 	CPUPct float64 `json:"cpu_pct"`
 	RSSKB  int64   `json:"rss_kb"`
+}
+
+// Budget is one evaluated resource-class budget (doc 06's "resource classes
+// and budgets for spawned tools"): an observed Value against a Limit in a
+// named Unit. Over-budget rows are rendered in the warn style by the
+// inspector and summarized by its warning strip ("2 budgets exceeded").
+type Budget struct {
+	// Name is the stable budget id, e.g. "daemon.heap_vs_gomemlimit".
+	Name string `json:"name"`
+	// Class is the doc 06 resource class: "daemon", "agent", "editor", "pty".
+	Class string `json:"class"`
+	// Value and Limit are in Unit: "count", "kb", "bytes" or "pct".
+	Value float64 `json:"value"`
+	Limit float64 `json:"limit"`
+	Unit  string  `json:"unit"`
+	// Exceeded is the server's verdict — clients must render this rather
+	// than recomputing Value > Limit, so a future non-linear rule (hysteresis,
+	// sustained-for-N-seconds) changes behaviour in ONE place.
+	Exceeded bool `json:"exceeded"`
+	// Offender attributes the consumption when a single item dominates
+	// (the largest agent subtree, the hottest child). May be empty.
+	Offender string `json:"offender,omitempty"`
 }
 
 // HealthWarning is one active health-rule violation (doc 50): a watched

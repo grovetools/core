@@ -33,6 +33,7 @@ func statsFixture() SystemStats {
 		},
 		Counters: map[string]float64{},
 		Warnings: []HealthWarning{},
+		Budgets:  []Budget{},
 	}
 }
 
@@ -74,7 +75,7 @@ func TestSystemStatsJSONFieldNames(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	wantTop := []string{"counters", "runtime", "sampled_at", "self", "warnings"}
+	wantTop := []string{"budgets", "counters", "runtime", "sampled_at", "self", "warnings"}
 	if got := keysOf(t, top); !reflect.DeepEqual(got, wantTop) {
 		t.Errorf("top-level keys = %v, want %v", got, wantTop)
 	}
@@ -100,6 +101,46 @@ func TestSystemStatsJSONFieldNames(t *testing.T) {
 	}
 	if string(top["warnings"]) != "[]" {
 		t.Errorf("warnings = %s, want []", top["warnings"])
+	}
+	if string(top["budgets"]) != "[]" {
+		t.Errorf("budgets = %s, want []", top["budgets"])
+	}
+}
+
+// TestBudgetJSONFieldNames pins the R3 budget shape (doc 06 resource classes).
+// Offender is omitempty; everything else — including a false Exceeded — must
+// always be present, because a client that renders "exceeded" from a missing
+// key would silently report every budget as healthy.
+func TestBudgetJSONFieldNames(t *testing.T) {
+	data, err := json.Marshal(Budget{
+		Name:  "pty.orphans",
+		Class: "pty",
+		Value: 3,
+		Limit: 0,
+		Unit:  "count",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := []string{"class", "exceeded", "limit", "name", "unit", "value"}
+	if got := keysOf(t, obj); !reflect.DeepEqual(got, want) {
+		t.Errorf("budget keys = %v, want %v", got, want)
+	}
+
+	withOffender, err := json.Marshal(Budget{Name: "n", Class: "c", Unit: "count", Offender: "nvim(900)"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var obj2 map[string]json.RawMessage
+	if err := json.Unmarshal(withOffender, &obj2); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := obj2["offender"]; !ok {
+		t.Error("offender missing when set")
 	}
 }
 

@@ -79,35 +79,83 @@ func GetBlobHash(repoPath, filePath string) (string, error) {
 // fall back. Paths are validated with the same SafeBuilder "fileName" pattern
 // GetBlobHash uses; ones that fail validation are skipped.
 func GetBlobHashes(repoPath string, paths []string) (map[string]string, error) {
+	result, _, err := GetBlobHashesObserved(repoPath, paths)
+	return result, err
+}
+
+// BlobHashBatch is the observability side-channel of a batch hash run: what
+// the batch actually fed to git, what it dropped, and how big the single
+// largest file in it was.
+//
+// It exists because the `git hash-object` storm that motivated doc 50 was
+// invisible from the outside — the daemon looked like it was doing ordinary
+// git work while one 60 GB sparse file was being re-read on every scan. The
+// os.Stat below was ALREADY being performed and its FileInfo discarded, so
+// reporting Largest*/NonRegular is free.
+//
+// GetBlobHashesObserved deliberately does NOT change behaviour: no size cap,
+// no regular-file filter. Those are doc 50 Layer 1's guardrails and belong to
+// that job; this struct is the reporting surface they will populate (Skipped
+// gains their skips, LargestBytes already names the offender).
+type BlobHashBatch struct {
+	// Hashed is how many paths were fed to git hash-object.
+	Hashed int
+	// Skipped counts paths dropped before hashing (failed validation or
+	// missing on disk). Doc 50's size/byte-budget skips will land here too.
+	Skipped int
+	// NonRegular counts paths that are not regular files (fifos, sockets,
+	// directories). They are still hashed today — the count is the evidence
+	// doc 50 Layer 1 needs to justify filtering them.
+	NonRegular int
+	// LargestBytes/LargestPath identify the biggest file in the batch.
+	LargestBytes int64
+	LargestPath  string
+}
+
+// GetBlobHashesObserved is GetBlobHashes plus a BlobHashBatch report. Callers
+// that can attribute the batch to a repository (the daemon's collector and
+// watcher) use this form so the cost of hashing is observable per repo.
+func GetBlobHashesObserved(repoPath string, paths []string) (map[string]string, BlobHashBatch, error) {
 	result := make(map[string]string)
 	cmdBuilder := command.NewSafeBuilder()
+	var batch BlobHashBatch
 
 	// Filter to paths that pass validation AND exist on disk, preserving order
 	// so the hashes read back from stdout line up with their input paths.
 	var valid []string
 	for _, p := range paths {
 		if err := cmdBuilder.Validate("fileName", p); err != nil {
+			batch.Skipped++
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(repoPath, p)); err != nil {
+		info, err := os.Stat(filepath.Join(repoPath, p))
+		if err != nil {
+			batch.Skipped++
 			continue
+		}
+		if !info.Mode().IsRegular() {
+			batch.NonRegular++
+		}
+		if info.Size() > batch.LargestBytes {
+			batch.LargestBytes, batch.LargestPath = info.Size(), p
 		}
 		valid = append(valid, p)
 	}
+	batch.Hashed = len(valid)
 	if len(valid) == 0 {
-		return result, nil
+		return result, batch, nil
 	}
 
 	cmd, err := cmdBuilder.Build(context.Background(), "git", "hash-object", "--stdin-paths")
 	if err != nil {
-		return nil, fmt.Errorf("failed to build command: %w", err)
+		return nil, batch, fmt.Errorf("failed to build command: %w", err)
 	}
 	execCmd := cmd.Exec()
 	execCmd.Dir = repoPath
 	execCmd.Stdin = strings.NewReader(strings.Join(valid, "\n") + "\n")
 	output, err := execCmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git hash-object --stdin-paths failed: %w", err)
+		return nil, batch, fmt.Errorf("git hash-object --stdin-paths failed: %w", err)
 	}
 
 	// One hash per input line, in order. Tolerate a short read (fewer lines than
@@ -122,7 +170,7 @@ func GetBlobHashes(repoPath string, paths []string) (map[string]string, error) {
 			result[p] = h
 		}
 	}
-	return result, nil
+	return result, batch, nil
 }
 
 // GetBlobContent returns the raw bytes of the git blob object identified by

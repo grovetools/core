@@ -218,3 +218,15 @@ func (s *Sample) ancestrySet(pid int) map[int]bool {
 		set[cur] = true
 	}
 }
+
+// NewSample builds a Sample from an already-parsed process table, without CPU
+// history — every pid's CPU% comes from ps's decaying pcpu (Proc.PctCPU).
+//
+// It exists because Sample's tree index is unexported (deliberately: it must
+// stay consistent with Procs), which otherwise makes the type impossible to
+// construct outside this package. Callers that already hold a proc table —
+// tests feeding synthetic fixtures, and consumers that sampled the process
+// list for their own reasons — use this instead of re-running `ps`.
+func NewSample(procs map[int]Proc, at time.Time) *Sample {
+	return (&Sampler{}).sample(procs, at)
+}
