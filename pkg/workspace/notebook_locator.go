@@ -513,22 +513,32 @@ func (l *NotebookLocator) ScanForAllNotes(provider *Provider) ([]ScannedDir, err
 // getContextNodeForPath is a helper to determine the correct context node for path rendering.
 func getContextNodeForPath(node *WorkspaceNode) *WorkspaceNode {
 	contextNode := node
-	// For worktrees, we need to use the parent project/ecosystem name
-	if node.IsWorktree() {
-		if node.Kind == KindEcosystemWorktree {
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.RootEcosystemPath),
-				Path:                node.RootEcosystemPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
-		} else if node.ParentProjectPath != "" {
-			contextNode = &WorkspaceNode{
-				Name:                filepath.Base(node.ParentProjectPath),
-				Path:                node.ParentProjectPath,
-				ParentEcosystemPath: node.ParentEcosystemPath,
-				RootEcosystemPath:   node.RootEcosystemPath,
-			}
+	switch {
+	case node.Kind == KindEcosystemWorktree:
+		contextNode = &WorkspaceNode{
+			Name:                filepath.Base(node.RootEcosystemPath),
+			Path:                node.RootEcosystemPath,
+			ParentEcosystemPath: node.ParentEcosystemPath,
+			RootEcosystemPath:   node.RootEcosystemPath,
+		}
+	case (node.Kind == KindEcosystemWorktreeSubProject || node.Kind == KindEcosystemWorktreeSubProjectWorktree) && node.RootEcosystemPath != "":
+		// Member repos inside a worktree container share the container's
+		// notebook workspace: the container's plan lives in the origin
+		// ecosystem's workspace (same rule as the KindEcosystemWorktree branch
+		// above), so resolving from a child checkout must land in the same
+		// plans dir the plan was created in — not the member repo's workspace.
+		contextNode = &WorkspaceNode{
+			Name:                filepath.Base(node.RootEcosystemPath),
+			Path:                node.RootEcosystemPath,
+			ParentEcosystemPath: node.ParentEcosystemPath,
+			RootEcosystemPath:   node.RootEcosystemPath,
+		}
+	case node.IsWorktree() && node.ParentProjectPath != "":
+		contextNode = &WorkspaceNode{
+			Name:                filepath.Base(node.ParentProjectPath),
+			Path:                node.ParentProjectPath,
+			ParentEcosystemPath: node.ParentEcosystemPath,
+			RootEcosystemPath:   node.RootEcosystemPath,
 		}
 	}
 	return contextNode

@@ -143,6 +143,10 @@
         "layout": {
           "$ref": "#/$defs/DrawerNodeConfig",
           "description": "Recursive BSP layout for the page"
+        },
+        "leader_key": {
+          "description": "Leader sub-key for this page; shadows the leader window jump on that key; none explicitly unbinds it",
+          "type": "string"
         }
       },
       "type": "object"

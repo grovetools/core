@@ -365,10 +365,15 @@ type DrawerViewsConfig struct {
 // DrawerPageConfig defines one named drawer page. A partial built-in page
 // inherits omitted fields during final resolution by the TUI host.
 type DrawerPageConfig struct {
-	Key    string            `yaml:"key,omitempty" toml:"key,omitempty" json:"key,omitempty" jsonschema:"description=Action sub-key for this page; none explicitly unbinds it"`
-	Icon   string            `yaml:"icon,omitempty" toml:"icon,omitempty" json:"icon,omitempty" jsonschema:"description=Named icon used for the page"`
-	Layout *DrawerNodeConfig `yaml:"layout,omitempty" toml:"layout,omitempty" json:"layout,omitempty" jsonschema:"description=Recursive BSP layout for the page"`
-	Delete bool              `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
+	Key string `yaml:"key,omitempty" toml:"key,omitempty" json:"key,omitempty" jsonschema:"description=Action sub-key for this page; none explicitly unbinds it"`
+	// LeaderKey binds this page under the LEADER chord instead of the action
+	// chord. It is unset by default because the leader digits 1-9 already jump
+	// to the Nth window (tmux-style); binding one here deliberately shadows that
+	// jump for that digit, which is why it must be opted into per page.
+	LeaderKey string            `yaml:"leader_key,omitempty" toml:"leader_key,omitempty" json:"leader_key,omitempty" jsonschema:"description=Leader sub-key for this page; shadows the leader window jump on that key; none explicitly unbinds it"`
+	Icon      string            `yaml:"icon,omitempty" toml:"icon,omitempty" json:"icon,omitempty" jsonschema:"description=Named icon used for the page"`
+	Layout    *DrawerNodeConfig `yaml:"layout,omitempty" toml:"layout,omitempty" json:"layout,omitempty" jsonschema:"description=Recursive BSP layout for the page"`
+	Delete    bool              `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
 }
 
 // DrawerNodeConfig is either a Pane leaf or a split with First and Second
