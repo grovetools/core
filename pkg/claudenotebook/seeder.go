@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/grovetools/core/pkg/exectrust"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/util/pathutil"
 )
@@ -483,9 +484,29 @@ type protectedPath struct {
 // a deny rule for a path that doesn't exist yet simply blocks creating it there.
 var configFileNames = []string{"grove.toml", "grove.yml", "grove.yaml"}
 
+// execTrustProtectedPaths returns the exec-provenance trust store's paths, which
+// the self-protection toggle must lock alongside the config files themselves.
+//
+// The trust store is what decides whether the gate honors a workspace's
+// exec-bearing and capability-granting config, so an agent that can write it can
+// self-trust its own repo and re-open everything protectConfig just closed —
+// leaving the store less protected than the config it gates. All three paths are
+// covered, not just the final one: exectrust.Store.Save writes a sibling .tmp and
+// renames it, so denying only the final path leaves a write-tmp-then-rename route
+// open. The store additionally MACs its entries (core/pkg/exectrust), so these
+// rules are the outer of two layers, not the only one.
+func execTrustProtectedPaths() []string {
+	store := exectrust.StorePath()
+	if store == "" {
+		return nil
+	}
+	return []string{store, store + ".tmp", exectrust.KeyPath()}
+}
+
 // protectedConfigPaths returns the canonicalized set of config paths the
-// self-protection toggle locks: the global grove config dir, the worktree-root
-// grove config files, and each member repo's grove config files. The worktree
+// self-protection toggle locks: the global grove config dir, the exec-trust
+// store that gates that config, the worktree-root grove config files, and each
+// member repo's grove config files. The worktree
 // root is canonicalized once (resolving symlinks + macOS case) and the config
 // filenames joined onto it, so the rules match the path Claude actually compares
 // against even for files that don't exist yet (CanonicalPath of a non-existent
@@ -515,6 +536,13 @@ func protectedConfigPaths(worktreePath string, repos []string) []protectedPath {
 		} else {
 			add(cfgDir, true)
 		}
+	}
+
+	// The exec-provenance trust store, its rename staging file, and its MAC
+	// key. Exact file paths (not the whole state dir, which holds sockets,
+	// logs and DBs an agent legitimately writes through the grove CLIs).
+	for _, p := range execTrustProtectedPaths() {
+		add(p, false)
 	}
 
 	// Canonical worktree root prefix; fall back to the raw path if it can't be

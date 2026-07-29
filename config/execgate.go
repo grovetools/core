@@ -25,12 +25,14 @@ import (
 // execution.
 //
 // This file is the single choke point that stops that. Every field whose
-// value is executed is declared in execFields below; on load, values reaching
-// the merged config from a repo-controlled layer are quarantined (stripped
-// before merge) unless the user has explicitly trusted that config file via
-// `grove config trust`. Values from user-controlled layers — the global
-// config, ~/.config/grove fragments and plugins, the global override, and the
-// GROVE_CONFIG_OVERLAY — are always honored: the user owns those files.
+// value is executed — or whose value hands an agent the capability to execute,
+// see RiskCapability — is declared in execFields below; on load, values
+// reaching the merged config from a repo-controlled layer are quarantined
+// (stripped before merge) unless the user has explicitly trusted that config
+// file via `grove config trust`. Values from user-controlled layers — the
+// global config, ~/.config/grove fragments and plugins, the global override,
+// and the GROVE_CONFIG_OVERLAY — are always honored: the user owns those
+// files.
 //
 // Every consumer benefits without changing: the value never reaches the
 // merged Config the consumer reads.
@@ -46,13 +48,29 @@ const (
 	// the default policy quarantines these from untrusted layers.
 	RiskImplicit ExecRisk = "implicit"
 	// RiskExplicit: the command runs only because the user invoked the verb
-	// that runs it (`grove build`, `grove env up`, `grove satellite up`). A
-	// malicious value still executes, but the user chose to run the repo's
-	// build. The default policy warns rather than strips, because
-	// build_cmd/commands are the overwhelmingly common workspace keys and
-	// stripping them by default would break every existing repo. Set
+	// that runs it (`grove build`, `grove env up`, `grove satellite up`) IN
+	// the workspace that declares it. A malicious value still executes, but
+	// the user chose to run that repo's build. The default policy warns rather
+	// than strips, because build_cmd is the overwhelmingly common workspace
+	// key and stripping it by default would break every existing repo. Set
 	// [security] exec_trust = "strict" to gate these too.
+	//
+	// The carve-out only holds for keys a single-workspace verb reads. A key
+	// the ECOSYSTEM verbs fan out over — `grove check`/`grove <verb>` load
+	// every discovered workspace's config and run its command — is implicit
+	// risk, not explicit: the user never entered those repos. See the note on
+	// the `commands` registry entry.
 	RiskExplicit ExecRisk = "explicit"
+	// RiskCapability: the value is not itself a command, but propagating it
+	// grants an agent running in the workspace the capability to execute —
+	// Claude Code permission rules, the sandbox boundary, the auto-approval
+	// classifier, folder-trust. A repo that can write `permissions.allow =
+	// ["Bash(*)"]` and `sandbox.enabled = false` into the worktree's
+	// .claude/settings.local.json has code execution one session later, so
+	// this is gated exactly as aggressively as RiskImplicit. It is a class of
+	// its own only so the report and the warning describe it truthfully
+	// (nothing here is a command the user can read as one).
+	RiskCapability ExecRisk = "capability"
 )
 
 // ExecTrustMode is the enforcement policy, from [security] exec_trust (read
@@ -61,8 +79,8 @@ const (
 type ExecTrustMode string
 
 const (
-	// ExecTrustModeDefault quarantines implicit-risk exec values from
-	// untrusted layers and warns about explicit-risk ones. The default.
+	// ExecTrustModeDefault quarantines implicit- and capability-risk values
+	// from untrusted layers and warns about explicit-risk ones. The default.
 	ExecTrustModeDefault ExecTrustMode = "default"
 	// ExecTrustModeStrict quarantines every exec value from untrusted layers.
 	ExecTrustModeStrict ExecTrustMode = "strict"
@@ -151,9 +169,19 @@ var execFields = []ExecField{
 		Path: "build_cmd", Risk: RiskExplicit, Consumer: "grove build",
 		Description: "command run by the build orchestrator",
 	},
+	// `commands` is IMPLICIT, not explicit, even though a verb runs it. The
+	// ecosystem verbs fan out: grove/cmd/check.go and grove/cmd/task_runner.go
+	// discover EVERY workspace, config.LoadFrom each, and ResolveCommand the
+	// verb — which reads commands[verb] first. So one `grove check` at the
+	// ecosystem root runs `commands.check` out of a repo the user cloned but
+	// never entered, and flow's plan-finish path runs `grove build` with no
+	// human in the loop at all. "The user opted in by running the command"
+	// does not hold for a workspace the user never chose. build_cmd stays
+	// explicit: it is the single-repo `make build` fallback, not an arbitrary
+	// per-verb override.
 	{
-		Path: "commands", Risk: RiskExplicit, Consumer: "grove orchestrator",
-		Description: "per-verb command overrides run by grove <verb>",
+		Path: "commands", Risk: RiskImplicit, Consumer: "grove orchestrator",
+		Description: "per-verb command overrides run by grove <verb> across every discovered workspace",
 	},
 	{
 		Path: "environment.provider", Risk: RiskExplicit, Consumer: "grove env",
@@ -221,6 +249,28 @@ var execFields = []ExecField{
 	},
 
 	// --- extension namespaces ----------------------------------------------
+	// [claude] is gated as ONE unit rather than key by key. The block is
+	// propagated wholesale into every worktree's .claude/settings.local.json
+	// (core/pkg/workspace/claude_notebook.go ResolveClaudeConfigForWorktree ->
+	// core/pkg/claudenotebook.SeedSettings), and almost every key in it is
+	// capability-bearing in one direction or the other: permissions.allow and
+	// autoMode grant tool use, sandbox.* sets the OS boundary, enabledPlugins
+	// loads code, protectConfig=false STRIPS grove's own self-protection deny
+	// rules, manageTrust arms folder-trust seeding into ~/.claude.json, and
+	// inherit=false lets a member repo replace the root's arrays wholesale
+	// instead of unioning with them. Naming sub-keys would leave every key
+	// added later ungated by default, and a partial strip could drop a
+	// protective key while keeping a permissive one. One coarse unit also
+	// means the trust digest covers the whole block, so any edit re-closes
+	// the gate.
+	//
+	// The resolver reaches this through config.LoadFrom, so gating here is
+	// what gates the seeder AND the manageTrust path — one trust source
+	// (pkg/exectrust), no second store.
+	{
+		Path: "claude", Risk: RiskCapability, Consumer: "grove worktree seeder",
+		Description: "Claude Code permissions, sandbox boundary, auto-approval rules and folder-trust propagated into .claude/settings.local.json",
+	},
 	{
 		Path: "keys.tmux.popups.*", Risk: RiskImplicit, Consumer: "grove keys",
 		Description: "command bound to a tmux popup keybinding",
@@ -384,7 +434,7 @@ func (m ExecTrustMode) stripsRisk(risk ExecRisk) bool {
 	case ExecTrustModeStrict:
 		return true
 	case ExecTrustModeDefault:
-		return risk == RiskImplicit
+		return risk == RiskImplicit || risk == RiskCapability
 	default: // warn, off
 		return false
 	}
@@ -556,7 +606,7 @@ func warnExecGate(report *ExecGateReport, logger *logrus.Logger) {
 				"key":   f.Key,
 				"file":  f.File,
 				"layer": string(f.Layer),
-			}).Warnf("exec-bearing config from an untrusted layer is being honored (exec_trust=warn): %s", logLine(f.Value))
+			}).Warnf("%s config from an untrusted layer is being honored (exec_trust=warn): %s", riskNoun(f.Risk), logLine(f.Value))
 		}
 		return
 	}
@@ -567,10 +617,19 @@ func warnExecGate(report *ExecGateReport, logger *logrus.Logger) {
 			"file":     f.File,
 			"layer":    string(f.Layer),
 			"consumer": f.Consumer,
-		}).Warnf("ignored exec-bearing config from an untrusted workspace: %s = %s", f.Key, logLine(f.Value))
+		}).Warnf("ignored %s config from an untrusted workspace: %s = %s", riskNoun(f.Risk), f.Key, logLine(f.Value))
 	}
-	logger.Warnf("%d exec-bearing config value(s) were ignored because the workspace is not trusted. "+
+	logger.Warnf("%d exec-bearing or capability-granting config value(s) were ignored because the workspace is not trusted. "+
 		"Review them with `grove config trust`, and allow them with `grove config trust --yes`.", len(quarantined))
+}
+
+// riskNoun names what a finding's risk class actually is, so the warning does
+// not call a Claude Code permission block a command the user can go read.
+func riskNoun(risk ExecRisk) string {
+	if risk == RiskCapability {
+		return "capability-granting"
+	}
+	return "exec-bearing"
 }
 
 // execWalker resolves one ExecField path against a *Config (including its

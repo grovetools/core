@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/grovetools/core/pkg/claudenotebook"
+	"github.com/grovetools/core/pkg/exectrust"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/util/pathutil"
 )
@@ -1225,6 +1226,10 @@ func protectionExpectation(t *testing.T, wt string, repos []string) (denyWrite [
 		}
 		pths = append(pths, pp{canon, true})
 	}
+	// The exec-provenance trust store, its rename staging file, and its key.
+	if store := exectrust.StorePath(); store != "" {
+		pths = append(pths, pp{store, false}, pp{store + ".tmp", false}, pp{exectrust.KeyPath(), false})
+	}
 	canonWt := wt
 	if canon, err := pathutil.CanonicalPath(wt); err == nil {
 		canonWt = canon
@@ -1806,4 +1811,54 @@ func TestSeedSettings_EnabledPluginsMergesPerKey(t *testing.T) {
 	assert.True(t, boolAt(t, root, "enabledPlugins", "user@plug"), "user entry preserved")
 	assert.True(t, boolAt(t, root, "enabledPlugins", "acme@shared"), "grove.toml wins per key")
 	assert.True(t, boolAt(t, root, "enabledPlugins", "grove@plug"), "grove entry added")
+}
+
+// TestSeedSettings_ProtectConfig_CoversTheExecTrustStore is F4's outer layer:
+// the exec-provenance trust store decides whether the gate honors a workspace's
+// exec-bearing config, so protectConfig must lock it at least as tightly as the
+// grove.toml it gates. All three paths are covered — the store, the .tmp
+// exectrust.Store.Save stages the rename through, and the MAC key — because a
+// deny rule on the final path alone leaves a write-tmp-then-rename route open.
+func TestSeedSettings_ProtectConfig_CoversTheExecTrustStore(t *testing.T) {
+	stateDir := t.TempDir()
+	storePath := filepath.Join(stateDir, "exec-trust.json")
+	t.Setenv(exectrust.EnvStorePath, storePath)
+
+	wt := t.TempDir()
+	cfg := &claudenotebook.ClaudeConfig{
+		ProtectConfig: boolPtr(true),
+		Sandbox:       claudenotebook.ClaudeSandbox{Enabled: boolPtr(true)},
+	}
+	require.NoError(t, claudenotebook.SeedSettings(wt, nil, cfg, nil))
+
+	root := readSettings(t, wt)
+	gotDenyWrite := denyWriteAt(t, root)
+	gotDeny := permDeny(t, root)
+
+	for _, p := range []string{storePath, storePath + ".tmp", filepath.Join(stateDir, "exec-trust.key")} {
+		assert.Contains(t, gotDenyWrite, p, "sandbox denyWrite must cover the exec-trust store path %s", p)
+		anchored := "//" + strings.TrimPrefix(filepath.ToSlash(p), "/")
+		for _, verb := range []string{"Edit", "Write", "MultiEdit"} {
+			assert.Contains(t, gotDeny, verb+"("+anchored+")",
+				"permissions.deny must cover the exec-trust store path %s", p)
+		}
+	}
+	assertNoTmpLeak(t, wt)
+}
+
+// TestExecTrustStoreLivesOutsideEveryWorkspace pins the location half of F4:
+// the store resolves under the XDG state dir, never inside a workspace or
+// worktree where a resident process could reach it by relative path.
+func TestExecTrustStoreLivesOutsideEveryWorkspace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(exectrust.EnvStorePath, "")
+	t.Setenv("GROVE_HOME", "")
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".state"))
+
+	store := exectrust.StorePath()
+	require.NotEmpty(t, store, "the trust store must resolve from the XDG state dir")
+	assert.True(t, strings.HasPrefix(store, filepath.Join(home, ".state")),
+		"the trust store must live under the state dir, got %s", store)
+	assert.Equal(t, filepath.Dir(store), filepath.Dir(exectrust.KeyPath()),
+		"the MAC key must live beside the store, not inside a workspace")
 }

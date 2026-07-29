@@ -127,6 +127,15 @@ func SeedNotebookDirsForWorktree(worktreePath string, repos []string, provider *
 // worktree layer, so a global [claude] preference (e.g. manageTrust=true)
 // reaches this resolved profile without any extra load.
 //
+// PROVENANCE. Every load here goes through config.LoadFrom, which means the
+// exec-provenance gate has already run: a [claude] block reaching this resolver
+// from a repo-controlled layer was stripped unless the user trusted that file
+// via `grove config trust` (core/config/execgate.go declares `claude` as
+// RiskCapability). That is deliberate and is the ONLY trust source on this
+// path — the settings seeder and the manageTrust folder-trust path both read
+// what this returns, so neither needs (nor may keep) a trust store of its own.
+// A user-layer [claude] is never gated: the user owns those files.
+//
 // Errors are swallowed to nil the same way the seed path historically did: a
 // nil result (no readable config) must degrade callers to "disabled", never to
 // a panic or an accidental enable.
