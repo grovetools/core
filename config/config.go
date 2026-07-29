@@ -644,7 +644,15 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 					continue
 				}
 
-				gate.apply(overrideConfig, SourceOverride, overridePath)
+				// Only gate when these are the REPO's override files. Under
+				// isGlobalFallback, projectDir is the global config dir, so
+				// projectOverrideFiles() resolves to ~/.config/grove/grove.override.*
+				// — a user-controlled file already merged ungated above. Gating
+				// it here would quarantine the user's own hooks/plugins and warn
+				// about their own config.
+				if !isGlobalFallback {
+					gate.apply(overrideConfig, SourceOverride, overridePath)
+				}
 				finalConfig = mergeConfigs(finalConfig, overrideConfig)
 			}
 		}
@@ -1281,6 +1289,12 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		projectPath = "" // No project file found, proceed without it.
 	}
 
+	// FindConfigFile falls through to the XDG global config when no project
+	// config exists anywhere above startDir. That file is user-controlled and
+	// already loaded as the Global layer, so it must not be gated as if it
+	// were a repo's grove.toml — mirrors LoadFromWithLogger's isGlobalFallback.
+	isGlobalFallback := projectPath != "" && globalPath != "" && projectPath == globalPath
+
 	if projectPath != "" {
 		projectData, err := os.ReadFile(projectPath)
 		if err != nil {
@@ -1291,7 +1305,9 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		if parseErr != nil {
 			return nil, errors.Wrap(parseErr, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
 		}
-		gate.apply(projectConfig, SourceProject, projectPath)
+		if !isGlobalFallback {
+			gate.apply(projectConfig, SourceProject, projectPath)
+		}
 		layeredConfig.Project = projectConfig
 		layeredConfig.FilePaths[SourceProject] = projectPath
 
@@ -1378,7 +1394,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 				expandedOverride := expandEnvVars(string(overrideData))
 				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expandedOverride))
 				if parseErr == nil {
-					gate.apply(overrideConfig, SourceOverride, overridePath)
+					// Under isGlobalFallback these resolve to the user's own
+					// ~/.config/grove/grove.override.* — never gate those.
+					if !isGlobalFallback {
+						gate.apply(overrideConfig, SourceOverride, overridePath)
+					}
 					layeredConfig.Overrides = append(layeredConfig.Overrides, OverrideSource{
 						Path:   overridePath,
 						Config: overrideConfig,

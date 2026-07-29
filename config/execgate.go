@@ -181,11 +181,53 @@ var execFields = []ExecField{
 		Path: "environments.*.commands", Risk: RiskExplicit, Consumer: "grove env",
 		Description: "named commands run in the environment (startup=true auto-runs)",
 	},
+	// [environment.config] is the provider-specific blob, forwarded verbatim
+	// to groved as EnvRequest.Config. The daemon shells out to several of its
+	// sub-tables (daemon/internal/daemon/env/{local_services,lifecycle,docker,
+	// native,terraform}.go), so they need naming here even though the parent
+	// `config` table also carries inert keys (path, vars, compose_file) that
+	// must keep flowing.
+	{
+		Path: "environment.config.services.*", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "process the environment starts (command, volume restore command, post-start hook)",
+	},
+	{
+		Path: "environment.config.lifecycle", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "environment lifecycle hook (pre_stop) run on teardown",
+	},
+	{
+		Path: "environment.config.images.*", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "image build command run when the environment's image is stale",
+	},
+	{
+		Path: "environment.config.tunnels.*", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "tunnel command run when the environment comes up",
+	},
+	{
+		Path: "environments.*.config.services.*", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "process the environment starts (command, volume restore command, post-start hook)",
+	},
+	{
+		Path: "environments.*.config.lifecycle", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "environment lifecycle hook (pre_stop) run on teardown",
+	},
+	{
+		Path: "environments.*.config.images.*", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "image build command run when the environment's image is stale",
+	},
+	{
+		Path: "environments.*.config.tunnels.*", Risk: RiskExplicit, Consumer: "groved env",
+		Description: "tunnel command run when the environment comes up",
+	},
 
 	// --- extension namespaces ----------------------------------------------
 	{
 		Path: "keys.tmux.popups.*", Risk: RiskImplicit, Consumer: "grove keys",
 		Description: "command bound to a tmux popup keybinding",
+	},
+	{
+		Path: "keys.tmux.bindings", Risk: RiskImplicit, Consumer: "grove keys",
+		Description: "generic tmux bindings written into the user's tmux config (run-shell reaches a shell)",
 	},
 	{
 		Path: "keys.shell.bindings", Risk: RiskImplicit, Consumer: "grove keys",
