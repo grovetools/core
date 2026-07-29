@@ -128,6 +128,57 @@ adding or removing an entry takes effect without resetting the layout.
   cwd = "~/src/grove"
 ```
 
+## Security: the exec-config trust gate
+
+Grove's config cascade merges `grove.toml` files that come out of cloned
+repositories — the ecosystem, project-notebook, project, and project-local
+override layers. Several config keys carry shell commands grove or one of its
+satellites executes, so honoring those unconditionally would mean that cloning
+a repository and starting an agent session inside it is enough to give the
+repo's author code execution on your machine.
+
+Grove gates them by **provenance**. Values from layers you control are always
+honored: `~/.config/grove/grove.toml`, its `*.toml` fragments,
+`~/.config/grove/plugins/*.toml`, the global override, and
+`GROVE_CONFIG_OVERLAY`. Values from repo-controlled layers are quarantined —
+stripped before the merge, so no consumer ever sees them — until you trust
+that config file.
+
+Exec-bearing keys are classified by how their command comes to run:
+
+| Risk | Keys | Default policy |
+| :--- | :--- | :--- |
+| **implicit** — runs without you asking | `[[hooks.on_stop]]`, `[[daemon.hooks.on_skill_sync]]`, `[tui.plugins.*]`, `[tui.panels]` `command`, `[tui.panels.bindings.*]`, `[keys.tmux.popups.*]`, `[keys.shell] bindings`, `[keys.nvim.bindings.*] command`, `<provider>.api_key_command`, `[notifications.home_assistant]` `token_command`/`webhook_secret_command`, `notebooks.definitions.*.sync.token_command` | quarantined |
+| **explicit** — runs because you invoked the verb | `build_cmd`, `commands`, `[environment]`/`[environments.*]` `provider`/`command`/`commands`, `satellites.*.provision.gh_token_cmd`/`claude_token_cmd` | reported, honored |
+
+Review and trust a workspace with:
+
+```bash
+grove config trust           # show exactly what would be enabled
+grove config trust --yes     # trust the config files in scope
+grove config trust --revoke  # withdraw trust
+grove config trust --list    # list every trusted config file
+```
+
+Trust is recorded per config **file** together with a digest of the exec
+values you reviewed (`~/.local/state/grove/exec-trust.json`). If the repo
+later adds or edits a command, the digest no longer matches and the gate
+re-closes — you are asked about the new content rather than inheriting a
+decision you made about different content.
+
+| Property | Description |
+| :--- | :--- |
+| `security.exec_trust` | (string, optional, default: `default`) <br> Enforcement policy. `default` quarantines implicit-risk values from untrusted layers and reports explicit-risk ones. `strict` quarantines every exec-bearing value from untrusted layers. `warn` never strips and only reports. `off` disables the gate entirely. Overridden by the `GROVE_EXEC_TRUST` environment variable. |
+
+```toml
+[security]
+exec_trust = "strict"
+```
+
+`security.exec_trust` is only ever read from the layers you control — a
+workspace `grove.toml` setting `exec_trust = "off"` is inert, because
+otherwise the hostile file could disable the gate that contains it.
+
 ## Notebook Options
 
 These settings configure the `notebook` extension, typically found in `grove.yml` or a dedicated notebook configuration file. They control how and where notes, plans, and other documentation artifacts are stored and generated.

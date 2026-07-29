@@ -153,6 +153,7 @@ var coreConfigKeys = map[string]bool{
 	"test_scopes":       true,
 	"worktree":          true,
 	"onboarding":        true,
+	"security":          true,
 	"_grove":            true, // Meta section for config metadata (priority, etc.)
 }
 
@@ -511,6 +512,14 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 	}
 
+	// Everything merged so far comes from user-controlled files: the global
+	// config, its fragments and plugin manifests, the global override, and
+	// the GROVE_CONFIG_OVERLAY. Snapshot it before any repo-controlled layer
+	// lands so the exec-trust policy is read from the user's own config only
+	// — a workspace grove.toml must not be able to set exec_trust = "off"
+	// and disable the gate that contains it.
+	gate := newExecGateRun(finalConfig, logger)
+
 	// Detect when FindConfigFile fell through to the global config (no local project config).
 	// In this case, skip loading it again as the "project" layer — it's already loaded as global.
 	isGlobalFallback := projectPath != "" && globalPath != "" && projectPath == globalPath
@@ -543,6 +552,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 					expandedEco := expandEnvVars(string(ecosystemData))
 					ecosystemConfig, ecoParseErr := unmarshalConfig(ecosystemPath, []byte(expandedEco))
 					if ecoParseErr == nil {
+						gate.apply(ecosystemConfig, SourceEcosystem, ecosystemPath)
 						// Merge ecosystem config after global but before project
 						if finalConfig == nil {
 							finalConfig = ecosystemConfig
@@ -587,6 +597,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
 				if parseErr == nil {
 					stripGroveMeta(nbConfig)
+					gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
 					if finalConfig == nil {
 						finalConfig = nbConfig
 					} else {
@@ -599,6 +610,10 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 
 		if !isGlobalFallback {
+			// The project layer is the repo's own grove.toml — the layer the
+			// gate exists for. (When isGlobalFallback is set, projectPath IS
+			// the global config, which is user-controlled and already merged.)
+			gate.apply(projectConfig, SourceProject, projectPath)
 			if finalConfig == nil {
 				finalConfig = projectConfig
 			} else {
@@ -629,6 +644,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 					continue
 				}
 
+				gate.apply(overrideConfig, SourceOverride, overridePath)
 				finalConfig = mergeConfigs(finalConfig, overrideConfig)
 			}
 		}
@@ -649,6 +665,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
 				if parseErr == nil {
 					stripGroveMeta(nbConfig)
+					gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
 					finalConfig = mergeConfigs(finalConfig, nbConfig)
 				} else {
 					logger.WithError(parseErr).Warn("Failed to parse project notebook config, skipping")
@@ -666,6 +683,12 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 
 	// Set defaults
 	finalConfig.SetDefaults()
+
+	// Attach the exec-provenance report AFTER all merging: mergeConfigs
+	// rebuilds the config from declared fields and would drop it otherwise.
+	// Warn loudly about anything the gate ignored.
+	finalConfig.ExecGate = gate.report()
+	warnExecGate(finalConfig.ExecGate, logger)
 
 	// Warn-only schema check over the merged config. Never fatal — see
 	// validateAndWarn. This is the report F2 called for: the "real" load path
@@ -1240,6 +1263,14 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 	}
 
+	// The exec-provenance gate, driven exactly as in LoadFromWithLogger: the
+	// policy comes from the user-controlled layers loaded above, never from
+	// the repo-controlled layers it is about to gate. LoadLayered keeps the
+	// RAW per-layer configs for analysis, so the quarantine must happen here
+	// too — otherwise `grove config` would display values the real loader
+	// dropped.
+	gate := newExecGateRun(userLayerConfig(layeredConfig), logger)
+
 	// 3. Load Project layer (optional)
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
@@ -1260,6 +1291,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		if parseErr != nil {
 			return nil, errors.Wrap(parseErr, errors.ErrCodeConfigInvalid, "failed to parse project config").WithDetail("path", projectPath)
 		}
+		gate.apply(projectConfig, SourceProject, projectPath)
 		layeredConfig.Project = projectConfig
 		layeredConfig.FilePaths[SourceProject] = projectPath
 
@@ -1272,6 +1304,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 					expandedEco := expandEnvVars(string(ecosystemData))
 					ecosystemConfig, ecoParseErr := unmarshalConfig(ecosystemPath, []byte(expandedEco))
 					if ecoParseErr == nil {
+						gate.apply(ecosystemConfig, SourceEcosystem, ecosystemPath)
 						layeredConfig.Ecosystem = ecosystemConfig
 						layeredConfig.FilePaths[SourceEcosystem] = ecosystemPath
 					}
@@ -1325,6 +1358,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
 			if parseErr == nil {
 				stripGroveMeta(nbConfig)
+				gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
 				layeredConfig.ProjectNotebook = nbConfig
 				layeredConfig.FilePaths[SourceProjectNotebook] = notebookConfigPath
 			}
@@ -1344,6 +1378,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 				expandedOverride := expandEnvVars(string(overrideData))
 				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expandedOverride))
 				if parseErr == nil {
+					gate.apply(overrideConfig, SourceOverride, overridePath)
 					layeredConfig.Overrides = append(layeredConfig.Overrides, OverrideSource{
 						Path:   overridePath,
 						Config: overrideConfig,
@@ -1401,6 +1436,9 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 
 	// Set defaults for the final merged config
 	finalConfig.SetDefaults()
+
+	finalConfig.ExecGate = gate.report()
+	warnExecGate(finalConfig.ExecGate, logger)
 
 	layeredConfig.Final = finalConfig
 

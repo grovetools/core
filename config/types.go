@@ -868,8 +868,36 @@ type Config struct {
 
 	Onboarding *OnboardingConfig `yaml:"onboarding,omitempty" toml:"onboarding,omitempty" jsonschema:"description=First-run onboarding progress (completed marker + resume step)"`
 
+	Security *SecurityConfig `yaml:"security,omitempty" toml:"security,omitempty" jsonschema:"description=Security policy (exec-bearing config trust gate)"`
+
 	// Extensions captures all other top-level keys for extensibility.
 	Extensions map[string]interface{} `yaml:",inline" toml:"-" jsonschema:"-"`
+
+	// ExecGate reports what the exec-provenance gate did during this load:
+	// which repo-controlled layer files carried exec-bearing config, whether
+	// they are trusted, and what was quarantined. Populated by the loaders
+	// (LoadFrom*/LoadLayered) after merging; nil for configs built any other
+	// way. Never read from or written to a config file — see execgate.go.
+	ExecGate *ExecGateReport `yaml:"-" toml:"-" json:"-" jsonschema:"-"`
+}
+
+// SecurityConfig holds grove's security policy. It is only ever honored from
+// user-controlled layers (global config, ~/.config/grove fragments, global
+// override, GROVE_CONFIG_OVERLAY) — a workspace grove.toml setting
+// exec_trust = "off" would otherwise disable the gate that exists to contain
+// that very file.
+type SecurityConfig struct {
+	// ExecTrust selects the exec-provenance enforcement policy:
+	//
+	//   default  quarantine implicit-exec values (hooks, plugin panels, panel
+	//            keybindings, key-resolution commands) from untrusted layers;
+	//            warn about user-invoked ones (build_cmd, commands, env)
+	//   strict   quarantine every exec-bearing value from untrusted layers
+	//   warn     never strip; report only
+	//   off      disable the gate entirely
+	//
+	// Overridden by the GROVE_EXEC_TRUST environment variable.
+	ExecTrust string `yaml:"exec_trust,omitempty" toml:"exec_trust,omitempty" jsonschema:"description=Exec-provenance gate policy for config from untrusted (repo-controlled) layers,enum=default,enum=strict,enum=warn,enum=off,default=default" jsonschema_extras:"x-layer=global,x-priority=95"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling to handle backward compatibility
@@ -894,6 +922,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty"`
 		Worktree         *WorktreeConfig               `yaml:"worktree,omitempty"`
 		Onboarding       *OnboardingConfig             `yaml:"onboarding,omitempty"`
+		Security         *SecurityConfig               `yaml:"security,omitempty"`
 		Extensions       map[string]interface{}        `yaml:",inline"`
 
 		// --- Legacy Fields for Backward Compatibility ---
@@ -925,6 +954,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.TestScopes = raw.TestScopes
 	c.Worktree = raw.Worktree
 	c.Onboarding = raw.Onboarding
+	c.Security = raw.Security
 	c.Extensions = raw.Extensions
 
 	// Handle backward compatibility for `search_paths` -> `groves`

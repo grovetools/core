@@ -466,6 +466,18 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge security policy. Only user-controlled layers ever reach this
+	// merge with a meaningful value — execTrustMode reads the knob from the
+	// user-layer merge specifically, so a workspace setting it is inert.
+	if override.Security != nil {
+		if result.Security == nil {
+			result.Security = &SecurityConfig{}
+		}
+		if override.Security.ExecTrust != "" {
+			result.Security.ExecTrust = override.Security.ExecTrust
+		}
+	}
+
 	// Merge TUI configuration
 	if override.TUI != nil {
 		if result.TUI == nil {

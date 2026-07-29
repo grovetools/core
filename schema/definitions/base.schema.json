@@ -978,6 +978,25 @@
       ],
       "type": "object"
     },
+    "SecurityConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "exec_trust": {
+          "default": "default",
+          "description": "Exec-provenance gate policy for config from untrusted (repo-controlled) layers",
+          "enum": [
+            "default",
+            "strict",
+            "warn",
+            "off"
+          ],
+          "type": "string",
+          "x-layer": "global",
+          "x-priority": "95"
+        }
+      },
+      "type": "object"
+    },
     "SyncConfig": {
       "description": "Sync configuration: typed object (server/token/workspaces) or legacy provider list"
     },
@@ -1390,6 +1409,12 @@
       "x-status-replaced-by": "groves",
       "x-status-since": "v0.5.0",
       "x-status-target": "v1.0.0"
+    },
+    "security": {
+      "$ref": "#/$defs/SecurityConfig",
+      "description": "Security policy (exec-bearing config trust gate)",
+      "x-layer": "global",
+      "x-priority": "95"
     },
     "test_scopes": {
       "description": "Smart test triggering scopes",
