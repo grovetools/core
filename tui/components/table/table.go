@@ -214,6 +214,29 @@ type SelectableTableOptions struct {
 	BorderColor     lipgloss.TerminalColor // Border color override (nil uses default)
 }
 
+// RenderedWidth returns the width SelectableTableWithOptions draws for these
+// columns, given each header's measured cell width: the cells, a space of
+// padding either side of each, the │ separators between them, the rounded
+// border, and the two-column selection gutter the table prepends.
+//
+// Callers that drop columns to fit a pane measure against this rather than
+// re-deriving the arithmetic: the formula belongs next to the renderer it
+// describes, or the two drift and the table overflows its pane.
+func RenderedWidth(headers []string, widths map[string]int) int {
+	if len(headers) == 0 {
+		return 0
+	}
+	total := 0
+	for _, h := range headers {
+		total += widths[h]
+	}
+	total += len(headers) * 2 // cell padding, one space each side
+	total += len(headers) - 1 // │ separators
+	total += 2                // left + right border
+	total += 2                // selection gutter
+	return total
+}
+
 // SelectableTableWithOptions creates a table with custom highlighting options
 func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex int, opts SelectableTableOptions) string {
 	t := theme.DefaultTheme
