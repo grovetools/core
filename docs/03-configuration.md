@@ -128,6 +128,54 @@ adding or removing an entry takes effect without resetting the layout.
   cwd = "~/src/grove"
 ```
 
+### Daemon event hooks
+
+`[[daemon.hooks.on_event]]` runs a shell command when the daemon broadcasts a
+matching lifecycle event — a job finishing, a note changing, a build
+completing. It is the exec-side subscription to the same event bus
+`/api/stream` exposes; for the full event vocabulary and the streaming
+alternative, see the daemon's
+[Reacting to grove events](../../daemon/docs/reacting-to-grove-events.md)
+guide.
+
+| Property | Description |
+| :--- | :--- |
+| `events` | (array of strings, required) <br> Event types that trigger the hook. Glob patterns are allowed, so `job_*` catches the whole job lifecycle. An empty list never fires. |
+| `filter` | (string, optional) <br> Narrows matches by event field. Terms are `field=glob` pairs, ANDed: `workspace=grove*`, `plan=extensib* status=failed`. Known fields are `workspace`, `plan`, `job_id`, `status`, `source`, `origin`. A bare term with no `=` is a substring match against workspace, plan and job id. |
+| `name` | (string, optional) <br> Label used in logs and as the dedupe/cancel key. Defaults to the command. |
+| `command` | (string, required) <br> Shell command, run via `sh -c`. |
+| `timeout` | (integer, optional, default: 30) <br> Seconds before the hook is killed. |
+| `cancel_previous` | (boolean, optional, default: false) <br> SIGTERM an in-flight run of the same hook when a new event fires, instead of running both. |
+| `disable_env` | (string, optional) <br> Skip the hook while the named environment variable is non-empty. |
+| `enable_env` | (string, optional) <br> Skip the hook unless the named environment variable is non-empty. |
+
+`run_if` is a skill-sync concept and is ignored here: an event already asserts
+that something changed.
+
+The event arrives two ways — as JSON on the hook's stdin, and as `GROVE_*`
+environment variables (`GROVE_EVENT_TYPE`, `GROVE_EVENT_SEQ`,
+`GROVE_EVENT_SOURCE`, `GROVE_JOB_ID`, `GROVE_WORKSPACE`, `GROVE_PLAN`,
+`GROVE_JOB_STATUS`, `GROVE_EVENT_ORIGIN`).
+
+```toml
+[[daemon.hooks.on_event]]
+  name    = "desktop-notify"
+  events  = ["job_completed", "job_failed"]
+  filter  = "workspace=grove*"
+  command = 'notify-send "grove" "$GROVE_JOB_ID $GROVE_EVENT_TYPE"'
+  timeout = 30
+
+[[daemon.hooks.on_event]]
+  name       = "reindex"
+  events     = ["note_event"]
+  command    = "my-indexer --stdin"
+  enable_env = "GROVE_INDEXER"
+```
+
+Terminal job events are deduplicated per hook by job id: the daemon
+synthesizes a terminal event from every federated snapshot that shows the
+transition, so without dedupe a satellite job would notify repeatedly.
+
 ## Security: the exec-config trust gate
 
 Grove's config cascade merges `grove.toml` files that come out of cloned
@@ -148,7 +196,7 @@ Exec-bearing keys are classified by how their command comes to run:
 
 | Risk | Keys | Default policy |
 | :--- | :--- | :--- |
-| **implicit** — runs without you asking | `[[hooks.on_stop]]`, `[[daemon.hooks.on_skill_sync]]`, `[tui.plugins.*]`, `[tui.panels]` `command`, `[tui.panels.bindings.*]`, `[keys.tmux.popups.*]`, `[keys.shell] bindings`, `[keys.nvim.bindings.*] command`, `<provider>.api_key_command`, `[notifications.home_assistant]` `token_command`/`webhook_secret_command`, `notebooks.definitions.*.sync.token_command` | quarantined |
+| **implicit** — runs without you asking | `[[hooks.on_stop]]`, `[[daemon.hooks.on_skill_sync]]`, `[[daemon.hooks.on_event]]`, `[tui.plugins.*]`, `[tui.panels]` `command`, `[tui.panels.bindings.*]`, `[keys.tmux.popups.*]`, `[keys.shell] bindings`, `[keys.nvim.bindings.*] command`, `<provider>.api_key_command`, `[notifications.home_assistant]` `token_command`/`webhook_secret_command`, `notebooks.definitions.*.sync.token_command` | quarantined |
 | **explicit** — runs because you invoked the verb | `build_cmd`, `commands`, `[environment]`/`[environments.*]` `provider`/`command`/`commands`, `flow.recipes.get_recipe_cmd`, `satellites.*.provision.gh_token_cmd`/`claude_token_cmd` | reported, honored |
 
 Review and trust a workspace with:

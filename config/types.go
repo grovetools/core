@@ -753,6 +753,49 @@ type DaemonSSHConfig struct {
 // DaemonHooks defines hooks that are triggered by daemon events.
 type DaemonHooks struct {
 	OnSkillSync []HookCommand `yaml:"on_skill_sync,omitempty" toml:"on_skill_sync,omitempty" jsonschema:"description=Commands to run after skills are synced for a workspace"`
+	OnEvent     []EventHook   `yaml:"on_event,omitempty" toml:"on_event,omitempty" jsonschema:"description=Commands to run when the daemon broadcasts a matching lifecycle event"`
+}
+
+// EventHook binds a set of daemon lifecycle events to a shell command.
+//
+//	[[daemon.hooks.on_event]]
+//	events  = ["job_completed", "job_failed"]
+//	filter  = "workspace=grove*"
+//	command = "notify-send grove \"$GROVE_JOB_ID $GROVE_EVENT_TYPE\""
+//	timeout = 30
+//
+// The daemon publishes a typed event vocabulary (jobs, sessions, workflows,
+// builds, notes, plans, git…) over its SSE bus; this is the exec-side
+// subscription to it. The event is delivered as JSON on the hook's stdin and
+// as GROVE_* environment variables — the same two conventions grove-env-<name>
+// sidecars and Claude Code hooks already use.
+//
+// The embedded HookCommand supplies the lifecycle semantics (timeout,
+// cancel_previous, disable_env/enable_env); `run_if` is a skill-sync concept
+// and is ignored here, since "did anything change" is what the event itself
+// already asserts.
+//
+// SECURITY: this is exec-bearing config. It is registered in the
+// exec-provenance gate (see execgate.go), so a definition arriving from a
+// cloned repository's grove.toml is quarantined unless the user has trusted
+// that file with `grove config trust`.
+type EventHook struct {
+	// HookCommand carries name/command plus the execution lifecycle. It is
+	// embedded, so its keys appear at the same level as events/filter in TOML.
+	HookCommand `yaml:",inline"`
+
+	// Events lists the update types that trigger this hook. Glob patterns are
+	// allowed, so `job_*` catches the whole job lifecycle. An empty list never
+	// fires — the daemon logs that at startup rather than defaulting to "all",
+	// because a hook that silently subscribes to the firehose is a footgun.
+	Events []string `yaml:"events,omitempty" toml:"events,omitempty" jsonschema:"description=Daemon event types that trigger this hook (glob patterns allowed e.g. job_*)"`
+
+	// Filter narrows matches by event field. It is deliberately NOT an
+	// expression language: terms are `field=glob` pairs ANDed together, over
+	// workspace, plan, job_id, status, source and origin. A bare term with no
+	// `=` is a substring match against workspace, plan and job_id. An
+	// expression language (CEL/expr) is a named follow-up.
+	Filter string `yaml:"filter,omitempty" toml:"filter,omitempty" jsonschema:"description=Optional field filter e.g. workspace=grove* or plan=extensib*"`
 }
 
 // HookCommand defines a command to be executed for a hook.

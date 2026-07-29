@@ -287,6 +287,32 @@ func structFieldsByConfigKey(t reflect.Type) map[string]reflect.StructField {
 		}
 		if key := fieldConfigKey(sf); key != "" {
 			fields[key] = sf
+			continue
+		}
+		// An untagged embedded struct is INLINE in every codec grove uses
+		// (go-toml v2 promotes anonymous fields; yaml.v3 inlines them), so its
+		// keys live at the parent's level in the file. Promote them here too,
+		// or a key path naming one — daemon.hooks.on_event[].command, once
+		// EventHook embedded HookCommand — would resolve to nothing and the
+		// caller would conclude the value simply is not there.
+		if sf.Anonymous {
+			embedded := sf.Type
+			for embedded.Kind() == reflect.Ptr {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() != reflect.Struct {
+				continue
+			}
+			for key, inner := range structFieldsByConfigKey(embedded) {
+				if _, shadowed := fields[key]; shadowed {
+					continue // an explicit field at this level wins
+				}
+				// Index is relative to the embedded type; prefix it so
+				// FieldByIndex walks from the outer struct.
+				promoted := inner
+				promoted.Index = append(append([]int{}, sf.Index...), inner.Index...)
+				fields[key] = promoted
+			}
 		}
 	}
 	return fields

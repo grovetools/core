@@ -149,6 +149,16 @@ var execFields = []ExecField{
 		Path: "daemon.hooks.on_skill_sync", Risk: RiskImplicit, Consumer: "groved",
 		Description: "shell commands run after the daemon syncs skills",
 	},
+	// on_event is the broadest implicit-exec surface grove has: it fires on
+	// daemon lifecycle events (a job finishing, a note changing, a build
+	// completing), so a workspace that could define one would get code
+	// execution the moment the daemon noticed anything about it — no session,
+	// no verb, no user action at all. Quarantined by default like every other
+	// implicit-risk field.
+	{
+		Path: "daemon.hooks.on_event", Risk: RiskImplicit, Consumer: "groved",
+		Description: "shell commands run when the daemon broadcasts a matching lifecycle event",
+	},
 	{
 		Path: "tui.plugins.*", Risk: RiskImplicit, Consumer: "treemux",
 		Description: "process spawned in its own PTY rail panel at TUI startup",
@@ -831,11 +841,22 @@ func formatExecValue(v reflect.Value) string {
 		t := v.Type()
 		for i := 0; i < t.NumField(); i++ {
 			sf := t.Field(i)
+			fv := v.Field(i)
 			key := fieldConfigKey(sf)
 			if key == "" {
+				// An untagged embedded struct is inline in the config file, so
+				// its fields belong in THIS rendering. Skipping it would leave
+				// the digest blind to the embedded values — for EventHook that
+				// would mean editing `command` without changing the digest, so
+				// a file trusted once would stay trusted for a command the user
+				// never reviewed.
+				if sf.Anonymous && !fv.IsZero() {
+					if inner := strings.TrimSuffix(strings.TrimPrefix(formatExecValue(fv), "{"), "}"); inner != "" {
+						parts = append(parts, inner)
+					}
+				}
 				continue
 			}
-			fv := v.Field(i)
 			if fv.IsZero() {
 				continue
 			}
@@ -843,6 +864,9 @@ func formatExecValue(v reflect.Value) string {
 				parts = append(parts, key+"="+s)
 			}
 		}
+		// Declaration order, deliberately: sorting here would change the digest
+		// of every already-trusted typed struct and silently re-close the gate
+		// on configs the user has already reviewed.
 		return "{" + strings.Join(parts, " ") + "}"
 	default:
 		return ""
