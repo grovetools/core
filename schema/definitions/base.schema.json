@@ -930,10 +930,9 @@
         },
         "position": {
           "default": "rail",
-          "description": "Panel position: rail (persistent) or ephemeral (on-demand)",
+          "description": "Panel position: rail (persistent icon-rail pane). For spawn-on-demand panels use [tui.panels.bindings].",
           "enum": [
-            "rail",
-            "ephemeral"
+            "rail"
           ],
           "type": "string"
         },

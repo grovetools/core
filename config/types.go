@@ -605,8 +605,12 @@ type PluginConfig struct {
 	Args []string `yaml:"args,omitempty" toml:"args,omitempty" jsonschema:"description=Arguments passed to the command"`
 	// Icon is the nerd font icon displayed in the rail.
 	Icon string `yaml:"icon,omitempty" toml:"icon,omitempty" jsonschema:"description=Nerd font icon for the rail"`
-	// Position controls where the plugin appears: rail (persistent) or ephemeral (on-demand).
-	Position string `yaml:"position,omitempty" toml:"position,omitempty" jsonschema:"description=Panel position: rail (persistent) or ephemeral (on-demand),enum=rail,enum=ephemeral,default=rail"`
+	// Position controls where the plugin appears. "rail" (the default, and
+	// the only supported value) gives the plugin a persistent icon-rail pane.
+	// "ephemeral" was declared here but never had a consumer; spawn-on-demand
+	// panes are configured under [tui.panels.bindings], which also carries the
+	// key chord such a pane needs in order to be reachable.
+	Position string `yaml:"position,omitempty" toml:"position,omitempty" jsonschema:"description=Panel position: rail (persistent icon-rail pane). For spawn-on-demand panels use [tui.panels.bindings].,enum=rail,default=rail"`
 	// Cwd is the working directory for the command.
 	Cwd string `yaml:"cwd,omitempty" toml:"cwd,omitempty" jsonschema:"description=Working directory for the command"`
 	// Env are extra environment variables (KEY=VALUE format).
