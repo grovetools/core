@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/tui/theme/themecfg"
 )
 
 // Nerd Font Icons (Private Constants)
@@ -522,24 +522,28 @@ var (
 var ASCIIIcons bool
 
 // init determines which icon set to use at process start: the GROVE_ICONS
-// environment variable wins, then the config file's tui.icons, then the
-// Nerd Font default. The actual loading lives in applyIcons so the set can
-// also be switched at runtime via SetIcons.
+// environment variable wins, then the selection resolver (grove.toml's
+// tui.icons in-tree, the host's icon mode in a sidecar), then the Nerd Font
+// default. The actual loading lives in applyIcons so the set can also be
+// switched at runtime via SetIcons.
+//
+// The resolver may not be installed yet when this runs — package init order
+// between this package and the one that registers it is unspecified — so the
+// choice is re-made whenever a resolver appears.
 func init() {
-	useASCII := false
+	applyIcons(useASCIIIcons())
+	themecfg.OnResolve(func(themecfg.Selection) {
+		applyIcons(useASCIIIcons())
+	})
+}
 
-	// 1. Check environment variable first
+// useASCIIIcons reports the icon mode with GROVE_ICONS ahead of the resolver.
+// Only the exact value "ascii" selects the ASCII set from either source.
+func useASCIIIcons() bool {
 	if os.Getenv("GROVE_ICONS") == "ascii" {
-		useASCII = true
-	} else {
-		// 2. Check config file
-		cfg, err := config.LoadDefault()
-		if err == nil && cfg.TUI != nil && cfg.TUI.Icons == "ascii" {
-			useASCII = true
-		}
+		return true
 	}
-
-	applyIcons(useASCII)
+	return themecfg.Resolve().Icons == "ascii"
 }
 
 // SetIcons re-runs the icon loader for the given mode ("ascii" selects the

@@ -212,6 +212,13 @@ func SelectableTable(headers []string, rows [][]string, selectedIndex int) strin
 type SelectableTableOptions struct {
 	HighlightColumn int                    // Column index to highlight (0-based), -1 for no highlight
 	BorderColor     lipgloss.TerminalColor // Border color override (nil uses default)
+	// Theme supplies the header, row and highlight styles. Nil falls back to
+	// theme.DefaultTheme, which is what every in-tree caller relies on. It is a
+	// field rather than a global read so a panel rendered under a host's theme
+	// — a sidecar handed theme tokens over the wire, two panes on different
+	// themes in one process — can draw a table without mutating the process's
+	// theme out from under everything else.
+	Theme *theme.Theme
 }
 
 // RenderedWidth returns the width SelectableTableWithOptions draws for these
@@ -239,7 +246,10 @@ func RenderedWidth(headers []string, widths map[string]int) int {
 
 // SelectableTableWithOptions creates a table with custom highlighting options
 func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex int, opts SelectableTableOptions) string {
-	t := theme.DefaultTheme
+	t := opts.Theme
+	if t == nil {
+		t = theme.DefaultTheme
+	}
 
 	// Pre-style headers with the theme's TableHeader style
 	styledHeaders := make([]string, len(headers))
@@ -247,7 +257,7 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 		styledHeaders[i] = t.TableHeader.Render(h)
 	}
 
-	borderColor := theme.Border
+	borderColor := t.Colors.Border
 	if opts.BorderColor != nil {
 		borderColor = opts.BorderColor
 	}
@@ -299,7 +309,7 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 
 	// Add the indicator to each line
 	result := ""
-	arrow := theme.DefaultTheme.Highlight.Render(theme.IconArrowRightBold)
+	arrow := t.Highlight.Render(theme.IconArrowRightBold)
 	for i, line := range lines {
 		// Add the indicator on the left for the selected row
 		if i == selectedLineIndex {

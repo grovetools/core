@@ -4,8 +4,6 @@ import (
 	"reflect"
 
 	"github.com/charmbracelet/bubbles/key"
-
-	"github.com/grovetools/core/config"
 )
 
 // ApplyOverrides applies keybinding overrides from config to any KeyMap struct.
@@ -16,7 +14,7 @@ import (
 //
 //	km := KeyMap{ViewLogs: key.NewBinding(...), ...}
 //	ApplyOverrides(&km, overrides) // overrides["view_logs"] -> km.ViewLogs
-func ApplyOverrides(km interface{}, overrides config.KeybindingSectionConfig) {
+func ApplyOverrides(km interface{}, overrides map[string][]string) {
 	if overrides == nil {
 		return
 	}
@@ -34,7 +32,7 @@ func ApplyOverrides(km interface{}, overrides config.KeybindingSectionConfig) {
 }
 
 // applyOverridesRecursive applies overrides to struct fields, recursing into embedded structs.
-func applyOverridesRecursive(v reflect.Value, overrides config.KeybindingSectionConfig) {
+func applyOverridesRecursive(v reflect.Value, overrides map[string][]string) {
 	t := v.Type()
 	bindingType := reflect.TypeOf(key.Binding{})
 
@@ -77,23 +75,19 @@ func applyOverridesRecursive(v reflect.Value, overrides config.KeybindingSection
 	}
 }
 
-// ApplyTUIOverrides applies TUI-specific keybinding overrides from config.
-// This is a convenience wrapper that handles the nested config lookup.
+// ApplyTUIOverrides applies TUI-specific keybinding overrides from a
+// keybinding source. This is a convenience wrapper that handles the nested
+// lookup; a nil source is a no-op.
 //
 // Example:
 //
 //	km := MyKeyMap{Base: keymap.Load(cfg, "flow.status"), ...}
 //	keymap.ApplyTUIOverrides(cfg, "flow", "status", &km)
-func ApplyTUIOverrides(cfg *config.Config, pkg, tui string, km interface{}) {
-	if cfg == nil || cfg.TUI == nil || cfg.TUI.Keybindings == nil {
+func ApplyTUIOverrides(src KeybindingSource, pkg, tui string, km interface{}) {
+	if src == nil {
 		return
 	}
-	tuiOverrides := cfg.TUI.Keybindings.GetTUIOverrides()
-	if pkgOverrides, ok := tuiOverrides[pkg]; ok {
-		if overrides, ok := pkgOverrides[tui]; ok {
-			ApplyOverrides(km, overrides)
-		}
-	}
+	ApplyOverrides(km, src.TUIKeybindings(pkg, tui))
 }
 
 // camelToSnake converts a CamelCase string to snake_case.

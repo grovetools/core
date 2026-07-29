@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/tui/components/whichkey"
 	"github.com/grovetools/core/tui/theme"
 )
@@ -69,13 +68,20 @@ type WhichKeyHost struct {
 }
 
 // NewWhichKeyHost builds a host with a fresh wait-indefinitely SequenceState, the
-// given namespaces (in wire order), and the show-delay resolved from cfg (a nil
-// cfg yields the default delay).
-func NewWhichKeyHost(cfg *config.Config, namespaces ...Namespace) WhichKeyHost {
+// given namespaces (in wire order), and the show-delay resolved from src (a nil
+// source yields the default delay).
+func NewWhichKeyHost(src KeybindingSource, namespaces ...Namespace) WhichKeyHost {
+	return NewWhichKeyHostWithDelay(WhichKeyDelay(src), namespaces...)
+}
+
+// NewWhichKeyHostWithDelay is NewWhichKeyHost for a caller that already has the
+// delay in hand and no configuration to resolve it from — a sidecar panel given
+// the value over the wire, or a test forcing 0 to render the popup immediately.
+func NewWhichKeyHostWithDelay(delay time.Duration, namespaces ...Namespace) WhichKeyHost {
 	return WhichKeyHost{
 		Sequence:   NewSequenceState(),
 		Namespaces: namespaces,
-		Delay:      WhichKeyDelay(cfg),
+		Delay:      delay,
 	}
 }
 

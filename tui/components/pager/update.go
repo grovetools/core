@@ -3,12 +3,10 @@ package pager
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/grovetools/core/tui/embed"
 )
 
 // Update handles WindowSizeMsg (with chrome deduction via SubSize),
-// numeric tab jumps, [/] cycling, embed.SwitchTabMsg auto-switch,
+// numeric tab jumps, [/] cycling, SwitchTabMsg auto-switch,
 // and Focus/Blur fan-out. Anything else is forwarded to the active
 // page. Disabled pages are skipped by jumps and cycling; when the
 // active page reports IsTextEntryActive(), navigation keys fall
@@ -34,7 +32,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.pages[m.activePage] = updated
 		return m, cmd
 
-	case embed.SwitchTabMsg:
+	case SwitchTabMsg:
 		idx := msg.TabIndex
 		if msg.TabID != "" {
 			if resolved, ok := m.resolveTabID(msg.TabID); ok {
@@ -48,7 +46,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m.switchTo(idx)
 
-	case embed.FocusMsg:
+	case FocusMsg:
 		updated, cmd := m.pages[m.activePage].Update(msg)
 		m.pages[m.activePage] = updated
 		if cmd != nil {
@@ -56,7 +54,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, m.pages[m.activePage].Focus()
 
-	case embed.BlurMsg:
+	case BlurMsg:
 		m.pages[m.activePage].Blur()
 		updated, cmd := m.pages[m.activePage].Update(msg)
 		m.pages[m.activePage] = updated

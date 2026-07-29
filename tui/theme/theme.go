@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/tui/theme/themecfg"
 )
 
 // DefaultThemeName is the theme in effect when neither GROVE_THEME nor
@@ -469,18 +469,25 @@ func getThemeName() string {
 		return theme
 	}
 
-	cfg, err := config.LoadDefault()
-	if err != nil || cfg == nil {
-		// Config loading failed or returned nil - use default
-		return DefaultThemeName
-	}
-
-	// Check if TUI config exists and has a theme set
-	if cfg.TUI != nil && cfg.TUI.Theme != "" {
-		if theme := normalizeThemeName(cfg.TUI.Theme); theme != "" {
-			return theme
-		}
+	// Whatever supplies the non-environment half of the selection: grove.toml
+	// in-tree (core/config registers the resolver), the host's theme tokens in
+	// a sidecar. No resolver means no configured theme.
+	if theme := normalizeThemeName(themecfg.Resolve().Theme); theme != "" {
+		return theme
 	}
 
 	return DefaultThemeName
+}
+
+// init replays the configured theme once a selection resolver appears. This
+// package's DefaultTheme is a variable initialiser, so it runs before any
+// other package's init can register a resolver, and package init order between
+// the two is unspecified — the replay is what makes the outcome the same
+// either way.
+func init() {
+	themecfg.OnResolve(func(themecfg.Selection) {
+		// SetTheme honours the pin and the alias table, and is a no-op for an
+		// unknown name; getThemeName keeps GROVE_THEME ahead of the resolver.
+		_ = SetTheme(getThemeName())
+	})
 }

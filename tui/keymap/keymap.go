@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
-
-	"github.com/grovetools/core/config"
 )
 
 // defaultWhichKeyDelay is the show-delay applied when the config leaves
@@ -15,18 +13,18 @@ import (
 // still surfacing the menu on a deliberate hold.
 const defaultWhichKeyDelay = 400 * time.Millisecond
 
-// WhichKeyDelay resolves the which-key popup SHOW delay from config. It reads
-// [tui].whichkey_delay_ms: nil/unset → defaultWhichKeyDelay (400ms); an
-// explicit 0 → 0 (show immediately); any positive value → that many
-// milliseconds. This is the "how long to hold the prefix before the popup
-// appears" clock, distinct from SequenceState's expire timeout. A nil cfg
+// WhichKeyDelay resolves the which-key popup SHOW delay from a keybinding
+// source. It reads [tui].whichkey_delay_ms: unset → defaultWhichKeyDelay
+// (400ms); an explicit 0 → 0 (show immediately); any positive value → that
+// many milliseconds. This is the "how long to hold the prefix before the popup
+// appears" clock, distinct from SequenceState's expire timeout. A nil source
 // yields the default.
-func WhichKeyDelay(cfg *config.Config) time.Duration {
-	if cfg == nil || cfg.TUI == nil || cfg.TUI.WhichKeyDelayMs == nil {
+func WhichKeyDelay(src KeybindingSource) time.Duration {
+	if src == nil {
 		return defaultWhichKeyDelay
 	}
-	ms := *cfg.TUI.WhichKeyDelayMs
-	if ms < 0 {
+	ms, ok := src.WhichKeyDelayMillis()
+	if !ok || ms < 0 {
 		return defaultWhichKeyDelay
 	}
 	return time.Duration(ms) * time.Millisecond
@@ -404,11 +402,11 @@ func DefaultArrows() Base {
 // Load creates a Base keymap based on configuration.
 // It starts with the selected preset (vim/emacs/arrows), then applies
 // global keybinding overrides, and finally TUI-specific overrides.
-func Load(cfg *config.Config, tuiName string) Base {
+func Load(src KeybindingSource, tuiName string) Base {
 	// Determine which preset to use
-	preset := "vim"
-	if cfg != nil && cfg.TUI != nil && cfg.TUI.Preset != "" {
-		preset = cfg.TUI.Preset
+	preset := ""
+	if src != nil {
+		preset = src.KeymapPreset()
 	}
 
 	// Start with the preset
@@ -422,34 +420,24 @@ func Load(cfg *config.Config, tuiName string) Base {
 		base = DefaultVim()
 	}
 
-	// If no keybindings config, return preset as-is
-	if cfg == nil || cfg.TUI == nil || cfg.TUI.Keybindings == nil {
+	if src == nil {
 		return base
 	}
 
-	kb := cfg.TUI.Keybindings
-
 	// Apply global section overrides
-	applyNavigationOverrides(&base, kb.Navigation)
-	applySelectionOverrides(&base, kb.Selection)
-	applyActionsOverrides(&base, kb.Actions)
-	applySearchOverrides(&base, kb.Search)
-	applyViewOverrides(&base, kb.View)
-	applyFoldOverrides(&base, kb.Fold)
-	applySystemOverrides(&base, kb.System)
+	applyNavigationOverrides(&base, section(src, "navigation"))
+	applySelectionOverrides(&base, section(src, "selection"))
+	applyActionsOverrides(&base, section(src, "actions"))
+	applySearchOverrides(&base, section(src, "search"))
+	applyViewOverrides(&base, section(src, "view"))
+	applyFoldOverrides(&base, section(src, "fold"))
+	applySystemOverrides(&base, section(src, "system"))
 
 	// Apply TUI-specific overrides
 	// tuiName is in format "package.tui" (e.g., "nb.browser", "flow.status")
-	tuiOverrides := kb.GetTUIOverrides()
-	if tuiName != "" && tuiOverrides != nil {
-		parts := strings.SplitN(tuiName, ".", 2)
-		if len(parts) == 2 {
-			pkgName, tui := parts[0], parts[1]
-			if pkgOverrides, ok := tuiOverrides[pkgName]; ok {
-				if overrides, ok := pkgOverrides[tui]; ok {
-					applyGenericOverrides(&base, overrides)
-				}
-			}
+	if tuiName != "" {
+		if parts := strings.SplitN(tuiName, ".", 2); len(parts) == 2 {
+			applyGenericOverrides(&base, src.TUIKeybindings(parts[0], parts[1]))
 		}
 	}
 
@@ -467,7 +455,7 @@ func updateBinding(binding *key.Binding, keys []string) {
 	}
 }
 
-func applyNavigationOverrides(base *Base, nav config.KeybindingSectionConfig) {
+func applyNavigationOverrides(base *Base, nav map[string][]string) {
 	if nav == nil {
 		return
 	}
@@ -503,7 +491,7 @@ func applyNavigationOverrides(base *Base, nav config.KeybindingSectionConfig) {
 	}
 }
 
-func applySelectionOverrides(base *Base, sel config.KeybindingSectionConfig) {
+func applySelectionOverrides(base *Base, sel map[string][]string) {
 	if sel == nil {
 		return
 	}
@@ -518,7 +506,7 @@ func applySelectionOverrides(base *Base, sel config.KeybindingSectionConfig) {
 	}
 }
 
-func applyActionsOverrides(base *Base, actions config.KeybindingSectionConfig) {
+func applyActionsOverrides(base *Base, actions map[string][]string) {
 	if actions == nil {
 		return
 	}
@@ -551,7 +539,7 @@ func applyActionsOverrides(base *Base, actions config.KeybindingSectionConfig) {
 	}
 }
 
-func applySearchOverrides(base *Base, search config.KeybindingSectionConfig) {
+func applySearchOverrides(base *Base, search map[string][]string) {
 	if search == nil {
 		return
 	}
@@ -572,7 +560,7 @@ func applySearchOverrides(base *Base, search config.KeybindingSectionConfig) {
 	}
 }
 
-func applyViewOverrides(base *Base, view config.KeybindingSectionConfig) {
+func applyViewOverrides(base *Base, view map[string][]string) {
 	if view == nil {
 		return
 	}
@@ -596,7 +584,7 @@ func applyViewOverrides(base *Base, view config.KeybindingSectionConfig) {
 	}
 }
 
-func applyFoldOverrides(base *Base, fold config.KeybindingSectionConfig) {
+func applyFoldOverrides(base *Base, fold map[string][]string) {
 	if fold == nil {
 		return
 	}
@@ -617,7 +605,7 @@ func applyFoldOverrides(base *Base, fold config.KeybindingSectionConfig) {
 	}
 }
 
-func applySystemOverrides(base *Base, sys config.KeybindingSectionConfig) {
+func applySystemOverrides(base *Base, sys map[string][]string) {
 	if sys == nil {
 		return
 	}
@@ -631,7 +619,7 @@ func applySystemOverrides(base *Base, sys config.KeybindingSectionConfig) {
 
 // applyGenericOverrides applies a flat map of overrides to any matching binding.
 // This is used for TUI-specific overrides that might override any binding.
-func applyGenericOverrides(base *Base, overrides config.KeybindingSectionConfig) {
+func applyGenericOverrides(base *Base, overrides map[string][]string) {
 	if overrides == nil {
 		return
 	}
