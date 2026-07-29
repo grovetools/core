@@ -104,8 +104,79 @@ const (
 // keystroke) and must be treated as read-only by consumers. Accepted carries
 // the same set in declaration order for reporting; Rejected explains every
 // declared chord that is not in Claims, so a refusal is never silent.
+//
+// Ref retains the declaration the grant answers. Arbitration used to reduce a
+// Reference to a set of chord strings, which threw away every human-readable
+// thing the hosted app said about them: a host could report THAT it deferred
+// ctrl+f and never what ctrl+f does. Keeping the declaration is what lets the
+// help overlay, the which-key popup and the config keys page describe a hosted
+// panel's keys in the app's own words.
 type Grant struct {
 	Claims   map[string]bool
 	Accepted []string
 	Rejected []Rejection
+
+	// Ref is the declaration this grant answers, retained verbatim. Its
+	// Bindings carry the Scope/Action/Description the wire already transported
+	// and arbitration previously discarded.
+	Ref Reference
+}
+
+// App names the declaring application, or "" for an empty grant.
+func (g Grant) App() string { return g.Ref.App }
+
+// GrantedBindings returns the declared bindings with at least one chord the
+// host will defer, each paired with the subset of its chords that were
+// actually granted.
+//
+// The pairing matters because a binding may declare several chords and the
+// host can grant only some of them: rendering the whole Keys list next to a
+// description would advertise a deferral the user does not have.
+func (g Grant) GrantedBindings() []BoundKeys {
+	var out []BoundKeys
+	for _, b := range g.Ref.Bindings {
+		var keys []string
+		for _, k := range b.Keys {
+			if g.Claims[k] {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) > 0 {
+			out = append(out, BoundKeys{Binding: b, Keys: keys})
+		}
+	}
+	return out
+}
+
+// SelfBindings returns the declared bindings the host granted nothing for.
+//
+// These are not failures: a chord the host does not bind at all already
+// reaches the hosted app, which is why the commonest rejection reason is
+// no_collision. They are the app's OWN keys, and they are most of what a user
+// looking at the panel wants to see — a help overlay that listed only the
+// arbitrated chords would show the two exotic ones and hide j/k/enter.
+func (g Grant) SelfBindings() []BoundKeys {
+	var out []BoundKeys
+	for _, b := range g.Ref.Bindings {
+		var keys []string
+		for _, k := range b.Keys {
+			if k != "" && !g.Claims[k] {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) > 0 {
+			out = append(out, BoundKeys{Binding: b, Keys: keys})
+		}
+	}
+	return out
+}
+
+// BoundKeys is one declared binding narrowed to the chords a caller asked
+// about — the granted ones, or the non-granted ones. Binding is the whole
+// declaration (Binding.Keys included); Keys is the subset this row describes.
+// Deliberately not an embed: two fields named Keys meaning different sets is
+// exactly the confusion this type exists to remove.
+type BoundKeys struct {
+	Binding Binding
+	Keys    []string
 }

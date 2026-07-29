@@ -605,6 +605,11 @@ type PluginConfig struct {
 	Args []string `yaml:"args,omitempty" toml:"args,omitempty" jsonschema:"description=Arguments passed to the command"`
 	// Icon is the nerd font icon displayed in the rail.
 	Icon string `yaml:"icon,omitempty" toml:"icon,omitempty" jsonschema:"description=Nerd font icon for the rail"`
+	// Label is the human-readable name shown on the rail item and in the
+	// panel's host-facing surfaces. Empty falls back to the map key, which is
+	// constrained to a TOML bare key and therefore often not what a user would
+	// choose to read ("break-timer" vs "Break timer").
+	Label string `yaml:"label,omitempty" toml:"label,omitempty" jsonschema:"description=Display label for the rail item (defaults to the plugin's config key)"`
 	// Position controls where the plugin appears. "rail" (the default, and
 	// the only supported value) gives the plugin a persistent icon-rail pane.
 	// "ephemeral" was declared here but never had a consumer; spawn-on-demand
@@ -632,6 +637,31 @@ type PluginConfig struct {
 	// stays open past the deadline, so a slow sidecar still connects — the
 	// timeout governs the host's readiness reporting, not the socket's life.
 	ProtocolTimeout string `yaml:"protocol_timeout,omitempty" toml:"protocol_timeout,omitempty" jsonschema:"description=Handshake deadline for protocol panels (Go duration; default 2s)"`
+	// Settings is a free-form table the host hands to the panel verbatim —
+	// [tui.plugins.<name>.settings] in grove.toml, delivered in the embed/v1
+	// welcome frame and re-delivered live on config_reload. It is how a panel
+	// gets configured at all: before it, a plugin's only knobs were `args` and
+	// `env`, both fixed at spawn, so changing one meant restarting the process.
+	//
+	// It is DATA, and the schema deliberately leaves it unconstrained: grove
+	// does not know what a third-party panel's options are, and a schema that
+	// guessed would reject valid ones.
+	//
+	// It is not separately exec-gated, and that is a decision rather than an
+	// omission. The gate quarantines `tui.plugins.*` — the WHOLE entry — so a
+	// settings table from a repo-controlled layer is already stripped along with
+	// the `command` that would read it, and a settings table that survives came
+	// from a layer the user owns. Gating the subtree again would add a second
+	// prompt about a value that cannot arrive without the first.
+	//
+	// What keeps that true is that nothing here is ever executed. The host does
+	// not interpret settings; it forwards them. A panel that chooses to treat
+	// one of its own settings as a command is making that decision in its own
+	// code, with the authority it already had as a process the user configured —
+	// exactly as it would if it read the same value from its own dotfile. If a
+	// future host ever wants to act on a settings value itself, that key needs
+	// its own RegisterExecField entry before it ships, not after.
+	Settings map[string]interface{} `yaml:"settings,omitempty" toml:"settings,omitempty" jsonschema:"description=Free-form settings table delivered to the panel over the embed/v1 control plane (data only; never executed by the host)"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel

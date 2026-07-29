@@ -928,6 +928,10 @@
           "description": "Nerd font icon for the rail",
           "type": "string"
         },
+        "label": {
+          "description": "Display label for the rail item (defaults to the plugin's config key)",
+          "type": "string"
+        },
         "position": {
           "default": "rail",
           "description": "Panel position: rail (persistent icon-rail pane). For spawn-on-demand panels use [tui.panels.bindings].",
@@ -952,6 +956,10 @@
           "default": false,
           "description": "Auto-restart plugin on exit",
           "type": "boolean"
+        },
+        "settings": {
+          "description": "Free-form settings table delivered to the panel over the embed/v1 control plane (data only; never executed by the host)",
+          "type": "object"
         }
       },
       "required": [
