@@ -149,7 +149,7 @@ Exec-bearing keys are classified by how their command comes to run:
 | Risk | Keys | Default policy |
 | :--- | :--- | :--- |
 | **implicit** — runs without you asking | `[[hooks.on_stop]]`, `[[daemon.hooks.on_skill_sync]]`, `[tui.plugins.*]`, `[tui.panels]` `command`, `[tui.panels.bindings.*]`, `[keys.tmux.popups.*]`, `[keys.shell] bindings`, `[keys.nvim.bindings.*] command`, `<provider>.api_key_command`, `[notifications.home_assistant]` `token_command`/`webhook_secret_command`, `notebooks.definitions.*.sync.token_command` | quarantined |
-| **explicit** — runs because you invoked the verb | `build_cmd`, `commands`, `[environment]`/`[environments.*]` `provider`/`command`/`commands`, `satellites.*.provision.gh_token_cmd`/`claude_token_cmd` | reported, honored |
+| **explicit** — runs because you invoked the verb | `build_cmd`, `commands`, `[environment]`/`[environments.*]` `provider`/`command`/`commands`, `flow.recipes.get_recipe_cmd`, `satellites.*.provision.gh_token_cmd`/`claude_token_cmd` | reported, honored |
 
 Review and trust a workspace with:
 

@@ -216,6 +216,10 @@ var execFields = []ExecField{
 		Description: "shell command run to resolve the Home Assistant webhook secret",
 	},
 	{
+		Path: "flow.recipes.get_recipe_cmd", Risk: RiskExplicit, Consumer: "flow plan init",
+		Description: "command run to produce dynamic recipe definitions as JSON",
+	},
+	{
 		Path: "satellites.*.provision.gh_token_cmd", Risk: RiskExplicit, Consumer: "grove satellite up",
 		Description: "local command run to mint the GitHub token piped to VM bootstrap",
 	},
