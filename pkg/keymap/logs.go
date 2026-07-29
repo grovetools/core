@@ -140,6 +140,28 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 	return km
 }
 
+// Sections returns the log viewer's grouped keybindings for structured help.
+// LogKeyMap embeds Base, whose promoted Sections method describes the generic
+// base keymap; defining this method ensures help shows the log-specific keys.
+func (k LogKeyMap) Sections() []keymap.Section {
+	return []keymap.Section{
+		keymap.NavigationSection(
+			k.Base.Up, k.Base.Down, k.PageUp, k.PageDown,
+			k.HalfUp, k.HalfDown, k.GotoTop, k.GotoEnd,
+		),
+		keymap.NewSection("Filters & View",
+			k.ToggleScope, k.ToggleSystem, k.CycleLevel,
+			k.ComponentSummary, k.ToggleFilters, k.ToggleEvents,
+			k.ToggleFollow, k.Search,
+		),
+		keymap.ActionsSection(
+			k.Expand, k.ViewJSON, k.VisualModeStart, k.Yank,
+			k.CopyRawText, k.ClearBuffer, k.OpenEditor, k.SwitchFocus,
+		),
+		keymap.SystemSection(k.Base.Help, k.Base.Quit),
+	}
+}
+
 // ShortHelp returns keybindings to be shown in the mini help view.
 func (k LogKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Base.Help, k.Base.Quit, k.ToggleScope, k.CycleLevel, k.ComponentSummary, k.Search, k.ToggleFollow}
