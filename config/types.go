@@ -662,6 +662,28 @@ type PluginConfig struct {
 	// future host ever wants to act on a settings value itself, that key needs
 	// its own RegisterExecField entry before it ships, not after.
 	Settings map[string]interface{} `yaml:"settings,omitempty" toml:"settings,omitempty" jsonschema:"description=Free-form settings table delivered to the panel over the embed/v1 control plane (data only; never executed by the host)"`
+	// Keys mirrors the host chords the panel declares it intends to claim —
+	// `grove plugin install` copies them here from the manifest's
+	// [[panel.keys]], which is the list the user read on the consent screen.
+	//
+	// It is a DECLARATION and grants nothing: a protocol panel's real claims
+	// arrive in its handshake and are arbitrated there. It exists so the two
+	// can be compared. Without it the host had no idea what a panel was
+	// supposed to ask for, so a panel claiming chords the user never approved
+	// looked exactly like one claiming the chords they did — and `treemux keys`
+	// could only describe the compiled-in flow panel, because it was the only
+	// hosted key reference reachable without a running handshake.
+	Keys []PluginKey `yaml:"keys,omitempty" toml:"keys,omitempty" jsonschema:"description=Host chords the panel declares it intends to claim (declaration only; the host arbitrates the real claims at handshake time)"`
+}
+
+// PluginKey is one declared host chord in a plugin's [[tui.plugins.<name>.keys]].
+type PluginKey struct {
+	// Key is the chord in the host's key vocabulary (bubbletea's), e.g.
+	// "ctrl+f".
+	Key string `yaml:"key" toml:"key" jsonschema:"description=Key chord in the host's vocabulary (e.g. ctrl+f)"`
+	// Description is the human-readable effect, shown wherever the host lists
+	// the panel's keys.
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=What the chord does, shown in the host's help surfaces"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel

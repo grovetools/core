@@ -928,6 +928,13 @@
           "description": "Nerd font icon for the rail",
           "type": "string"
         },
+        "keys": {
+          "description": "Host chords the panel declares it intends to claim (declaration only; the host arbitrates the real claims at handshake time)",
+          "items": {
+            "$ref": "#/$defs/PluginKey"
+          },
+          "type": "array"
+        },
         "label": {
           "description": "Display label for the rail item (defaults to the plugin's config key)",
           "type": "string"
@@ -964,6 +971,23 @@
       },
       "required": [
         "command"
+      ],
+      "type": "object"
+    },
+    "PluginKey": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "What the chord does",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key chord in the host's vocabulary (e.g. ctrl+f)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
       ],
       "type": "object"
     },
