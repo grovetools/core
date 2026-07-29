@@ -27,6 +27,14 @@ func (gw *globalWriter) Set(w io.Writer) {
 	gw.w = w
 }
 
+func (gw *globalWriter) Swap(w io.Writer) io.Writer {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	previous := gw.w
+	gw.w = w
+	return previous
+}
+
 // Ensure the global writer is a singleton.
 var defaultGlobalWriter = &globalWriter{w: os.Stdout}
 
@@ -34,6 +42,12 @@ var defaultGlobalWriter = &globalWriter{w: os.Stdout}
 // This is the central function for redirecting logs in the TUI.
 func SetGlobalOutput(w io.Writer) {
 	defaultGlobalWriter.Set(w)
+}
+
+// SwapGlobalOutput changes the global output destination and returns the
+// previous destination so callers can restore scoped redirections.
+func SwapGlobalOutput(w io.Writer) io.Writer {
+	return defaultGlobalWriter.Swap(w)
 }
 
 // GetGlobalOutput returns the singleton instance of the global writer.
