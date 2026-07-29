@@ -936,6 +936,18 @@
           ],
           "type": "string"
         },
+        "protocol": {
+          "description": "Control-plane protocol: empty for a plain PTY plugin or embed/v1 for a socket-connected sidecar panel",
+          "enum": [
+            "",
+            "embed/v1"
+          ],
+          "type": "string"
+        },
+        "protocol_timeout": {
+          "description": "Handshake deadline for protocol panels (Go duration; default 2s)",
+          "type": "string"
+        },
         "restart": {
           "default": false,
           "description": "Auto-restart plugin on exit",

@@ -617,6 +617,21 @@ type PluginConfig struct {
 	Env []string `yaml:"env,omitempty" toml:"env,omitempty" jsonschema:"description=Extra environment variables (KEY=VALUE)"`
 	// Restart controls whether the plugin auto-restarts on exit.
 	Restart bool `yaml:"restart,omitempty" toml:"restart,omitempty" jsonschema:"description=Auto-restart plugin on exit,default=false"`
+	// Protocol opts the plugin into the embed-over-socket control plane.
+	// Empty (the default) is a plain PTY plugin: the host spawns it and
+	// renders its output, and nothing else. "embed/v1" additionally makes the
+	// host create a per-panel unix socket, pass its path in
+	// GROVE_PANEL_SOCKET, and exchange JSON-lines control messages over it
+	// (focus, workspace scope, deep links, key claims). The rendering plane is
+	// identical either way, so a protocol panel that never connects degrades
+	// to a plain PTY plugin.
+	Protocol string `yaml:"protocol,omitempty" toml:"protocol,omitempty" jsonschema:"description=Control-plane protocol: empty for a plain PTY plugin or embed/v1 for a socket-connected sidecar panel,enum=,enum=embed/v1"`
+	// ProtocolTimeout bounds how long the host waits for a protocol panel to
+	// connect and complete its handshake before reporting the pane degraded.
+	// A Go duration string; empty means the host default (2s). The listener
+	// stays open past the deadline, so a slow sidecar still connects — the
+	// timeout governs the host's readiness reporting, not the socket's life.
+	ProtocolTimeout string `yaml:"protocol_timeout,omitempty" toml:"protocol_timeout,omitempty" jsonschema:"description=Handshake deadline for protocol panels (Go duration; default 2s)"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel
