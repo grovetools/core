@@ -510,7 +510,7 @@ func warnExecGate(report *ExecGateReport, logger *logrus.Logger) {
 				"key":   f.Key,
 				"file":  f.File,
 				"layer": string(f.Layer),
-			}).Warnf("exec-bearing config from an untrusted layer is being honored (exec_trust=warn): %s", f.Value)
+			}).Warnf("exec-bearing config from an untrusted layer is being honored (exec_trust=warn): %s", logLine(f.Value))
 		}
 		return
 	}
@@ -521,7 +521,7 @@ func warnExecGate(report *ExecGateReport, logger *logrus.Logger) {
 			"file":     f.File,
 			"layer":    string(f.Layer),
 			"consumer": f.Consumer,
-		}).Warnf("ignored exec-bearing config from an untrusted workspace: %s = %s", f.Key, f.Value)
+		}).Warnf("ignored exec-bearing config from an untrusted workspace: %s = %s", f.Key, logLine(f.Value))
 	}
 	logger.Warnf("%d exec-bearing config value(s) were ignored because the workspace is not trusted. "+
 		"Review them with `grove config trust`, and allow them with `grove config trust --yes`.", len(quarantined))
@@ -693,10 +693,20 @@ func formatExecValue(v reflect.Value) string {
 		return fmt.Sprintf("%v", v.Interface())
 	case reflect.Slice, reflect.Array:
 		parts := make([]string, 0, v.Len())
+		composite := false
 		for i := 0; i < v.Len(); i++ {
-			if s := formatExecValue(v.Index(i)); s != "" {
-				parts = append(parts, s)
+			s := formatExecValue(v.Index(i))
+			if s == "" {
+				continue
 			}
+			composite = composite || strings.HasPrefix(s, "{")
+			parts = append(parts, s)
+		}
+		// An array of tables — [[hooks.on_stop]] — gets one entry per line so
+		// the review UX can show each command on its own. Scalar arrays
+		// (args) stay inline.
+		if composite {
+			return "[\n" + strings.Join(parts, "\n") + "\n]"
 		}
 		return "[" + strings.Join(parts, " ") + "]"
 	case reflect.Map:
@@ -732,6 +742,12 @@ func formatExecValue(v reflect.Value) string {
 	default:
 		return ""
 	}
+}
+
+// logLine flattens a multi-line rendered value into one log line. The review
+// UX wants one hook per line; a log record wants one record per line.
+func logLine(value string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(value, "\n", " ")), " ")
 }
 
 // sortedMapKeys returns a map's keys as sorted strings. Non-string keys are
