@@ -86,3 +86,24 @@ type PageWithFooterHeight interface {
 	Page
 	FooterHeight() int
 }
+
+// PageWithMinSize is an optional extension a Page can implement to declare the
+// smallest body it can draw anything meaningful in. Below either dimension the
+// pager renders a placeholder instead of calling View().
+//
+// It exists because there was no min-width contract anywhere in the ecosystem,
+// and the failure mode without one is bad in a specific way: a table or tree
+// squeezed under its usable width does not fail visibly, it renders a column
+// of punctuation that looks like a rendering bug. A page that says "I need 40
+// columns" gets told, in words, that the pane is too narrow — which is
+// actionable, where a mangled frame is not.
+//
+// Declaring a minimum is a last resort, not a first one. A page that can
+// reflow — dropping columns, flipping a split from side-by-side to stacked —
+// should do that first and declare a minimum only for the size below which
+// even the degraded layout is meaningless. Zero or negative values mean "no
+// minimum in that dimension".
+type PageWithMinSize interface {
+	Page
+	MinSize() (width, height int)
+}

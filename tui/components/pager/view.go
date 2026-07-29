@@ -79,22 +79,30 @@ func (m Model) View() string {
 		m.footer = fp.Footer()
 	}
 
-	// Body: loading placeholder if the page is async-not-ready,
-	// otherwise the page's own View().
-	var body string
+	// Body, in precedence order: too-small placeholder, then loading
+	// placeholder if the page is async-not-ready, then the page's own View().
+	//
+	// Too small comes first because a page that cannot be drawn at this size
+	// cannot draw its loading state either, and "Loading…" in a four-column
+	// pane is no more readable than the content would have been.
+	sub := m.SubSizeFor(active, m.width, m.height)
+	ready, loadingMsg := true, ""
 	if r, ok := active.(PageWithReady); ok {
-		if ready, loadingMsg := r.Ready(); !ready {
-			sub := m.SubSize(m.width, m.height)
-			if loadingMsg == "" {
-				loadingMsg = "Loading…"
-			}
-			body = lipgloss.Place(sub.Width, sub.Height,
-				lipgloss.Center, lipgloss.Center,
-				th.Muted.Render(loadingMsg))
-		} else {
-			body = active.View()
+		ready, loadingMsg = r.Ready()
+	}
+
+	var body string
+	switch {
+	case tooSmall(active, sub.Width, sub.Height):
+		body = TooSmallPlaceholder(sub.Width, sub.Height)
+	case !ready:
+		if loadingMsg == "" {
+			loadingMsg = "Loading…"
 		}
-	} else {
+		body = lipgloss.Place(sub.Width, sub.Height,
+			lipgloss.Center, lipgloss.Center,
+			th.Muted.Render(loadingMsg))
+	default:
 		body = active.View()
 	}
 

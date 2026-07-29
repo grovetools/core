@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	ltable "github.com/charmbracelet/lipgloss/table"
 
+	fit "github.com/grovetools/core/panelkit/table"
 	"github.com/grovetools/core/tui/theme"
 )
 
@@ -230,18 +231,7 @@ type SelectableTableOptions struct {
 // re-deriving the arithmetic: the formula belongs next to the renderer it
 // describes, or the two drift and the table overflows its pane.
 func RenderedWidth(headers []string, widths map[string]int) int {
-	if len(headers) == 0 {
-		return 0
-	}
-	total := 0
-	for _, h := range headers {
-		total += widths[h]
-	}
-	total += len(headers) * 2 // cell padding, one space each side
-	total += len(headers) - 1 // │ separators
-	total += 2                // left + right border
-	total += 2                // selection gutter
-	return total
+	return fit.SelectableChrome.Width(headers, widths)
 }
 
 // SelectableTableWithOptions creates a table with custom highlighting options

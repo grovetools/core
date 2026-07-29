@@ -18,6 +18,10 @@ var kitPackages = []string{
 	"github.com/grovetools/core/tui/components/table",
 	"github.com/grovetools/core/tui/components/pager",
 	"github.com/grovetools/core/tui/hostedkeys",
+	"github.com/grovetools/core/panelkit/window",
+	"github.com/grovetools/core/panelkit/table",
+	"github.com/grovetools/core/panelkit/tree",
+	"github.com/grovetools/core/panelkit/layout",
 }
 
 // forbidden are the host-only package trees. Each entry cost the kit something
