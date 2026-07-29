@@ -39,6 +39,7 @@ type (
 	SplitViewportClosedMsg       = tuimux_embed.SplitViewportClosedMsg
 	UpdateViewportContentMsg     = tuimux_embed.UpdateViewportContentMsg
 	UpdateViewportTitleMsg       = tuimux_embed.UpdateViewportTitleMsg
+	ViewportKeyMsg               = tuimux_embed.ViewportKeyMsg
 	SplitContextRequestMsg       = tuimux_embed.SplitContextRequestMsg
 	SplitContextCloseRequestMsg  = tuimux_embed.SplitContextCloseRequestMsg
 	SplitContextClosedMsg        = tuimux_embed.SplitContextClosedMsg
