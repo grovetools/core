@@ -17,6 +17,7 @@
 package workspace
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,63 @@ const legacyWorktreeDirName = paths.LegacyWorktreeDirName
 // limits.
 func DirIdentifier(gitRoot string) string {
 	return pathutil.WorktreeID(gitRoot)
+}
+
+// ValidateWorktreeName reports whether name is usable as a worktree name —
+// i.e. whether it is safe to Join onto a worktree base.
+//
+// Every layout helper builds a path with filepath.Join(base, name), and Go's
+// Join does NOT treat an absolute second element as absolute: it concatenates.
+// So an absolute path arriving where a NAME is expected silently synthesizes a
+// deep tree INSIDE the container base (an anchored worktree path passed as a
+// name once produced <base>/<id>/Users/solair/.local/share/grove/worktrees/...),
+// and a name containing ".." escapes the base entirely. Neither is caught by
+// any downstream check, so validate at every point a name enters the layout.
+//
+// Names MAY contain '/' — branch-style names ("feature/foo") nest the same way
+// in every layout, which FindWorktreePath and ResolveNewWorktreePath rely on.
+// What is rejected is anything that is not a pure relative, non-escaping,
+// non-empty sequence of segments.
+func ValidateWorktreeName(name string) error {
+	if name == "" {
+		return fmt.Errorf("worktree name cannot be empty")
+	}
+	if strings.TrimSpace(name) != name {
+		return fmt.Errorf("worktree name %q has leading or trailing whitespace", name)
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("worktree name cannot be empty")
+	}
+	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
+		return fmt.Errorf("worktree name %q must be a relative name, not an absolute path", name)
+	}
+	// Normalize separators before segmenting so a Windows-style name is checked
+	// the same way Join would nest it.
+	for _, part := range strings.Split(filepath.ToSlash(name), "/") {
+		switch part {
+		case "":
+			return fmt.Errorf("worktree name %q contains an empty path segment", name)
+		case ".", "..":
+			return fmt.Errorf("worktree name %q must not contain %q path segments", name, part)
+		}
+	}
+	return nil
+}
+
+// WorktreeBase returns the identifier-level directory that will contain a NEW
+// worktree of the repository rooted at gitRoot, in the layout selected by
+// useXDG. It is the base half of ResolveNewWorktreePath:
+//
+//	ResolveNewWorktreePath(gitRoot, name, useXDG) ==
+//	    filepath.Join(WorktreeBase(gitRoot, useXDG), name)
+//
+// Callers that must distinguish "directories I created for THIS worktree" from
+// the shared container base (creation rollback) need the split.
+func WorktreeBase(gitRoot string, useXDG bool) string {
+	if useXDG {
+		return filepath.Join(paths.WorktreesDir(), DirIdentifier(gitRoot))
+	}
+	return filepath.Join(gitRoot, legacyWorktreeDirName)
 }
 
 // WorktreeBases returns the ordered, legacy-first list of identifier-level
@@ -257,11 +315,11 @@ func ResolveWorktreePathByName(gitRoot, name string, acceptOwners []string) (str
 //
 // The identifier is computed internally from gitRoot — callers don't need a
 // WorkspaceNode.
+// name is NOT validated here (the helper returns no error and is used on
+// already-known-good names in hot paths); creation paths MUST call
+// ValidateWorktreeName first — see workspace.Prepare.
 func ResolveNewWorktreePath(gitRoot, name string, useXDG bool) string {
-	if useXDG {
-		return filepath.Join(paths.WorktreesDir(), DirIdentifier(gitRoot), name)
-	}
-	return filepath.Join(gitRoot, legacyWorktreeDirName, name)
+	return filepath.Join(WorktreeBase(gitRoot, useXDG), name)
 }
 
 // WorktreeOwner resolves the repository root that owns the worktree at

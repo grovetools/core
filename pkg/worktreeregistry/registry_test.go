@@ -146,11 +146,13 @@ func TestReconcile_AdoptsUnregisteredLiveDir(t *testing.T) {
 	setStateDir(t)
 	xdgBase := t.TempDir()
 
-	// Simulate an XDG worktree: <xdgBase>/<identifier>/<name>
+	// Simulate an XDG worktree: <xdgBase>/<identifier>/<name>. A creation
+	// marker is required — depth alone is not evidence of a worktree.
 	identifierDir := filepath.Join(xdgBase, "grovetools-abc12345")
 	require.NoError(t, os.MkdirAll(identifierDir, 0o755))
 	wtDir := filepath.Join(identifierDir, "my-branch")
 	require.NoError(t, os.MkdirAll(wtDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wtDir, "grove.toml"), []byte("workspaces = [\"*\"]\n"), 0o644))
 
 	require.NoError(t, worktreeregistry.Reconcile(xdgBase))
 
@@ -158,6 +160,47 @@ func TestReconcile_AdoptsUnregisteredLiveDir(t *testing.T) {
 	loaded, err := worktreeregistry.Load(id)
 	require.NoError(t, err)
 	assert.Equal(t, wtDir, loaded.AbsPath)
+}
+
+// TestReconcile_AdoptsOnAnyMarker pins that the marker set is a union, not a
+// conjunction: worktrees predate some of these artifacts, so any ONE suffices.
+func TestReconcile_AdoptsOnAnyMarker(t *testing.T) {
+	for _, marker := range []string{".git", "grove.toml", filepath.Join(".grove", "workspace")} {
+		t.Run(marker, func(t *testing.T) {
+			setStateDir(t)
+			xdgBase := t.TempDir()
+
+			wtDir := filepath.Join(xdgBase, "grovetools-abc12345", "my-branch")
+			require.NoError(t, os.MkdirAll(wtDir, 0o755))
+			markerPath := filepath.Join(wtDir, marker)
+			require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
+			require.NoError(t, os.WriteFile(markerPath, []byte("x\n"), 0o644))
+
+			require.NoError(t, worktreeregistry.Reconcile(xdgBase))
+
+			_, err := worktreeregistry.Load(pathutil.WorktreeID(wtDir))
+			require.NoError(t, err, "a dir carrying %s should be adopted", marker)
+		})
+	}
+}
+
+// TestReconcile_IgnoresUnmarkedDir is the phantom-worktree regression. A failed
+// workspace.Prepare once left an intermediate directory two levels under the
+// XDG base; Reconcile adopted it purely on depth, which promoted the debris to
+// a first-class worktree that discovery classified, the skills watcher synced
+// into, and the git watcher scanned forever.
+func TestReconcile_IgnoresUnmarkedDir(t *testing.T) {
+	setStateDir(t)
+	xdgBase := t.TempDir()
+
+	// Exactly the shape the "Users" bug left behind: correct depth, no marker.
+	debris := filepath.Join(xdgBase, "grovetools-0bd46c64", "Users")
+	require.NoError(t, os.MkdirAll(filepath.Join(debris, "solair", ".local"), 0o755))
+
+	require.NoError(t, worktreeregistry.Reconcile(xdgBase))
+
+	_, err := worktreeregistry.Load(pathutil.WorktreeID(debris))
+	assert.True(t, os.IsNotExist(err), "unmarked debris must not be adopted as a worktree")
 }
 
 func TestPlanForPath(t *testing.T) {

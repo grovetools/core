@@ -299,6 +299,88 @@ func TestPrepare(t *testing.T) {
 		assert.True(t, os.IsNotExist(statErr), "failed Prepare must remove the poisoned worktree container")
 	})
 
+	t.Run("absolute worktree name is rejected before anything is created", func(t *testing.T) {
+		// Regression for the "Users" phantom worktree. A caller passed an
+		// already-resolved worktree PATH where a NAME belongs. filepath.Join
+		// concatenates an absolute second element rather than replacing the
+		// base, so MkdirAll synthesized
+		// <base>/<id>/Users/solair/.local/share/grove/worktrees/<other-id>/<name>
+		// inside the container. Prepare must reject the name up front and touch
+		// nothing on disk.
+		sandboxXDG(t)
+
+		tempDir := resolveDir(t.TempDir())
+		repoDir := filepath.Join(tempDir, "eco-root")
+		require.NoError(t, os.MkdirAll(repoDir, 0o755))
+		setupTestRepo(t, repoDir)
+
+		otherPath := filepath.Join(tempDir, "elsewhere", "some-worktree")
+
+		ctx := context.Background()
+		for _, name := range []string{otherPath, "../escape", "nested/../.."} {
+			opts := PrepareOptions{
+				GitRoot:         repoDir,
+				WorktreeName:    name,
+				BranchName:      "feature/whatever",
+				UseXDGWorktrees: true,
+			}
+
+			_, err := Prepare(ctx, opts)
+			require.Error(t, err, "Prepare must reject worktree name %q", name)
+
+			// Nothing was synthesized: the base itself must not even exist,
+			// since Prepare bailed before creating it.
+			base := WorktreeBase(repoDir, true)
+			_, statErr := os.Stat(base)
+			assert.True(t, os.IsNotExist(statErr),
+				"rejected name %q must not create anything under the worktree base", name)
+		}
+	})
+
+	t.Run("failed setup removes intermediate dirs of a nested name", func(t *testing.T) {
+		// Second half of the phantom-worktree regression. Rolling back only the
+		// leaf leaves every intermediate directory MkdirAll created; registry
+		// reconciliation then adopts the leftover as a real worktree and the
+		// daemon provisions skills and .claude settings into it. Rollback must
+		// remove the SHALLOWEST directory this call created — but never the
+		// shared base, which may hold sibling worktrees.
+		sandboxXDG(t)
+
+		tempDir := resolveDir(t.TempDir())
+		repoDir := filepath.Join(tempDir, "eco-root")
+		require.NoError(t, os.MkdirAll(repoDir, 0o755))
+		setupTestRepo(t, repoDir)
+
+		base := WorktreeBase(repoDir, true)
+		// A pre-existing sibling proves the base and its other children survive.
+		sibling := filepath.Join(base, "untouched-sibling")
+		require.NoError(t, os.MkdirAll(sibling, 0o755))
+
+		ctx := context.Background()
+		opts := PrepareOptions{
+			GitRoot:      repoDir,
+			WorktreeName: "feature/poisoned",
+			BranchName:   "feature/poisoned",
+			// A sibling that exists nowhere hard-errors in SetupSubmodules.
+			SiblingWorkspaces: []string{"ghost-repo"},
+			UseXDGWorktrees:   true,
+		}
+
+		_, err := Prepare(ctx, opts)
+		require.Error(t, err)
+
+		// The leaf AND its synthesized parent are gone...
+		_, statErr := os.Stat(filepath.Join(base, "feature", "poisoned"))
+		assert.True(t, os.IsNotExist(statErr), "failed Prepare must remove the leaf container")
+		_, statErr = os.Stat(filepath.Join(base, "feature"))
+		assert.True(t, os.IsNotExist(statErr),
+			"failed Prepare must remove the intermediate dirs it created, not just the leaf")
+
+		// ...while the shared base and unrelated siblings are untouched.
+		_, statErr = os.Stat(sibling)
+		assert.NoError(t, statErr, "rollback must not reach outside the worktree it created")
+	})
+
 	t.Run("error cases", func(t *testing.T) {
 		ctx := context.Background()
 

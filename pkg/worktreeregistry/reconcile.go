@@ -10,8 +10,9 @@ import (
 //
 //  1. Any registered entry whose AbsPath no longer exists on disk is deleted.
 //  2. Any directory found under xdgBase at two levels deep
-//     (<xdgBase>/<identifier>/<name>) that lacks a registry entry is adopted
-//     with a structural-default Entry (AbsPath only).
+//     (<xdgBase>/<identifier>/<name>) that LOOKS like a worktree (see
+//     looksLikeWorktree) and lacks a registry entry is adopted with a
+//     structural-default Entry (AbsPath only).
 //  3. Any registered entry with a stale AnchorOverride (the override no longer
 //     names a live Repos member) has the override cleared.
 //
@@ -85,10 +86,38 @@ func Reconcile(xdgBase string) error {
 			if _, ok := registered[wtPath]; ok {
 				continue
 			}
+			// Depth alone is not evidence: any stray directory that lands two
+			// levels under xdgBase has worktree SHAPE. Adopting it makes it a
+			// first-class worktree everywhere downstream (discovery classifies
+			// it, the daemon syncs skills and writes .claude settings into it,
+			// the git watcher scans it forever). Require a creation marker so
+			// debris — e.g. intermediate dirs left by a failed Prepare — stays
+			// inert until something legitimately provisions it.
+			if !looksLikeWorktree(wtPath) {
+				continue
+			}
 			// Adopt with a minimal structural-default entry.
 			entry := &Entry{AbsPath: wtPath}
 			_ = Save(entry) // best-effort
 		}
 	}
 	return nil
+}
+
+// looksLikeWorktree reports whether dir carries at least one artifact that only
+// a real worktree has:
+//
+//   - .git       — git's own worktree pointer (file) or a repo (dir);
+//   - grove.toml — the synthetic container config workspace.Prepare writes;
+//   - .grove/workspace — the grove workspace marker Prepare writes.
+//
+// Any one is sufficient: the marker set has grown over time, so an older
+// worktree may carry only some of them.
+func looksLikeWorktree(dir string) bool {
+	for _, marker := range []string{".git", "grove.toml", filepath.Join(".grove", "workspace")} {
+		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
+			return true
+		}
+	}
+	return false
 }

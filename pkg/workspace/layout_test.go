@@ -36,6 +36,65 @@ func TestWorktreeBases(t *testing.T) {
 	}
 }
 
+// TestValidateWorktreeName pins the guard that keeps a PATH from being used
+// where a NAME belongs. filepath.Join(base, "/abs/path") concatenates rather
+// than replacing, so an unvalidated absolute name synthesizes a deep tree
+// inside the container base — the "Users" phantom-worktree bug.
+func TestValidateWorktreeName(t *testing.T) {
+	valid := []string{
+		"my-branch",
+		"feature/foo",       // branch-style names nest the same way in every layout
+		"feature/foo/bar",   // arbitrarily deep is fine
+		"weird name",        // spaces inside are fine
+		".hidden",           // a leading dot is not a "." segment
+		"..leading-dots",    // likewise
+		"release-2026.07.1", // dots inside a segment are fine
+	}
+	for _, name := range valid {
+		if err := ValidateWorktreeName(name); err != nil {
+			t.Errorf("ValidateWorktreeName(%q) = %v, want nil", name, err)
+		}
+	}
+
+	invalid := []string{
+		"",  // empty
+		" ", // whitespace-only
+		"/Users/solair/.local/share/grove/worktrees/grove-cd22fef3/agent-testing-environments", // the real regression
+		"/abs",
+		"trailing ",
+		" leading",
+		"..",
+		".",
+		"../escape",
+		"a/../../escape",
+		"nested/..",
+		"nested/./here",
+		"double//slash",
+		"trailing/",
+		"/",
+	}
+	for _, name := range invalid {
+		if err := ValidateWorktreeName(name); err == nil {
+			t.Errorf("ValidateWorktreeName(%q) = nil, want error", name)
+		}
+	}
+}
+
+// TestWorktreeBase pins that WorktreeBase is exactly the base half of
+// ResolveNewWorktreePath in both layouts — the split creation rollback needs.
+func TestWorktreeBase(t *testing.T) {
+	sandboxXDG(t)
+
+	gitRoot := "/path/to/my-ecosystem"
+	for _, useXDG := range []bool{false, true} {
+		base := WorktreeBase(gitRoot, useXDG)
+		got := ResolveNewWorktreePath(gitRoot, "feature/foo", useXDG)
+		if want := filepath.Join(base, "feature/foo"); got != want {
+			t.Errorf("useXDG=%v: ResolveNewWorktreePath = %q, want %q", useXDG, got, want)
+		}
+	}
+}
+
 // TestIsWorktreePath_Legacy pins the anchored legacy semantics: a full
 // .grove-worktrees path component, not a substring.
 func TestIsWorktreePath_Legacy(t *testing.T) {

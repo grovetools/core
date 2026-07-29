@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -22,8 +23,13 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 		return "", fmt.Errorf("cannot create project worktree inside a notebook repository located at %s. Run this command from your project directory", opts.GitRoot)
 	}
 
-	if opts.WorktreeName == "" {
-		return "", fmt.Errorf("worktree name cannot be empty")
+	// Reject anything that is not a pure relative name BEFORE it reaches
+	// filepath.Join. An absolute path arriving here (a caller passing an
+	// already-resolved worktree PATH where a name belongs) does not replace the
+	// base — Join concatenates it — so MkdirAll below would otherwise
+	// materialize a deep synthetic tree inside the container base.
+	if err := ValidateWorktreeName(opts.WorktreeName); err != nil {
+		return "", err
 	}
 
 	// Every worktree container is a synthetic directory that holds its 1..N repos
@@ -39,11 +45,24 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 	// records whether the owner is the ecosystem root (non-anchored) or a
 	// sub-repo (anchored), which is how classification resolves the parent
 	// ecosystem (see GetProjectByPath in lookup.go).
+	base := WorktreeBase(opts.GitRoot, opts.UseXDGWorktrees)
 	target := ResolveNewWorktreePath(opts.GitRoot, opts.WorktreeName, opts.UseXDGWorktrees)
 
 	worktreePath := target
 	var created bool
+	// rollbackRoot is the SHALLOWEST directory this call creates for this
+	// worktree. Removing worktreePath alone on failure leaks every intermediate
+	// directory MkdirAll synthesized (branch-style names nest), and those
+	// leftovers are then adopted as real worktrees by registry reconciliation
+	// and discovery. It is always at or below base, so a concurrent Prepare's
+	// sibling worktree is never in the blast radius.
+	var rollbackRoot string
 	if _, statErr := os.Stat(worktreePath); os.IsNotExist(statErr) {
+		// The shared base is created separately and never rolled back.
+		if err := os.MkdirAll(base, 0o755); err != nil {
+			return "", fmt.Errorf("failed to create worktree base: %w", err)
+		}
+		rollbackRoot = shallowestMissing(base, worktreePath)
 		if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 			return "", fmt.Errorf("failed to create worktree container: %w", err)
 		}
@@ -81,7 +100,12 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 			// created worktreePath in THIS call (created==true here), so removing
 			// it is safe; any member linked-worktrees left inside are cleared by
 			// the pre-add `git worktree prune` on the next attempt.
-			_ = os.RemoveAll(worktreePath)
+			//
+			// Remove rollbackRoot, not worktreePath: for a nested (branch-style)
+			// name they differ, and leaving the intermediate directories behind
+			// is what turns a transient failure into a permanent phantom
+			// worktree (reconcile adopts it, skills/settings sync provision it).
+			_ = os.RemoveAll(rollbackRoot)
 			// Propagate hard: an explicitly-requested sibling repo that can't be
 			// set up means the resulting worktree would be silently incomplete
 			// (a non-ecosystem or missing-repo worktree). Fail loudly so the
@@ -232,4 +256,29 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 	}
 
 	return worktreePath, nil
+}
+
+// shallowestMissing returns the highest directory at or under base, on the path
+// from base to target, that does not yet exist — i.e. the shallowest directory
+// a subsequent MkdirAll(target) will create. When every level already exists it
+// returns target, so callers can always remove the result unconditionally.
+//
+// base itself is never returned: it is the shared container base and may hold
+// sibling worktrees created by other callers.
+func shallowestMissing(base, target string) string {
+	rel, err := filepath.Rel(base, target)
+	if err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		// target is not under base (shouldn't happen for a validated name) —
+		// fall back to the leaf, which is always safe to remove.
+		return target
+	}
+	cur := base
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		cur = filepath.Join(cur, part)
+		if _, err := os.Stat(cur); os.IsNotExist(err) {
+			return cur
+		}
+	}
+	return target
 }
