@@ -85,6 +85,7 @@ Settings nested under the `tui` key.
 | `theme` | (string, optional) <br> Sets the color theme for the terminal interfaces. Accepts a theme family ('ayu', 'catppuccin', 'floraverse', 'github', 'gruvbox', 'kanagawa', 'nord', 'onedark', 'oxocarbon', 'terminal', 'tokyonight') or a specific variant such as 'catppuccin-mocha', 'tokyonight-storm', or 'github-light-high-contrast'. Family names resolve to the family's default variant and adapt to light/dark terminal backgrounds when the family ships both. The complete list of valid names is generated into the JSON schema from the embedded theme registry. |
 | `icons` | (string, optional) <br> Controls the icon set used in the UI. Options are 'nerd' (requires a Nerd Font) or 'ascii' (text-based fallbacks). |
 | `nvim_embed` | (object, optional) <br> Configuration for the embedded Neovim component. Contains a `user_config` (boolean, required) property to toggle loading user's personal nvim config. |
+| `plugins` | (object, optional) <br> Process-based plugin panels: a map of plugin name to command definition. Each entry gets its own PTY pane on the treemux icon rail. See **TUI Plugins** below. |
 
 ```toml
 [tui]
@@ -92,6 +93,39 @@ Settings nested under the `tui` key.
   icons = "nerd"
   [tui.nvim_embed]
     user_config = true
+```
+
+#### TUI Plugins
+
+Settings nested under `tui.plugins.<name>`. The map key is the plugin name: it
+labels the rail item and identifies the pane in the persisted layout
+(`plugin-<name>`). Consumed by treemux.
+
+| Property | Description |
+| :--- | :--- |
+| `command` | (string, required) <br> The executable to run in the pane's PTY. |
+| `args` | (array of strings, optional) <br> Arguments passed to the command. |
+| `icon` | (string, optional) <br> Nerd Font glyph shown in the icon rail. Defaults to a sparkle. |
+| `cwd` | (string, optional) <br> Working directory for the command; `~` is expanded. Defaults to the user's home directory. |
+| `env` | (array of strings, optional) <br> Extra environment entries in `KEY=VALUE` form, layered on top of the inherited environment. |
+| `restart` | (boolean, optional, default: false) <br> Respawn the command automatically when it exits. Without it the pane shows an exited banner and waits for `r`. |
+| `position` | (string, optional, default: rail) <br> Where the pane lives. `rail` (a persistent icon-rail pane) is the only supported value; for a panel spawned on a key chord use `[tui.panels.bindings]`, which carries the chord. |
+
+The plugin set is read from the whole config cascade — global, the
+`~/.config/grove/plugins/*.toml` fragments, and workspace files — and is
+reconciled into the saved layout on every start and on every config reload, so
+adding or removing an entry takes effect without resetting the layout.
+
+```toml
+[tui.plugins.btop]
+  command = "btop"
+  icon = ""
+  restart = true
+
+[tui.plugins.lazygit]
+  command = "lazygit"
+  args = ["--use-config-file", "~/.config/lazygit/config.yml"]
+  cwd = "~/src/grove"
 ```
 
 ## Notebook Options
