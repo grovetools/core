@@ -616,15 +616,39 @@ func (c *RemoteClient) RefreshPaths(ctx context.Context, paths []string) ([]*mod
 // byte-identical to the one this method always sent, so an unfiltered subscriber
 // keeps the full stream.
 func (c *RemoteClient) StreamState(ctx context.Context, filter ...StreamFilter) (<-chan StateUpdate, error) {
-	streamURL := baseURL + "/api/stream"
+	var query string
 	if len(filter) > 0 {
-		if q := filter[0].Encode(); q != "" {
-			streamURL += "?" + q
-		}
+		query = filter[0].Encode()
+	}
+	ch, _, err := c.streamState(ctx, query)
+	return ch, err
+}
+
+// StreamStateWithOptions subscribes with a replay cursor and/or a server-side
+// type filter, and reports which of those the connected daemon honored.
+//
+// An older daemon ignores the query parameters and answers 200 with the plain
+// firehose, so the returned StreamCapabilities is the only honest signal:
+// treat a zero value as "I asked for filtering and resumption and got
+// neither". A daemon so old that /api/stream is missing entirely still yields
+// an error, as before.
+func (c *RemoteClient) StreamStateWithOptions(ctx context.Context, opts StreamOptions) (<-chan StateUpdate, StreamCapabilities, error) {
+	return c.streamState(ctx, opts.query())
+}
+
+// streamState is the one subscribe path both entry points share. The query is
+// already rendered by the caller — StreamFilter and StreamOptions encode
+// overlapping but not identical parameter sets (paths= vs since=, exact types
+// vs globs), so each keeps its own encoder and only the transport is common.
+// An empty query reproduces the historical bare /api/stream URL exactly.
+func (c *RemoteClient) streamState(ctx context.Context, query string) (<-chan StateUpdate, StreamCapabilities, error) {
+	streamURL := baseURL + "/api/stream"
+	if query != "" {
+		streamURL += "?" + query
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", streamURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create stream request: %w", err)
+		return nil, StreamCapabilities{}, fmt.Errorf("failed to create stream request: %w", err)
 	}
 
 	// Use a separate client with no timeout for streaming
@@ -636,13 +660,18 @@ func (c *RemoteClient) StreamState(ctx context.Context, filter ...StreamFilter) 
 
 	resp, err := streamClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to stream: %w", err)
+		return nil, StreamCapabilities{}, fmt.Errorf("failed to connect to stream: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("stream returned status %d", resp.StatusCode)
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, StreamCapabilities{}, fmt.Errorf("stream returned status %d: %w", resp.StatusCode, errEndpointNotFound)
+		}
+		return nil, StreamCapabilities{}, fmt.Errorf("stream returned status %d", resp.StatusCode)
 	}
+
+	caps := parseStreamCapabilities(resp.Header.Get(StreamFeaturesHeader), resp.Header.Get(StreamRingHeader))
 
 	ch := make(chan StateUpdate, 10)
 
@@ -680,7 +709,7 @@ func (c *RemoteClient) StreamState(ctx context.Context, filter ...StreamFilter) 
 		}
 	}()
 
-	return ch, nil
+	return ch, caps, nil
 }
 
 // StreamWorkspaceHUD subscribes to per-workspace HUD updates via SSE.

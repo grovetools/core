@@ -108,6 +108,14 @@ type Client interface {
 	// is used; the argument is variadic solely to stay source-compatible.
 	StreamState(ctx context.Context, filter ...StreamFilter) (<-chan StateUpdate, error)
 
+	// StreamStateWithOptions is StreamState with a replay cursor and/or a
+	// server-side type filter (see StreamOptions). The returned capabilities
+	// report what the connected daemon actually honored — an older daemon
+	// answers 200 and ignores the parameters, so a caller that needs the
+	// guarantees must check rather than assume. Passing the zero
+	// StreamOptions is exactly equivalent to StreamState.
+	StreamStateWithOptions(ctx context.Context, opts StreamOptions) (<-chan StateUpdate, StreamCapabilities, error)
+
 	// StreamWorkspaceHUD subscribes to per-workspace HUD updates for the
 	// given path. The daemon aggregates git/plan/cx/hooks/notebook state
 	// and emits a debounced snapshot whenever something relevant changes.
@@ -602,11 +610,17 @@ type StateUpdate struct {
 	Workspaces      []*models.EnrichedWorkspace `json:"workspaces,omitempty"`
 	WorkspaceDeltas []*models.WorkspaceDelta    `json:"workspace_deltas,omitempty"`
 	Sessions        []*models.Session           `json:"sessions,omitempty"`
-	UpdateType      string                      `json:"update_type"`           // "full", "workspace", "workspaces_delta", "session", "enrichment", "config_reload", "skill_sync"
-	Source          string                      `json:"source,omitempty"`      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note", "config", "skills")
-	Scanned         int                         `json:"scanned,omitempty"`     // Number of items actually scanned (for focused updates)
-	ConfigFile      string                      `json:"config_file,omitempty"` // The config file that changed (for "config_reload" events)
-	Payload         interface{}                 `json:"payload,omitempty"`     // Generic payload for events like skill_sync
+	UpdateType      string                      `json:"update_type"` // "full", "workspace", "workspaces_delta", "session", "enrichment", "config_reload", "skill_sync"
+	// Seq is the daemon's monotonic sequence for this update — the cursor to
+	// hand back as StreamOptions.Since on reconnect. It resets when the daemon
+	// restarts (a stream_gap frame with reason "reset" announces that), and is
+	// ZERO on every frame from a daemon that predates stream hardening: check
+	// StreamCapabilities.Sequenced before treating 0 as meaningful.
+	Seq        uint64      `json:"seq,omitempty"`
+	Source     string      `json:"source,omitempty"`      // Which collector sent this update (e.g., "git", "workspace", "session", "plan", "note", "config", "skills")
+	Scanned    int         `json:"scanned,omitempty"`     // Number of items actually scanned (for focused updates)
+	ConfigFile string      `json:"config_file,omitempty"` // The config file that changed (for "config_reload" events)
+	Payload    interface{} `json:"payload,omitempty"`     // Generic payload for events like skill_sync
 	// Theme carries the current resolved theme on the "initial" snapshot so
 	// a theme change during a disconnect isn't lost across reconnects.
 	// Dedicated "theme_changed" events arrive via Payload instead (decode

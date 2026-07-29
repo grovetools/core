@@ -33,6 +33,19 @@ type ThemeChangedMsg struct {
 // StreamReadyMsg signals that the SSE subscription is established.
 type StreamReadyMsg struct {
 	Ch <-chan daemon.StateUpdate
+	// Caps reports what the connected daemon honored of the requested
+	// StreamOptions. The zero value means a daemon that predates stream
+	// hardening: no sequence numbers, no replay, no server-side filtering —
+	// so a TUI that filtered server-side must filter locally too.
+	Caps daemon.StreamCapabilities
+}
+
+// StreamGapMsg is produced when the daemon reports it could not honor a
+// resume cursor. The subscription stays live; the consumer must reconcile
+// its own derived state (re-fetch what it cares about) rather than assume
+// the events it missed simply did not happen.
+type StreamGapMsg struct {
+	Gap daemon.StreamGap
 }
 
 // StreamErrorMsg signals an SSE stream error or closure.
@@ -47,6 +60,15 @@ type StateMsg struct {
 
 // StartStreamCmd opens the daemon SSE subscription.
 func StartStreamCmd(daemonClient daemon.Client) tea.Cmd {
+	return StartStreamCmdWithOptions(daemonClient, daemon.StreamOptions{})
+}
+
+// StartStreamCmdWithOptions opens the subscription with a resume cursor and/or
+// a server-side type filter. The resulting StreamReadyMsg carries the
+// daemon's actual capabilities: a TUI that narrowed the stream with Types must
+// check Caps.TypeFilter and keep its local switch, because an older daemon
+// answers with the full firehose.
+func StartStreamCmdWithOptions(daemonClient daemon.Client, opts daemon.StreamOptions) tea.Cmd {
 	ulog := grovelogging.NewUnifiedLogger("daemonstream")
 	return func() tea.Msg {
 		if daemonClient == nil || !daemonClient.IsRunning() {
@@ -55,15 +77,19 @@ func StartStreamCmd(daemonClient daemon.Client) tea.Cmd {
 		}
 
 		ctx := context.Background()
-		ch, err := daemonClient.StreamState(ctx)
+		ch, caps, err := daemonClient.StreamStateWithOptions(ctx, opts)
 		if err != nil {
 			ulog.Warn("Failed to connect daemon SSE stream").
 				Field("error", err.Error()).StructuredOnly().Log(ctx)
 			return StreamErrorMsg{Err: err}
 		}
 
-		ulog.Info("Connected to daemon SSE stream").StructuredOnly().Log(ctx)
-		return StreamReadyMsg{Ch: ch}
+		ulog.Info("Connected to daemon SSE stream").
+			Field("sequenced", caps.Sequenced).
+			Field("replay", caps.Replay).
+			Field("type_filter", caps.TypeFilter).
+			StructuredOnly().Log(ctx)
+		return StreamReadyMsg{Ch: ch, Caps: caps}
 	}
 }
 
@@ -82,10 +108,14 @@ func WaitForNextMsg(ch <-chan daemon.StateUpdate) tea.Cmd {
 }
 
 // HandleUpdate processes an SSE update and returns a tea.Cmd if it contains
-// an attach_agent_pane event or a theme change.
+// an attach_agent_pane event, a theme change, or a stream gap.
 func HandleUpdate(update daemon.StateUpdate) tea.Cmd {
 	if payload, ok := daemon.ParseThemeChanged(update); ok {
 		return handleThemeChanged(payload)
+	}
+
+	if gap, ok := daemon.ParseStreamGap(update); ok {
+		return handleStreamGap(gap)
 	}
 
 	if update.UpdateType != "attach_agent_pane" {
@@ -108,6 +138,23 @@ func HandleUpdate(update daemon.StateUpdate) tea.Cmd {
 		Field("pty_id", msg.PtyID).
 		StructuredOnly().Log(context.Background())
 
+	return func() tea.Msg { return msg }
+}
+
+// handleStreamGap surfaces a resume gap so the embedding TUI can reconcile.
+// It deliberately does NOT tear the subscription down: the stream stays live
+// and correct from here on, and the daemon has already re-sent the initial
+// snapshot. What is lost is the individual events in between.
+func handleStreamGap(gap *daemon.StreamGap) tea.Cmd {
+	grovelogging.NewUnifiedLogger("daemonstream").
+		Info("Daemon stream reported a resume gap; reconciling").
+		Field("reason", gap.Reason).
+		Field("since", gap.Since).
+		Field("oldest", gap.Oldest).
+		Field("current", gap.Current).
+		StructuredOnly().Log(context.Background())
+
+	msg := StreamGapMsg{Gap: *gap}
 	return func() tea.Msg { return msg }
 }
 

@@ -100,6 +100,13 @@ func (c *LocalClient) StreamState(ctx context.Context, filter ...StreamFilter) (
 	return nil, errors.New("streaming not available in local mode; start the daemon for real-time updates")
 }
 
+// StreamStateWithOptions returns an error for LocalClient: there is no bus to
+// replay or filter without a daemon.
+func (c *LocalClient) StreamStateWithOptions(ctx context.Context, opts StreamOptions) (<-chan StateUpdate, StreamCapabilities, error) {
+	ch, err := c.StreamState(ctx)
+	return ch, StreamCapabilities{}, err
+}
+
 // StreamWorkspaceHUD returns an error for LocalClient since HUD streaming
 // requires the daemon's aggregation + debouncing infrastructure.
 func (c *LocalClient) StreamWorkspaceHUD(ctx context.Context, path string) (<-chan models.WorkspaceHUD, error) {
