@@ -1227,6 +1227,39 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 				}
 			}
 		}
+
+		// 2.3. Load the plugin drop-in directory, ~/.config/grove/plugins/*.toml.
+		//
+		// These are global-layer fragments like the ones above, kept in their
+		// own directory because they are MACHINE-written: `grove plugin
+		// install` puts one [tui.plugins.<name>] file per installed panel
+		// there, so an uninstall is a file removal and a hand-disabled plugin
+		// is one file moved aside.
+		//
+		// LoadFromWithLogger has globbed this directory since the drop-in
+		// mechanism shipped; LoadLayered did not, which meant the one consumer
+		// of [tui.plugins] (treemux, via LoadLayered) never saw a drop-in.
+		// They are loaded after the ordinary fragments in both loaders, so the
+		// merge order is identical.
+		pluginPattern := filepath.Join(globalDir, "plugins", "*.toml")
+		if pluginFiles, err := filepath.Glob(pluginPattern); err == nil {
+			sort.Strings(pluginFiles)
+			for _, file := range pluginFiles {
+				fragmentData, err := os.ReadFile(file)
+				if err != nil {
+					continue
+				}
+				expanded := expandEnvVars(string(fragmentData))
+				fragmentConfig, parseErr := unmarshalConfig(file, []byte(expanded))
+				if parseErr == nil {
+					stripGroveMeta(fragmentConfig)
+					layeredConfig.GlobalFragments = append(layeredConfig.GlobalFragments, OverrideSource{
+						Path:   file,
+						Config: fragmentConfig,
+					})
+				}
+			}
+		}
 	}
 
 	// 2.5. Load Global Override layer (optional)

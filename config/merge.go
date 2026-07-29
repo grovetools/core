@@ -594,6 +594,28 @@ func mergeConfigs(base, override *Config) *Config {
 			result.TUI.Panels = override.TUI.Panels
 		}
 
+		// Merge [tui.plugins] per entry rather than wholesale. Plugin panels
+		// arrive one file at a time — `grove plugin install` writes one
+		// ~/.config/grove/plugins/<name>.toml per installed panel — so a
+		// layer that declares one panel must not erase the panels declared by
+		// the layers under it. Same-named entries are replaced, which is what
+		// lets a user's own config override an installed panel's command.
+		//
+		// Without this clause [tui.plugins] survived only in the base layer
+		// (mergeConfigs shallow-copies base and then rebuilds TUI field by
+		// field), so a panel declared anywhere but ~/.config/grove/grove.toml
+		// silently never appeared.
+		if len(override.TUI.Plugins) > 0 {
+			merged := make(map[string]*PluginConfig, len(result.TUI.Plugins)+len(override.TUI.Plugins))
+			for name, plugin := range result.TUI.Plugins {
+				merged[name] = plugin
+			}
+			for name, plugin := range override.TUI.Plugins {
+				merged[name] = plugin
+			}
+			result.TUI.Plugins = merged
+		}
+
 		// Merge Focus config
 		if override.TUI.Focus != nil {
 			if result.TUI.Focus == nil {

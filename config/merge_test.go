@@ -1267,3 +1267,46 @@ func TestMergeConfigs_TUIVimNavAndFocusThickness(t *testing.T) {
 		t.Errorf("theme = %q, want dark", merged.TUI.Theme)
 	}
 }
+
+// Plugin panels arrive one config file at a time: `grove plugin install`
+// writes one ~/.config/grove/plugins/<name>.toml per installed panel, and each
+// of those is its own layer in the cascade. Merging [tui.plugins] wholesale
+// would mean the last file wins and every other installed panel disappears.
+func TestMergeTUIPluginsAccumulatesAcrossLayers(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{Plugins: map[string]*PluginConfig{
+		"first": {Command: "/bin/first", Icon: "1"},
+	}}}
+	override := &Config{TUI: &TUIConfig{Plugins: map[string]*PluginConfig{
+		"second": {Command: "/bin/second", Icon: "2"},
+	}}}
+
+	merged := mergeConfigs(base, override)
+	if len(merged.TUI.Plugins) != 2 {
+		t.Fatalf("expected both panels to survive, got %+v", merged.TUI.Plugins)
+	}
+	if merged.TUI.Plugins["first"].Command != "/bin/first" {
+		t.Error("a later layer erased the panel declared by an earlier one")
+	}
+	if merged.TUI.Plugins["second"].Command != "/bin/second" {
+		t.Error("the later layer's own panel is missing")
+	}
+	if len(base.TUI.Plugins) != 1 {
+		t.Errorf("mergeConfigs mutated the base layer: %+v", base.TUI.Plugins)
+	}
+}
+
+// A same-named entry in a later layer replaces the earlier one, which is how a
+// user's own config overrides something an install wrote.
+func TestMergeTUIPluginsLaterLayerWinsOnTheSameName(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{Plugins: map[string]*PluginConfig{
+		"hello": {Command: "/installed/hello"},
+	}}}
+	override := &Config{TUI: &TUIConfig{Plugins: map[string]*PluginConfig{
+		"hello": {Command: "/my/own/hello"},
+	}}}
+
+	merged := mergeConfigs(base, override)
+	if got := merged.TUI.Plugins["hello"].Command; got != "/my/own/hello" {
+		t.Errorf("command = %q, want the later layer's", got)
+	}
+}
