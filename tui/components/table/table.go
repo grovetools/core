@@ -285,11 +285,16 @@ func SelectableTableWithOptions(headers []string, rows [][]string, selectedIndex
 	// If no headers:
 	// Line 0: top border
 	// Line 1+: data rows (first data row is at index 1)
-	var selectedLineIndex int
-	if len(headers) > 0 {
-		selectedLineIndex = 3 + selectedIndex
-	} else {
-		selectedLineIndex = 1 + selectedIndex
+	// A negative selectedIndex means "no selection" (empty tables pass -1), and
+	// must draw no marker at all: the naive 3+selectedIndex arithmetic landed
+	// the arrow on the header separator line instead.
+	selectedLineIndex := -1
+	if selectedIndex >= 0 {
+		if len(headers) > 0 {
+			selectedLineIndex = 3 + selectedIndex
+		} else {
+			selectedLineIndex = 1 + selectedIndex
+		}
 	}
 
 	// Add the indicator to each line
