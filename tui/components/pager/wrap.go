@@ -43,6 +43,35 @@ type InnerWithClose interface {
 	Close() error
 }
 
+// InnerWithMinSize is an Inner that declares the smallest body it can draw
+// anything meaningful in. Wrap forwards it to the pager's automatic too-small
+// gate, so the model gets TooSmallPlaceholder in place of its own view without
+// checking the pane size itself. See PageWithMinSize for what a minimum is —
+// and, more to the point, is not — for.
+type InnerWithMinSize interface {
+	MinSize() (width, height int)
+}
+
+// InnerWithTitle is an Inner that supplies the bold title row the pager renders
+// above the body when configured with ShowTitleRow.
+type InnerWithTitle interface {
+	Title() string
+}
+
+// InnerWithReady is an Inner that loads asynchronously. Until it reports ready,
+// the pager renders a centered loading message in place of its view.
+type InnerWithReady interface {
+	Ready() (ready bool, loadingMsg string)
+}
+
+// InnerWithEnabled is an Inner that can decline to be switched to: its tab is
+// dimmed, and numeric jumps and [/] cycling skip it. Inert while Wrap's single
+// tab is the whole pager, and the reason to declare it is the panel that grows
+// past one — see Meta.Pager.
+type InnerWithEnabled interface {
+	Enabled() bool
+}
+
 // WrapConfig configures a wrapped meta-panel.
 type WrapConfig struct {
 	// Config is the pager's own configuration: padding, footer reservation,
@@ -217,9 +246,44 @@ func (p *wrapped[T]) SetSize(w, h int) {
 	p.step(tea.WindowSizeMsg{Width: w, Height: h})
 }
 
+// The optional Page extensions below are forwarded to the inner model when it
+// implements the matching Inner interface. wrapped declares all of them
+// unconditionally — a generic type cannot acquire a method only for some
+// instantiations — so each answers, for a model that has not opted in, exactly
+// what the pager assumes of a page that does not implement the extension at
+// all: no text entry, no minimum, no title, always ready, always enabled.
+
 func (p *wrapped[T]) IsTextEntryActive() bool {
 	if t, ok := any(p.inner).(InnerWithTextEntry); ok {
 		return t.IsTextEntryActive()
 	}
 	return false
+}
+
+func (p *wrapped[T]) MinSize() (width, height int) {
+	if ms, ok := any(p.inner).(InnerWithMinSize); ok {
+		return ms.MinSize()
+	}
+	return 0, 0
+}
+
+func (p *wrapped[T]) Title() string {
+	if t, ok := any(p.inner).(InnerWithTitle); ok {
+		return t.Title()
+	}
+	return ""
+}
+
+func (p *wrapped[T]) Ready() (ready bool, loadingMsg string) {
+	if r, ok := any(p.inner).(InnerWithReady); ok {
+		return r.Ready()
+	}
+	return true, ""
+}
+
+func (p *wrapped[T]) Enabled() bool {
+	if e, ok := any(p.inner).(InnerWithEnabled); ok {
+		return e.Enabled()
+	}
+	return true
 }

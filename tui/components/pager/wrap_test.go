@@ -222,3 +222,122 @@ func TestWrapDefaultsTheTabName(t *testing.T) {
 		t.Errorf("default tab name missing from the bar:\n%s", meta.View())
 	}
 }
+
+// optModel implements every optional Inner interface at once, so each
+// forwarding path can be exercised with the others left at an inert value.
+// Constructed through newOpt so "ready" and "enabled" start true — a zero
+// value would open not-ready and unswitchable, which is the opposite of what
+// a model that never opted in should look like.
+type optModel struct {
+	minW, minH int
+	title      string
+	ready      bool
+	loading    string
+	enabled    bool
+}
+
+func newOpt() optModel { return optModel{ready: true, enabled: true} }
+
+func (m optModel) Init() tea.Cmd                       { return nil }
+func (m optModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
+func (m optModel) View() string                        { return "OPT-BODY" }
+func (m optModel) MinSize() (int, int)                 { return m.minW, m.minH }
+func (m optModel) Title() string                       { return m.title }
+func (m optModel) Ready() (bool, string)               { return m.ready, m.loading }
+func (m optModel) Enabled() bool                       { return m.enabled }
+
+func (m optModel) withMinSize(w, h int) optModel { m.minW, m.minH = w, h; return m }
+func (m optModel) withTitle(s string) optModel   { m.title = s; return m }
+func (m optModel) notReady(msg string) optModel  { m.ready, m.loading = false, msg; return m }
+func (m optModel) withEnabled(b bool) optModel   { m.enabled = b; return m }
+
+// The defect this set covers: wrapped implemented none of these, so every
+// optional Page extension was unreachable through Wrap however the inner model
+// was written.
+var (
+	_ PageWithMinSize   = (*wrapped[optModel])(nil)
+	_ PageWithTitle     = (*wrapped[optModel])(nil)
+	_ PageWithReady     = (*wrapped[optModel])(nil)
+	_ PageWithEnabled   = (*wrapped[optModel])(nil)
+	_ PageWithTextInput = (*wrapped[optModel])(nil)
+	_ PageWithID        = (*wrapped[optModel])(nil)
+)
+
+func TestWrapForwardsTheMinimumSize(t *testing.T) {
+	meta := Wrap(newOpt().withMinSize(40, 10), WrapConfig{Config: Config{HideTabBar: true}})
+
+	meta, _ = meta.Step(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if !strings.Contains(meta.View(), "OPT-BODY") {
+		t.Errorf("a pane above the minimum did not render the body:\n%s", meta.View())
+	}
+
+	meta, _ = meta.Step(tea.WindowSizeMsg{Width: 30, Height: 24})
+	narrow := meta.View()
+	if strings.Contains(narrow, "OPT-BODY") {
+		t.Errorf("a pane below the minimum width still rendered the body:\n%s", narrow)
+	}
+	if !strings.Contains(narrow, "too small") {
+		t.Errorf("no placeholder in a pane below the minimum width:\n%s", narrow)
+	}
+
+	// Height is checked independently of width.
+	meta, _ = meta.Step(tea.WindowSizeMsg{Width: 80, Height: 6})
+	if strings.Contains(meta.View(), "OPT-BODY") {
+		t.Errorf("a pane below the minimum height still rendered the body:\n%s", meta.View())
+	}
+}
+
+// A model that declares no minimum keeps the opt-in default: it is never too
+// small, however little room it is given.
+func TestWrapWithoutAMinimumIsNeverTooSmall(t *testing.T) {
+	meta := Wrap(bareModel{}, WrapConfig{Config: Config{HideTabBar: true}})
+	meta, _ = meta.Step(tea.WindowSizeMsg{Width: 4, Height: 2})
+
+	if !strings.Contains(meta.View(), "BARE") {
+		t.Errorf("a model that declared no minimum was gated anyway:\n%s", meta.View())
+	}
+}
+
+func TestWrapForwardsTheTitle(t *testing.T) {
+	meta := Wrap(newOpt().withTitle("TITLE-ROW"),
+		WrapConfig{Config: Config{HideTabBar: true, ShowTitleRow: true}})
+	meta, _ = meta.Step(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	if !strings.Contains(meta.View(), "TITLE-ROW") {
+		t.Errorf("title row not rendered:\n%s", meta.View())
+	}
+}
+
+func TestWrapForwardsReadiness(t *testing.T) {
+	meta := Wrap(newOpt().notReady("Loading timers…"), WrapConfig{Config: Config{HideTabBar: true}})
+	meta, _ = meta.Step(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := meta.View()
+	if strings.Contains(view, "OPT-BODY") {
+		t.Errorf("a model that is not ready still rendered its body:\n%s", view)
+	}
+	if !strings.Contains(view, "Loading timers…") {
+		t.Errorf("loading message not rendered:\n%s", view)
+	}
+}
+
+// Enabled is inert on the single tab Wrap starts with, so the assertion is on
+// a two-page pager built from the same adapter — the shape a panel reaches
+// through Meta.Pager once it grows.
+func TestWrapForwardsEnabled(t *testing.T) {
+	first := &wrapped[optModel]{inner: newOpt(), cfg: WrapConfig{Name: "first"}}
+	second := &wrapped[optModel]{inner: newOpt().withEnabled(false), cfg: WrapConfig{Name: "second"}}
+	m := New([]Page{first, second}, DefaultKeyMap())
+
+	jump2 := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")}
+	m, _ = m.Update(jump2)
+	if m.ActiveIndex() != 0 {
+		t.Fatalf("a numeric jump landed on a disabled tab (index %d)", m.ActiveIndex())
+	}
+
+	second.inner = second.inner.withEnabled(true)
+	m, _ = m.Update(jump2)
+	if m.ActiveIndex() != 1 {
+		t.Errorf("active tab = %d, want the now-enabled tab 1", m.ActiveIndex())
+	}
+}
