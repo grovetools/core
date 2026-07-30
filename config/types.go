@@ -366,9 +366,13 @@ type DrawerViewsConfig struct {
 	Files *DrawerFilesConfig `yaml:"files,omitempty" toml:"files,omitempty" json:"files,omitempty" jsonschema:"description=Settings for the accessed-files drawer pane"`
 }
 
-// Drawer files view modes. Flat is the default because its ORDER is information
-// the trie cannot carry: the list is append-ordered by last access, so "what is
-// this agent doing right now" is readable straight off the bottom of it.
+// Drawer files view modes. Tree is the default: the repo → dir → file shape is
+// what a reader is looking for in a list of files, and follow mode reveals the
+// newest access inside it, so the live question the flat list answers by ORDER
+// ("what is this agent doing right now") is still answered by the cursor.
+//
+// Flat remains a first-class view, not a fallback — its append-ordered-by-last-
+// access sequence is information no trie can carry — and stays one t away.
 const (
 	DrawerFilesViewFlat = "flat"
 	DrawerFilesViewTree = "tree"
@@ -377,10 +381,11 @@ const (
 // DrawerFilesConfig configures the accessed-files drawer pane.
 type DrawerFilesConfig struct {
 	// View is the view the pane STARTS in ("flat" or "tree"); the pane's own t
-	// key toggles it per session and outranks this once used. An unrecognized
-	// value falls back to flat rather than failing the config: a bad spelling
-	// here should cost you the preference, not the pane.
-	View string `yaml:"view,omitempty" toml:"view,omitempty" json:"view,omitempty" jsonschema:"description=Initial view for the accessed-files drawer pane,enum=flat,enum=tree,default=flat"`
+	// key toggles it per session and outranks this once used. Only "flat" turns
+	// the trie off — any other value, including an unrecognized one, leaves the
+	// default in place: a bad spelling here should cost you the preference, not
+	// the pane.
+	View string `yaml:"view,omitempty" toml:"view,omitempty" json:"view,omitempty" jsonschema:"description=Initial view for the accessed-files drawer pane,enum=flat,enum=tree,default=tree"`
 }
 
 // DrawerPageConfig defines one named drawer page. A partial built-in page

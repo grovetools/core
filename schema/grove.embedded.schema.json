@@ -98,7 +98,7 @@
       "additionalProperties": false,
       "properties": {
         "view": {
-          "default": "flat",
+          "default": "tree",
           "description": "Initial view for the accessed-files drawer pane",
           "enum": [
             "flat",
