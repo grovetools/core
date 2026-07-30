@@ -182,6 +182,43 @@ func TestDrawerConfigMerge(t *testing.T) {
 	})
 }
 
+// Pane settings live beside the pages and merge field-wise, so a layer naming
+// only the files view neither restates a page nor aliases the layer it came from.
+func TestDrawerFilesViewMergesFieldWise(t *testing.T) {
+	var cfg Config
+	input := "[tui.drawer.files]\nview = \"tree\"\n"
+	if err := toml.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatalf("unmarshal files view: %v", err)
+	}
+	if cfg.TUI == nil || cfg.TUI.Drawer == nil || cfg.TUI.Drawer.Files == nil {
+		t.Fatalf("files view did not parse: %#v", cfg.TUI)
+	}
+	if got := cfg.TUI.Drawer.Files.View; got != DrawerFilesViewTree {
+		t.Fatalf("view = %q, want %q", got, DrawerFilesViewTree)
+	}
+
+	base := &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+		CycleKey: "D", Files: &DrawerFilesConfig{View: DrawerFilesViewTree},
+	}}}
+	// An override that says nothing about the pane keeps the base's view...
+	got := mergeConfigs(base, &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{DefaultPage: "git"}}}).TUI.Drawer
+	if got.Files == nil || got.Files.View != DrawerFilesViewTree {
+		t.Fatalf("empty override dropped the files view: %#v", got.Files)
+	}
+	// ...and the merged result owns its copy.
+	got.Files.View = DrawerFilesViewFlat
+	if base.TUI.Drawer.Files.View != DrawerFilesViewTree {
+		t.Fatal("merged files config aliases the base layer")
+	}
+
+	got = mergeConfigs(base, &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+		Files: &DrawerFilesConfig{View: DrawerFilesViewFlat},
+	}}}).TUI.Drawer
+	if got.Files.View != DrawerFilesViewFlat {
+		t.Fatalf("last non-empty view did not win: %#v", got.Files)
+	}
+}
+
 func TestDrawerConfigAbsentRemainsNil(t *testing.T) {
 	var cfg Config
 	if err := toml.Unmarshal([]byte("[tui]\ntheme = \"dark\"\n"), &cfg); err != nil {

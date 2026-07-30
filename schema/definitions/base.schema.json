@@ -94,6 +94,21 @@
       },
       "type": "object"
     },
+    "DrawerFilesConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "view": {
+          "default": "flat",
+          "description": "Initial view for the accessed-files drawer pane",
+          "enum": [
+            "flat",
+            "tree"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "DrawerNodeConfig": {
       "additionalProperties": false,
       "properties": {
@@ -161,6 +176,10 @@
         "default_page": {
           "description": "Drawer page selected at startup",
           "type": "string"
+        },
+        "files": {
+          "$ref": "#/$defs/DrawerFilesConfig",
+          "description": "Settings for the accessed-files drawer pane"
         },
         "page_order": {
           "description": "Ordered drawer page names",

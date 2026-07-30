@@ -360,6 +360,27 @@ type DrawerViewsConfig struct {
 	DefaultPage string                       `yaml:"default_page,omitempty" toml:"default_page,omitempty" json:"default_page,omitempty" jsonschema:"description=Drawer page selected at startup"`
 	PageOrder   []string                     `yaml:"page_order,omitempty" toml:"page_order,omitempty" json:"page_order,omitempty" jsonschema:"description=Ordered drawer page names"`
 	Pages       map[string]*DrawerPageConfig `yaml:"pages,omitempty" toml:"pages,omitempty" json:"pages,omitempty" jsonschema:"description=Named drawer page definitions"`
+	// Files configures the accessed-files pane. Pane-level settings live beside
+	// the pages rather than inside them because a pane is not owned by a page:
+	// any page's layout may mount "files", and all of them want the same view.
+	Files *DrawerFilesConfig `yaml:"files,omitempty" toml:"files,omitempty" json:"files,omitempty" jsonschema:"description=Settings for the accessed-files drawer pane"`
+}
+
+// Drawer files view modes. Flat is the default because its ORDER is information
+// the trie cannot carry: the list is append-ordered by last access, so "what is
+// this agent doing right now" is readable straight off the bottom of it.
+const (
+	DrawerFilesViewFlat = "flat"
+	DrawerFilesViewTree = "tree"
+)
+
+// DrawerFilesConfig configures the accessed-files drawer pane.
+type DrawerFilesConfig struct {
+	// View is the view the pane STARTS in ("flat" or "tree"); the pane's own t
+	// key toggles it per session and outranks this once used. An unrecognized
+	// value falls back to flat rather than failing the config: a bad spelling
+	// here should cost you the preference, not the pane.
+	View string `yaml:"view,omitempty" toml:"view,omitempty" json:"view,omitempty" jsonschema:"description=Initial view for the accessed-files drawer pane,enum=flat,enum=tree,default=flat"`
 }
 
 // DrawerPageConfig defines one named drawer page. A partial built-in page

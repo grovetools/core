@@ -408,6 +408,10 @@ func cloneDrawerViews(drawer *DrawerViewsConfig) *DrawerViewsConfig {
 			cloned.Pages[name] = cloneDrawerPage(page)
 		}
 	}
+	if drawer.Files != nil {
+		files := *drawer.Files
+		cloned.Files = &files
+	}
 	return &cloned
 }
 
@@ -520,6 +524,15 @@ func mergeConfigs(base, override *Config) *Config {
 				for name, page := range override.TUI.Drawer.Pages {
 					result.TUI.Drawer.Pages[name] = cloneDrawerPage(page)
 				}
+			}
+			// Pane settings merge field-wise (last-non-empty-wins), unlike whole
+			// page definitions: a layer that only names a files view must not have
+			// to restate anything else the pane grows later.
+			if override.TUI.Drawer.Files != nil && override.TUI.Drawer.Files.View != "" {
+				if result.TUI.Drawer.Files == nil {
+					result.TUI.Drawer.Files = &DrawerFilesConfig{}
+				}
+				result.TUI.Drawer.Files.View = override.TUI.Drawer.Files.View
 			}
 		}
 		// Bool fields need explicit clauses or an override layer's value is
