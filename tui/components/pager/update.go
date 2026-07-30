@@ -11,6 +11,19 @@ import (
 // page. Disabled pages are skipped by jumps and cycling; when the
 // active page reports IsTextEntryActive(), navigation keys fall
 // through to the page's own Update so text input is preserved.
+//
+// Focus and blur reach a page through exactly one door: its Focus and
+// Blur methods. FocusMsg and BlurMsg are translated into those calls
+// and are NOT also forwarded to the page's Update — a page that
+// received both would run its focus transition twice, and a transition
+// with a side effect (pausing a timer, starting a poll, marking read)
+// would fire it twice. That also makes the two ways a page can gain
+// focus — the host focusing the pager, and a tab switch within it —
+// the same single call, so a page has one place to react.
+//
+// A page adapting an inner bubbletea model is the one responsible for
+// re-emitting FocusMsg/BlurMsg into that model from its Focus/Blur; see
+// wrapped, which does exactly that.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if len(m.pages) == 0 {
 		return m, nil
@@ -47,18 +60,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.switchTo(idx)
 
 	case FocusMsg:
-		updated, cmd := m.pages[m.activePage].Update(msg)
-		m.pages[m.activePage] = updated
-		if cmd != nil {
-			return m, cmd
-		}
+		// Focus()/Blur() are the canonical focus edge — see the note above.
+		// The message is not also forwarded to Update.
 		return m, m.pages[m.activePage].Focus()
 
 	case BlurMsg:
 		m.pages[m.activePage].Blur()
-		updated, cmd := m.pages[m.activePage].Update(msg)
-		m.pages[m.activePage] = updated
-		return m, cmd
+		return m, nil
 
 	case tea.KeyMsg:
 		// If the active page is currently accepting text input, let

@@ -13,11 +13,14 @@ package pager
 // switches on is here.
 
 // FocusMsg informs a pager that it has gained focus in the host layout. The
-// pager forwards it to the active page and then calls that page's Focus.
+// pager calls the active page's Focus and does not forward the message to that
+// page's Update — Focus is the single delivery point, so a focus side effect
+// runs once. A page holding an inner model re-emits FocusMsg into it from
+// Focus.
 type FocusMsg struct{}
 
 // BlurMsg informs a pager that it has lost focus in the host layout. The pager
-// blurs the active page and forwards the message to it.
+// calls the active page's Blur, on the same exactly-once terms as FocusMsg.
 type BlurMsg struct{}
 
 // SwitchTabMsg requests that the pager activate a different tab. TabID wins

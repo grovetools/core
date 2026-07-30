@@ -6,6 +6,15 @@ package pager
 import tea "github.com/charmbracelet/bubbletea"
 
 // Page is one tab of a pager.
+//
+// Focus and Blur are the page's focus transition, and the only one: the pager
+// calls them both when the host focuses or blurs the whole pager (FocusMsg,
+// BlurMsg) and when a tab switch changes which page is active, and it never
+// also hands FocusMsg/BlurMsg to Update. So a page implements its transition
+// once, in Focus/Blur, and it runs exactly once per transition — which is what
+// makes a side effect there (starting a poll, pausing a timer, marking read)
+// safe to write. A page wrapping an inner bubbletea model that expects
+// FocusMsg/BlurMsg delivers it from Focus/Blur.
 type Page interface {
 	Name() string
 	Init() tea.Cmd

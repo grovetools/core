@@ -239,6 +239,11 @@ func (p *wrapped[T]) Update(msg tea.Msg) (Page, tea.Cmd) {
 	return p, p.step(msg)
 }
 
+// Focus and Blur are where the inner model learns about a focus transition:
+// the pager calls these and does not forward FocusMsg/BlurMsg to Update, so
+// each step below is the inner model's one delivery. Blur drops the returned
+// command because Page.Blur has nowhere to return one; a model with deferred
+// work to do on blur should do it on the next focus instead.
 func (p *wrapped[T]) Focus() tea.Cmd { return p.step(FocusMsg{}) }
 func (p *wrapped[T]) Blur()          { p.step(BlurMsg{}) }
 
