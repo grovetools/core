@@ -13,8 +13,12 @@ const (
 	MuxTmux   MuxType = "tmux"
 	MuxTuimux MuxType = "tuimux"
 
-	EnvGroveMux          = "GROVE_MUX"
-	EnvTmux              = "TMUX"
+	EnvGroveMux = "GROVE_MUX"
+	EnvTmux     = "TMUX"
+	// EnvGroveTerminal marks a process spawned by a grove terminal. It is not a
+	// mux marker: ActiveMux ignores it, and only the agent-target derivation
+	// reads it — see agent_target.go for why it ranks below tuimux.
+	EnvGroveTerminal     = "GROVE_TERMINAL"
 	EnvTuimuxPTY         = "TUIMUX_PTY"
 	EnvTuimuxSession     = "TUIMUX_SESSION"
 	EnvGroveTmuxSocket   = "GROVE_TMUX_SOCKET"
