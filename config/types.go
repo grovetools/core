@@ -565,6 +565,23 @@ type DaemonConfig struct {
 	Build                  *BuildConfig      `yaml:"build,omitempty" toml:"build,omitempty" jsonschema:"description=Machine-wide build queue configuration"`
 	SSH                    *DaemonSSHConfig  `yaml:"ssh,omitempty" toml:"ssh,omitempty" jsonschema:"description=Embedded SSH server configuration"`
 	PairWithTreemux        *bool             `yaml:"pair_with_treemux,omitempty" toml:"pair_with_treemux,omitempty" jsonschema:"description=Opt-in to kill daemon when the parent treemux exits"`
+
+	JobReconcile *DaemonJobReconcileConfig `yaml:"job_reconcile,omitempty" toml:"job_reconcile,omitempty" jsonschema:"description=Reconciliation of job files left claiming an active status by processes that died"`
+}
+
+// DaemonJobReconcileConfig controls the JobCollector's sweep for job
+// files stuck on an active status ("running") with nothing alive behind
+// them — the ghosts left when a daemon restart loses a job, or a
+// process dies without anyone watching.
+//
+// It defaults to report-only. Rewriting somebody's job file on
+// inference is the kind of change that should be observed in logs for a
+// release before it is trusted to act, so `enabled` must be set
+// explicitly to make the sweep write anything.
+type DaemonJobReconcileConfig struct {
+	Enabled   *bool  `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Actually rewrite stuck job files. When false (the default) the sweep only logs what it would have changed."`
+	QuietFor  string `yaml:"quiet_for,omitempty" toml:"quiet_for,omitempty" jsonschema:"description=How long a job file must be untouched before the sweep will reconcile it (default: 10m)"`
+	MaxPerRun int    `yaml:"max_per_run,omitempty" toml:"max_per_run,omitempty" jsonschema:"description=Cap on files reconciled per sweep, so a bad inference can't rewrite a whole notebook at once (default: 25)"`
 }
 
 // DaemonSSHConfig holds configuration for the embedded SSH server.

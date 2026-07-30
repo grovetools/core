@@ -23,7 +23,15 @@ type FileSystemRegistry struct {
 }
 
 func NewFileSystemRegistry() (*FileSystemRegistry, error) {
-	baseDir := filepath.Join(paths.StateDir(), "hooks", "sessions")
+	return NewFileSystemRegistryAt(paths.StateDir())
+}
+
+// NewFileSystemRegistryAt is NewFileSystemRegistry rooted at an explicit
+// state directory instead of paths.StateDir(). Used by tests and by
+// callers (health.Cleaner) that carry a state-dir override so a sweep
+// can be exercised without touching the real registry.
+func NewFileSystemRegistryAt(stateDir string) (*FileSystemRegistry, error) {
+	baseDir := filepath.Join(stateDir, "hooks", "sessions")
 	if err := os.MkdirAll(baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create sessions directory: %w", err)
 	}
