@@ -529,21 +529,19 @@ func (m *Model) Close() error {
 	return nil
 }
 
-// Init kicks off the daemon stream connection and arms the spinner
-// and ticker commands.
+// Init kicks off the daemon stream connection and arms the spinner.
+//
+// There is no periodic UI tick: every source of new content already
+// arrives as its own message (batchLogMsg from the log stream pump,
+// batchStateMsg from the daemon SSE pump), and the View renders only
+// absolute timestamps, so nothing on screen goes stale between
+// messages. A refresh tick here would re-render the whole list at its
+// own cadence forever while the panel sits idle.
 func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		m.connectToDaemon(),
-		tick(),
 	)
-}
-
-// tick emits a plain tickMsg every 100ms for UI refresh.
-func tick() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
 }
 
 // Messages
@@ -553,7 +551,6 @@ type newLogMsg struct {
 	data          map[string]interface{}
 }
 type (
-	tickMsg        time.Time
 	clearStatusMsg struct{}
 	streamErrMsg   struct{ err error }
 )
@@ -1420,9 +1417,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		m.statusMessage = fmt.Sprintf("Stream error: %v", msg.err)
 		return m, m.clearStatusMessageAfter(5 * time.Second)
-
-	case tickMsg:
-		return m, tick()
 
 	case clearStatusMsg:
 		m.statusMessage = ""
