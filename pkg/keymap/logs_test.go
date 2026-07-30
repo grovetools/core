@@ -5,9 +5,11 @@ import "testing"
 func TestLogKeyMapSectionsExposeLogSpecificFilters(t *testing.T) {
 	sections := NewLogKeyMap(nil).Sections()
 
+	// Chord canon 60 §10: the display/filter toggles moved into the t…
+	// namespace (RULE T) — flat `v` and `E` are gone, chord-only (E4).
 	want := map[string]string{
-		"v": "cycle log level",
-		"E": "toggle events only",
+		"tl": "cycle log level",
+		"te": "toggle events only",
 	}
 	for _, section := range sections {
 		for _, binding := range section.Bindings {

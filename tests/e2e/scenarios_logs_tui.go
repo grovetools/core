@@ -156,13 +156,13 @@ logging:
 			harness.NewStep("View JSON tree", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Press 'J' to view JSON tree
-				if err := session.SendKeys("J"); err != nil {
-					return fmt.Errorf("failed to send J key: %w", err)
+				// Press the vj chord to view the JSON tree
+				if err := session.SendKeys("vj"); err != nil {
+					return fmt.Errorf("failed to send vj chord: %w", err)
 				}
 
 				if err := session.WaitStable(); err != nil {
-					return fmt.Errorf("UI did not stabilize after J: %w", err)
+					return fmt.Errorf("UI did not stabilize after vj: %w", err)
 				}
 
 				// Wait for JSON tree view indicator
@@ -268,9 +268,9 @@ logging:
 			harness.NewStep("Verify follow mode toggle", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Press 'F' to toggle follow mode on
-				if err := session.SendKeys("F"); err != nil {
-					return fmt.Errorf("failed to send F key: %w", err)
+				// Press the tt chord to toggle follow mode on
+				if err := session.SendKeys("tt"); err != nil {
+					return fmt.Errorf("failed to send tt chord: %w", err)
 				}
 
 				// Wait for the follow indicator
@@ -279,9 +279,9 @@ logging:
 					return fmt.Errorf("follow mode indicator did not appear: %w\nContent: %s", err, content)
 				}
 
-				// Press 'F' again to toggle it off
-				if err := session.SendKeys("F"); err != nil {
-					return fmt.Errorf("failed to send F key again: %w", err)
+				// Press the tt chord again to toggle it off
+				if err := session.SendKeys("tt"); err != nil {
+					return fmt.Errorf("failed to send tt chord again: %w", err)
 				}
 
 				// Wait for UI to stabilize
@@ -614,9 +614,9 @@ logging:
 			harness.NewStep("Open JSON viewer", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Press 'J' to view JSON tree
-				if err := session.SendKeys("J"); err != nil {
-					return fmt.Errorf("failed to send J key: %w", err)
+				// Press the vj chord to view the JSON tree
+				if err := session.SendKeys("vj"); err != nil {
+					return fmt.Errorf("failed to send vj chord: %w", err)
 				}
 
 				// Wait for JSON view indicator
@@ -771,9 +771,9 @@ logging:
 			harness.NewStep("Yank selection and verify exit", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				// Press 'y' to yank selection
-				if err := session.SendKeys("y"); err != nil {
-					return fmt.Errorf("failed to send y key: %w", err)
+				// Press the yy chord to yank the selection
+				if err := session.SendKeys("yy"); err != nil {
+					return fmt.Errorf("failed to send yy chord: %w", err)
 				}
 
 				// Wait for copy confirmation message

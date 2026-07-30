@@ -97,11 +97,11 @@ extensions:
 
 				return nil
 			}),
-			harness.NewStep("Toggle filters ON with 'f' key", func(ctx *harness.Context) error {
+			harness.NewStep("Toggle filters ON with the tf chord", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				if err := session.SendKeys("f"); err != nil {
-					return fmt.Errorf("failed to send f key: %w", err)
+				if err := session.SendKeys("tf"); err != nil {
+					return fmt.Errorf("failed to send tf chord: %w", err)
 				}
 
 				if err := session.WaitForText("[Filters:ON]", 2*time.Second); err != nil {
@@ -119,11 +119,11 @@ extensions:
 
 				return nil
 			}),
-			harness.NewStep("Toggle filters OFF again with 'f' key", func(ctx *harness.Context) error {
+			harness.NewStep("Toggle filters OFF again with the tf chord", func(ctx *harness.Context) error {
 				session := ctx.Get("tui_session").(*tui.Session)
 
-				if err := session.SendKeys("f"); err != nil {
-					return fmt.Errorf("failed to send f key again: %w", err)
+				if err := session.SendKeys("tf"); err != nil {
+					return fmt.Errorf("failed to send tf chord again: %w", err)
 				}
 
 				if err := session.WaitStable(); err != nil {

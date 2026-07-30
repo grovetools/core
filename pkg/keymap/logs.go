@@ -76,57 +76,74 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "clear/back"),
 		),
+		// Toggle (t…) namespace member. RULE T (canon 60 §4.2): every
+		// display/filter toggle is a chord. `tt` = toggle tail/follow.
 		ToggleFollow: key.NewBinding(
-			key.WithKeys("F"),
-			key.WithHelp("F", "toggle follow"),
+			key.WithKeys("tt"),
+			key.WithHelp("tt", "toggle follow (tail)"),
 		),
+		// Toggle (t…) namespace member (was flat `f`).
 		ToggleFilters: key.NewBinding(
-			key.WithKeys("f"),
-			key.WithHelp("f", "toggle filters"),
+			key.WithKeys("tf"),
+			key.WithHelp("tf", "toggle filters"),
 		),
+		// Toggle (t…) namespace member (was flat `E`).
 		ToggleEvents: key.NewBinding(
-			key.WithKeys("E"),
-			key.WithHelp("E", "toggle events only"),
+			key.WithKeys("te"),
+			key.WithHelp("te", "toggle events only"),
 		),
+		// View (v…) namespace member (was flat `J`). Canon 60 §4.1.
 		ViewJSON: key.NewBinding(
-			key.WithKeys("J"),
-			key.WithHelp("J", "view json"),
+			key.WithKeys("vj"),
+			key.WithHelp("vj", "view json"),
 		),
 		VisualModeStart: key.NewBinding(
 			key.WithKeys("V"),
 			key.WithHelp("V", "visual line mode"),
 		),
+		// The canonical vim yank chord (was flat `y`). Canon 60 §5.6: flat `y`
+		// is the arming letter for `yy` and must stay unbound. Base.Yank is
+		// disabled below so `yy` routes here.
 		Yank: key.NewBinding(
-			key.WithKeys("y"),
-			key.WithHelp("y", "yank json"),
+			key.WithKeys("yy"),
+			key.WithHelp("yy", "yank json"),
 		),
 		SwitchFocus: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch focus"),
 		),
+		// Toggle (t…) namespace member (was flat `s`).
 		ToggleScope: key.NewBinding(
-			key.WithKeys("s"),
-			key.WithHelp("s", "cycle scope"),
+			key.WithKeys("ts"),
+			key.WithHelp("ts", "cycle scope"),
 		),
+		// Toggle (t…) namespace member (was flat `S`). Uppercase-in-chord is
+		// established house style (flow-status ships cM/cA).
 		ToggleSystem: key.NewBinding(
-			key.WithKeys("S"),
-			key.WithHelp("S", "toggle system logs"),
+			key.WithKeys("tS"),
+			key.WithHelp("tS", "toggle system logs"),
 		),
+		// Toggle (t…) namespace member. Vacates flat `v`, the reserved view
+		// prefix this TUI was squatting on.
 		CycleLevel: key.NewBinding(
-			key.WithKeys("v"),
-			key.WithHelp("v", "cycle log level"),
+			key.WithKeys("tl"),
+			key.WithHelp("tl", "cycle log level"),
 		),
+		// Toggle (t…) namespace member (was flat `C`).
 		ComponentSummary: key.NewBinding(
-			key.WithKeys("C"),
-			key.WithHelp("C", "component filter"),
+			key.WithKeys("tc"),
+			key.WithHelp("tc", "component filter"),
 		),
 		ClearBuffer: key.NewBinding(
 			key.WithKeys("ctrl+l"),
 			key.WithHelp("ctrl+l", "clear buffer"),
 		),
+		// Ring-1 `Y` = yank the ALTERNATE payload (canon 60 §5.1), matching
+		// memory-view's Y=copy_chunk. Vacates flat `c`, the reserved change
+		// prefix this TUI was squatting on.
 		CopyRawText: key.NewBinding(
-			key.WithKeys("c"),
-			key.WithHelp("c", "copy raw text"),
+			key.WithKeys("Y"),
+			key.WithHelp("Y", "copy raw text"),
 		),
 		OpenEditor: key.NewBinding(
 			key.WithKeys("e"),
@@ -134,29 +151,80 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 		),
 	}
 
+	// Base bindings the logs viewer does not implement. They were enabled but
+	// unreachable, so they were invisible squatters — notably Base.TogglePreview
+	// on flat `v` (the reserved view prefix this TUI now uses as a namespace),
+	// Base.Confirm's `y` half (the `yy` arming letter), and Base.ClearSearch on
+	// ctrl+l (which the log viewer means as clear-buffer, canon 60 §7.4).
+	// Disabling them keeps help truthful and AuditCoverage clean. Only Up, Down,
+	// Left, Right, Help and Quit are actually dispatched from Base.
+	disableBindings(
+		&km.Base.PageUp, &km.Base.PageDown, &km.Base.Home, &km.Base.End,
+		&km.Base.Top, &km.Base.Bottom,
+		&km.Base.Confirm, &km.Base.Cancel, &km.Base.Back, &km.Base.Edit,
+		&km.Base.Delete, &km.Base.Yank, &km.Base.Rename, &km.Base.Refresh,
+		&km.Base.CopyPath,
+		&km.Base.SearchNext, &km.Base.SearchPrev, &km.Base.ClearSearch, &km.Base.Grep,
+		&km.Base.SwitchView, &km.Base.NextTab, &km.Base.PrevTab,
+		&km.Base.FocusNext, &km.Base.FocusPrev, &km.Base.TogglePreview,
+		&km.Base.Tab1, &km.Base.Tab2, &km.Base.Tab3, &km.Base.Tab4, &km.Base.Tab5,
+		&km.Base.Tab6, &km.Base.Tab7, &km.Base.Tab8, &km.Base.Tab9,
+		&km.Base.Select, &km.Base.SelectAll, &km.Base.SelectNone,
+		&km.Base.FoldOpen, &km.Base.FoldClose, &km.Base.FoldToggle,
+		&km.Base.FoldOpenAll, &km.Base.FoldCloseAll,
+	)
+
 	// Apply TUI-specific overrides from config
 	keymap.ApplyTUIOverrides(cfg, "core", "logs", &km)
 
 	return km
 }
 
+// disableBindings turns off a set of bindings in place. Used to switch off the
+// keymap.Base defaults a TUI never dispatches, so they neither render in help
+// nor squat on a key the chord canon needs.
+func disableBindings(bs ...*key.Binding) {
+	for _, b := range bs {
+		b.SetEnabled(false)
+	}
+}
+
+// Namespaces returns the which-key chord namespaces for the logs TUI, built
+// from the named LogKeyMap fields (so any user override applied by
+// ApplyTUIOverrides is reflected — namespace.go's ConfigKey-stability rule;
+// never construct members inline). Order here is the wire order ProcessChord
+// relies on.
+func (k LogKeyMap) Namespaces() []keymap.Namespace {
+	return []keymap.Namespace{
+		{Prefix: "t", Label: "Toggle", Bindings: []key.Binding{
+			k.CycleLevel, k.ToggleScope, k.ToggleSystem, k.ToggleFilters,
+			k.ToggleEvents, k.ToggleFollow, k.ComponentSummary,
+		}},
+		{Prefix: "v", Label: "View", Bindings: []key.Binding{
+			k.ViewJSON,
+		}},
+	}
+}
+
 // Sections returns the log viewer's grouped keybindings for structured help.
 // LogKeyMap embeds Base, whose promoted Sections method describes the generic
 // base keymap; defining this method ensures help shows the log-specific keys.
 func (k LogKeyMap) Sections() []keymap.Section {
+	ns := k.Namespaces()
 	return []keymap.Section{
 		keymap.NavigationSection(
-			k.Base.Up, k.Base.Down, k.PageUp, k.PageDown,
+			k.Base.Up, k.Base.Down, k.Base.Left, k.Base.Right,
+			k.PageUp, k.PageDown,
 			k.HalfUp, k.HalfDown, k.GotoTop, k.GotoEnd,
 		),
-		keymap.NewSection("Filters & View",
-			k.ToggleScope, k.ToggleSystem, k.CycleLevel,
-			k.ComponentSummary, k.ToggleFilters, k.ToggleEvents,
-			k.ToggleFollow, k.Search,
-		),
+		// Toggle (t…) and View (v…) namespace sections, so the ? overlay and
+		// the generated registry list the chord members as ordinary bindings.
+		ns[0].Section(),
+		ns[1].Section(),
 		keymap.ActionsSection(
-			k.Expand, k.ViewJSON, k.VisualModeStart, k.Yank,
+			k.Expand, k.VisualModeStart, k.Yank,
 			k.CopyRawText, k.ClearBuffer, k.OpenEditor, k.SwitchFocus,
+			k.Search, k.Clear,
 		),
 		keymap.SystemSection(k.Base.Help, k.Base.Quit),
 	}
@@ -180,7 +248,7 @@ func (k LogKeyMap) FullHelp() [][]key.Binding {
 			k.GotoTop,
 			k.GotoEnd,
 		},
-		{ // Filters/View
+		{ // Toggle (t…) / View (v…)
 			k.ToggleScope,
 			k.ToggleSystem,
 			k.CycleLevel,

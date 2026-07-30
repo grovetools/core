@@ -408,7 +408,10 @@ type Model struct {
 	statusMessage  string
 	jsonTree       jsontree.Model
 	jsonView       bool
-	sequence       *tuikeymap.SequenceState
+	// whichKey is the shared chord/which-key mixin: the gg + yy sequence
+	// engine, the t…/v… namespaces declared by LogKeyMap.Namespaces(), and the
+	// popup show-delay.
+	whichKey tuikeymap.WhichKeyHost
 
 	// Compact mode: list-only, no detail viewport or focus switching.
 	compact bool
@@ -444,10 +447,8 @@ type Model struct {
 func New(ctx context.Context, cfg Config) *Model {
 	ctx, cancel := context.WithCancel(ctx)
 
-	keys := func() logskeymap.LogKeyMap {
-		c, _ := config.LoadDefault()
-		return logskeymap.NewLogKeyMap(c)
-	}()
+	coreCfg, _ := config.LoadDefault()
+	keys := logskeymap.NewLogKeyMap(coreCfg)
 
 	logCfg := cfg.LogConfig
 	if logCfg == nil {
@@ -498,7 +499,7 @@ func New(ctx context.Context, cfg Config) *Model {
 		minLevel:            parseLevelConfig(cfg.InitialLevel),
 		hiddenComponents:    make(map[string]bool),
 		compact:             cfg.Compact,
-		sequence:            tuikeymap.NewSequenceState(),
+		whichKey:            tuikeymap.NewWhichKeyHost(coreCfg, keys.Namespaces()...),
 	}
 
 	// Resolve initial scope
@@ -1052,19 +1053,54 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		} else {
-			// Route multi-key sequences (gg) through the shared sequence
-			// state so GotoTop's binding can truthfully declare "gg".
-			seqResult, _ := m.sequence.Process(msg, m.keys.GotoTop)
-			switch seqResult {
-			case tuikeymap.SequenceMatch:
-				m.sequence.Clear()
-				m.list.Select(0)
-				return m, nil
-			case tuikeymap.SequencePending:
-				// First "g" of a potential "gg" — wait for more input.
-				return m, nil
+			// ── Pane guard, BEFORE the chord seam (sign-off E3) ───────────
+			// While the details viewport holds focus it owns its keys, so a
+			// stray keystroke there must not arm the t…/v… namespaces. Only
+			// the globals below and the chord ARM letters reach the seam.
+			// Once a namespace IS armed the guard stands down entirely
+			// (Armed()), so a chord's continuation key is never stolen by the
+			// pane — the same shape flow-status uses for its detail panes.
+			if m.focus == viewportPane && !m.whichKey.Armed() && !m.armsChord(msg) &&
+				!key.Matches(msg, m.keys.Base.Quit) &&
+				!key.Matches(msg, m.keys.Base.Help) &&
+				!key.Matches(msg, m.keys.SwitchFocus) &&
+				!key.Matches(msg, m.keys.Expand) {
+				return m.handleDetailPaneKey(msg)
 			}
-			m.sequence.Clear()
+
+			// ── Chord seam ────────────────────────────────────────────────
+			// The reusable which-key host resolves the flat gg / yy motions
+			// (passed as extras) plus the t…/v… namespace chords, arms the
+			// popup on a pending prefix, and consumes esc-cancel or a stray
+			// key while a namespace menu is open. A resolved chord is
+			// re-synthesized as its canonical key and falls through to the
+			// dispatch switches below, whose key.Matches arms still carry
+			// each action's handler.
+			res, matched, chordCmd := m.whichKey.ProcessChord(msg, m.keys.GotoTop, m.keys.Yank)
+			switch res {
+			case tuikeymap.ChordMatched:
+				// Only rewrite when the pressed key is NOT already one of the
+				// binding's keys: a binding that retains a flat alternate
+				// alongside its chord (Top = ["gg","home"]) would otherwise
+				// have the flat press rewritten to the chord and lost.
+				if len(matched.Keys()) > 0 && !key.Matches(msg, matched) {
+					msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(matched.Keys()[0])}
+				}
+				if key.Matches(msg, m.keys.GotoTop) {
+					m.list.Select(0)
+					return m, nil
+				}
+			case tuikeymap.ChordPending:
+				// Armed; chordCmd is the delayed popup re-render tick for a
+				// namespace prefix (nil for the flat gg/yy motions).
+				return m, chordCmd
+			case tuikeymap.ChordConsumed:
+				// esc dismissed the popup, or a stray key closed an armed
+				// namespace menu — swallow it.
+				return m, nil
+			case tuikeymap.ChordNone:
+				// Not a chord — fall through unchanged.
+			}
 
 			switch {
 			case key.Matches(msg, m.keys.Base.Quit):
@@ -1089,72 +1125,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			if m.focus == viewportPane {
-				if key.Matches(msg, m.keys.Base.Left) {
-					currentIndex := m.list.Index()
-					if currentIndex > 0 {
-						m.list.Select(currentIndex - 1)
-						if selectedItem := m.list.SelectedItem(); selectedItem != nil {
-							if li, ok := selectedItem.(logItem); ok {
-								m.viewport.SetContent(li.FormatDetails())
-								m.viewport.GotoTop()
-							}
-						}
-					}
-					return m, nil
-				}
-
-				if key.Matches(msg, m.keys.Base.Right) {
-					currentIndex := m.list.Index()
-					visibleItems := len(m.list.VisibleItems())
-					if currentIndex < visibleItems-1 {
-						m.list.Select(currentIndex + 1)
-						if selectedItem := m.list.SelectedItem(); selectedItem != nil {
-							if li, ok := selectedItem.(logItem); ok {
-								m.viewport.SetContent(li.FormatDetails())
-								m.viewport.GotoTop()
-							}
-						}
-					}
-					return m, nil
-				}
-
-				if key.Matches(msg, m.keys.Clear) || msg.String() == "esc" {
-					m.focus = listPane
-					listHeight := m.height / 2
-					m.viewport.Height = m.height - listHeight - 3
-					return m, nil
-				}
-				if key.Matches(msg, m.keys.ViewJSON) {
-					if selectedItem := m.list.SelectedItem(); selectedItem != nil {
-						if li, ok := selectedItem.(logItem); ok {
-							var jsonData interface{}
-							for _, v := range li.rawData {
-								switch v.(type) {
-								case map[string]interface{}, []interface{}:
-									jsonData = v
-								}
-								if jsonData != nil {
-									break
-								}
-							}
-							if jsonData != nil {
-								m.jsonTree = jsontree.New(jsonData)
-								m.jsonTree.SetSize(m.width-4, m.height-3)
-								m.jsonView = true
-							} else {
-								m.statusMessage = "No JSON data in this log entry"
-							}
-						}
-					}
-					return m, nil
-				}
-				var cmd tea.Cmd
-				m.viewport, cmd = m.viewport.Update(msg)
-				return m, cmd
-			}
-
-			// List pane focused
+			// List pane focused — also reached from the details pane once a
+			// chord has resolved, so the chorded actions stay available there.
 			switch {
 			case key.Matches(msg, m.keys.VisualModeStart):
 				if !m.visualMode {
@@ -1364,8 +1336,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						if jsonData != nil {
 							m.jsonTree = jsontree.New(jsonData)
-							listHeight := m.height / 2
-							viewportHeight := m.height - listHeight - 3
+							// vj resolves from either pane (the pane guard
+							// stands down once the v… namespace is armed): the
+							// details pane owns the full height, the list pane
+							// only its half.
+							viewportHeight := m.height - 3
+							if m.focus != viewportPane {
+								viewportHeight = m.height - m.height/2 - 3
+							}
 							m.jsonTree.SetSize(m.width-4, viewportHeight)
 							m.jsonView = true
 						} else {
@@ -1567,7 +1545,85 @@ func (m *Model) UnseenAlerts() int {
 	return m.unseenAlerts
 }
 
+// armsChord reports whether msg is a first keystroke that must reach the chord
+// seam even while the details pane has focus: a namespace prefix (t/v) or the
+// opening key of a flat sequence chord (gg, yy). Derived from the live keymap
+// rather than a hard-coded letter list so a user override still works.
+func (m *Model) armsChord(msg tea.KeyMsg) bool {
+	s := msg.String()
+	if s == "" {
+		return false
+	}
+	for _, ns := range m.whichKey.Namespaces {
+		if ns.Prefix == s {
+			return true
+		}
+	}
+	for _, b := range []key.Binding{m.keys.GotoTop, m.keys.Yank} {
+		for _, k := range b.Keys() {
+			if len(k) > len(s) && strings.HasPrefix(k, s) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// handleDetailPaneKey dispatches a key while the details viewport holds focus.
+// It runs from the pane guard ahead of the chord seam (E3), so it only ever
+// sees keys that are neither globals nor chord-arming.
+func (m *Model) handleDetailPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Base.Left) {
+		currentIndex := m.list.Index()
+		if currentIndex > 0 {
+			m.list.Select(currentIndex - 1)
+			if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+				if li, ok := selectedItem.(logItem); ok {
+					m.viewport.SetContent(li.FormatDetails())
+					m.viewport.GotoTop()
+				}
+			}
+		}
+		return m, nil
+	}
+
+	if key.Matches(msg, m.keys.Base.Right) {
+		currentIndex := m.list.Index()
+		visibleItems := len(m.list.VisibleItems())
+		if currentIndex < visibleItems-1 {
+			m.list.Select(currentIndex + 1)
+			if selectedItem := m.list.SelectedItem(); selectedItem != nil {
+				if li, ok := selectedItem.(logItem); ok {
+					m.viewport.SetContent(li.FormatDetails())
+					m.viewport.GotoTop()
+				}
+			}
+		}
+		return m, nil
+	}
+
+	if key.Matches(msg, m.keys.Clear) || msg.String() == "esc" {
+		m.focus = listPane
+		listHeight := m.height / 2
+		m.viewport.Height = m.height - listHeight - 3
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, cmd
+}
+
+// View renders the frame and composites the bottom-anchored which-key popup
+// onto it. The popup is gated by the host's show-delay, so a fast chord never
+// flashes it; the delayed keymap.WhichKeyShowMsg tick forces the re-render.
 func (m *Model) View() string {
+	frame := m.frameView()
+	return m.whichKey.RenderOverlayAvail(frame, lipgloss.Width(frame), m.height, *theme.DefaultTheme)
+}
+
+// frameView assembles the log viewer's frame, without the which-key overlay.
+func (m *Model) frameView() string {
 	if m.help.ShowAll {
 		return m.help.View()
 	}

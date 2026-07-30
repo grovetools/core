@@ -160,8 +160,14 @@ func DefaultVim() Base {
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
 		),
+		// enter only. The legacy flat `y` confirm-alias is dropped (chord canon
+		// 60 §5.6, sign-off E4): `yy` is the canonical yank, and a flat `y`
+		// fires first so the yy chord can never arm in any TUI that embeds
+		// Base. Every holder of this binding also binds enter, so nothing is
+		// lost. A TUI that genuinely wants a y/n prompt (grove-onboard) binds
+		// its own key rather than riding the shared confirm.
 		Confirm: key.NewBinding(
-			key.WithKeys("enter", "y"),
+			key.WithKeys("enter"),
 			key.WithHelp("enter", "confirm"),
 		),
 		Cancel: key.NewBinding(
