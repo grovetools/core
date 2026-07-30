@@ -113,9 +113,15 @@ func NewLogKeyMap(cfg *config.Config) LogKeyMap {
 			key.WithHelp("tab", "switch focus"),
 		),
 		// Toggle (t…) namespace member (was flat `s`).
+		//
+		// The consolidation pass moved scope off `ts` onto `tw`: `ts` was
+		// carrying four meanings across eight TUIs, and sort held the
+		// plurality (cx-view, grove-config, nb-browser). `tw` = "this
+		// Workspace" — the local half of the local/global toggle — and is
+		// shared with hooks-browser and memory-view.
 		ToggleScope: key.NewBinding(
-			key.WithKeys("ts"),
-			key.WithHelp("ts", "cycle scope"),
+			key.WithKeys("tw"),
+			key.WithHelp("tw", "cycle scope"),
 		),
 		// Toggle (t…) namespace member (was flat `S`). Uppercase-in-chord is
 		// established house style (flow-status ships cM/cA).
