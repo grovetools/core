@@ -2235,6 +2235,13 @@ func (c *RemoteClient) CaptureAgentPane(ctx context.Context, jobID string) (stri
 		return "", fmt.Errorf("capture timeout: groveterm did not respond")
 	}
 	if resp.StatusCode != http.StatusOK {
+		// Keep the daemon's reason: a bare status code collapsed distinct
+		// failures ("pty session X not found", "no capture transport") into
+		// one opaque error, hiding which daemon/PTY was actually missing.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if msg := strings.TrimSpace(string(body)); msg != "" {
+			return "", fmt.Errorf("daemon returned status %d: %s", resp.StatusCode, msg)
+		}
 		return "", fmt.Errorf("daemon returned status %d", resp.StatusCode)
 	}
 

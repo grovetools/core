@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/tuimux"
 )
 
@@ -22,11 +24,43 @@ type TuimuxEngine struct {
 
 func NewTuimuxEngine() (*TuimuxEngine, error) {
 	socketPath := GetTuimuxSocketPath()
-	api, err := tuimux.EnsureDaemon(socketPath)
+	// EnsureDaemon with no binary path re-execs the CALLING binary with a
+	// "daemon" subcommand. Only tuimux itself has one — from flow/grove/
+	// treemux the spawn died instantly with stderr discarded, the ping poll
+	// burned its full window, and every distinct failure (scope-mismatched
+	// socket, sandboxed connect, daemon really down) surfaced as the same
+	// misleading "daemon did not start within 5s". Resolve the real tuimux
+	// binary; without one, report the actual connection failure instead of
+	// pretending we could have started a daemon.
+	binaryPath, binErr := resolveTuimuxBinary()
+	if binErr != nil {
+		api := tuimux.NewApiClient(socketPath)
+		if err := api.Ping(); err != nil {
+			return nil, fmt.Errorf("tuimux daemon not reachable at %s (%v) and no tuimux binary found to start one: %w", socketPath, err, binErr)
+		}
+		return &TuimuxEngine{api: api, socketPath: socketPath}, nil
+	}
+	api, err := tuimux.EnsureDaemonWithBinary(socketPath, binaryPath)
 	if err != nil {
-		return nil, fmt.Errorf("tuimux daemon: %w", err)
+		return nil, fmt.Errorf("tuimux daemon at %s: %w", socketPath, err)
 	}
 	return &TuimuxEngine{api: api, socketPath: socketPath}, nil
+}
+
+// resolveTuimuxBinary finds the tuimux binary, checking the grove bin dir
+// first then PATH — the same resolution groved uses before spawning the PTY
+// backplane. os.Executable() is deliberately not a fallback: only the tuimux
+// binary has a "daemon" subcommand.
+func resolveTuimuxBinary() (string, error) {
+	binDirPath := filepath.Join(paths.BinDir(), "tuimux")
+	if _, err := os.Stat(binDirPath); err == nil {
+		return binDirPath, nil
+	}
+	p, err := exec.LookPath("tuimux")
+	if err != nil {
+		return "", fmt.Errorf("tuimux not found in %s or PATH", paths.BinDir())
+	}
+	return p, nil
 }
 
 // NewTuimuxEngineWithSocket connects to an existing tuimux daemon at the given socket path.
@@ -59,7 +93,12 @@ func (e *TuimuxEngine) StartServer(ctx context.Context, name string, opts ...Ses
 	}
 	_ = cmd.Process.Release()
 
-	for i := 0; i < 20; i++ {
+	// Deadline-bound, not iteration-bound: each ListServers can itself take
+	// up to the client's 5s HTTP timeout against a stalled daemon, so an
+	// iteration count multiplies into minutes while a wall-clock deadline
+	// stays a real 2s.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
 		servers, err := e.api.ListServers()
 		if err != nil {

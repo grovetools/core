@@ -3,6 +3,7 @@ package mux
 import (
 	"os"
 
+	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/tuimux"
 )
 
@@ -41,15 +42,24 @@ func GetTmuxSocketPath() string {
 	return os.Getenv(EnvGroveTmuxSocket)
 }
 
-// GetTuimuxSocketPath returns the tuimux socket path. GROVE_TUIMUX_SOCKET is the
-// explicit override; otherwise it falls back to tuimux.DefaultSocketPath(),
-// which is scope-derived (it reads GROVE_SCOPE) — an empty scope keeps the
-// legacy machine-wide socket, non-empty scopes get an isolated daemon-<scope>.sock.
+// GetTuimuxSocketPath returns the tuimux socket path. GROVE_TUIMUX_SOCKET is
+// the explicit override; otherwise the ambient GROVE_SCOPE — normalized
+// through workspace.ResolveScope — selects the scoped socket, and with no
+// scope at all the cwd is classified, mirroring ResolveRecordSocket.
+//
+// Normalization is load-bearing: the scoped socket name embeds a hash of the
+// literal scope string, and groved binds its tuimuxd at the NORMALIZED
+// (ecosystem/worktree root) scope. Hashing a raw GROVE_SCOPE that points at a
+// repo subdir resolved a socket no daemon ever bound, so callers concluded
+// "tuimux not running" while a healthy tuimuxd served the worktree.
 func GetTuimuxSocketPath() string {
 	if s := os.Getenv(EnvGroveTuimuxSocket); s != "" {
 		return s
 	}
-	return tuimux.DefaultSocketPath()
+	if s := os.Getenv(EnvGroveScope); s != "" {
+		return tuimux.ScopedSocketPath(workspace.ResolveScope(s))
+	}
+	return tuimux.ScopedSocketPath(workspace.ResolveScope(""))
 }
 
 // PingTuimuxSocket checks if a tuimux daemon is reachable at the given socket path.
