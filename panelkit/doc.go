@@ -27,8 +27,30 @@
 //	panelkit/table                    responsive priority-drop column fitting
 //	panelkit/tree                     fold state and flat-list tree prefixes
 //	panelkit/layout                   small composition helpers
+//	panelkit/panelproto               the embed/v1 wire types and Dial
 //	panelkit/sidecar                  the out-of-process runtime and its
 //	                                  bubbletea adapter
+//
+// # One module, on purpose
+//
+// The kit is whole here. A Go panel imports github.com/grovetools/core and
+// nothing else of grove's: the widgets, the protocol bindings and the sidecar
+// runtime are all in this module.
+//
+// It was briefly split. panelproto and the sidecar runtime were written in
+// treemux, next to the host that speaks the other end, and the reference panel
+// (treemux/examples/grove-panel-breaktimer) then had to import two modules —
+// core for the widgets, treemux for the runtime. In-tree that is free, because
+// go.work resolves both. Out of tree it is not: treemux has no tags, so the
+// only way to name it in a go.mod is a `replace` pointing at a local checkout,
+// which is not something a third-party panel author can ship.
+//
+// So the runtime moved to the module a panel already depends on. It cost core
+// nothing: panelproto is stdlib plus core/tui/hostedkeys, and sidecar adds
+// bubbletea and x/term, both of which core/tui already links. Nothing here
+// imports treemux — the host is reached over a socket, which is the whole
+// point of the protocol. treemux/pkg/panelproto remains as a frozen alias for
+// one release; treemux itself imports these packages like any other consumer.
 //
 // # The sidecar-clean guarantee
 //

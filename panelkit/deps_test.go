@@ -7,8 +7,15 @@ import (
 )
 
 // kitPackages is the curated surface a panel is built from: the decoupled
-// core/tui primitives plus the panelkit widgets. panelkit/sidecar is
-// deliberately absent — it is allowed to know about the protocol and the host.
+// core/tui primitives, the panelkit widgets, and — since the protocol and its
+// runtime moved into this module — panelproto and sidecar.
+//
+// Those last two were exempt while they lived in treemux, on the grounds that
+// the runtime is "allowed to know about the host". It is not, and never was:
+// a sidecar reaches its host over a socket, so knowing the host means knowing
+// the wire format, and panelproto is stdlib plus hostedkeys. Holding both to
+// the same line is what keeps `go build` of a third-party panel from pulling
+// in a config loader it has no grove.toml for.
 var kitPackages = []string{
 	"github.com/grovetools/core/tui/theme",
 	"github.com/grovetools/core/tui/theme/themecfg",
@@ -22,6 +29,8 @@ var kitPackages = []string{
 	"github.com/grovetools/core/panelkit/table",
 	"github.com/grovetools/core/panelkit/tree",
 	"github.com/grovetools/core/panelkit/layout",
+	"github.com/grovetools/core/panelkit/panelproto",
+	"github.com/grovetools/core/panelkit/sidecar",
 }
 
 // forbidden are the host-only package trees. Each entry cost the kit something

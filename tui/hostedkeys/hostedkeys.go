@@ -8,7 +8,7 @@
 // app declares the chords it wants back and the host arbitrates. The
 // declaration is data, not code: flow publishes one in-process
 // (flow/pkg/tui/view.HostedKeys), and a sidecar panel publishes the identical
-// JSON over the embed/v1 control socket (treemux/pkg/panelproto). Both are
+// JSON over the embed/v1 control socket (core/panelkit/panelproto). Both are
 // this type, so a host filters them through one code path.
 //
 // The package is deliberately stdlib-only — a sidecar or a standalone tool can
