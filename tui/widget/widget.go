@@ -183,6 +183,18 @@ type Keymapper interface {
 // It is consumed by a host's page compiler, which uses it to decide whether a
 // layout can still be given the shape it asks for at the size the drawer is
 // now. Implementations should be pure and cheap: it is polled during layout.
+//
+// It is a property of the WIDGET, fixed at registration and true wherever the
+// widget is mounted. Its dynamic counterpart is a property of the mounted PANE:
+// a panel that implements tuimux.SizeHintProvider tells the layout how many
+// rows its CURRENT content can use, which is what lets a pane with nothing to
+// show hand its rows to a content-bearing sibling. The two never disagree
+// because they answer different questions — "how small can this widget be built
+// at" versus "how much of what it was given is it using right now".
+//
+// A panel implementing the dynamic hint must report a bounded row count only
+// for content that is genuinely bounded (an empty state, a fixed table). A hint
+// that tracked a live stream row by row would move the layout on every append.
 type SizeHint interface {
 	// MinSize reports the smallest width and height at which the widget still
 	// renders something worth showing. Either value may be 0, meaning "no
@@ -221,14 +233,11 @@ func (s Spec) Bindings() []KeyBinding {
 // the muted info glyph, the reason, italic. Returns "" for an empty reason so a
 // caller can hand through whatever [Spec.Reason] gave it.
 //
-// The theme is read at render time so a live re-theme self-heals without any
-// fan-out wiring.
-func RenderEmptyReason(reason string) string {
-	if reason == "" {
-		return ""
-	}
-	return theme.DefaultTheme.Muted.Italic(true).Render(theme.IconInfo + " " + reason)
-}
+// The implementation lives in core/tui/theme so that a view which cannot import
+// this package — git-viewer's changes model, which this package's own widget
+// wraps — still renders the identical line. This is the name to call from a
+// widget; both spellings are the same one convention.
+func RenderEmptyReason(reason string) string { return theme.RenderEmptyReason(reason) }
 
 // HighlightStyle is the drawer's cursor/heading highlight. Read from the live
 // theme at render time — a package-level capture would freeze the palette

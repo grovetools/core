@@ -129,6 +129,12 @@ func New(groups func() []GroupRow) *Panel {
 	}
 }
 
+// emptyReason is the one sentence this widget has when there is nothing to
+// summarize. Declared once because two surfaces say it: the pane draws it as
+// its ⓘ line, and [Spec.EmptyReason] hands the same words to a host that wants
+// to explain the pane without mounting it.
+const emptyReason = "no notes in this workspace's notebook"
+
 // Spec is the widget's registration entry. The host supplies only the group
 // reader; everything else about the widget — its glyph, its keys, what it says
 // when there is nothing to show — is declared here.
@@ -139,7 +145,7 @@ func Spec(groups func() []GroupRow) widget.Spec {
 		Build: func() tuimux.Panel { return New(groups) },
 		EmptyReason: func() string {
 			if groups == nil || len(groups()) == 0 {
-				return "no notes in this workspace's notebook"
+				return emptyReason
 			}
 			return ""
 		},
@@ -238,6 +244,27 @@ func (p *Panel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (p *Panel) View() string { return p.viewport.View() }
+
+// PreferredHeightHint collapses the pane to its empty state — the heading, the
+// blank line under it, and the one ⓘ line — while the workspace's notebook has
+// nothing to summarize, so the rows it cannot use go to a sibling that can.
+//
+// With any group at all it is flexible: the summary is a list, and a list wants
+// every row it is given. That makes the hint binary, which is the point — it
+// moves only when the pane crosses empty↔content, not on every note that
+// arrives. It reads the host's group reader rather than the last rendered rows
+// so it is correct before the first refresh, and it never consults the height
+// the pane was given, which would feed its own answer back in.
+func (p *Panel) PreferredHeightHint() (int, bool) {
+	if len(p.currentGroups()) > 0 {
+		return 0, true
+	}
+	rows := 1
+	if !p.hideHeading {
+		rows += 2
+	}
+	return rows, false
+}
 
 func (p *Panel) Resize(w, h int) {
 	p.PanelBase.Resize(w, h)
@@ -373,7 +400,10 @@ func (p *Panel) refresh() {
 	p.headerLines = lines
 
 	if len(p.rows) == 0 {
-		write(th.Muted.Render("No notes in scope."))
+		// The contract's shared renderer, and the contract's phrasing: a fact
+		// the reader can act on, not an apology. It is also what the pane's
+		// height hint is counting when it collapses — heading, blank, this line.
+		write(widget.RenderEmptyReason(emptyReason))
 		p.viewport.SetContent(b.String())
 		return
 	}

@@ -60,3 +60,23 @@ func StatusStyle(status string, theme *Theme) lipgloss.Style {
 func StyleIcon(icon string, style lipgloss.Style) string {
 	return style.Render(icon)
 }
+
+// RenderEmptyReason renders one empty-state line in the drawer's convention:
+// the muted info glyph, the reason, italic. Returns "" for an empty reason so a
+// caller can hand through whatever its widget gave it.
+//
+// It lives beside the status ladder, in the package everything that draws a
+// pane already imports, so a widget in ANY repository renders its empty state
+// the same way — the alternative is one near-copy per widget, and the near-copy
+// is what makes an empty pane read as a broken one.
+//
+// The theme is read at render time so a live re-theme self-heals without any
+// fan-out wiring. See github.com/grovetools/core/tui/widget for the convention
+// this belongs to: a widget with nothing to show says WHY, in one sentence the
+// reader can act on.
+func RenderEmptyReason(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return DefaultTheme.Muted.Italic(true).Render(IconInfo + " " + reason)
+}
