@@ -327,6 +327,14 @@ type TUIConfig struct {
 	// horizontal bar. Default: "right".
 	DrawerOrientation string `yaml:"drawer_orientation,omitempty" toml:"drawer_orientation,omitempty" jsonschema:"description=Active sessions drawer position,enum=right,enum=bottom,default=right" jsonschema_extras:"x-layer=global,x-priority=62"`
 
+	// DrawerSize is the expanded drawer's extent along its own axis: columns
+	// for the right orientation, rows for the bottom one. Written either
+	// absolutely (35) or as a share of the terminal ("25%"). Unset leaves the
+	// host's per-orientation default in place, and the host also applies a
+	// floor — a drawer narrower than its panes can render is not a smaller
+	// drawer, it is a broken one.
+	DrawerSize DrawerSize `yaml:"drawer_size,omitempty" toml:"drawer_size,omitempty" json:"drawer_size,omitempty" jsonschema:"description=Expanded drawer extent along its own axis - columns on the right / rows on the bottom - as an absolute count (35) or a percentage of the terminal (25%)" jsonschema_extras:"x-layer=global,x-priority=62"`
+
 	// DrawerExpanded controls whether the active sessions drawer starts
 	// expanded (showing full list) or collapsed (mini icons only).
 	// Default: false (collapsed).
@@ -399,7 +407,14 @@ type DrawerPageConfig struct {
 	LeaderKey string            `yaml:"leader_key,omitempty" toml:"leader_key,omitempty" json:"leader_key,omitempty" jsonschema:"description=Leader sub-key for this page; shadows the leader window jump on that key; none explicitly unbinds it"`
 	Icon      string            `yaml:"icon,omitempty" toml:"icon,omitempty" json:"icon,omitempty" jsonschema:"description=Named icon used for the page"`
 	Layout    *DrawerNodeConfig `yaml:"layout,omitempty" toml:"layout,omitempty" json:"layout,omitempty" jsonschema:"description=Recursive BSP layout for the page"`
-	Delete    bool              `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
+	// Size overrides the shared [tui] drawer_size while this page is showing,
+	// in the same absolute-or-percentage syntax. A page whose panes want the
+	// room (a wide diff, a deep tree) can ask for it without every other page
+	// paying for it. Hosts honor it on a direct jump to the page and ignore it
+	// while cycling: cycling is browsing, and reflowing the main area on every
+	// step of a browse is worse than a page rendering at the shared width.
+	Size   DrawerSize `yaml:"size,omitempty" toml:"size,omitempty" json:"size,omitempty" jsonschema:"description=Drawer extent while this page is showing - honored on a direct jump and ignored while cycling - as an absolute count (70) or a percentage of the terminal (40%)"`
+	Delete bool       `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
 }
 
 // DrawerNodeConfig is either a Pane leaf or a split with First and Second

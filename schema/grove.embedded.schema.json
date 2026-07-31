@@ -162,9 +162,25 @@
         "leader_key": {
           "description": "Leader sub-key for this page; shadows the leader window jump on that key; none explicitly unbinds it",
           "type": "string"
+        },
+        "size": {
+          "$ref": "#/$defs/DrawerSize",
+          "description": "Drawer extent while this page is showing - honored on a direct jump and ignored while cycling - as an absolute count (70) or a percentage of the terminal (40%)"
         }
       },
       "type": "object"
+    },
+    "DrawerSize": {
+      "oneOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "pattern": "^\\s*[0-9]+(\\.[0-9]+)?\\s*%?\\s*$",
+          "type": "string"
+        }
+      ]
     },
     "DrawerViewsConfig": {
       "additionalProperties": false,
@@ -949,6 +965,12 @@
             "bottom"
           ],
           "type": "string",
+          "x-layer": "global",
+          "x-priority": "62"
+        },
+        "drawer_size": {
+          "$ref": "#/$defs/DrawerSize",
+          "description": "Expanded drawer extent along its own axis - columns on the right / rows on the bottom - as an absolute count (35) or a percentage of the terminal (25%)",
           "x-layer": "global",
           "x-priority": "62"
         },

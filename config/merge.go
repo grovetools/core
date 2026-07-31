@@ -494,6 +494,12 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.NvimEmbed != nil {
 			result.TUI.NvimEmbed = override.TUI.NvimEmbed
 		}
+		// drawer_size is an ordinary last-non-empty-wins scalar, matching the
+		// drawer scalars below. Unset in an override layer means "no opinion",
+		// not "back to the built-in default".
+		if override.TUI.DrawerSize != "" {
+			result.TUI.DrawerSize = override.TUI.DrawerSize
+		}
 
 		// Drawer scalars use last-non-empty-wins, page_order uses
 		// last-non-nil-wins, and pages are replaced as whole definitions per
