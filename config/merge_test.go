@@ -1310,3 +1310,87 @@ func TestMergeTUIPluginsLaterLayerWinsOnTheSameName(t *testing.T) {
 		t.Errorf("command = %q, want the later layer's", got)
 	}
 }
+
+// A repo's [[test_scopes]] are declared in the project layer, which reaches
+// mergeConfigs as the override whenever a global or ecosystem layer exists —
+// i.e. always, in a real ecosystem checkout. The array parsed fine and was then
+// dropped by the merge, so `grove internal test-smart` saw zero scopes in every
+// repo and fell back to running the whole tend suite on every agent turn.
+func TestMergeTestScopesSurviveTheProjectLayer(t *testing.T) {
+	base := &Config{Name: "ecosystem"}
+	override := &Config{Name: "treemux", TestScopes: []TestScopeConfig{{
+		Name:      "plugin-protocol",
+		Rules:     ".cx/plugin-protocol.rules",
+		Scenarios: []string{"treemux-plugin", "treemux-panelkit"},
+	}}}
+
+	merged := mergeConfigs(base, override)
+	if len(merged.TestScopes) != 1 {
+		t.Fatalf("test_scopes dropped by merge: %+v", merged.TestScopes)
+	}
+	if got := merged.TestScopes[0].Rules; got != ".cx/plugin-protocol.rules" {
+		t.Errorf("rules = %q, want the project layer's", got)
+	}
+	if got := merged.TestScopes[0].Scenarios; len(got) != 2 {
+		t.Errorf("scenarios = %v, want both", got)
+	}
+}
+
+// The end-to-end version of the above: a repo grove.toml under an ecosystem
+// grove.toml and a global config, loaded the way test-smart loads it.
+func TestLoadFromKeepsRepoTestScopesUnderAnEcosystem(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	fakeHome := filepath.Join(tmpDir, "home")
+	fakeConfigDir := filepath.Join(fakeHome, ".config", "grove")
+	if err := os.MkdirAll(fakeConfigDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	origHome := os.Getenv("HOME")
+	origXDG := os.Getenv("XDG_CONFIG_HOME")
+	defer func() {
+		os.Setenv("HOME", origHome)
+		os.Setenv("XDG_CONFIG_HOME", origXDG)
+	}()
+	os.Setenv("HOME", fakeHome)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	if err := os.WriteFile(filepath.Join(fakeConfigDir, "grove.toml"),
+		[]byte("version = \"1.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ecosystemDir := filepath.Join(tmpDir, "ecosystem")
+	repoDir := filepath.Join(ecosystemDir, "repo")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ecosystemDir, "grove.toml"),
+		[]byte("workspaces = [\"*\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoConfig := `name = "repo"
+
+[[test_scopes]]
+name = "plugin-protocol"
+rules = ".cx/plugin-protocol.rules"
+scenarios = ["repo-plugin", "repo-panelkit"]
+`
+	if err := os.WriteFile(filepath.Join(repoDir, "grove.toml"), []byte(repoConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFrom(repoDir)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if len(cfg.TestScopes) != 1 {
+		t.Fatalf("test_scopes = %+v, want the repo's one scope", cfg.TestScopes)
+	}
+	if got := cfg.TestScopes[0].Name; got != "plugin-protocol" {
+		t.Errorf("scope name = %q", got)
+	}
+	if got := cfg.TestScopes[0].Scenarios; len(got) != 2 || got[0] != "repo-plugin" {
+		t.Errorf("scenarios = %v", got)
+	}
+}

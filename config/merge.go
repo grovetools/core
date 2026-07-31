@@ -440,6 +440,14 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.ExplicitProjects != nil {
 		result.ExplicitProjects = override.ExplicitProjects
 	}
+	// A repo's [[test_scopes]] live in its own grove.toml, which is the
+	// project layer — i.e. always an override here whenever any earlier layer
+	// (global config, ecosystem grove.toml) exists. Without this clause the
+	// array parsed fine and was then dropped on the floor, so every repo that
+	// declared scopes still ran its whole tend suite on every turn.
+	if override.TestScopes != nil {
+		result.TestScopes = override.TestScopes
+	}
 
 	// Merge worktree configuration
 	if override.Worktree != nil {
