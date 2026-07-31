@@ -28,6 +28,7 @@ type (
 	CloseRequestMsg              = tuimux_embed.CloseRequestMsg
 	CloseConfirmMsg              = tuimux_embed.CloseConfirmMsg
 	AgentSplitAction             = tuimux_embed.AgentSplitAction
+	SplitOrientation             = tuimux_embed.SplitOrientation
 	SplitEditorRequestMsg        = tuimux_embed.SplitEditorRequestMsg
 	SplitEditorClosedMsg         = tuimux_embed.SplitEditorClosedMsg
 	SplitEditorCloseRequestMsg   = tuimux_embed.SplitEditorCloseRequestMsg
@@ -122,6 +123,10 @@ type KeyCaptureMsg struct {
 const (
 	AgentSplitOpen  = tuimux_embed.AgentSplitOpen
 	AgentSplitClose = tuimux_embed.AgentSplitClose
+
+	SplitOrientationDefault    = tuimux_embed.SplitOrientationDefault
+	SplitOrientationVertical   = tuimux_embed.SplitOrientationVertical
+	SplitOrientationHorizontal = tuimux_embed.SplitOrientationHorizontal
 
 	GitOperationInspect    = tuimux_embed.GitOperationInspect
 	GitOperationUpdateOnly = tuimux_embed.GitOperationUpdateOnly

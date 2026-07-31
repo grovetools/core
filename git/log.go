@@ -52,6 +52,42 @@ func GetLogRange(repoPath, revRange string, limit int) ([]LogEntry, error) {
 	return runLog(repoPath, limit, revRange)
 }
 
+// showStatLimit caps the per-file stat width `git show` renders, so the
+// summary block stays readable inside a TUI pane rather than padding paths out
+// to the terminal width git would otherwise guess at.
+const showStatLimit = 120
+
+// ShowCommit returns the full `git show` text for one commit in the repository
+// at repoPath: the commit header, message, diffstat, and patch. It is the Log
+// page's fullscreen commit view, so the output is deliberately plain — no
+// color, no pager — leaving the caller free to style and scroll it.
+//
+// The commit is passed after a `--` -free explicit end of options; a hash that
+// does not resolve is an error rather than a silent empty view.
+func ShowCommit(repoPath, ref string) (string, error) {
+	if strings.TrimSpace(ref) == "" {
+		return "", fmt.Errorf("no commit specified")
+	}
+
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(context.Background(), "git",
+		"show", "--no-color", "--stat", "--patch",
+		"--stat-width="+strconv.Itoa(showStatLimit), ref)
+	if err != nil {
+		return "", fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+
+	var stderr bytes.Buffer
+	execCmd.Stderr = &stderr
+	output, err := execCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to show %s: %w, output: %s", ref, err, stderr.String())
+	}
+	return string(output), nil
+}
+
 // runLog is the shared engine behind GetLog and GetLogRange: it runs `git log`
 // with the machine-readable format, optionally scoped to a revision range, and
 // parses the output. An empty revRange logs from HEAD.
