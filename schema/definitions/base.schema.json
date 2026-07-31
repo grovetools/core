@@ -116,6 +116,16 @@
           "$ref": "#/$defs/DrawerNodeConfig",
           "description": "First split child"
         },
+        "min_height": {
+          "description": "Smallest row count this node is worth compiling at; an explicit split that cannot give both children their minimum degrades to the drawer orientation's natural stacking",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_width": {
+          "description": "Smallest column count this node is worth compiling at; an explicit split that cannot give both children their minimum degrades to the drawer orientation's natural stacking",
+          "minimum": 0,
+          "type": "integer"
+        },
         "pane": {
           "description": "Pane name for a leaf node",
           "type": "string"

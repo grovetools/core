@@ -425,11 +425,25 @@ type DrawerPageConfig struct {
 // DrawerNodeConfig is either a Pane leaf or a split with First and Second
 // children. Shape and value validation is performed by the TUI host.
 type DrawerNodeConfig struct {
-	Pane   string            `yaml:"pane,omitempty" toml:"pane,omitempty" json:"pane,omitempty" jsonschema:"description=Pane name for a leaf node"`
-	Split  string            `yaml:"split,omitempty" toml:"split,omitempty" json:"split,omitempty" jsonschema:"description=Split direction,enum=auto,enum=horizontal,enum=vertical"`
-	Ratio  float64           `yaml:"ratio,omitempty" toml:"ratio,omitempty" json:"ratio,omitempty" jsonschema:"description=Fraction allocated to the first child"`
-	First  *DrawerNodeConfig `yaml:"first,omitempty" toml:"first,omitempty" json:"first,omitempty" jsonschema:"description=First split child"`
-	Second *DrawerNodeConfig `yaml:"second,omitempty" toml:"second,omitempty" json:"second,omitempty" jsonschema:"description=Second split child"`
+	Pane  string  `yaml:"pane,omitempty" toml:"pane,omitempty" json:"pane,omitempty" jsonschema:"description=Pane name for a leaf node"`
+	Split string  `yaml:"split,omitempty" toml:"split,omitempty" json:"split,omitempty" jsonschema:"description=Split direction,enum=auto,enum=horizontal,enum=vertical"`
+	Ratio float64 `yaml:"ratio,omitempty" toml:"ratio,omitempty" json:"ratio,omitempty" jsonschema:"description=Fraction allocated to the first child"`
+	// MinWidth and MinHeight are the smallest extent this node is worth
+	// compiling at, in cells. They are what makes a multi-column page
+	// RESPONSIVE: a host compiles an explicit split only while both children
+	// can still get their minimum along the split axis, and otherwise falls
+	// back to the orientation's natural stacking rather than handing every pane
+	// a strip too narrow to read.
+	//
+	// Unset means "use the host's built-in default"
+	// ([DrawerMinWidthDefault] / [DrawerMinHeightDefault]), which is itself
+	// outranked by a minimum the mounted widget declares for itself. Setting
+	// one here is the last word: it is the only statement that knows what THIS
+	// layout is for.
+	MinWidth  int               `yaml:"min_width,omitempty" toml:"min_width,omitempty" json:"min_width,omitempty" jsonschema:"description=Smallest column count this node is worth compiling at; an explicit split that cannot give both children their minimum degrades to the drawer orientation's natural stacking,minimum=0"`
+	MinHeight int               `yaml:"min_height,omitempty" toml:"min_height,omitempty" json:"min_height,omitempty" jsonschema:"description=Smallest row count this node is worth compiling at; an explicit split that cannot give both children their minimum degrades to the drawer orientation's natural stacking,minimum=0"`
+	First     *DrawerNodeConfig `yaml:"first,omitempty" toml:"first,omitempty" json:"first,omitempty" jsonschema:"description=First split child"`
+	Second    *DrawerNodeConfig `yaml:"second,omitempty" toml:"second,omitempty" json:"second,omitempty" jsonschema:"description=Second split child"`
 }
 
 // AgentPaneConfig controls how treemux hosts agent CLI panes (claude etc.).
