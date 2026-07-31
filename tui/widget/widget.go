@@ -123,8 +123,13 @@ type Spec struct {
 
 	// SizeHint is the widget's opinion about the space it needs. Nil means "no
 	// opinion" and is the correct value for a widget that degrades gracefully
-	// at any size. Declared here now so the sizing work can consume it without
-	// re-opening the contract; nothing reads it yet.
+	// at any size.
+	//
+	// A host's page compiler weighs it when deciding whether a multi-column
+	// layout still fits — a hint that cannot be met is what makes an explicit
+	// split stack instead. A layout may state a minimum of its own, which
+	// outranks this: the layout knows what one page is for, the widget only
+	// knows what it needs wherever it is mounted.
 	SizeHint SizeHint
 }
 
@@ -138,14 +143,46 @@ type KeyBinding struct {
 	// When narrows the binding to a mode or row kind ("on a stale row", "tree
 	// view"). Empty means the binding is always live while the pane is focused.
 	When string
+	// Active evaluates the When condition against the widget's state RIGHT NOW.
+	// Nil means "cannot say", which is different from "false": a renderer shows
+	// such a binding normally, annotated with its When label.
+	//
+	// It exists so a help surface can DIM what does not currently apply instead
+	// of hiding it. Hiding would make a binding that is one keystroke away look
+	// like a binding that does not exist, and the user would have no way to
+	// learn what to press first. Only a live panel can answer this — see
+	// [Keymapper], which is how a renderer reaches one.
+	Active func() bool
+}
+
+// Live reports whether the binding applies right now. A binding with no Active
+// predicate is treated as live, so a widget that declares plain labels keeps
+// rendering exactly as it did before predicates existed.
+func (b KeyBinding) Live() bool { return b.Active == nil || b.Active() }
+
+// Keymapper is implemented by a widget's PANEL when its bindings depend on
+// state only the mounted instance holds — which view it is in, what is under
+// the cursor, what kind of source it is following.
+//
+// [Spec.Keymap] answers the same question for a widget that has not been built
+// (a page map, a help surface describing an unmounted pane), and is the
+// fallback: a host asks the focused panel first and falls back to the spec, so
+// a widget that has nothing mode-dependent to say implements nothing.
+//
+// The two must agree on the KEYS. A panel that returned a different set from
+// its spec would make the drawer's help depend on whether the pane happened to
+// be mounted, which is exactly the drift the contract exists to prevent — so
+// the idiomatic implementation starts from the package-level declaration and
+// only attaches [KeyBinding.Active] predicates to it.
+type Keymapper interface {
+	Keymap() []KeyBinding
 }
 
 // SizeHint is a widget's opinion about how much room it needs to be useful.
 //
-// Nothing consumes it yet — it is declared now so widgets can start stating
-// their minimum and the sizing work can grow into it without every widget
-// package changing again. Implementations should be pure and cheap: it is
-// polled during layout.
+// It is consumed by a host's page compiler, which uses it to decide whether a
+// layout can still be given the shape it asks for at the size the drawer is
+// now. Implementations should be pure and cheap: it is polled during layout.
 type SizeHint interface {
 	// MinSize reports the smallest width and height at which the widget still
 	// renders something worth showing. Either value may be 0, meaning "no

@@ -159,6 +159,28 @@ func Keymap() []widget.KeyBinding {
 	}
 }
 
+// Keymap answers for the LIVE pane, implementing [widget.Keymapper]: Enter
+// means two different things and which one is live depends entirely on the row
+// under the cursor, so only the mounted panel can say.
+func (p *Panel) Keymap() []widget.KeyBinding {
+	bindings := Keymap()
+	for i := range bindings {
+		switch bindings[i].When {
+		case "on a group row":
+			bindings[i].Active = func() bool {
+				row, ok := p.selected()
+				return ok && row.priority == ""
+			}
+		case "on a P0/P1 row":
+			bindings[i].Active = func() bool {
+				row, ok := p.selected()
+				return ok && row.priority != ""
+			}
+		}
+	}
+	return bindings
+}
+
 func (p *Panel) currentGroups() []GroupRow {
 	if p.groups == nil {
 		return nil
