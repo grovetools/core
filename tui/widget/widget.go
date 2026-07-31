@@ -93,10 +93,15 @@ type Spec struct {
 	// the widget knowing. Empty means "use the map's neutral fallback".
 	Glyph string
 
-	// Build returns a FRESH panel. Drawer roots are disposable — the host
-	// recompiles a page whenever its pane availability changes — so a Build
-	// that returned a shared panel would leak state across recompiles and pin
-	// scope resolved at registration time.
+	// Build CONSTRUCTS a panel: it is a constructor, never a getter, and every
+	// call must return a new one.
+	//
+	// How long that panel then LIVES is the host's business, and hosts differ —
+	// treemux's drawer recompiles a page whenever its pane availability
+	// changes, and keeps one panel per mounted pane across those recompiles so
+	// a widget's own state survives them. A Build that handed back a shared
+	// panel would take that decision away from the host entirely, and would pin
+	// whatever scope it resolved at registration time.
 	Build func() tuimux.Panel
 
 	// Available gates whether the pane is mounted at all. Nil means always
