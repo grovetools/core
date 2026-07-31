@@ -379,3 +379,52 @@ func TestDrawerPageScopeIsSchemaEnforced(t *testing.T) {
 		t.Errorf("schema violation does not point at scope: %v", err)
 	}
 }
+
+// The composition grammar rides the existing `pane` key, so it needs nothing
+// from the encoder — which is the point of spelling it as a prefix. This pins
+// that: a composed page survives a TOML round trip unchanged, and the layered
+// clone every merge goes through carries the references too.
+func TestDrawerConfigTOMLRoundTripComposedPage(t *testing.T) {
+	input := `
+[tui.drawer.pages.wide]
+key = "W"
+size = "40%"
+
+[tui.drawer.pages.wide.layout]
+split = "vertical"
+first = { pane = "page:sessions" }
+second = { pane = "page:git", min_width = 40 }
+`
+
+	var cfg Config
+	if err := toml.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatalf("unmarshal composed drawer config: %v", err)
+	}
+	encoded, err := toml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("marshal composed drawer config: %v", err)
+	}
+	var roundTripped Config
+	if err := toml.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("unmarshal round-tripped composed drawer config: %v", err)
+	}
+	if !reflect.DeepEqual(cfg.TUI.Drawer, roundTripped.TUI.Drawer) {
+		t.Fatalf("composed drawer changed across TOML round trip:\nwant: %#v\n got: %#v", cfg.TUI.Drawer, roundTripped.TUI.Drawer)
+	}
+
+	wide := roundTripped.TUI.Drawer.Pages["wide"]
+	if wide == nil || wide.Layout == nil {
+		t.Fatal("composed page was not preserved")
+	}
+	first, ok := DrawerPageRef(wide.Layout.First.Pane)
+	if !ok || first != "sessions" {
+		t.Fatalf("first child = %q, want a reference to sessions", wide.Layout.First.Pane)
+	}
+	second, ok := DrawerPageRef(wide.Layout.Second.Pane)
+	if !ok || second != "git" || wide.Layout.Second.MinWidth != 40 {
+		t.Fatalf("second child = %#v, want a reference to git minding 40 columns", wide.Layout.Second)
+	}
+	if cloned := cloneDrawerViews(roundTripped.TUI.Drawer); cloned.Pages["wide"].Layout.First.Pane != "page:sessions" {
+		t.Fatalf("clone dropped the reference: %#v", cloned.Pages["wide"].Layout)
+	}
+}

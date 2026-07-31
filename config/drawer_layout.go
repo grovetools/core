@@ -1,5 +1,31 @@
 package config
 
+import "strings"
+
+// DrawerPageRefPrefix marks a layout leaf as a reference to another PAGE rather
+// than to a pane: `pane = "page:sessions"` mounts the sessions page's whole
+// layout at that position, which is how a drawer wide enough for two subjects
+// shows two pages side by side without either of them becoming a special kind
+// of page.
+//
+// It is spelled as a prefix on the existing `pane` key rather than as a key of
+// its own because a reference IS a leaf everywhere it matters — it sits where a
+// pane sits, it is a child of a split, it takes a min_width — and one field with
+// one grammar keeps every host walker on one shape.
+const DrawerPageRefPrefix = "page:"
+
+// DrawerPageRef splits a leaf's pane value into the page it references and
+// whether it references one at all.
+//
+// It lives here, beside the schema description that documents the grammar to
+// users, so the two cannot drift. A host that does not compose can ignore the
+// second return entirely: a reference then reads as a pane name no registry
+// has, which is already a leaf that normalizes away.
+func DrawerPageRef(pane string) (string, bool) {
+	name, ok := strings.CutPrefix(pane, DrawerPageRefPrefix)
+	return name, ok && name != ""
+}
+
 // The built-in per-leaf minimums a host applies to a drawer node that declares
 // none of its own. They are the point below which a pane stops being readable
 // rather than merely cramped: under ~24 columns a session row, a note title or

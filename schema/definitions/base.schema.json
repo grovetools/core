@@ -127,7 +127,7 @@
           "type": "integer"
         },
         "pane": {
-          "description": "Pane name for a leaf node",
+          "description": "Pane name for a leaf node; the prefix page: instead inlines another page's layout here (page:sessions)",
           "type": "string"
         },
         "ratio": {
@@ -233,6 +233,10 @@
           },
           "description": "Named drawer page definitions",
           "type": "object"
+        },
+        "responsive": {
+          "description": "Let empty drawer panes give their unused rows to content-bearing siblings (default: false)",
+          "type": "boolean"
         }
       },
       "type": "object"

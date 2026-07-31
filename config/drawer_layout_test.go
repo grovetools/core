@@ -60,3 +60,29 @@ func TestEffectiveRatioClampsToTheAcceptedRange(t *testing.T) {
 		}
 	}
 }
+
+// The `page:` grammar is one rule with one edge: the prefix alone names no
+// page, so it is a pane name (an unknown one) rather than a reference to
+// nowhere. Everything else round-trips the name verbatim, including a name a
+// host will go on to reject.
+func TestDrawerPageRefParsesTheCompositionGrammar(t *testing.T) {
+	for _, tc := range []struct {
+		pane string
+		name string
+		ref  bool
+	}{
+		{"page:sessions", "sessions", true},
+		{"page:my-page_2", "my-page_2", true},
+		{"page:Bad Name", "Bad Name", true},
+		{"page:", "", false},
+		{"queue", "", false},
+		{"", "", false},
+		{"pages:sessions", "", false},
+		{"PAGE:sessions", "", false},
+	} {
+		name, ref := DrawerPageRef(tc.pane)
+		if ref != tc.ref || (ref && name != tc.name) {
+			t.Fatalf("DrawerPageRef(%q) = %q, %v; want %q, %v", tc.pane, name, ref, tc.name, tc.ref)
+		}
+	}
+}

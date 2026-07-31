@@ -372,6 +372,23 @@ type DrawerViewsConfig struct {
 	// the pages rather than inside them because a pane is not owned by a page:
 	// any page's layout may mount "files", and all of them want the same view.
 	Files *DrawerFilesConfig `yaml:"files,omitempty" toml:"files,omitempty" json:"files,omitempty" jsonschema:"description=Settings for the accessed-files drawer pane"`
+	// Responsive lets a mounted pane with nothing to show shrink to its header
+	// plus its one ⓘ line, handing the rows it cannot use to a content-bearing
+	// sibling on the same page. The tree never changes shape: nothing is
+	// unmounted, reordered or recompiled — only the row split moves.
+	//
+	// Unset is OFF while the feature bakes; false restores pure ratio layout
+	// permanently, which is the setting to reach for if a pane ever resizes at
+	// a moment you did not expect.
+	Responsive *bool `yaml:"responsive,omitempty" toml:"responsive,omitempty" json:"responsive,omitempty" jsonschema:"description=Let empty drawer panes give their unused rows to content-bearing siblings (default: false)"`
+}
+
+// ResponsiveDrawer reports whether content-aware pane sizing is on, treating an
+// absent config and an absent key alike. Hosts must call this rather than
+// dereferencing the field, so the default lives in exactly one place — and so
+// flipping it after the feature bakes is a one-line change here.
+func (c *DrawerViewsConfig) ResponsiveDrawer() bool {
+	return c != nil && c.Responsive != nil && *c.Responsive
 }
 
 // Drawer files view modes. Tree is the default: the repo → dir → file shape is
@@ -425,7 +442,11 @@ type DrawerPageConfig struct {
 // DrawerNodeConfig is either a Pane leaf or a split with First and Second
 // children. Shape and value validation is performed by the TUI host.
 type DrawerNodeConfig struct {
-	Pane  string  `yaml:"pane,omitempty" toml:"pane,omitempty" json:"pane,omitempty" jsonschema:"description=Pane name for a leaf node"`
+	// Pane names the widget mounted at this leaf, or — with the `page:` prefix
+	// ([DrawerPageRefPrefix]) — another page whose layout is inlined here. The
+	// reference is what composes a wide drawer out of pages that already exist:
+	// see [DrawerPageRef].
+	Pane  string  `yaml:"pane,omitempty" toml:"pane,omitempty" json:"pane,omitempty" jsonschema:"description=Pane name for a leaf node; the prefix page: instead inlines another page's layout here (page:sessions)"`
 	Split string  `yaml:"split,omitempty" toml:"split,omitempty" json:"split,omitempty" jsonschema:"description=Split direction,enum=auto,enum=horizontal,enum=vertical"`
 	Ratio float64 `yaml:"ratio,omitempty" toml:"ratio,omitempty" json:"ratio,omitempty" jsonschema:"description=Fraction allocated to the first child"`
 	// MinWidth and MinHeight are the smallest extent this node is worth
