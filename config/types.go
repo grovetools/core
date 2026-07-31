@@ -413,8 +413,13 @@ type DrawerPageConfig struct {
 	// paying for it. Hosts honor it on a direct jump to the page and ignore it
 	// while cycling: cycling is browsing, and reflowing the main area on every
 	// step of a browse is worse than a page rendering at the shared width.
-	Size   DrawerSize `yaml:"size,omitempty" toml:"size,omitempty" json:"size,omitempty" jsonschema:"description=Drawer extent while this page is showing - honored on a direct jump and ignored while cycling - as an absolute count (70) or a percentage of the terminal (40%)"`
-	Delete bool       `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
+	Size DrawerSize `yaml:"size,omitempty" toml:"size,omitempty" json:"size,omitempty" jsonschema:"description=Drawer extent while this page is showing - honored on a direct jump and ignored while cycling - as an absolute count (70) or a percentage of the terminal (40%)"`
+	// Scope declares what the page is ABOUT. Unset means mixed. It never
+	// reorders pages and never switches them; it lets a host explain an empty
+	// page in one sentence, group adjacent same-subject pages in the page map,
+	// and dim a whole page when its subject is absent. See [DrawerPageScope].
+	Scope  DrawerPageScope `yaml:"scope,omitempty" toml:"scope,omitempty" json:"scope,omitempty" jsonschema:"description=What this page is about - drives page-level empty reasons and page-map grouping - never reorders or switches pages,enum=global,enum=workspace,enum=worktree,enum=agent,enum=agents,enum=mixed,default=mixed"`
+	Delete bool            `yaml:"delete,omitempty" toml:"delete,omitempty" json:"delete,omitempty" jsonschema:"description=Remove this page from inherited configuration"`
 }
 
 // DrawerNodeConfig is either a Pane leaf or a split with First and Second

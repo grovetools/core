@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
@@ -278,5 +279,103 @@ func TestDrawerConfigRecursiveJSONSchema(t *testing.T) {
 	}
 	if got, want := mapAt(nodeProps, "split")["enum"], []interface{}{"auto", "horizontal", "vertical"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("split enum = %#v, want %#v", got, want)
+	}
+}
+
+func TestDrawerPageScopeRoundTripsAndValidates(t *testing.T) {
+	input := `
+[tui.drawer.pages.review]
+scope = "worktree"
+layout = { pane = "changes" }
+
+[tui.drawer.pages.watch]
+layout = { pane = "toc" }
+`
+	var cfg Config
+	if err := toml.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatalf("unmarshal drawer scope: %v", err)
+	}
+	encoded, err := toml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("marshal drawer scope: %v", err)
+	}
+	var roundTripped Config
+	if err := toml.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("unmarshal round-tripped drawer scope: %v", err)
+	}
+	if got := roundTripped.TUI.Drawer.Pages["review"].Scope; got != DrawerScopeWorktree {
+		t.Errorf("scope after round trip = %q, want %q", got, DrawerScopeWorktree)
+	}
+	// Unset stays unset on the wire — omitempty keeps a page that declared no
+	// scope from acquiring an explicit "mixed" it never asked for.
+	if got := roundTripped.TUI.Drawer.Pages["watch"].Scope; got != "" {
+		t.Errorf("unset scope round-tripped as %q, want empty", got)
+	}
+	if got := roundTripped.TUI.Drawer.Pages["watch"].Scope.Resolved(); got != DrawerScopeMixed {
+		t.Errorf("unset scope resolved to %q, want %q", got, DrawerScopeMixed)
+	}
+
+	// JSON is the shape the schema validator sees.
+	encodedJSON, err := json.Marshal(cfg.TUI.Drawer.Pages["review"])
+	if err != nil {
+		t.Fatalf("marshal page as JSON: %v", err)
+	}
+	if !strings.Contains(string(encodedJSON), `"scope":"worktree"`) {
+		t.Errorf("scope missing from JSON encoding: %s", encodedJSON)
+	}
+}
+
+func TestDrawerPageScopeValidateNamesTheAcceptedSet(t *testing.T) {
+	for _, ok := range append([]DrawerPageScope{""}, drawerPageScopes...) {
+		if err := ok.Validate(); err != nil {
+			t.Errorf("scope %q rejected: %v", ok, err)
+		}
+	}
+	err := DrawerPageScope("wortree").Validate()
+	if err == nil {
+		t.Fatal("misspelled scope accepted")
+	}
+	// The message has to carry both what was wrong and what is allowed: a lint
+	// line that only says "invalid" sends the user to the source to find out
+	// what the six words are.
+	msg := err.Error()
+	if !strings.Contains(msg, `"wortree"`) {
+		t.Errorf("error does not quote the bad value: %q", msg)
+	}
+	for _, want := range drawerPageScopes {
+		if !strings.Contains(msg, string(want)) {
+			t.Errorf("error does not list %q: %q", want, msg)
+		}
+	}
+	// A bad value costs the grouping, never the page.
+	if got := DrawerPageScope("wortree").Resolved(); got != DrawerScopeMixed {
+		t.Errorf("invalid scope resolved to %q, want %q", got, DrawerScopeMixed)
+	}
+}
+
+// TestDrawerPageScopeIsSchemaEnforced pins the lint half of the contract: the
+// embedded schema the config load path validates against carries the enum, so
+// a misspelled scope is reported rather than silently ignored.
+func TestDrawerPageScopeIsSchemaEnforced(t *testing.T) {
+	validator, err := NewSchemaValidator()
+	if err != nil {
+		t.Skipf("schema validator unavailable: %v", err)
+	}
+	page := func(scope string) *Config {
+		return &Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+			Pages: map[string]*DrawerPageConfig{
+				"review": {Scope: DrawerPageScope(scope), Layout: &DrawerNodeConfig{Pane: "changes"}},
+			},
+		}}}
+	}
+	for _, scope := range drawerPageScopes {
+		if err := validator.Validate(page(string(scope))); err != nil {
+			t.Errorf("schema rejected valid scope %q: %v", scope, err)
+		}
+	}
+	if err := validator.Validate(page("wortree")); err == nil {
+		t.Error("schema accepted a misspelled scope")
+	} else if !strings.Contains(err.Error(), "scope") {
+		t.Errorf("schema violation does not point at scope: %v", err)
 	}
 }

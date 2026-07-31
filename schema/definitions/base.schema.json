@@ -163,6 +163,19 @@
           "description": "Leader sub-key for this page; shadows the leader window jump on that key; none explicitly unbinds it",
           "type": "string"
         },
+        "scope": {
+          "default": "mixed",
+          "description": "What this page is about - drives page-level empty reasons and page-map grouping - never reorders or switches pages",
+          "enum": [
+            "global",
+            "workspace",
+            "worktree",
+            "agent",
+            "agents",
+            "mixed"
+          ],
+          "type": "string"
+        },
         "size": {
           "$ref": "#/$defs/DrawerSize",
           "description": "Drawer extent while this page is showing - honored on a direct jump and ignored while cycling - as an absolute count (70) or a percentage of the terminal (40%)"
