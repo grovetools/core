@@ -500,6 +500,19 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.DrawerSize != "" {
 			result.TUI.DrawerSize = override.TUI.DrawerSize
 		}
+		// drawer_orientation and drawer_expanded are the same two spellings of
+		// "no opinion" the rest of this block uses — empty string, false — and
+		// they need clauses for the same reason every other key does. Their
+		// x-layer=global tag is a HINT to the config editor about where a key
+		// usually belongs, not a rule about where it works: drawer_size carries
+		// the identical tag and has always merged from any layer. Without these
+		// two, an ecosystem grove.toml setting either one was silently ignored.
+		if override.TUI.DrawerOrientation != "" {
+			result.TUI.DrawerOrientation = override.TUI.DrawerOrientation
+		}
+		if override.TUI.DrawerExpanded {
+			result.TUI.DrawerExpanded = true
+		}
 
 		// Drawer scalars use last-non-empty-wins, page_order uses
 		// last-non-nil-wins, and pages are replaced as whole definitions per
@@ -530,6 +543,21 @@ func mergeConfigs(base, override *Config) *Config {
 				for name, page := range override.TUI.Drawer.Pages {
 					result.TUI.Drawer.Pages[name] = cloneDrawerPage(page)
 				}
+			}
+			// The drawer's behaviour booleans are three-state (*bool), so unlike
+			// the or-style plain bools elsewhere in this function they merge on
+			// nil rather than on false — which is the whole point of the pointer.
+			// A layer can therefore turn one OFF again, not just on: an ecosystem
+			// that wants `responsive = false` under a global true has no other way
+			// to say so, and an or-merge would make that config a silent no-op.
+			if override.TUI.Drawer.Responsive != nil {
+				result.TUI.Drawer.Responsive = override.TUI.Drawer.Responsive
+			}
+			if override.TUI.Drawer.HideInapplicablePages != nil {
+				result.TUI.Drawer.HideInapplicablePages = override.TUI.Drawer.HideInapplicablePages
+			}
+			if override.TUI.Drawer.PageMapLongForm != nil {
+				result.TUI.Drawer.PageMapLongForm = override.TUI.Drawer.PageMapLongForm
 			}
 			// Pane settings merge field-wise (last-non-empty-wins), unlike whole
 			// page definitions: a layer that only names a files view must not have

@@ -220,6 +220,14 @@
           "$ref": "#/$defs/DrawerFilesConfig",
           "description": "Settings for the accessed-files drawer pane"
         },
+        "hide_inapplicable_pages": {
+          "description": "Omit drawer pages whose scope subject is absent from the page map instead of dimming them; the active page is never hidden (default: false)",
+          "type": "boolean"
+        },
+        "page_map_long_form": {
+          "description": "Render the drawer page map as labelled pages with their jump keys instead of the compact glyph strip (default: false)",
+          "type": "boolean"
+        },
         "page_order": {
           "description": "Ordered drawer page names",
           "items": {
@@ -235,7 +243,7 @@
           "type": "object"
         },
         "responsive": {
-          "description": "Let empty drawer panes give their unused rows to content-bearing siblings (default: false)",
+          "description": "Let empty drawer panes give their unused rows to content-bearing siblings (default: true)",
           "type": "boolean"
         }
       },

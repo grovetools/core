@@ -377,18 +377,61 @@ type DrawerViewsConfig struct {
 	// sibling on the same page. The tree never changes shape: nothing is
 	// unmounted, reordered or recompiled — only the row split moves.
 	//
-	// Unset is OFF while the feature bakes; false restores pure ratio layout
-	// permanently, which is the setting to reach for if a pane ever resizes at
-	// a moment you did not expect.
-	Responsive *bool `yaml:"responsive,omitempty" toml:"responsive,omitempty" json:"responsive,omitempty" jsonschema:"description=Let empty drawer panes give their unused rows to content-bearing siblings (default: false)"`
+	// Unset is ON: the feature has baked, and a pane that hands its unused rows
+	// to a sibling is what a reader wants often enough that it is not worth
+	// asking for. false restores pure ratio layout permanently, which is the
+	// setting to reach for if a pane ever resizes at a moment you did not
+	// expect.
+	Responsive *bool `yaml:"responsive,omitempty" toml:"responsive,omitempty" json:"responsive,omitempty" jsonschema:"description=Let empty drawer panes give their unused rows to content-bearing siblings (default: true)"`
+	// HideInapplicablePages omits a page whose scope SUBJECT is absent from the
+	// page map entirely, instead of dimming its run. It is opt-in because the
+	// map's whole premise is a fixed shape you can learn by looking at it, and a
+	// page that comes and goes with the focus teaches less than one that is
+	// always there greyed out — but a user who never works with agents has a
+	// standing answer, not a transient one, and should be able to stop paying
+	// bar width for it.
+	//
+	// It is PAGE-level only and deliberately does not extend to hiding an
+	// unavailable pane inside an applicable page: a page's scope is a declared
+	// statement about what it is for, while a pane going quiet is transient, and
+	// hiding on that signal would make the bar twitch continuously.
+	//
+	// The ACTIVE page is never hidden whatever this says — see the host's page
+	// map builder. A map with no accent anywhere is strictly worse than a map
+	// with one dim run in it.
+	HideInapplicablePages *bool `yaml:"hide_inapplicable_pages,omitempty" toml:"hide_inapplicable_pages,omitempty" json:"hide_inapplicable_pages,omitempty" jsonschema:"description=Omit drawer pages whose scope subject is absent from the page map instead of dimming them; the active page is never hidden (default: false)"`
+	// PageMapLongForm renders the open drawer's tab bar as labelled pages —
+	// NAME (jump key) followed by the glyph run — wrapping across lines rather
+	// than as the compact glyph strip. Opt-in because the compact form is what
+	// fits a narrow drawer; see the page map's own doc comment for why labelling
+	// EVERY page does not reintroduce the reflow that removed the single active
+	// label.
+	PageMapLongForm *bool `yaml:"page_map_long_form,omitempty" toml:"page_map_long_form,omitempty" json:"page_map_long_form,omitempty" jsonschema:"description=Render the drawer page map as labelled pages with their jump keys instead of the compact glyph strip (default: false)"`
 }
 
 // ResponsiveDrawer reports whether content-aware pane sizing is on, treating an
 // absent config and an absent key alike. Hosts must call this rather than
-// dereferencing the field, so the default lives in exactly one place — and so
-// flipping it after the feature bakes is a one-line change here.
+// dereferencing the field, so the default lives in exactly one place — which is
+// what made turning it on by default the one-line change it turned out to be.
 func (c *DrawerViewsConfig) ResponsiveDrawer() bool {
-	return c != nil && c.Responsive != nil && *c.Responsive
+	return c == nil || c.Responsive == nil || *c.Responsive
+}
+
+// HideInapplicableDrawerPages reports whether a page whose scope subject is
+// absent is omitted from the page map rather than dimmed. Same contract as
+// [DrawerViewsConfig.ResponsiveDrawer]: absent config and absent key are the
+// same answer, and hosts call this rather than dereferencing the field so the
+// default lives in exactly one place.
+func (c *DrawerViewsConfig) HideInapplicableDrawerPages() bool {
+	return c != nil && c.HideInapplicablePages != nil && *c.HideInapplicablePages
+}
+
+// LongFormPageMap reports whether the drawer's page map renders in its labelled
+// long form. Named for the question rather than the field because the field
+// name is already taken by the struct — same accessor contract as its two
+// neighbours otherwise.
+func (c *DrawerViewsConfig) LongFormPageMap() bool {
+	return c != nil && c.PageMapLongForm != nil && *c.PageMapLongForm
 }
 
 // Drawer files view modes. Tree is the default: the repo → dir → file shape is

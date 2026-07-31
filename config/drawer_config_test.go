@@ -428,3 +428,168 @@ second = { pane = "page:git", min_width = 40 }
 		t.Fatalf("clone dropped the reference: %#v", cloned.Pages["wide"].Layout)
 	}
 }
+
+// TestDrawerViewAccessorsTreatAbsentConfigAndAbsentKeyAlike pins the one rule
+// the three [tui.drawer] booleans share: hosts ask the accessor, never the
+// field, so "no config at all", "no key" and "the key set to its default" are
+// one answer written in one place.
+//
+// The DEFAULTS are what differ, and each is a decision:
+//   - responsive is ON. It has baked; a pane handing its unused rows to a
+//     sibling is what a reader wants often enough not to have to ask for.
+//   - hide_inapplicable_pages is OFF. The page map's premise is a fixed shape
+//     you learn by looking at it, and a page that comes and goes teaches less
+//     than one that is always there greyed out.
+//   - page_map_long_form is OFF. The compact glyph strip is what fits a narrow
+//     drawer, which is the drawer most people have.
+func TestDrawerViewAccessorsTreatAbsentConfigAndAbsentKeyAlike(t *testing.T) {
+	yes, no := true, false
+	for _, tc := range []struct {
+		name                       string
+		cfg                        *DrawerViewsConfig
+		responsive, hide, longForm bool
+	}{
+		{"nil config", nil, true, false, false},
+		{"no keys set", &DrawerViewsConfig{}, true, false, false},
+		{"every key off", &DrawerViewsConfig{Responsive: &no, HideInapplicablePages: &no, PageMapLongForm: &no}, false, false, false},
+		{"every key on", &DrawerViewsConfig{Responsive: &yes, HideInapplicablePages: &yes, PageMapLongForm: &yes}, true, true, true},
+		// Each key answers only for itself: they share a table, not a meaning.
+		{"hide alone", &DrawerViewsConfig{HideInapplicablePages: &yes}, true, true, false},
+		{"long form alone", &DrawerViewsConfig{PageMapLongForm: &yes}, true, false, true},
+		{"responsive off alone", &DrawerViewsConfig{Responsive: &no}, false, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.ResponsiveDrawer(); got != tc.responsive {
+				t.Errorf("ResponsiveDrawer() = %v, want %v", got, tc.responsive)
+			}
+			if got := tc.cfg.HideInapplicableDrawerPages(); got != tc.hide {
+				t.Errorf("HideInapplicableDrawerPages() = %v, want %v", got, tc.hide)
+			}
+			if got := tc.cfg.LongFormPageMap(); got != tc.longForm {
+				t.Errorf("LongFormPageMap() = %v, want %v", got, tc.longForm)
+			}
+		})
+	}
+}
+
+// TestDrawerViewBooleansRoundTripAsThreeStateKeys: each is a *bool so that
+// "unset" stays distinguishable from "explicitly false" across a TOML round
+// trip — which is the whole reason the accessors can own the default.
+func TestDrawerViewBooleansRoundTripAsThreeStateKeys(t *testing.T) {
+	input := `
+[tui.drawer]
+responsive = false
+hide_inapplicable_pages = true
+page_map_long_form = true
+`
+	var cfg Config
+	if err := toml.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatalf("unmarshal drawer booleans: %v", err)
+	}
+	d := cfg.TUI.Drawer
+	if d == nil || d.Responsive == nil || *d.Responsive {
+		t.Fatalf("responsive = %#v, want an explicit false", d)
+	}
+	if !d.HideInapplicableDrawerPages() || !d.LongFormPageMap() {
+		t.Fatalf("drawer booleans did not survive the parse: %#v", d)
+	}
+
+	encoded, err := toml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("marshal drawer booleans: %v", err)
+	}
+	var roundTripped Config
+	if err := toml.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("unmarshal round-tripped drawer booleans: %v", err)
+	}
+	if !reflect.DeepEqual(cfg.TUI.Drawer, roundTripped.TUI.Drawer) {
+		t.Fatalf("drawer booleans changed across a TOML round trip:\nwant: %#v\n got: %#v", cfg.TUI.Drawer, roundTripped.TUI.Drawer)
+	}
+
+	// An unset key is omitted entirely rather than written as false, so a
+	// config file never pins a default the accessor is free to change.
+	empty, err := toml.Marshal(&Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{}}})
+	if err != nil {
+		t.Fatalf("marshal empty drawer: %v", err)
+	}
+	for _, key := range []string{"responsive", "hide_inapplicable_pages", "page_map_long_form"} {
+		if strings.Contains(string(empty), key) {
+			t.Errorf("unset key %q was written out: %s", key, empty)
+		}
+	}
+}
+
+// TestDrawerSettingsMergeFromAnyLayer covers the five keys that used to reach
+// the host only from the GLOBAL config, because mergeConfigs had no clause for
+// them and every non-global layer arrives here as an override.
+//
+// The failure this pins was silent and total: a user writing
+// `hide_inapplicable_pages = true` in an ecosystem grove.toml got no warning, no
+// error, and no effect. Their x-layer=global schema tag is a hint to the config
+// editor about where a key usually belongs, not a statement about where it
+// works — drawer_size carries the same tag and has always merged from anywhere.
+func TestDrawerSettingsMergeFromAnyLayer(t *testing.T) {
+	t.Run("orientation and expanded", func(t *testing.T) {
+		base := &Config{TUI: &TUIConfig{DrawerOrientation: "right"}}
+		override := &Config{TUI: &TUIConfig{DrawerOrientation: "bottom", DrawerExpanded: true}}
+		got := mergeConfigs(base, override).TUI
+		if got.DrawerOrientation != "bottom" {
+			t.Errorf("orientation = %q, want bottom", got.DrawerOrientation)
+		}
+		if !got.DrawerExpanded {
+			t.Error("drawer_expanded did not survive the merge")
+		}
+	})
+
+	t.Run("an override that says nothing changes nothing", func(t *testing.T) {
+		base := &Config{TUI: &TUIConfig{DrawerOrientation: "bottom", DrawerExpanded: true}}
+		got := mergeConfigs(base, &Config{TUI: &TUIConfig{}}).TUI
+		if got.DrawerOrientation != "bottom" || !got.DrawerExpanded {
+			t.Errorf("silent override clobbered the base: orientation=%q expanded=%v",
+				got.DrawerOrientation, got.DrawerExpanded)
+		}
+	})
+
+	t.Run("three-state booleans", func(t *testing.T) {
+		yes, no := true, false
+		for _, tc := range []struct {
+			name           string
+			base, override *bool
+			want           *bool
+		}{
+			{"override sets it", nil, &yes, &yes},
+			// The case an or-style bool merge cannot express, and the reason
+			// these three are pointers: a layer turning an inherited true back
+			// OFF has no other way to say so.
+			{"override can turn it off again", &yes, &no, &no},
+			{"silence inherits", &yes, nil, &yes},
+			{"silence over silence", nil, nil, nil},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				got := mergeConfigs(
+					&Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+						Responsive: tc.base, HideInapplicablePages: tc.base, PageMapLongForm: tc.base,
+					}}},
+					&Config{TUI: &TUIConfig{Drawer: &DrawerViewsConfig{
+						Responsive: tc.override, HideInapplicablePages: tc.override, PageMapLongForm: tc.override,
+					}}},
+				).TUI.Drawer
+
+				for name, p := range map[string]*bool{
+					"responsive":              got.Responsive,
+					"hide_inapplicable_pages": got.HideInapplicablePages,
+					"page_map_long_form":      got.PageMapLongForm,
+				} {
+					switch {
+					case tc.want == nil && p != nil:
+						t.Errorf("%s = %v, want unset", name, *p)
+					case tc.want != nil && p == nil:
+						t.Errorf("%s is unset, want %v", name, *tc.want)
+					case tc.want != nil && p != nil && *p != *tc.want:
+						t.Errorf("%s = %v, want %v", name, *p, *tc.want)
+					}
+				}
+			})
+		}
+	})
+}
