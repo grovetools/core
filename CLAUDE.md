@@ -43,6 +43,20 @@ Never add `go fmt ./...` to scripts — use `gofumpt -w .` directly. `gofmt` pro
 
 See `CONTRIBUTING.md` for rationale.
 
+## Changing the config schema regenerates a file in `grove`
+
+Any change to `config/`'s schema types — a new field, a renamed tag, a changed
+`jsonschema:` description — invalidates `grove/pkg/configui/schema_generated.go`.
+Run `make config-schema` **in `grove`** as part of the same change; it is the
+definition of done here, not a follow-up there. `grove`'s `make check` gates it
+(`config-schema-check`), but a gate catching it means it already shipped past
+the person who knew why. `[tui] drawer_size` and `[tui.drawer] responsive` both
+landed that way.
+
+Resolve a conflict in a `*_generated.go` by regenerating, never by merging the
+text — see `grove/CLAUDE.md` for why a regeneration run against a lagging
+sibling silently drops fields.
+
 ## Looking Up Related Concepts
 
 Before starting work, search for existing concepts that may relate to your task:

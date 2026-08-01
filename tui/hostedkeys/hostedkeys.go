@@ -28,8 +28,40 @@ type Reference struct {
 	Bindings      []Binding `json:"bindings"`
 }
 
-// Binding is one declared binding. Keys is the stable surface a host joins on;
-// everything else is description.
+// Binding is one declared binding: a key a component responds to, what it
+// does, and the condition under which it applies. Keys is the stable surface a
+// host joins on; everything else is description.
+//
+// It is THE shape for that statement in this ecosystem, and the other two
+// vocabularies are projections onto it rather than rivals:
+//
+//   - bubbles key.Binding inside a keymap.SectionedKeyMap, which a hosted app
+//     already writes for its own help overlay — projected by
+//     keymap.HostedReference, so an app declares its keys once.
+//   - widget.KeyBinding, which a drawer widget declares for the host's help
+//     layers — projected by widget.HostedBindings, and reconstructed by
+//     widget.BindingsFromHosted.
+//
+// It is the canonical one because it is the only one that can cross a process
+// boundary: it is versioned (SchemaVersion), it is plain JSON on the embed/v1
+// control socket, and it is what a sidecar written in another language emits.
+// The other two carry Go values — a matcher the compiler checks, a live
+// predicate — that no wire can transport, so the derivation only runs one way.
+//
+// # Scope, When and HostSwallowed are three different questions
+//
+// They read alike and are routinely confused, so each says which question it
+// answers:
+//
+//   - Scope is WHERE the binding lives: the sub-application or mode it belongs
+//     to, so a host can report "flow's browser binds this" rather than just
+//     "flow does". It PARTITIONS a declaration, and a renderer turns it into a
+//     heading over a group of rows.
+//   - When is the narrower condition INSIDE a scope ("on a stale row", "tree
+//     view"). It qualifies one binding, and a renderer puts it beside that row.
+//   - HostSwallowed is not a condition at all: it says WHICH LAYER of the
+//     declaring app acts on the key, not whether the binding applies. It is
+//     advisory input to arbitration.
 type Binding struct {
 	// Scope names the sub-application or mode the binding belongs to, so a
 	// host can report "flow's browser binds this" rather than just "flow does".
@@ -41,6 +73,18 @@ type Binding struct {
 	Keys []string `json:"keys"`
 	// Description is human-readable help text.
 	Description string `json:"description"`
+	// When narrows the binding to a mode or row kind within its scope ("on a
+	// stale row", "tree view"). Empty means the binding is always live while
+	// the declaring component holds focus.
+	//
+	// It carries the LABEL, never the answer. Whether the condition holds right
+	// now is a question only a live component can answer, and a wire
+	// declaration is a snapshot of what a component binds, not of what it is
+	// doing — see widget.KeyBinding.Active, which is the in-process half and is
+	// deliberately not expressible here. A renderer with only the label shows
+	// the row normally, annotated; a renderer that can reach the live component
+	// dims what does not currently apply.
+	When string `json:"when,omitempty"`
 	// ConfigKey names the config entry that rebinds this, when it has one.
 	ConfigKey string `json:"config_key,omitempty"`
 	// HostSwallowed marks a key the declaring app itself intercepts before

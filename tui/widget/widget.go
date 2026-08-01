@@ -73,6 +73,7 @@ package widget
 
 import (
 	"github.com/charmbracelet/lipgloss"
+	"github.com/grovetools/core/tui/components/pager"
 	"github.com/grovetools/core/tui/theme"
 	"github.com/grovetools/tuimux"
 )
@@ -138,7 +139,18 @@ type Spec struct {
 	SizeHint SizeHint
 }
 
-// KeyBinding is one declared key of a widget.
+// KeyBinding is one declared key of a widget: the in-process PROJECTION of
+// hostedkeys.Binding, which is the ecosystem's shape for "a key this component
+// responds to, its description, and the condition under which it applies".
+//
+// It exists as its own type for the two things a wire declaration cannot carry:
+// [KeyBinding.Active], a live predicate over the mounted widget's state, and a
+// single Key column that reads the way it renders. Everything else is the same
+// statement, and hostedkeys.Binding is where its field meanings are defined —
+// notably the Scope/When/HostSwallowed distinction, which is easy to get wrong.
+// See hostedkeys.go in this package for the conversion in both directions; a
+// host that renders drawer widgets and hosted panels in one help surface goes
+// through it rather than carrying two row types to the renderer.
 type KeyBinding struct {
 	// Key is the chord as bubbletea spells it ("enter", "ctrl+d", "q"), or
 	// several separated by "/" when they are aliases of one action ("q/esc").
@@ -183,11 +195,29 @@ type Keymapper interface {
 	Keymap() []KeyBinding
 }
 
-// SizeHint is a widget's opinion about how much room it needs to be useful.
+// SizeHint is a widget's opinion about how much room it needs to be useful:
+// MinSize reports the smallest width and height at which the widget still
+// renders something worth showing, either value 0 meaning "no opinion on that
+// axis".
 //
 // It is consumed by a host's page compiler, which uses it to decide whether a
 // layout can still be given the shape it asks for at the size the drawer is
 // now. Implementations should be pure and cheap: it is polled during layout.
+//
+// It is an ALIAS of [pager.SizeHint], not a second interface that happens to
+// match. The two were declared independently — a drawer widget's minimum and a
+// panelkit page's minimum — and had already converged on the same method and
+// the same doc comment, but on DIFFERENT behavior below the minimum. That
+// conflict is settled on pager.SizeHint, which is where both packages' readers
+// are pointed: below its declared minimum a component gets
+// [pager.TooSmallPlaceholder], in a pager tab and in a drawer pane alike. Read
+// it before implementing this — the choice of whether to declare a minimum at
+// all depends on it.
+//
+// The practical consequence for a widget: an in-process panelkit page mounted
+// as a drawer widget needs no adapter for this. A type implementing
+// pager.PageWithMinSize already satisfies SizeHint, and it now behaves the same
+// way in both hosts.
 //
 // It is a property of the WIDGET, fixed at registration and true wherever the
 // widget is mounted. Its dynamic counterpart is a property of the mounted PANE:
@@ -200,12 +230,7 @@ type Keymapper interface {
 // A panel implementing the dynamic hint must report a bounded row count only
 // for content that is genuinely bounded (an empty state, a fixed table). A hint
 // that tracked a live stream row by row would move the layout on every append.
-type SizeHint interface {
-	// MinSize reports the smallest width and height at which the widget still
-	// renders something worth showing. Either value may be 0, meaning "no
-	// opinion on that axis".
-	MinSize() (w, h int)
-}
+type SizeHint = pager.SizeHint
 
 // MinSize is the trivial [SizeHint]: a fixed floor on either axis.
 type MinSize struct{ W, H int }
