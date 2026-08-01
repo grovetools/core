@@ -412,6 +412,39 @@ func cloneDrawerViews(drawer *DrawerViewsConfig) *DrawerViewsConfig {
 		files := *drawer.Files
 		cloned.Files = &files
 	}
+	if drawer.Panes != nil {
+		cloned.Panes = make(map[string]*DrawerPaneConfig, len(drawer.Panes))
+		for name, pane := range drawer.Panes {
+			cloned.Panes[name] = cloneDrawerPane(pane)
+		}
+	}
+	return &cloned
+}
+
+// cloneDrawerPane deep-copies one pane declaration. The slices and the settings
+// map are copied rather than shared because a merged result is owned by the
+// caller: a layer that appended to a retained Args would otherwise edit the
+// layer it inherited from.
+func cloneDrawerPane(pane *DrawerPaneConfig) *DrawerPaneConfig {
+	if pane == nil {
+		return nil
+	}
+	cloned := *pane
+	if pane.Args != nil {
+		cloned.Args = append([]string(nil), pane.Args...)
+	}
+	if pane.Env != nil {
+		cloned.Env = append([]string(nil), pane.Env...)
+	}
+	if pane.Keys != nil {
+		cloned.Keys = append([]PluginKey(nil), pane.Keys...)
+	}
+	if pane.Settings != nil {
+		cloned.Settings = make(map[string]interface{}, len(pane.Settings))
+		for k, v := range pane.Settings {
+			cloned.Settings[k] = v
+		}
+	}
 	return &cloned
 }
 
@@ -587,6 +620,18 @@ func mergeConfigs(base, override *Config) *Config {
 					result.TUI.Drawer.Files = &DrawerFilesConfig{}
 				}
 				result.TUI.Drawer.Files.View = override.TUI.Drawer.Files.View
+			}
+			// Pane DECLARATIONS replace wholesale, like page definitions and
+			// unlike the field-wise Files block above: a declaration says what a
+			// pane IS, and half of one layer's command with half of another's
+			// args is a process nobody wrote down.
+			if override.TUI.Drawer.Panes != nil {
+				if result.TUI.Drawer.Panes == nil {
+					result.TUI.Drawer.Panes = make(map[string]*DrawerPaneConfig, len(override.TUI.Drawer.Panes))
+				}
+				for name, pane := range override.TUI.Drawer.Panes {
+					result.TUI.Drawer.Panes[name] = cloneDrawerPane(pane)
+				}
 			}
 		}
 		// Bool fields need explicit clauses or an override layer's value is

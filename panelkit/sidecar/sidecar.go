@@ -542,6 +542,25 @@ func (c *Client) Log(level, message string) error {
 	return c.send(panelproto.TypeLog, panelproto.Log{Level: level, Message: message})
 }
 
+// SetPaneState tells the host whether this pane is worth mounting and what its
+// empty state says, so a host that must answer those questions synchronously —
+// a drawer compiling a page — can answer them from a cache instead of asking.
+//
+// Send it whenever the answer CHANGES, and once at startup if the opening
+// answer is not the default. A host that has heard nothing treats the pane as
+// available with no reason, which is the direction that fails visibly rather
+// than by taking the pane's slot away mid-compile (see panelproto.PaneState).
+//
+// A pane mounted somewhere with no such contract — the icon rail — simply
+// ignores it, so a panel that means to be mountable in both places says its
+// piece once and does not branch.
+func (c *Client) SetPaneState(available *bool, emptyReason string) error {
+	return c.send(panelproto.TypeState, panelproto.PaneState{
+		Available:   available,
+		EmptyReason: emptyReason,
+	})
+}
+
 // DeclareKeys re-declares the panel's key claims mid-flight, replacing what
 // Hello asked for. The host re-filters, and the new grant arrives as the next
 // Welcome — so a panel that rebinds should not assume its request was met.

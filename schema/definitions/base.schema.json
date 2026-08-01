@@ -222,6 +222,88 @@
       },
       "type": "object"
     },
+    "DrawerPaneConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "description": "Arguments passed to the sidecar command",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "backend": {
+          "default": "in-process",
+          "description": "Which implementation backs this pane: in-process (the default) or a sidecar process speaking embed/v1",
+          "enum": [
+            "in-process",
+            "sidecar"
+          ],
+          "type": "string"
+        },
+        "command": {
+          "description": "Executable to run for a sidecar-backed pane",
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Working directory for the sidecar command",
+          "type": "string"
+        },
+        "env": {
+          "description": "Extra environment variables for the sidecar (KEY=VALUE)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "icon": {
+          "description": "Page-map icon name for this pane; resolved through the host icon table",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Chords the sidecar declares it intends to claim while focused (declaration only; the host arbitrates the real claims at handshake time)",
+          "items": {
+            "$ref": "#/$defs/PluginKey"
+          },
+          "type": "array"
+        },
+        "label": {
+          "description": "Heading the host draws above the pane (defaults to the pane name)",
+          "type": "string"
+        },
+        "min_height": {
+          "description": "Smallest row count at which this pane still renders something worth showing",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_width": {
+          "description": "Smallest column count at which this pane still renders something worth showing; below it the pane shows the too-small placeholder",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "protocol": {
+          "description": "Control-plane protocol for the sidecar; empty means embed/v1",
+          "enum": [
+            "",
+            "embed/v1"
+          ],
+          "type": "string"
+        },
+        "protocol_timeout": {
+          "description": "Handshake deadline for the sidecar (Go duration; default 2s)",
+          "type": "string"
+        },
+        "restart": {
+          "description": "Auto-restart the sidecar when it exits",
+          "type": "boolean"
+        },
+        "settings": {
+          "description": "Free-form settings table delivered to the sidecar over embed/v1 (data only; never executed by the host)",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "DrawerSize": {
       "oneOf": [
         {
@@ -269,6 +351,13 @@
             "$ref": "#/$defs/DrawerPageConfig"
           },
           "description": "Named drawer page definitions",
+          "type": "object"
+        },
+        "panes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DrawerPaneConfig"
+          },
+          "description": "Drawer panes whose backend is chosen in config (in-process or an embed/v1 sidecar process)",
           "type": "object"
         },
         "responsive": {

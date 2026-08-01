@@ -163,6 +163,14 @@ var execFields = []ExecField{
 		Path: "tui.plugins.*", Risk: RiskImplicit, Consumer: "treemux",
 		Description: "process spawned in its own PTY rail panel at TUI startup",
 	},
+	// A drawer pane's sidecar is the same spawn as a rail plugin's, in a
+	// different slot, so it is quarantined on the same terms. The whole entry is
+	// gated (not just `command`) for the reason the tui.plugins entry states:
+	// args, env and cwd all steer what actually runs.
+	{
+		Path: "tui.drawer.panes.*", Risk: RiskImplicit, Consumer: "treemux",
+		Description: "process spawned in its own PTY drawer pane when the drawer page is compiled",
+	},
 	{
 		Path: "tui.panels.command", Risk: RiskImplicit, Consumer: "treemux",
 		Description: "default binary spawned by panel keybindings",

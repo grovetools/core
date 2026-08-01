@@ -372,6 +372,17 @@ type DrawerViewsConfig struct {
 	// the pages rather than inside them because a pane is not owned by a page:
 	// any page's layout may mount "files", and all of them want the same view.
 	Files *DrawerFilesConfig `yaml:"files,omitempty" toml:"files,omitempty" json:"files,omitempty" jsonschema:"description=Settings for the accessed-files drawer pane"`
+	// Panes declares drawer panes whose BACKEND is chosen by the user rather
+	// than compiled in. It sits beside Files for the same reason Files does: a
+	// pane is not owned by a page, so what a pane IS belongs next to the page
+	// definitions, never inside one.
+	//
+	// An entry naming a name the host already registers REDEFINES that pane —
+	// which is what makes a widget dual-mode. `changes` is the exemplar: it is
+	// an in-process git-viewer widget by default, and an entry here pointing at
+	// git-viewer's own binary makes the same pane a sidecar over embed/v1, in
+	// the same page and the same tree as its in-process neighbours.
+	Panes map[string]*DrawerPaneConfig `yaml:"panes,omitempty" toml:"panes,omitempty" json:"panes,omitempty" jsonschema:"description=Drawer panes whose backend is chosen in config (in-process or an embed/v1 sidecar process)"`
 	// Responsive lets a mounted pane with nothing to show shrink to its header
 	// plus its one ⓘ line, handing the rows it cannot use to a content-bearing
 	// sibling on the same page. The tree never changes shape: nothing is
@@ -454,6 +465,103 @@ type DrawerFilesConfig struct {
 	// default in place: a bad spelling here should cost you the preference, not
 	// the pane.
 	View string `yaml:"view,omitempty" toml:"view,omitempty" json:"view,omitempty" jsonschema:"description=Initial view for the accessed-files drawer pane,enum=flat,enum=tree,default=tree"`
+}
+
+// Drawer pane backends. In-process is the default and the one every built-in
+// widget uses; sidecar spawns a process in the pane's own PTY and speaks
+// embed/v1 to it over a per-pane control socket.
+//
+// The choice is a PROCESS boundary, not an ownership one. A first-party widget
+// in the same go.work should stay in-process whatever repository owns it —
+// compile-time types, no serialization, and a dynamic size hint the layout can
+// poll. The sidecar backend buys isolation and independent release, and is paid
+// for with everything crossing a wire; it is worth it for third-party,
+// other-language or untrusted panels, and for nothing that can simply be
+// imported.
+const (
+	DrawerBackendInProcess = "in-process"
+	DrawerBackendSidecar   = "sidecar"
+)
+
+// DrawerPaneConfig declares one drawer pane's backend and, for a sidecar-backed
+// pane, the process behind it.
+//
+// The sidecar fields mirror [PluginConfig] deliberately: a drawer sidecar and a
+// rail sidecar are the same kind of thing spawned in two different places, and
+// a panel author who has written one manifest should not have to learn a second
+// vocabulary to mount it in a drawer. What is NOT mirrored is as deliberate:
+// there is no `position` (the position is the drawer slot a page's layout puts
+// it in) and no dynamic size hint (see MinWidth).
+type DrawerPaneConfig struct {
+	// Backend selects the implementation. Empty means [DrawerBackendInProcess],
+	// so an entry that sets only `min_width` tunes the built-in widget rather
+	// than accidentally asking for a process.
+	Backend string `yaml:"backend,omitempty" toml:"backend,omitempty" json:"backend,omitempty" jsonschema:"description=Which implementation backs this pane: in-process (the default) or a sidecar process speaking embed/v1,enum=in-process,enum=sidecar,default=in-process"`
+	// Command is the executable to run for a sidecar-backed pane. Required when
+	// Backend is sidecar; ignored otherwise.
+	Command string `yaml:"command,omitempty" toml:"command,omitempty" json:"command,omitempty" jsonschema:"description=Executable to run for a sidecar-backed pane"`
+	// Args, Cwd and Env are fixed at spawn, exactly as for a rail plugin.
+	Args []string `yaml:"args,omitempty" toml:"args,omitempty" json:"args,omitempty" jsonschema:"description=Arguments passed to the sidecar command"`
+	Cwd  string   `yaml:"cwd,omitempty" toml:"cwd,omitempty" json:"cwd,omitempty" jsonschema:"description=Working directory for the sidecar command"`
+	Env  []string `yaml:"env,omitempty" toml:"env,omitempty" json:"env,omitempty" jsonschema:"description=Extra environment variables for the sidecar (KEY=VALUE)"`
+	// Label is the pane heading the HOST draws above a sidecar's blit region.
+	// Empty falls back to the pane name.
+	Label string `yaml:"label,omitempty" toml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Heading the host draws above the pane (defaults to the pane name)"`
+	// Icon is the page-map icon KEY, resolved through the host's own icon
+	// table — the same thing widget.Spec.Glyph is, named as data so a sidecar
+	// can have one at all.
+	Icon string `yaml:"icon,omitempty" toml:"icon,omitempty" json:"icon,omitempty" jsonschema:"description=Page-map icon name for this pane; resolved through the host icon table"`
+	// Protocol opts the pane into the embed/v1 control plane. Empty means
+	// embed/v1 for a sidecar pane — unlike [tui.plugins], where empty means a
+	// plain PTY plugin. A drawer pane that never speaks the control plane can
+	// never report availability, so the default that makes the feature work is
+	// the right one here.
+	Protocol string `yaml:"protocol,omitempty" toml:"protocol,omitempty" json:"protocol,omitempty" jsonschema:"description=Control-plane protocol for the sidecar; empty means embed/v1,enum=,enum=embed/v1"`
+	// ProtocolTimeout bounds the handshake the same way PluginConfig's does.
+	ProtocolTimeout string `yaml:"protocol_timeout,omitempty" toml:"protocol_timeout,omitempty" json:"protocol_timeout,omitempty" jsonschema:"description=Handshake deadline for the sidecar (Go duration; default 2s)"`
+	// Restart auto-restarts the sidecar when it exits, as for a rail plugin.
+	Restart bool `yaml:"restart,omitempty" toml:"restart,omitempty" json:"restart,omitempty" jsonschema:"description=Auto-restart the sidecar when it exits"`
+	// MinWidth and MinHeight are the pane's DECLARED minimum, and they are the
+	// whole of what a sidecar can say about its size.
+	//
+	// Declared, never dynamic: the host polls a widget's minimum during page
+	// compilation and its dynamic counterpart during layout, and both are
+	// documented as pure and cheap — which a socket round-trip is not. So a
+	// sidecar pane opts out of content-aware shrinking (it is `flexible`), and
+	// its in-process siblings keep doing it normally. Below this minimum the
+	// pane renders the too-small placeholder rather than a squeezed column of
+	// punctuation.
+	MinWidth  int `yaml:"min_width,omitempty" toml:"min_width,omitempty" json:"min_width,omitempty" jsonschema:"description=Smallest column count at which this pane still renders something worth showing; below it the pane shows the too-small placeholder,minimum=0"`
+	MinHeight int `yaml:"min_height,omitempty" toml:"min_height,omitempty" json:"min_height,omitempty" jsonschema:"description=Smallest row count at which this pane still renders something worth showing,minimum=0"`
+	// Settings is the free-form table handed to the sidecar verbatim in the
+	// welcome frame and re-delivered on config_reload. Same contract, and the
+	// same non-interpretation guarantee, as PluginConfig.Settings.
+	Settings map[string]interface{} `yaml:"settings,omitempty" toml:"settings,omitempty" json:"settings,omitempty" jsonschema:"description=Free-form settings table delivered to the sidecar over embed/v1 (data only; never executed by the host)"`
+	// Keys mirrors the chords the sidecar declares it intends to claim. It is a
+	// DECLARATION and grants nothing — the real claims arrive in the handshake
+	// — but the host lints it against the drawer's own vocabulary at
+	// registration time, so a pane claiming `<`, `>` or `?` is warned about
+	// before it silently swallows a page switch.
+	Keys []PluginKey `yaml:"keys,omitempty" toml:"keys,omitempty" json:"keys,omitempty" jsonschema:"description=Chords the sidecar declares it intends to claim while focused (declaration only; the host arbitrates the real claims at handshake time)"`
+}
+
+// SidecarBacked reports whether this pane asks for a process. Hosts call it
+// rather than comparing Backend themselves, so the empty-means-in-process
+// default lives in one place.
+func (c *DrawerPaneConfig) SidecarBacked() bool {
+	return c != nil && c.Backend == DrawerBackendSidecar
+}
+
+// EffectiveProtocol is the control-plane version a sidecar pane is spawned
+// with. Empty means embed/v1 here, which is the opposite of [PluginConfig]'s
+// default and for a stated reason: a rail plugin with no control plane is a
+// perfectly good terminal pane, while a drawer pane with none can never tell
+// the host it is unavailable or what its empty state says.
+func (c *DrawerPaneConfig) EffectiveProtocol() string {
+	if c == nil || c.Protocol == "" {
+		return "embed/v1"
+	}
+	return c.Protocol
 }
 
 // DrawerPageConfig defines one named drawer page. A partial built-in page

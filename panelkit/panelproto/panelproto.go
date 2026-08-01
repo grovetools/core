@@ -96,6 +96,15 @@ const (
 	TypeKeys = "keys"
 	// TypeLog writes one diagnostic line to the host's log. Payload: Log.
 	TypeLog = "log"
+	// TypeState declares what the host must be able to answer about this panel
+	// SYNCHRONOUSLY, without asking. Payload: PaneState.
+	//
+	// It exists because a drawer host polls a widget's availability and its
+	// empty sentence during page COMPILATION and on every page-map frame — a
+	// function call, on the render path, that a socket round-trip cannot serve.
+	// So the panel pushes and the host caches. See PaneState for why the
+	// absent-state default is "available".
+	TypeState = "state"
 )
 
 // Frame types, host→app.
@@ -444,6 +453,37 @@ type Navigate struct {
 type Done struct {
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
+}
+
+// PaneState is a panel's push of the facts a host has to answer for it without
+// asking: whether the pane is worth mounting at all, and the one sentence that
+// explains it when it has nothing to show.
+//
+// Both are the wire form of a [core/tui/widget].Spec field — Available and
+// EmptyReason — and both are polled by a drawer host during page compilation,
+// which is a function call on the render path. A socket cannot answer one, so
+// the panel states its position whenever it changes and the host reads its
+// cache.
+//
+// # Absent state means AVAILABLE
+//
+// A host that has heard nothing — a sidecar still starting, one that never
+// speaks this frame, one whose process died — treats the pane as available with
+// no reason. The alternative fails in the direction that cannot be recovered
+// from: a pane that vanished mid-compile takes its slot with it, resizes its
+// siblings, and looks exactly like a config that did not load. A pane that
+// renders nothing is visibly a pane that has nothing to say.
+//
+// Available is a POINTER for the same reason: a frame that carries only a new
+// empty reason must not be read as a claim about availability.
+type PaneState struct {
+	// Available gates whether a host mounts the pane at all. nil leaves the
+	// host's last answer standing (available, if it never heard one).
+	Available *bool `json:"available,omitempty"`
+	// EmptyReason is one actionable sentence explaining why the pane is
+	// unavailable or empty ("no agent session focused"), phrased as a fact the
+	// reader can act on rather than an apology. Empty clears it.
+	EmptyReason string `json:"empty_reason,omitempty"`
 }
 
 // Log is one diagnostic line for the host log. Level is "debug", "info",
