@@ -439,6 +439,9 @@ func cloneDrawerPane(pane *DrawerPaneConfig) *DrawerPaneConfig {
 	if pane.Keys != nil {
 		cloned.Keys = append([]PluginKey(nil), pane.Keys...)
 	}
+	if pane.Views != nil {
+		cloned.Views = append([]PluginView(nil), pane.Views...)
+	}
 	if pane.Settings != nil {
 		cloned.Settings = make(map[string]interface{}, len(pane.Settings))
 		for k, v := range pane.Settings {

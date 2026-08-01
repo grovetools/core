@@ -590,6 +590,21 @@ type DrawerPaneConfig struct {
 	// registration time, so a pane claiming `<`, `>` or `?` is warned about
 	// before it silently swallows a page switch.
 	Keys []PluginKey `yaml:"keys,omitempty" toml:"keys,omitempty" json:"keys,omitempty" jsonschema:"description=Chords the sidecar declares it intends to claim while focused (declaration only; the host arbitrates the real claims at handshake time)"`
+	// Views mirrors the views the PANEL declares it can draw — `grove plugin
+	// install` copies them here from the manifest's [panel.views.<name>], in
+	// declaration order.
+	//
+	// It is the author's half of [DrawerPaneConfig.View]: the user names one
+	// view, the author says which views exist and which of them are meant for a
+	// pane this narrow. Like [Keys] it is a DECLARATION that grants and forbids
+	// nothing — a `view` naming something absent from this list still mounts and
+	// still reaches the panel verbatim, because only the panel knows what it
+	// implements.
+	//
+	// The host reads exactly one thing from it, [PluginView.Drawer], and only in
+	// the two ways [EffectiveView] and [DeclaredView] express. It never reads a
+	// NAME here, which is what keeps the view an open set.
+	Views []PluginView `yaml:"views,omitempty" toml:"views,omitempty" json:"views,omitempty" jsonschema:"description=Views the panel declares it can draw, in declaration order (declaration only; the host reads only each view's drawer suitability, never its name)"`
 }
 
 // SidecarBacked reports whether this pane asks for a process. Hosts call it
@@ -616,6 +631,55 @@ func (c *DrawerPaneConfig) EffectiveProtocol() string {
 		return "embed/v1"
 	}
 	return c.Protocol
+}
+
+// EffectiveView is the view a drawer pane actually mounts with: the one the user
+// named, or — when they named none — the first view the panel's author declared
+// drawer-suitable.
+//
+// That default is what makes an installed panel work well in a drawer before the
+// user has read its docs. Declaration order carries the preference because the
+// author writes their preferred drawer view first; there is deliberately no
+// separate `preferred` key, which would be a second way to say the same thing
+// and a second way to say it inconsistently.
+//
+// Empty is a legitimate answer and stays empty: a panel that declares no
+// drawer-suitable view is declining to offer one, which is information rather
+// than a gap, and empty on the wire means the panel's own default.
+//
+// This lives here rather than in a host for the reason [EffectiveProtocol] does
+// — "what does an unset field mean" is the config vocabulary's own question. Note
+// what it does NOT do: it never compares a view name to anything, so the host
+// still holds no view vocabulary. Presence is not identity.
+func (c *DrawerPaneConfig) EffectiveView() string {
+	if c == nil {
+		return ""
+	}
+	if c.View != "" {
+		return c.View
+	}
+	for _, v := range c.Views {
+		if v.Drawer {
+			return v.Name
+		}
+	}
+	return ""
+}
+
+// DeclaredView looks up what the panel's author said about one view. The second
+// return distinguishes "declared, and not for a drawer" from "not declared at
+// all", which are different situations: the first is something the host can
+// report honestly, and the second is a name only the panel can judge.
+func (c *DrawerPaneConfig) DeclaredView(name string) (PluginView, bool) {
+	if c == nil || name == "" {
+		return PluginView{}, false
+	}
+	for _, v := range c.Views {
+		if v.Name == name {
+			return v, true
+		}
+	}
+	return PluginView{}, false
 }
 
 // DrawerPageConfig defines one named drawer page. A partial built-in page
@@ -848,6 +912,18 @@ type PluginConfig struct {
 	// `wide` layout and a `graph` layout can be asked for either from either
 	// place. The host still reads it nowhere.
 	View string `yaml:"view,omitempty" toml:"view,omitempty" jsonschema:"description=Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default."`
+	// Views mirrors the panel's own view declaration, copied here from the
+	// manifest's [panel.views.<name>] by `grove plugin install` — see
+	// [DrawerPaneConfig.Views], which is the same declaration and the same
+	// contract, because it is a fact about the panel rather than about where it
+	// is mounted.
+	//
+	// Nothing reads it on the rail: a rail pane is as wide as the terminal, so
+	// "is this view drawer-suitable" has no bearing there. It is written into the
+	// installed fragment for the reason [Settings] is — the file the user edits
+	// to configure a panel should state every view they can ask that panel for —
+	// and it is where a drawer pane declaration is copied FROM.
+	Views []PluginView `yaml:"views,omitempty" toml:"views,omitempty" jsonschema:"description=Views the panel declares it can draw, in declaration order (declaration only; nothing on the rail reads it)"`
 }
 
 // PluginKey is one declared host chord in a plugin's [[tui.plugins.<name>.keys]].
@@ -858,6 +934,35 @@ type PluginKey struct {
 	// Description is the human-readable effect, shown wherever the host lists
 	// the panel's keys.
 	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=What the chord does, shown in the host's help surfaces"`
+}
+
+// PluginView is one view a panel declares it can draw — one entry of
+// [[tui.plugins.<name>.views]] or [[tui.drawer.panes.<name>.views]], copied from
+// the manifest's [panel.views.<name>] table by `grove plugin install`.
+//
+// An ARRAY here where the manifest has named tables, and that is the one thing
+// the translation adds: order. The author's declaration order is their
+// preference order (see [DrawerPaneConfig.EffectiveView]), and a TOML table of
+// tables decodes into a map, which has none.
+type PluginView struct {
+	// Name is the view's name in the PANEL's vocabulary, exactly as
+	// [DrawerPaneConfig.View] names one. The set is open and the host holds no
+	// list of members; this entry is a claim by the author, not a registration.
+	Name string `yaml:"name" toml:"name" json:"name" jsonschema:"description=The view's name in the panel's own vocabulary"`
+	// Description is what the view is for, in the author's words. Read by people
+	// — the install consent screen and anyone opening the fragment to choose a
+	// view — and by no code.
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" json:"description,omitempty" jsonschema:"description=What this view shows, in the author's words"`
+	// Drawer says whether the author means this view for a drawer pane: a column
+	// tens of cells wide and a handful of rows tall.
+	//
+	// It is the ONE thing about a view the host reads, and it does exactly two
+	// things with it — supply the default when the user named no view, and warn
+	// when a view the author excluded is mounted in a drawer anyway. It is never
+	// enforcement: a `drawer = false` view mounted in a drawer loads and runs, it
+	// is just ugly, and the host says so rather than substituting a choice the
+	// user did not make.
+	Drawer bool `yaml:"drawer,omitempty" toml:"drawer,omitempty" json:"drawer,omitempty" jsonschema:"description=Whether the author means this view for a drawer pane; the host defaults to the first such view and warns when a view marked false is mounted in a drawer anyway"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel
