@@ -1917,6 +1917,48 @@ func (c *RemoteClient) CleanupChannels(ctx context.Context) (*models.ChannelClea
 	return &result, nil
 }
 
+// EnsureAssistant asks the daemon's assistant supervisor for a live assistant
+// session and returns the resulting status.
+func (c *RemoteClient) EnsureAssistant(ctx context.Context) (*models.AssistantStatus, error) {
+	return c.assistantRequest(ctx, "POST", "/api/assistant/ensure")
+}
+
+// GetAssistantStatus reads the supervisor's state without triggering an ensure.
+func (c *RemoteClient) GetAssistantStatus(ctx context.Context) (*models.AssistantStatus, error) {
+	return c.assistantRequest(ctx, "GET", "/api/assistant/status")
+}
+
+func (c *RemoteClient) assistantRequest(ctx context.Context, method, path string) (*models.AssistantStatus, error) {
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// The supervisor reports its own refusals (breaker tripped, launch
+		// failed) in the body so the pane can show the reason rather than a
+		// bare status code.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("%s", msg)
+	}
+
+	var result models.AssistantStatus
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // SendSessionInput sends input to an interactive agent session via the daemon.
 func (c *RemoteClient) SendSessionInput(ctx context.Context, sessionID, input string) error {
 	body, err := json.Marshal(map[string]string{"input": input})

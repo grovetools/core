@@ -57,6 +57,70 @@ func TestResolveTarget(t *testing.T) {
 	})
 }
 
+// TestResolveTargetWorktreeless covers the plans that the worktree registry can
+// never name: a plan created without --worktree has no entry, so `--at <plan>`
+// used to fail with "no worktree found for target" even though the plan dir was
+// sitting right there.
+func TestResolveTargetWorktreeless(t *testing.T) {
+	// newWorktreelessPlan writes a plan directory with its marker and no
+	// registry entry, exactly like `flow plan init <name>` without --worktree.
+	newWorktreelessPlan := func(t *testing.T, dir string) string {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, plan.PlanMarkerFile), []byte("name: x\n"), 0o644))
+		return dir
+	}
+
+	t.Run("resolves an absolute plan directory", func(t *testing.T) {
+		t.Setenv("GROVE_HOME", t.TempDir())
+		planDir := newWorktreelessPlan(t, filepath.Join(t.TempDir(), "plans", "steward"))
+
+		target, err := plan.ResolveTarget(planDir)
+		require.NoError(t, err)
+		require.NotNil(t, target)
+		assert.Equal(t, planDir, target.PlanDir)
+		assert.Equal(t, "steward", target.PlanName)
+		// There is no worktree, so there must be no container claim.
+		assert.Empty(t, target.ContainerPath)
+	})
+
+	t.Run("resolves a bare plan name through the workspace plans dir", func(t *testing.T) {
+		t.Setenv("GROVE_HOME", t.TempDir())
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		root := canonicalTempDir(t)
+
+		// A standalone repo is the working directory; its notebook plans dir
+		// is where a worktree-less plan lives.
+		repo := filepath.Join(root, "alpha-repo")
+		require.NoError(t, os.MkdirAll(filepath.Join(repo, ".git"), 0o755))
+		newWorktreelessPlan(t, notebookPlanDir(home, "alpha-repo", "steward"))
+
+		t.Chdir(repo)
+		target, err := plan.ResolveTarget("steward")
+		require.NoError(t, err)
+		require.NotNil(t, target)
+		assert.Equal(t, notebookPlanDir(home, "alpha-repo", "steward"), target.PlanDir)
+		assert.Equal(t, "steward", target.PlanName)
+		assert.Empty(t, target.ContainerPath)
+	})
+
+	t.Run("an absolute directory without the plan marker is still an error", func(t *testing.T) {
+		t.Setenv("GROVE_HOME", t.TempDir())
+		dir := t.TempDir()
+		_, err := plan.ResolveTarget(dir)
+		require.Error(t, err)
+	})
+
+	t.Run("a bare name with no plan directory is still an error", func(t *testing.T) {
+		t.Setenv("GROVE_HOME", t.TempDir())
+		t.Setenv("HOME", t.TempDir())
+		t.Chdir(t.TempDir())
+		_, err := plan.ResolveTarget("nope")
+		require.Error(t, err)
+	})
+}
+
 // newLegacyPlanFixture builds the on-disk shape `flow plan init <name>
 // --worktree --layout legacy` produces for a STANDALONE repo: the owner repo,
 // a unified container at <owner>/.grove-worktrees/<plan> (synthetic grove.toml

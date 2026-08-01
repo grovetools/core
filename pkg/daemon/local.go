@@ -422,6 +422,16 @@ func (c *LocalClient) CleanupChannels(ctx context.Context) (*models.ChannelClean
 	return nil, errors.New("channel cleanup requires the grove daemon")
 }
 
+// EnsureAssistant requires the daemon: the assistant supervisor lives there
+// precisely so it outlives every TUI that asks for it.
+func (c *LocalClient) EnsureAssistant(ctx context.Context) (*models.AssistantStatus, error) {
+	return nil, errors.New("the assistant supervisor requires the grove daemon")
+}
+
+func (c *LocalClient) GetAssistantStatus(ctx context.Context) (*models.AssistantStatus, error) {
+	return nil, errors.New("the assistant supervisor requires the grove daemon")
+}
+
 // SendSessionInput returns an error since agent input requires the daemon for tmux target resolution.
 func (c *LocalClient) SendSessionInput(ctx context.Context, sessionID, input string) error {
 	return errors.New("sending input to agent sessions requires the grove daemon")

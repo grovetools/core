@@ -245,6 +245,18 @@ type Client interface {
 	// CleanupChannels purges stale sessions and routes from the channel manager.
 	CleanupChannels(ctx context.Context) (*models.ChannelCleanupResponse, error)
 
+	// --- Assistant Supervisor ---
+
+	// EnsureAssistant asks the daemon's assistant supervisor to make sure a
+	// live assistant session exists, and returns the resulting status. It is
+	// the "ensure" trigger of the assistant-pane spec §3.3: a request, not a
+	// restart — a chain that is already live is left alone.
+	EnsureAssistant(ctx context.Context) (*models.AssistantStatus, error)
+
+	// GetAssistantStatus returns the assistant supervisor's current state
+	// without triggering an ensure.
+	GetAssistantStatus(ctx context.Context) (*models.AssistantStatus, error)
+
 	// --- Environment Management ---
 
 	// EnvUp requests the daemon to spin up an environment for a workspace.

@@ -2,10 +2,16 @@ package plan
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/pkg/worktreeregistry"
 )
+
+// PlanMarkerFile is the file whose presence identifies a directory as a
+// grove-flow plan directory.
+const PlanMarkerFile = ".grove-plan.yml"
 
 // ResolvedTarget is the enriched bundle describing a flow target — the
 // worktree container plus the plan it hosts and the derived workspace/plan
@@ -49,6 +55,16 @@ type ResolvedTarget struct {
 func ResolveTarget(ref string) (*ResolvedTarget, error) {
 	entry, err := worktreeregistry.FindByRef(ref)
 	if err != nil {
+		// A plan with no worktree has no registry entry, so the registry can
+		// never name it. Worktree-less plans are a first-class shape — a
+		// portfolio-altitude coordinator (or the standing assistant) lives in
+		// the main checkout and reaches into feature plans with --at — so fall
+		// back to resolving ref as a plan directory before giving up. The
+		// result carries PlanName/PlanDir and nothing else: there is no
+		// container, and callers that need one already guard on it.
+		if target, ok := resolveWorktreelessPlan(ref); ok {
+			return target, nil
+		}
 		return nil, err
 	}
 	if entry == nil || entry.AbsPath == "" {
@@ -88,6 +104,55 @@ func ResolveTarget(ref string) (*ResolvedTarget, error) {
 	}
 
 	return target, nil
+}
+
+// resolveWorktreelessPlan resolves ref to a plan directory that has no
+// worktree behind it. ref may be an absolute path to the plan directory
+// itself, or a bare plan name resolved against the working directory's
+// plans dir.
+//
+// The .grove-plan.yml marker is what makes this safe to try after a registry
+// miss: without it an absolute path to any unregistered directory (a worktree
+// container that was never registered, say) would be silently accepted as a
+// plan and every downstream load would fail confusingly instead of at the
+// resolver.
+func resolveWorktreelessPlan(ref string) (*ResolvedTarget, bool) {
+	if ref == "" {
+		return nil, false
+	}
+
+	if filepath.IsAbs(ref) {
+		if isPlanDir(ref) {
+			return &ResolvedTarget{PlanName: filepath.Base(ref), PlanDir: ref}, true
+		}
+		return nil, false
+	}
+
+	// A slash-bearing relative ref is a path, not a plan name; resolving it
+	// under the plans dir would silently invent a directory.
+	if filepath.Base(ref) != ref {
+		return nil, false
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, false
+	}
+	planDir := ResolvePlanDir(cwd, ref)
+	if planDir == "" || !isPlanDir(planDir) {
+		return nil, false
+	}
+	return &ResolvedTarget{PlanName: ref, PlanDir: planDir}, true
+}
+
+// isPlanDir reports whether dir is a grove-flow plan directory.
+func isPlanDir(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	marker, err := os.Stat(filepath.Join(dir, PlanMarkerFile))
+	return err == nil && !marker.IsDir()
 }
 
 // ownerOriginRoot resolves the origin root a worktree owner qualifies plans
