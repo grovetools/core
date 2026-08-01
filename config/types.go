@@ -526,6 +526,47 @@ type AgentPaneConfig struct {
 	// full repaint) after agent output bursts settle and on pane focus,
 	// healing renderer corruption in the live region. Default: true.
 	RepaintNudge *bool `yaml:"repaint_nudge,omitempty" toml:"repaint_nudge,omitempty" json:"repaint_nudge,omitempty" jsonschema:"description=Automatically SIGWINCH-nudge agent panes after output bursts to heal rendering corruption,default=true"`
+
+	// AutoApprove configures answering agent permission prompts from the
+	// rendered pane. Off unless enabled. See AgentAutoApproveConfig.
+	AutoApprove *AgentAutoApproveConfig `yaml:"auto_approve,omitempty" toml:"auto_approve,omitempty" json:"auto_approve,omitempty" jsonschema:"description=Answer matching agent permission prompts by pressing Enter in the pane"`
+}
+
+// AgentAutoApproveConfig controls whether treemux answers an agent's
+// permission prompt by pressing Enter in the pane.
+//
+// The prompts this exists for are the ones Claude Code raises purely because
+// its static analyser could not model the command's shell syntax — `git log
+// $BRANCH`, `ls {a,b}`. Those are refused BEFORE permissions.allow is
+// consulted, so no allow rule can ever cover them, and the refusal reason is
+// not visible to a hook or a setting. It is, however, printed in the dialog,
+// so treemux reads it off the pane's own terminal grid and answers there.
+//
+// Nothing is auto-approved by default, and the guards are structural rather
+// than pattern-based: only the sandboxed "Bash command" dialog is ever a
+// candidate (the "(unsandboxed)" variant, file writes, fetches and tool use
+// are not), and only while its highlighted option is exactly "Yes" — so the
+// keystroke can never write a permission rule or answer something else.
+//
+// Example grove.toml:
+//
+//	[tui.agent.auto_approve]
+//	enabled = true
+//	deny_patterns = ["terraform apply"]
+type AgentAutoApproveConfig struct {
+	// Enabled turns auto-approval on for every agent pane. Default: false.
+	Enabled *bool `yaml:"enabled,omitempty" toml:"enabled,omitempty" json:"enabled,omitempty" jsonschema:"description=Answer matching agent permission prompts automatically,default=false"`
+
+	// ApprovePatterns are matched case-insensitively against the dialog text;
+	// any match makes it a candidate. They describe the REASON class being
+	// answered, not the command. Setting this REPLACES the built-in list
+	// ("cannot be statically analyzed", "expansion obfuscation").
+	ApprovePatterns []string `yaml:"approve_patterns,omitempty" toml:"approve_patterns,omitempty" json:"approve_patterns,omitempty" jsonschema:"description=Dialog text that makes a permission prompt eligible for auto-approval; replaces the built-in static-analysis-miss list"`
+
+	// DenyPatterns veto a candidate, matched against the whole dialog
+	// including the command itself. This EXTENDS the built-in floor (sandbox
+	// escapes, rm -rf, sudo, git push) — it cannot shrink it.
+	DenyPatterns []string `yaml:"deny_patterns,omitempty" toml:"deny_patterns,omitempty" json:"deny_patterns,omitempty" jsonschema:"description=Dialog text that vetoes auto-approval; extends the built-in deny floor rather than replacing it"`
 }
 
 // JobDetailConfig configures direct keybinds for the job detail tab wrapper.

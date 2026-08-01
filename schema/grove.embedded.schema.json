@@ -1,8 +1,37 @@
 {
   "$defs": {
+    "AgentAutoApproveConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "approve_patterns": {
+          "description": "Dialog text that makes a permission prompt eligible for auto-approval; replaces the built-in static-analysis-miss list",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny_patterns": {
+          "description": "Dialog text that vetoes auto-approval; extends the built-in deny floor rather than replacing it",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Answer matching agent permission prompts automatically",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "AgentPaneConfig": {
       "additionalProperties": false,
       "properties": {
+        "auto_approve": {
+          "$ref": "#/$defs/AgentAutoApproveConfig",
+          "description": "Answer matching agent permission prompts by pressing Enter in the pane"
+        },
         "repaint_nudge": {
           "default": true,
           "description": "Automatically SIGWINCH-nudge agent panes after output bursts to heal rendering corruption",
