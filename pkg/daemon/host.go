@@ -115,21 +115,60 @@ func WithHostSocketEnv(env []string) []string { return withHostSocketEnv(env) }
 // are skipped on lookup and pruned on the next registration; a live entry
 // whose daemon socket has died is skipped by the dial check in
 // sessionHostClient.
+//
+// The registry holds two KINDS of host (see hostKind). A "ui" host is a real
+// interactive UI (treemux) — the thing this contract was built for. A "daemon"
+// host is the global groved registering ITSELF as the machine-wide fallback
+// endpoint. Without that second tier, "no live registered UI host" and "no host
+// at all" are indistinguishable, which is exactly the fleet-restart window: kill
+// every daemon while agents are running, and for the seconds treemux takes to
+// come back the registry is empty, so every scope-resolving client in a worktree
+// concludes "no host" and SPAWNS a scoped groved nothing will ever use. The
+// global daemon is up long before its UI is, and it is where the jobs and
+// sessions actually live, so letting it answer "route here" closes that window.
+// A live UI host always beats a daemon host, so nothing about treemux's routing
+// changes while it is running.
 
-// uiHostRegistration is the on-disk record of one interactive host UI.
+// hostKind classifies a registered host. It decides precedence only: a UI host
+// always wins over a daemon host, because only a UI can render and attach a
+// session.
+type hostKind string
+
+const (
+	// hostKindUI is an interactive host UI (treemux). Also the meaning of an
+	// empty Kind, so records written before this field existed keep working.
+	hostKindUI hostKind = "ui"
+	// hostKindDaemon is the global groved acting as its own last-resort
+	// routing endpoint. It renders nothing; it exists so clients stop
+	// spawning scoped daemons when no UI happens to be up.
+	hostKindDaemon hostKind = "daemon"
+)
+
+// uiHostRegistration is the on-disk record of one host.
 type uiHostRegistration struct {
-	// PID of the host UI process (treemux). Liveness of this pid — not of
-	// the daemon — decides whether the entry is honored: the daemon can
-	// outlive the UI, and routing sessions at a UI that is gone helps nobody.
+	// PID of the host process (treemux, or the global groved for a daemon
+	// host). Liveness of this pid — not of the daemon — decides whether the
+	// entry is honored: for a UI host the daemon can outlive the UI, and
+	// routing sessions at a UI that is gone helps nobody.
 	PID int `json:"pid"`
-	// Program is a human-readable tag ("treemux") for debugging.
+	// Program is a human-readable tag ("treemux", "groved") for debugging.
 	Program string `json:"program,omitempty"`
+	// Kind is "ui" or "daemon"; empty means "ui" (pre-kind records).
+	Kind hostKind `json:"kind,omitempty"`
 	// Scope is the workspace subtree this host displays. "" is a global host
 	// and covers every directory.
 	Scope string `json:"scope"`
 	// SocketPath is the groved socket the host streams sessions from.
 	SocketPath string    `json:"socket_path"`
 	StartedAt  time.Time `json:"started_at"`
+}
+
+// kind returns the record's kind with the pre-kind default applied.
+func (r uiHostRegistration) kind() hostKind {
+	if r.Kind == "" {
+		return hostKindUI
+	}
+	return r.Kind
 }
 
 func uiHostsDir() string { return filepath.Join(paths.StateDir(), "hosts") }
@@ -148,6 +187,25 @@ func uiHostRegistrationPath(pid int) string {
 // groved jobrunner, which executes flow's providers in a process the host
 // never spawned.
 func RegisterUIHost(scope, program string) (unregister func(), err error) {
+	return registerHost(scope, program, hostKindUI)
+}
+
+// RegisterDaemonHost records the calling groved as the routing endpoint of last
+// resort for scope. It is the same contract as RegisterUIHost with strictly
+// lower precedence: any live UI host covering the same directory wins, and this
+// entry is consulted only when none does.
+//
+// Only the GLOBAL daemon should call this. A scoped groved registering itself
+// would make its socket the most-specific host for its own subtree and could
+// steal session traffic from a global treemux that is streaming a different
+// daemon. The global daemon has scope "" — it covers everything, is never
+// auto-shutdown, and is where in-process jobs and sessions already live — so it
+// is the only safe answer to "there is no UI, now what?".
+func RegisterDaemonHost(scope, program string) (unregister func(), err error) {
+	return registerHost(scope, program, hostKindDaemon)
+}
+
+func registerHost(scope, program string, kind hostKind) (unregister func(), err error) {
 	dir := uiHostsDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -157,6 +215,7 @@ func RegisterUIHost(scope, program string) (unregister func(), err error) {
 	reg := uiHostRegistration{
 		PID:        os.Getpid(),
 		Program:    program,
+		Kind:       kind,
 		Scope:      scope,
 		SocketPath: paths.SocketPath(scope),
 		StartedAt:  time.Now().UTC(),
@@ -235,11 +294,17 @@ func uiHostScopeCovers(scope, dir string) bool {
 	return dir == scope || strings.HasPrefix(dir, scope+string(filepath.Separator))
 }
 
-// lookupUIHostSocket returns the daemon socket of the registered live host
-// whose scope covers dir, or "" when no such host exists. The most specific
-// scope wins (a worktree-scoped treemux beats a global one for its subtree);
-// among equals, the most recently started host wins.
-func lookupUIHostSocket(dir string) string {
+// lookupHostSocket returns the daemon socket of the registered live host whose
+// scope covers dir, or "" when no such host exists.
+//
+// Precedence, in order:
+//  1. Kind — a UI host always beats a daemon host. A daemon host renders
+//     nothing, so it must never displace a treemux that could actually show
+//     and attach the session.
+//  2. Scope specificity — a worktree-scoped treemux beats a global one for
+//     its own subtree.
+//  3. Start time — among equals, the most recently started host wins.
+func lookupHostSocket(dir string) string {
 	hostsDir := uiHostsDir()
 	entries, err := os.ReadDir(hostsDir)
 	if err != nil {
@@ -254,8 +319,7 @@ func lookupUIHostSocket(dir string) string {
 		if err != nil || !uiHostAlive(reg.PID) || !uiHostScopeCovers(reg.Scope, dir) {
 			continue
 		}
-		if best == nil || len(reg.Scope) > len(best.Scope) ||
-			(len(reg.Scope) == len(best.Scope) && reg.StartedAt.After(best.StartedAt)) {
+		if best == nil || betterHost(reg, *best) {
 			r := reg
 			best = &r
 		}
@@ -264,6 +328,18 @@ func lookupUIHostSocket(dir string) string {
 		return ""
 	}
 	return best.SocketPath
+}
+
+// betterHost reports whether candidate should displace incumbent as the host
+// for a directory both cover. See lookupHostSocket for the ordering.
+func betterHost(candidate, incumbent uiHostRegistration) bool {
+	if candidate.kind() != incumbent.kind() {
+		return candidate.kind() == hostKindUI
+	}
+	if len(candidate.Scope) != len(incumbent.Scope) {
+		return len(candidate.Scope) > len(incumbent.Scope)
+	}
+	return candidate.StartedAt.After(incumbent.StartedAt)
 }
 
 // ResolveSessionHostSocket reports which daemon socket session-lifecycle
@@ -280,7 +356,7 @@ func ResolveSessionHostSocket(dir string) (socketPath string, viaHost bool) {
 		return host, true
 	}
 	effDir := resolveDir([]string{dir})
-	if host := lookupUIHostSocket(effDir); host != "" {
+	if host := lookupHostSocket(effDir); host != "" {
 		return host, true
 	}
 	_, socketPath, _ = resolveScopedTargets(effDir)
@@ -347,7 +423,7 @@ func sessionHostClient(dir string, connect func(socketPath string) Client, scope
 			StructuredOnly().
 			Log(context.Background())
 	}
-	if host := lookupUIHostSocket(resolveDir([]string{dir})); host != "" {
+	if host := lookupHostSocket(resolveDir([]string{dir})); host != "" {
 		if client := connect(host); client != nil {
 			return client
 		}

@@ -332,24 +332,24 @@ func TestUIHostRegistryScopeSelection(t *testing.T) {
 		PID: pid, Scope: "/wt/perf-audit", SocketPath: "/run/scoped.sock", StartedAt: now,
 	})
 
-	if got := lookupUIHostSocket("/wt/perf-audit/core"); got != "/run/scoped.sock" {
+	if got := lookupHostSocket("/wt/perf-audit/core"); got != "/run/scoped.sock" {
 		t.Fatalf("dir inside the scoped host resolved %q, want the scoped host", got)
 	}
-	if got := lookupUIHostSocket("/wt/perf-audit"); got != "/run/scoped.sock" {
+	if got := lookupHostSocket("/wt/perf-audit"); got != "/run/scoped.sock" {
 		t.Fatalf("the scope root itself resolved %q, want the scoped host", got)
 	}
 	// Prefix similarity is not containment.
-	if got := lookupUIHostSocket("/wt/perf-audit-other"); got != "/run/global.sock" {
+	if got := lookupHostSocket("/wt/perf-audit-other"); got != "/run/global.sock" {
 		t.Fatalf("a sibling dir resolved %q, want the global host", got)
 	}
-	if got := lookupUIHostSocket("/elsewhere"); got != "/run/global.sock" {
+	if got := lookupHostSocket("/elsewhere"); got != "/run/global.sock" {
 		t.Fatalf("a foreign dir resolved %q, want the global host", got)
 	}
 
 	writeUIHostRegistrationFile(t, "global-newer.json", uiHostRegistration{
 		PID: pid, Scope: "", SocketPath: "/run/global2.sock", StartedAt: now.Add(time.Minute),
 	})
-	if got := lookupUIHostSocket("/elsewhere"); got != "/run/global2.sock" {
+	if got := lookupHostSocket("/elsewhere"); got != "/run/global2.sock" {
 		t.Fatalf("equal scopes resolved %q, want the most recently started host", got)
 	}
 }
@@ -366,7 +366,7 @@ func TestUIHostRegistryIgnoresDeadHosts(t *testing.T) {
 		PID: deadPID, Scope: "", SocketPath: "/run/dead-host.sock", StartedAt: time.Now().UTC(),
 	})
 
-	if got := lookupUIHostSocket("/any"); got != "" {
+	if got := lookupHostSocket("/any"); got != "" {
 		t.Fatalf("a dead host's registration resolved %q, want nothing", got)
 	}
 	if _, viaHost := ResolveSessionHostSocket("/any"); viaHost {

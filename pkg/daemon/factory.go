@@ -250,6 +250,36 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 		}
 	}
 
+	// A daemon never spawns a scoped sibling, and never spawns a duplicate of
+	// itself. This is the structural half of the host-redirect above: the
+	// redirect needs a registered host to exist, and during a fleet restart
+	// there is a window where none does yet — but a groved always knows it is a
+	// groved. See MarkInProcessDaemon and inDaemonSpawnSuppressed.
+	if selfSock, suppressed := inDaemonSpawnSuppressed(scope, socketPath); suppressed {
+		ulog := logging.NewUnifiedLogger("daemon.factory")
+		// Fall back to this daemon's own client. Jobs, sessions and PTYs this
+		// process owns live here, so it is a strictly better answer than a
+		// LocalClient — and than a freshly spawned daemon that knows nothing.
+		if selfSock != "" && selfSock != socketPath {
+			if client := tryConnect(selfSock); client != nil {
+				ulog.Debug("in-daemon client: using own daemon instead of spawning a scoped sibling").
+					Field("scope", scope).
+					Field("requested_socket", socketPath).
+					Field("self_socket", selfSock).
+					StructuredOnly().
+					Log(context.Background())
+				return client
+			}
+		}
+		ulog.Debug("in-daemon client: spawn suppressed, falling back to local client").
+			Field("scope", scope).
+			Field("requested_socket", socketPath).
+			Field("self_socket", selfSock).
+			StructuredOnly().
+			Log(context.Background())
+		return NewLocalClient()
+	}
+
 	// Daemon not running, try to auto-start it for this scope. autoStartDaemon
 	// returns the read end of a pipe whose write end is inherited by groved
 	// (via --ready-fd); groved closes it after the socket is bound, giving us
