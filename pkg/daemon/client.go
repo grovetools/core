@@ -100,7 +100,13 @@ type Client interface {
 	// StreamState subscribes to real-time state updates from the daemon.
 	// Returns a channel that receives updates and a function to stop the stream.
 	// For LocalClient, this returns an error since streaming is only available via daemon.
-	StreamState(ctx context.Context) (<-chan StateUpdate, error)
+	//
+	// An optional StreamFilter declares which event types (and workspace paths)
+	// the subscriber cares about, and the daemon drops everything else before
+	// serializing it. Passing no filter keeps the full host-wide stream, which
+	// is what every caller got before filtering existed. Only the first filter
+	// is used; the argument is variadic solely to stay source-compatible.
+	StreamState(ctx context.Context, filter ...StreamFilter) (<-chan StateUpdate, error)
 
 	// StreamWorkspaceHUD subscribes to per-workspace HUD updates for the
 	// given path. The daemon aggregates git/plan/cx/hooks/notebook state

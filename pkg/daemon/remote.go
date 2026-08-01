@@ -610,8 +610,19 @@ func (c *RemoteClient) RefreshPaths(ctx context.Context, paths []string) ([]*mod
 // StreamState subscribes to real-time state updates via Server-Sent Events (SSE).
 // Returns a channel that receives updates. The channel is closed when the context is cancelled
 // or the connection is lost.
-func (c *RemoteClient) StreamState(ctx context.Context) (<-chan StateUpdate, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/stream", nil)
+//
+// An optional StreamFilter is encoded onto the subscribe URL so the daemon drops
+// non-matching events before serializing them. With no filter the URL is
+// byte-identical to the one this method always sent, so an unfiltered subscriber
+// keeps the full stream.
+func (c *RemoteClient) StreamState(ctx context.Context, filter ...StreamFilter) (<-chan StateUpdate, error) {
+	streamURL := baseURL + "/api/stream"
+	if len(filter) > 0 {
+		if q := filter[0].Encode(); q != "" {
+			streamURL += "?" + q
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", streamURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream request: %w", err)
 	}

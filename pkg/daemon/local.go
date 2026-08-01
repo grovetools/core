@@ -96,7 +96,7 @@ func (c *LocalClient) GetSessions(ctx context.Context) ([]*models.Session, error
 
 // StreamState returns an error for LocalClient since streaming is only available via daemon.
 // Use the daemon for real-time updates.
-func (c *LocalClient) StreamState(ctx context.Context) (<-chan StateUpdate, error) {
+func (c *LocalClient) StreamState(ctx context.Context, filter ...StreamFilter) (<-chan StateUpdate, error) {
 	return nil, errors.New("streaming not available in local mode; start the daemon for real-time updates")
 }
 
