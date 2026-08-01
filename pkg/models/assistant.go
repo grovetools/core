@@ -42,6 +42,23 @@ type AssistantStatus struct {
 	Plan    string `json:"plan,omitempty"`
 	PlanDir string `json:"plan_dir,omitempty"`
 
+	// Scope is the ECOSYSTEM ROOT whose [assistant] block configured this
+	// supervisor — not the daemon's own scope. The two coincide on a scoped
+	// daemon (development in an ecosystem worktree) and differ on the global
+	// daemon (production), whose scope is empty and which resolves the
+	// ecosystem it supervises by discovery. It is what makes `groved health`
+	// and `groved claws` answer "whose assistant is this?" truthfully in both
+	// deployments.
+	Scope string `json:"scope,omitempty"`
+
+	// Candidates lists every ecosystem root that opted in, and is populated
+	// ONLY when more than one did. A daemon supervises exactly one assistant
+	// today (one status endpoint, one default claw), so a second opted-in
+	// ecosystem is a configuration ambiguity the operator has to see rather
+	// than a silent choice: Scope names the one that won (lowest path, chosen
+	// deterministically) and this names all of them.
+	Candidates []string `json:"candidates,omitempty"`
+
 	// HeadJobID is the job at the head of the assistant chain, when one is
 	// live. HeadJobFile is its filename within PlanDir.
 	HeadJobID   string `json:"head_job_id,omitempty"`
