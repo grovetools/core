@@ -247,6 +247,36 @@ type Welcome struct {
 	// Settings is the free-form [tui.plugins.<name>.settings] table, verbatim.
 	// Equivalent to an immediate TypeConfig. See Config and Settings.
 	Settings Settings `json:"settings,omitempty"`
+	// View is the name of the view the user asked for, carried verbatim from
+	// the pane's `view` config to the panel.
+	//
+	// It is an OPAQUE string and the host must never read it. Not an enum, not
+	// validated, not switched on. Settings above is the precedent, and the
+	// comparison is exact: a free-form value the host delivers and does not
+	// interpret. That property is stated here rather than only in a design note
+	// because it erodes the first time someone adds one convenient
+	// `switch view {` — and a host that started interpreting view names would
+	// be defining a vocabulary only panels can define.
+	//
+	// Deliberately NOT a surface name ("rail" / "drawer") and not a size tier.
+	// A panel does not need to know where it is; it needs to know which of its
+	// own layouts to draw, and only the panel knows what those are. Sending a
+	// place would make every author invent their own mapping from place to
+	// layout; sending a tier would make the host own a vocabulary it cannot
+	// define, since a panel whose two modes are `tree` and `flat` has no tier
+	// to be.
+	//
+	// Empty means the panel's own default, so every panel written before this
+	// field existed keeps its behavior. Additive to v1 in both directions: an
+	// old panel ignores an unknown field, and a new panel reading it from an
+	// old host sees "" and renders its default.
+	//
+	// It arrives only here, never in a later TypeConfig frame. The view decides
+	// what the panel draws, and there is no wire message for changing that
+	// mid-run; editing `view` in config is therefore part of the definition of
+	// the process (see treemux's sidecarDefinitionKey), so the change retires
+	// the child and the replacement is told the new name in its own welcome.
+	View string `json:"view,omitempty"`
 }
 
 // Config projects the handshake's user-configuration fields onto the same

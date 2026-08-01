@@ -382,7 +382,7 @@ type DrawerViewsConfig struct {
 	// an in-process git-viewer widget by default, and an entry here pointing at
 	// git-viewer's own binary makes the same pane a sidecar over embed/v1, in
 	// the same page and the same tree as its in-process neighbours.
-	Panes map[string]*DrawerPaneConfig `yaml:"panes,omitempty" toml:"panes,omitempty" json:"panes,omitempty" jsonschema:"description=Drawer panes whose backend is chosen in config (in-process or an embed/v1 sidecar process)"`
+	Panes map[string]*DrawerPaneConfig `yaml:"panes,omitempty" toml:"panes,omitempty" json:"panes,omitempty" jsonschema:"description=Drawer panes whose backend and view are chosen in config: in-process or an embed/v1 sidecar process or a host-drawn digest"`
 	// Responsive lets a mounted pane with nothing to show shrink to its header
 	// plus its one ⓘ line, handing the rows it cannot use to a content-bearing
 	// sibling on the same page. The tree never changes shape: nothing is
@@ -478,9 +478,32 @@ type DrawerFilesConfig struct {
 // for with everything crossing a wire; it is worth it for third-party,
 // other-language or untrusted panels, and for nothing that can simply be
 // imported.
+//
+// This is a CLOSED set, and deliberately so: each value names a different
+// mechanism the host implements, so the host is the only party that can add
+// one. It is the opposite of [DrawerPaneConfig.View], which is open because
+// only the panel can name its own layouts. Keeping the two apart is the whole
+// design — a backend says what is behind the pane, a view says which of its own
+// renderings the panel should draw.
 const (
 	DrawerBackendInProcess = "in-process"
 	DrawerBackendSidecar   = "sidecar"
+	// DrawerBackendDigest is a pane with NO child, no PTY and no blit: the host
+	// draws it, from a short message the panel published from wherever it is
+	// actually running.
+	//
+	// A digest is a PROJECTION of a running panel, not a second instance of one
+	// — a PTY is one grid at one size, and a drawer pane may be mounted at most
+	// once per tree, so there is no way for one process to produce two
+	// differently-sized renderings. Nothing is spawned headless to feed it
+	// either: a PTY-less instance would be a second lifecycle nobody asked for.
+	//
+	// Until the digest frame's shape is decided (it is gated on the throwaway
+	// exercise the ticket calls S2), a digest pane renders the drawer's
+	// empty-state sentence — the panel's own pushed reason when there is one,
+	// and "this panel publishes no digest" when there is not. That is the
+	// degenerate case of the feature rather than a placeholder for it.
+	DrawerBackendDigest = "digest"
 )
 
 // DrawerPaneConfig declares one drawer pane's backend and, for a sidecar-backed
@@ -496,7 +519,31 @@ type DrawerPaneConfig struct {
 	// Backend selects the implementation. Empty means [DrawerBackendInProcess],
 	// so an entry that sets only `min_width` tunes the built-in widget rather
 	// than accidentally asking for a process.
-	Backend string `yaml:"backend,omitempty" toml:"backend,omitempty" json:"backend,omitempty" jsonschema:"description=Which implementation backs this pane: in-process (the default) or a sidecar process speaking embed/v1,enum=in-process,enum=sidecar,default=in-process"`
+	Backend string `yaml:"backend,omitempty" toml:"backend,omitempty" json:"backend,omitempty" jsonschema:"description=Which implementation backs this pane: in-process (the default) or a sidecar process speaking embed/v1 or digest (no child — the host draws what the panel published from wherever it is running),enum=in-process,enum=sidecar,enum=digest,default=in-process"`
+	// View names which of the PANEL's own layouts to draw. It is an OPAQUE
+	// string: the host carries it verbatim from here into the welcome frame
+	// (panelproto.Welcome.View) and does nothing else with it.
+	//
+	// Not an enum, not validated against a list this package holds, not
+	// branched on anywhere in host code. [PluginConfig.Settings] is the
+	// precedent and the comparison is exact — a free-form value the host
+	// delivers and does not interpret. That property is worth restating beside
+	// the field rather than only in a design note, because it erodes the first
+	// time someone adds one convenient `switch view {`.
+	//
+	// Deliberately NOT a surface name ("rail" / "drawer") and not a size tier.
+	// A panel does not need to know where it is; it needs to know which of its
+	// own layouts to draw, and only the panel knows what those are. A place
+	// would make every author invent their own mapping from place to layout,
+	// all slightly differently; a size tier would make the host own a
+	// vocabulary it cannot define — a panel whose two modes are `tree` and
+	// `flat` has no tier to be.
+	//
+	// Empty means the panel's own default: whatever it renders today with no
+	// host at all. So every existing declaration and every existing panel keeps
+	// working untouched, and a name the panel does not implement is the panel's
+	// to handle — the host cannot know it was wrong.
+	View string `yaml:"view,omitempty" toml:"view,omitempty" json:"view,omitempty" jsonschema:"description=Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default."`
 	// Command is the executable to run for a sidecar-backed pane. Required when
 	// Backend is sidecar; ignored otherwise.
 	Command string `yaml:"command,omitempty" toml:"command,omitempty" json:"command,omitempty" jsonschema:"description=Executable to run for a sidecar-backed pane"`
@@ -550,6 +597,13 @@ type DrawerPaneConfig struct {
 // default lives in one place.
 func (c *DrawerPaneConfig) SidecarBacked() bool {
 	return c != nil && c.Backend == DrawerBackendSidecar
+}
+
+// DigestBacked reports whether this pane asks the host to draw a projection of
+// a panel running elsewhere. The counterpart to SidecarBacked, and mutually
+// exclusive with it: a digest pane spawns nothing at all.
+func (c *DrawerPaneConfig) DigestBacked() bool {
+	return c != nil && c.Backend == DrawerBackendDigest
 }
 
 // EffectiveProtocol is the control-plane version a sidecar pane is spawned
@@ -782,6 +836,18 @@ type PluginConfig struct {
 	// could only describe the compiled-in flow panel, because it was the only
 	// hosted key reference reachable without a running handshake.
 	Keys []PluginKey `yaml:"keys,omitempty" toml:"keys,omitempty" jsonschema:"description=Host chords the panel declares it intends to claim (declaration only; the host arbitrates the real claims at handshake time)"`
+	// View names which of the PANEL's own layouts to draw, exactly as
+	// [DrawerPaneConfig.View] does — see there for the whole contract, which is
+	// the same contract in both places because it is a fact about the panel
+	// rather than about where it is mounted.
+	//
+	// It is here for two reasons. The drawer's declaration projects onto this
+	// type (a drawer sidecar and a rail sidecar are one implementation), so the
+	// field has to exist here for the string to reach the wire at all; and a
+	// rail entry has the same legitimate use for it, because a panel with a
+	// `wide` layout and a `graph` layout can be asked for either from either
+	// place. The host still reads it nowhere.
+	View string `yaml:"view,omitempty" toml:"view,omitempty" jsonschema:"description=Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default."`
 }
 
 // PluginKey is one declared host chord in a plugin's [[tui.plugins.<name>.keys]].

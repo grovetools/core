@@ -234,10 +234,11 @@
         },
         "backend": {
           "default": "in-process",
-          "description": "Which implementation backs this pane: in-process (the default) or a sidecar process speaking embed/v1",
+          "description": "Which implementation backs this pane: in-process (the default) or a sidecar process speaking embed/v1 or digest (no child — the host draws what the panel published from wherever it is running)",
           "enum": [
             "in-process",
-            "sidecar"
+            "sidecar",
+            "digest"
           ],
           "type": "string"
         },
@@ -300,6 +301,10 @@
         "settings": {
           "description": "Free-form settings table delivered to the sidecar over embed/v1 (data only; never executed by the host)",
           "type": "object"
+        },
+        "view": {
+          "description": "Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default.",
+          "type": "string"
         }
       },
       "type": "object"
@@ -357,7 +362,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/DrawerPaneConfig"
           },
-          "description": "Drawer panes whose backend is chosen in config (in-process or an embed/v1 sidecar process)",
+          "description": "Drawer panes whose backend and view are chosen in config: in-process or an embed/v1 sidecar process or a host-drawn digest",
           "type": "object"
         },
         "responsive": {
@@ -1056,6 +1061,10 @@
         "settings": {
           "description": "Free-form settings table delivered to the panel over the embed/v1 control plane (data only; never executed by the host)",
           "type": "object"
+        },
+        "view": {
+          "description": "Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default.",
+          "type": "string"
         }
       },
       "required": [
