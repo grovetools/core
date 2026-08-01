@@ -435,6 +435,13 @@ type Model struct {
 	streamCancel context.CancelFunc
 	streamCtxMu  sync.Mutex
 
+	// connecting is true while a daemon connect is in flight: from the
+	// moment connectToDaemon issues one until the first message comes
+	// back, or spinnerMaxWait elapses for a stream that connects and then
+	// stays silent. It is the sole re-arm condition for the spinner tick,
+	// so an idle panel holds no timer at all.
+	connecting bool
+
 	// Workspace coloring
 	workspaceColorMap   map[string]lipgloss.Style
 	workspaceColorIndex int
@@ -529,7 +536,8 @@ func (m *Model) Close() error {
 	return nil
 }
 
-// Init kicks off the daemon stream connection and arms the spinner.
+// Init kicks off the daemon stream connection. connectToDaemon arms the
+// spinner itself, for exactly as long as the connect is in flight.
 //
 // There is no periodic UI tick: every source of new content already
 // arrives as its own message (batchLogMsg from the log stream pump,
@@ -538,10 +546,7 @@ func (m *Model) Close() error {
 // messages. A refresh tick here would re-render the whole list at its
 // own cadence forever while the panel sits idle.
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(
-		m.spinner.Tick,
-		m.connectToDaemon(),
-	)
+	return m.connectToDaemon()
 }
 
 // Messages
@@ -590,6 +595,11 @@ func levelToParam(minLevel int) string {
 
 // connectToDaemon cancels any existing stream, builds new LogStreamOptions
 // from the current UI state, and starts pumping the daemon's SSE channel.
+//
+// It also owns the spinner's lifetime: the returned command arms the tick
+// alongside the connect and schedules the spinnerMaxWait backstop, and the
+// first message off the new stream clears m.connecting, which stops the
+// tick re-arming. Nothing else starts the spinner.
 func (m *Model) connectToDaemon() tea.Cmd {
 	m.streamCtxMu.Lock()
 	if m.streamCancel != nil {
@@ -599,6 +609,8 @@ func (m *Model) connectToDaemon() tea.Cmd {
 	m.streamCtx = sCtx
 	m.streamCancel = sCancel
 	m.streamCtxMu.Unlock()
+
+	m.connecting = true
 
 	opts := models.LogStreamOptions{
 		Scope:     m.activeScope.scopeToParam(),
@@ -615,23 +627,46 @@ func (m *Model) connectToDaemon() tea.Cmd {
 		}
 	}
 
+	var connect tea.Cmd
 	if m.activeScope == ScopeDaemon {
-		return func() tea.Msg {
+		connect = func() tea.Msg {
 			ch, err := client.StreamState(sCtx)
 			if err != nil {
 				return streamErrMsg{err: err}
 			}
 			return m.pumpFirstStateUpdate(sCtx, ch)
 		}
+	} else {
+		connect = func() tea.Msg {
+			ch, err := client.StreamLogs(sCtx, opts)
+			if err != nil {
+				return streamErrMsg{err: err}
+			}
+			return m.pumpFirstLine(sCtx, ch)
+		}
 	}
 
-	return func() tea.Msg {
-		ch, err := client.StreamLogs(sCtx, opts)
-		if err != nil {
-			return streamErrMsg{err: err}
-		}
-		return m.pumpFirstLine(sCtx, ch)
-	}
+	return tea.Batch(connect, m.spinner.Tick, stopSpinnerAfter(spinnerMaxWait))
+}
+
+// spinnerMaxWait bounds how long the spinner may animate for a connect that
+// never produces a first message. Both first-pumps return nil when the
+// stream context is cancelled or the channel closes without a line, and a
+// stream that connects but stays silent (an error-only filter on a quiet
+// host) never returns at all — without this backstop any of those would
+// leave m.connecting set and re-arm the 10fps tick forever, which is the
+// whole cost this gate exists to remove.
+const spinnerMaxWait = 10 * time.Second
+
+// stopSpinnerMsg ends the spinner's animation window.
+type stopSpinnerMsg struct{}
+
+// stopSpinnerAfter schedules the spinnerMaxWait backstop. This is a
+// one-shot: it does not re-arm.
+func stopSpinnerAfter(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg {
+		return stopSpinnerMsg{}
+	})
 }
 
 // pumpFirstLine reads the first line from the stream channel. This is
@@ -1399,22 +1434,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case batchLogMsg:
-		// Process the log line and re-arm the stream pump.
+		// Process the log line and re-arm the stream pump. Anything off
+		// the stream means the connect landed, so the spinner stops.
+		m.connecting = false
 		cmd := m.handleNewLog(msg.log)
 		return m, tea.Batch(cmd, pumpStream(msg.ctx, msg.ch))
 
 	case pumpStreamMsg:
 		// Non-JSON line was skipped; re-arm the pump.
+		m.connecting = false
 		return m, pumpStream(msg.ctx, msg.ch)
 
 	case batchStateMsg:
+		m.connecting = false
 		cmd := m.handleNewLog(msg.log)
 		return m, tea.Batch(cmd, pumpStateStream(msg.ctx, msg.ch))
 
 	case pumpStateMsg:
+		m.connecting = false
 		return m, pumpStateStream(msg.ctx, msg.ch)
 
 	case streamErrMsg:
+		m.connecting = false
 		m.statusMessage = fmt.Sprintf("Stream error: %v", msg.err)
 		return m, m.clearStatusMessageAfter(5 * time.Second)
 
@@ -1422,10 +1463,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMessage = ""
 		return m, nil
 
+	case stopSpinnerMsg:
+		m.connecting = false
+		return m, nil
+
 	case spinner.TickMsg:
+		// Re-arm only while a connect is in flight, so an idle panel
+		// arms no timer at all. Returning early matters as much as the
+		// gate: a spinner frame is nothing the inner list reads, and
+		// falling through to m.list.Update below would cost a full
+		// bubbles-list update plus a View ten times a second.
+		if !m.connecting {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
+		return m, cmd
 	}
 
 	// Delegate to inner list.

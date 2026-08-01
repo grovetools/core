@@ -1,9 +1,11 @@
 package logs
 
 import (
+	"context"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 )
 
 func eventsFilterFixtures() (eventInfo, plainInfo, plainDebug, warnItem, errItem logItem) {
@@ -97,5 +99,90 @@ func TestUnseenAlertsCountsWarnAndError(t *testing.T) {
 	m.unseenAlerts = 0
 	if got := m.UnseenAlerts(); got != 0 {
 		t.Fatalf("UnseenAlerts after clear = %d, want 0", got)
+	}
+}
+
+// spinnerGateModel builds the minimum Model the spinner gate needs: a real
+// spinner (so frame advancement is observable) and a real list (so a
+// regression that delegates ticks to it would run rather than panic).
+func spinnerGateModel() *Model {
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	m := &Model{ctx: context.Background(), spinner: sp}
+	m.list = list.New(nil, itemDelegate{model: m}, 0, 0)
+	return m
+}
+
+// TestSpinnerTickIdleArmsNothing is the idle-CPU regression: with no connect
+// in flight a spinner tick must die where it lands. A nil command means no
+// timer is left armed, which is the entire cost this gate removes — the
+// ungated version re-armed at 10fps forever and fell through to a full
+// bubbles-list update plus a View on every one of those ticks.
+func TestSpinnerTickIdleArmsNothing(t *testing.T) {
+	m := spinnerGateModel()
+	before := m.spinner.View()
+
+	_, cmd := m.Update(m.spinner.Tick())
+
+	if cmd != nil {
+		t.Error("idle spinner tick returned a command; the tick must not re-arm while nothing is loading")
+	}
+	if got := m.spinner.View(); got != before {
+		t.Errorf("idle spinner advanced a frame: %q -> %q", before, got)
+	}
+}
+
+// TestSpinnerTickAnimatesWhileConnecting is the other half: the gate must not
+// break the spinner during a real load.
+func TestSpinnerTickAnimatesWhileConnecting(t *testing.T) {
+	m := spinnerGateModel()
+	m.connecting = true
+	before := m.spinner.View()
+
+	_, cmd := m.Update(m.spinner.Tick())
+
+	if cmd == nil {
+		t.Error("spinner tick did not re-arm while a connect was in flight")
+	}
+	if got := m.spinner.View(); got == before {
+		t.Errorf("spinner frame did not advance during a connect (still %q)", got)
+	}
+}
+
+// TestConnectArmsSpinnerAndStreamTrafficStopsIt walks the window end to end:
+// issuing a connect opens it, and the first message off the stream closes it.
+func TestConnectArmsSpinnerAndStreamTrafficStopsIt(t *testing.T) {
+	streamMsgs := map[string]any{
+		"batchLogMsg":   batchLogMsg{log: newLogMsg{data: map[string]interface{}{"level": "info", "msg": "x"}}},
+		"pumpStreamMsg": pumpStreamMsg{},
+		"batchStateMsg": batchStateMsg{log: newLogMsg{data: map[string]interface{}{"level": "info", "msg": "x"}}},
+		"pumpStateMsg":  pumpStateMsg{},
+		"streamErrMsg":  streamErrMsg{err: context.Canceled},
+		// The backstop for a stream that connects and then stays silent,
+		// so a quiet host can never pin the spinner on forever.
+		"stopSpinnerMsg": stopSpinnerMsg{},
+	}
+
+	for name, msg := range streamMsgs {
+		t.Run(name, func(t *testing.T) {
+			m := spinnerGateModel()
+
+			// DaemonClient is nil, so connectToDaemon short-circuits to a
+			// streamErrMsg command — but it must still have opened the
+			// spinner's window before doing so.
+			m.connectToDaemon()
+			if !m.connecting {
+				t.Fatal("connectToDaemon did not mark the model as connecting")
+			}
+
+			m.Update(msg)
+
+			if m.connecting {
+				t.Errorf("%s left the model connecting; the spinner would keep ticking", name)
+			}
+			if _, cmd := m.Update(m.spinner.Tick()); cmd != nil {
+				t.Errorf("spinner still re-armed after %s", name)
+			}
+		})
 	}
 }
