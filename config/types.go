@@ -498,11 +498,16 @@ const (
 	// differently-sized renderings. Nothing is spawned headless to feed it
 	// either: a PTY-less instance would be a second lifecycle nobody asked for.
 	//
-	// Until the digest frame's shape is decided (it is gated on the throwaway
-	// exercise the ticket calls S2), a digest pane renders the drawer's
-	// empty-state sentence — the panel's own pushed reason when there is one,
-	// and "this panel publishes no digest" when there is not. That is the
-	// degenerate case of the feature rather than a placeholder for it.
+	// What it draws is a panelproto.Digest the panel published: a required
+	// line, an optional second line, a host-owned state enum and an icon key.
+	// No number and no pre-styled text — the host owns every escape code in a
+	// digest row, and a drawer column has no room for a gauge beside a
+	// sentence. A pane whose publisher is not running says so instead ("this
+	// panel publishes no digest"), which is the degenerate case of the feature
+	// rather than a placeholder for it.
+	//
+	// Which panel it projects is [DrawerPaneConfig.Source], defaulting to the
+	// pane's own name.
 	DrawerBackendDigest = "digest"
 )
 
@@ -544,6 +549,22 @@ type DrawerPaneConfig struct {
 	// working untouched, and a name the panel does not implement is the panel's
 	// to handle — the host cannot know it was wrong.
 	View string `yaml:"view,omitempty" toml:"view,omitempty" json:"view,omitempty" jsonschema:"description=Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default."`
+	// Source names which panel's digest a digest-backed pane shows. Read only
+	// for [DrawerBackendDigest]; ignored otherwise.
+	//
+	// Empty means the pane's own name, which is the case worth optimizing for:
+	// `[tui.drawer.panes.breaktimer] backend = "digest"` projects
+	// `[tui.plugins.breaktimer]`, the panel running on the rail, and the user
+	// wrote the name once. This key exists for the case that convention cannot
+	// express — a digest of a pane whose own name is already taken, because a
+	// drawer pane and its digest cannot both be `[tui.drawer.panes.probe]`.
+	//
+	// It resolves to a PANEL, not to a pane: a rail plugin and a sidecar-backed
+	// drawer pane are both publishers, and a digest of a digest is not a thing.
+	// A name that resolves to nothing running is not an error — the pane says
+	// so in its empty state, which is the same answer it gives while the panel
+	// is still starting.
+	Source string `yaml:"source,omitempty" toml:"source,omitempty" json:"source,omitempty" jsonschema:"description=Which panel's digest a digest-backed pane shows; empty means the pane's own name"`
 	// Command is the executable to run for a sidecar-backed pane. Required when
 	// Backend is sidecar; ignored otherwise.
 	Command string `yaml:"command,omitempty" toml:"command,omitempty" json:"command,omitempty" jsonschema:"description=Executable to run for a sidecar-backed pane"`
@@ -619,6 +640,20 @@ func (c *DrawerPaneConfig) SidecarBacked() bool {
 // exclusive with it: a digest pane spawns nothing at all.
 func (c *DrawerPaneConfig) DigestBacked() bool {
 	return c != nil && c.Backend == DrawerBackendDigest
+}
+
+// DigestSource is the panel whose digest this pane projects: [Source] when the
+// user named one, and the pane's own name when they did not.
+//
+// Here rather than in the host for the reason [EffectiveProtocol] is: "what does
+// an unset field mean" is the config vocabulary's question. It takes the pane
+// name as an argument because a declaration does not know its own map key —
+// which is also why this cannot be a plain accessor.
+func (c *DrawerPaneConfig) DigestSource(pane string) string {
+	if c == nil || c.Source == "" {
+		return pane
+	}
+	return c.Source
 }
 
 // EffectiveProtocol is the control-plane version a sidecar pane is spawned

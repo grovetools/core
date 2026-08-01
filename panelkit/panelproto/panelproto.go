@@ -105,6 +105,17 @@ const (
 	// So the panel pushes and the host caches. See PaneState for why the
 	// absent-state default is "available".
 	TypeState = "state"
+	// TypeDigest publishes the panel's projection of itself into a slot far
+	// too small to run in. Payload: Digest.
+	//
+	// Its own frame rather than a field on PaneState, and the reason is
+	// CADENCE. A digest changes whenever the thing it summarizes does — a
+	// clock's is new every second — while an availability state changes when a
+	// panel's subject appears or disappears, which is rare. Carried together,
+	// every digest push would restate an availability answer nobody asked to
+	// change, and a frame that omitted EmptyReason would clear a sentence the
+	// panel still means. Two facts on two clocks are two frames.
+	TypeDigest = "digest"
 )
 
 // Frame types, host→app.
@@ -515,6 +526,99 @@ type PaneState struct {
 	// reader can act on rather than an apology. Empty clears it.
 	EmptyReason string `json:"empty_reason,omitempty"`
 }
+
+// Digest is a panel's projection of itself into a slot it could never run in:
+// one row, sometimes two, drawn by the HOST from data, in a drawer column that
+// is around twenty-four usable cells wide.
+//
+// It is READ-ONLY in the strict sense — nothing a user does to a digest travels
+// back here. v1 has no host→app frame carrying a user action at all, and the
+// affordance people actually want costs the protocol nothing: a host can bind a
+// key on a digest slot to focus the panel that published it, which is the
+// host's own navigation and not a message. Anything that wants a digest to ACT
+// is a protocol change with its own spec, argued on its own.
+//
+// Every field is a fact, never a rendering. The host owns the escape codes in a
+// digest row, so there is nowhere to put pre-styled text and no number to draw
+// a gauge from — both were built and measured, and both lost: a gauge ate
+// fourteen of the twenty-four columns, and a panel's raw SGR reached the glass
+// verbatim, including an unterminated one that held to the end of its row.
+//
+// # Whose coalescing
+//
+// The panel's. A host caches this frame and wakes its render loop for each one;
+// it does not diff them, because diffing is knowledge the panel has for free
+// and the host would have to reconstruct. So: PUSH WHEN WHAT A READER WOULD SEE
+// CHANGES, NOT ON YOUR TIMER. A panel that pushes on a 10 Hz tick makes a host
+// with four panels do forty Update-loop turns a second for a clock;
+// core/panelkit/sidecar's Client.SetDigest does the suppression for a Go panel,
+// and a panel in another language owes itself the same three lines.
+type Digest struct {
+	// Line is the row that matters, and the only required field. A host may
+	// show this and nothing else, so a panel that has one thing to say says it
+	// here.
+	Line string `json:"line"`
+	// Detail is a second row, and the first thing a host drops when the slot is
+	// short. Optional for that reason: a digest slot can be one row tall, and a
+	// frame that REQUIRED two would put the host in the position of choosing
+	// which half to lose.
+	Detail string `json:"detail,omitempty"`
+	// State tints the row. It is a CLOSED set the host owns — DigestStateOK,
+	// DigestStateAttention, DigestStateIdle — and empty means unstyled.
+	//
+	// Deliberately the opposite of [Welcome.View]'s open-string contract, and
+	// the pair is worth reading together: a view names one of the PANEL's own
+	// layouts, so only the panel can define the vocabulary; a state names one of
+	// the HOST's theme roles, so only the host can. A value outside the set is
+	// read as empty rather than refused — an additive value from a newer panel
+	// should cost a tint, not a frame.
+	//
+	// Host-semantic, not panel-semantic: a host that had to learn what a
+	// pomodoro's "work" phase is would be learning a vocabulary per panel.
+	State string `json:"state,omitempty"`
+	// Icon is a key resolved through the host's icon table, degrading exactly
+	// as a drawer pane's own `icon` does — an unknown key falls back to a
+	// bullet and the row still reads. Same contract, deliberately not a second
+	// one.
+	Icon string `json:"icon,omitempty"`
+}
+
+// Digest states: the closed set [Digest.State] draws from, named for what the
+// HOST does about them rather than for what a panel is doing.
+//
+// Three, mapping onto theme roles a host already has (Success, Warning, Muted).
+// The set is small on purpose — a fourth entry has to earn a role no existing
+// one covers, and "the panel wants a different colour" is not that.
+const (
+	// DigestStateOK is the ordinary, healthy reading.
+	DigestStateOK = "ok"
+	// DigestStateAttention is the reading a user should look at now.
+	DigestStateAttention = "attention"
+	// DigestStateIdle is a panel with nothing happening — running, but not
+	// doing anything worth a colour.
+	DigestStateIdle = "idle"
+)
+
+// NormalizedState is [Digest.State] reduced to the closed set: one of the three
+// constants, or "" for absent, unknown or misspelled.
+//
+// Unknown is not an error. A host that refused a frame over one unrecognized
+// enum value would lose the line as well as the tint, and the line is the part
+// that matters; a newer panel naming a state this host has never heard of
+// should degrade to unstyled, which is exactly what "" means.
+func (d Digest) NormalizedState() string {
+	switch d.State {
+	case DigestStateOK, DigestStateAttention, DigestStateIdle:
+		return d.State
+	default:
+		return ""
+	}
+}
+
+// Empty reports a digest with nothing to draw. Line is the required field, so a
+// frame without one clears whatever the host was showing rather than leaving a
+// stale reading on screen with a fresh detail under it.
+func (d Digest) Empty() bool { return d.Line == "" }
 
 // Log is one diagnostic line for the host log. Level is "debug", "info",
 // "warn" or "error"; anything else is treated as "info".

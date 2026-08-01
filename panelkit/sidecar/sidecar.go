@@ -207,6 +207,12 @@ type Client struct {
 	conn    *panelproto.Conn
 	welcome *panelproto.Welcome
 	granted map[string]bool
+	// digest is the last digest actually SENT, which is what makes SetDigest
+	// coalescing. Held here rather than by the caller because every panel that
+	// publishes one would otherwise hold the same field, and the ones that
+	// forgot would be the ones costing the host a wake per tick.
+	digest    panelproto.Digest
+	digestSet bool
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -559,6 +565,40 @@ func (c *Client) SetPaneState(available *bool, emptyReason string) error {
 		Available:   available,
 		EmptyReason: emptyReason,
 	})
+}
+
+// SetDigest publishes what this panel looks like in a slot it could never run
+// in — one row, sometimes two, drawn by the host from the fields of
+// [panelproto.Digest]. A digest pane elsewhere in the host renders it; a panel
+// nobody projects simply has no reader, so publishing costs nothing.
+//
+// # It coalesces, so a timer is safe
+//
+// A push whose payload is identical to the last one sent is DROPPED here, and
+// that is the whole of the host's protection: a host caches this frame and
+// wakes its render loop for every one it receives, without diffing — wakes per
+// second are publishers times push rate, exactly. Measured, a 10 Hz publisher
+// suppressed panel-side collapses to the 1 Hz figure with no host change at
+// all.
+//
+// So the rule a panel author needs is: PUSH WHEN WHAT A READER WOULD SEE
+// CHANGES, NOT ON YOUR TIMER — and calling this from a ticker satisfies it,
+// because a tick that changes nothing sends nothing. What it cannot save you
+// from is a line that carries more precision than a reader can use: a digest
+// rendering seconds genuinely changes every second, and the fix for that is to
+// render minutes, not to push less often.
+//
+// A zero Digest clears the projection. Sending is a no-op with no host, like
+// every other client send.
+func (c *Client) SetDigest(d panelproto.Digest) error {
+	c.mu.Lock()
+	if c.digestSet && c.digest == d {
+		c.mu.Unlock()
+		return nil
+	}
+	c.digest, c.digestSet = d, true
+	c.mu.Unlock()
+	return c.send(panelproto.TypeDigest, d)
 }
 
 // DeclareKeys re-declares the panel's key claims mid-flight, replacing what
