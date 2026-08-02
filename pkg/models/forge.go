@@ -63,6 +63,21 @@ type ForgeRepoState struct {
 	LastError string `json:"last_error,omitempty"`
 }
 
+// ForgeStatePayload is the wire payload of a "forge_state" SSE frame: the repo
+// entries whose state MATERIALLY changed on one poller sweep, never the whole
+// cache. It mirrors daemon/internal/daemon/store.ForgeStatePayload the way
+// ForgeRepoState mirrors that package's cache entry.
+//
+// The stream is lossy by design (the poller emits only on change, and a late
+// subscriber missed every earlier frame), so a consumer must never treat "I
+// have seen no forge_state frame" as "there is nothing to review". Reconcile
+// from GET /api/forge/state (ForgeStateSnapshot) or from the ReviewStats that
+// rides workspaces_delta; use these frames as the freshening signal.
+type ForgeStatePayload struct {
+	// Repos are the changed entries, sorted by Repo for a deterministic frame.
+	Repos []ForgeRepoState `json:"repos,omitempty"`
+}
+
 // ForgeStateSnapshot is the whole read surface: every repo the poller watches,
 // plus whether the poller is running at all.
 //
