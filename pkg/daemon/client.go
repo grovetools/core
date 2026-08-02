@@ -527,6 +527,13 @@ type Client interface {
 	// workspaces.
 	GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error)
 
+	// SyncRepush voids synced state for a workspace ("" = all) and kicks an
+	// immediate anti-entropy pass (POST /api/sync/repush). `grove sync adopt`
+	// uses it for the kick: a subscription written a second ago has nothing
+	// to void, and the pass is what turns it into a real scan without waiting
+	// for the hourly tick.
+	SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error)
+
 	// --- Claude Trust Seeding ---
 
 	// SeedTrust asks the (unsandboxed) daemon to pre-seed Claude Code

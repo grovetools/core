@@ -857,5 +857,12 @@ func (c *LocalClient) GetSyncConflicts(ctx context.Context, workspace string) ([
 	return nil, ErrNotSupported
 }
 
+// SyncRepush requires the daemon: the anti-entropy pass it kicks is owned by
+// the running SyncHandler, and there is nothing local to kick (see
+// GetSyncStatus).
+func (c *LocalClient) SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error) {
+	return nil, ErrNotSupported
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

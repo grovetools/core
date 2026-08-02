@@ -50,24 +50,8 @@ func WorkspaceRoot(cfg *config.Config, name string) string {
 	if name == "" {
 		return ""
 	}
-	locator := workspace.NewNotebookLocator(cfg)
-	rootFor := func(node *workspace.WorkspaceNode) string {
-		notesDir, err := locator.GetNotesDir(node, "inbox")
-		if err != nil || !filepath.IsAbs(notesDir) {
-			return ""
-		}
-		return workspaceRootForDir(filepath.Dir(notesDir))
-	}
-
-	if cfg != nil && cfg.Notebooks != nil && len(cfg.Notebooks.Definitions) > 0 {
-		for _, defName := range slices.Sorted(maps.Keys(cfg.Notebooks.Definitions)) {
-			node := &workspace.WorkspaceNode{Name: name, NotebookName: defName}
-			if root := rootFor(node); root != "" {
-				if fi, err := os.Stat(root); err == nil && fi.IsDir() {
-					return root
-				}
-			}
-		}
+	if root := existingDefinitionRoot(cfg, name); root != "" {
+		return root
 	}
 	if cfg != nil && cfg.Notebooks != nil && cfg.Notebooks.Definitions != nil {
 		for _, groveName := range slices.Sorted(maps.Keys(cfg.Groves)) {
@@ -78,10 +62,42 @@ func WorkspaceRoot(cfg *config.Config, name string) string {
 			if _, ok := cfg.Notebooks.Definitions[nb]; !ok {
 				continue
 			}
-			return rootFor(&workspace.WorkspaceNode{Name: name, NotebookName: nb})
+			return rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: nb})
 		}
 	}
-	return rootFor(&workspace.WorkspaceNode{Name: name})
+	return rootForNode(cfg, &workspace.WorkspaceNode{Name: name})
+}
+
+// rootForNode is the shared "node → workspace root" step: the notes content dir
+// the locator resolves, walked back to the workspace root. Returns "" when the
+// locator fails or resolves a non-absolute path (a local-mode notebook has no
+// project path to anchor to).
+func rootForNode(cfg *config.Config, node *workspace.WorkspaceNode) string {
+	notesDir, err := workspace.NewNotebookLocator(cfg).GetNotesDir(node, "inbox")
+	if err != nil || !filepath.IsAbs(notesDir) {
+		return ""
+	}
+	return workspaceRootForDir(filepath.Dir(notesDir))
+}
+
+// existingDefinitionRoot is rung 1 on its own: the first DECLARED notebook, in
+// sorted order, whose resolved root for this workspace is already a directory.
+// Split out because PlannedRoot needs exactly this rung and must not be allowed
+// to fall through to the locator's builtin default.
+func existingDefinitionRoot(cfg *config.Config, name string) string {
+	if cfg == nil || cfg.Notebooks == nil || len(cfg.Notebooks.Definitions) == 0 {
+		return ""
+	}
+	for _, defName := range slices.Sorted(maps.Keys(cfg.Notebooks.Definitions)) {
+		root := rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: defName})
+		if root == "" {
+			continue
+		}
+		if fi, err := os.Stat(root); err == nil && fi.IsDir() {
+			return root
+		}
+	}
+	return ""
 }
 
 // workspaceRootForDir derives the workspace root a content dir belongs to.
@@ -98,6 +114,54 @@ func workspaceRootForDir(dir string) string {
 		return dir
 	}
 	return filepath.Dir(dir)
+}
+
+// PlannedRoot resolves where a workspace that does NOT exist yet should be
+// created, and is what `grove join` needs before it can make the registry
+// resolvable at all.
+//
+// WorkspaceRoot has a chicken-and-egg property that only bites the creating
+// caller: its first and strongest rung prefers a notebook whose resolved root
+// already exists on disk, and its last rung passes NO notebook name, which
+// sends the locator to its hardcoded `~/.grove/notebooks/nb` default. A verb
+// that used it to decide where to MkdirAll would therefore create the registry
+// under that default rather than under the notebook the machine configured —
+// on a machine with notebooks declared, in a directory nothing else reads.
+//
+// So this names a notebook explicitly:
+//
+//  1. a DECLARED notebook whose root for this workspace already exists — the
+//     same rung WorkspaceRoot leads with, so re-running converges;
+//  2. the configured default notebook (notebooks.rules.default) when it names a
+//     real definition;
+//  3. otherwise the first definition by sorted name — the same order rung 1
+//     will scan in once the directory exists, so the two agree from then on.
+//
+// It returns "" when the machine declares no notebooks at all. That is a
+// refusal, not a fallback: a caller must NOT quietly create a notebook tree in
+// the locator's home-anchored default, which nothing else on a configured
+// machine reads.
+func PlannedRoot(cfg *config.Config, name string) string {
+	if name == "" {
+		return ""
+	}
+	if root := existingDefinitionRoot(cfg, name); root != "" {
+		return root
+	}
+	if cfg == nil || cfg.Notebooks == nil || len(cfg.Notebooks.Definitions) == 0 {
+		return ""
+	}
+
+	notebook := ""
+	if cfg.Notebooks.Rules != nil && cfg.Notebooks.Rules.Default != "" {
+		if _, ok := cfg.Notebooks.Definitions[cfg.Notebooks.Rules.Default]; ok {
+			notebook = cfg.Notebooks.Rules.Default
+		}
+	}
+	if notebook == "" {
+		notebook = slices.Sorted(maps.Keys(cfg.Notebooks.Definitions))[0]
+	}
+	return rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: notebook})
 }
 
 // Locate is the one-call read-surface entry point: load the machine's config,

@@ -484,6 +484,44 @@ func (c *RemoteClient) GetSyncConflicts(ctx context.Context, workspace string) (
 	return conflicts, nil
 }
 
+// SyncRepush voids synced state and kicks an immediate anti-entropy pass
+// (POST /api/sync/repush). An empty workspace selects all of them.
+//
+// The endpoint's own body is optional, but it is sent explicitly here so the
+// selection is unambiguous on the wire. Same 404/503 semantics as
+// GetSyncOutbox: a daemon predating the endpoint answers 404, and one without
+// sync configured answers 503.
+func (c *RemoteClient) SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error) {
+	body, err := json.Marshal(map[string]string{"workspace": workspace})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/sync/repush", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to kick sync on daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var out models.SyncRepushResult
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("failed to decode repush result: %w", err)
+	}
+	return &out, nil
+}
+
 // GetConfig returns the running configuration of the daemon.
 func (c *RemoteClient) GetConfig(ctx context.Context) (*RunningConfig, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/config", nil)

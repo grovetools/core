@@ -33,8 +33,15 @@ const loadCacheTTL = 2 * time.Second
 var loadCache sync.Map // map[string]loadCacheEntry, keyed by absolute startDir
 
 // ResetLoadCache clears the LoadFromWithLogger cache. Tests that mutate config
-// files across sub-cases within the TTL window should call this between them;
-// production code has no reason to touch it.
+// files across sub-cases within the TTL window should call this between them.
+//
+// Production code needs it in exactly one shape: a command that WRITES config
+// and then reads the result back inside the same process (`grove subscribe`,
+// `grove ecosystem materialize`, `grove join` — all of which write
+// machine.toml or sync.toml and immediately resolve against it). Without the
+// reset those reads would be served the pre-write config for up to the TTL and
+// the verb would report on a state it had already changed. Nothing else should
+// call it.
 func ResetLoadCache() {
 	loadCache.Range(func(key, _ any) bool {
 		loadCache.Delete(key)

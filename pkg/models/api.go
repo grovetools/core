@@ -463,6 +463,19 @@ type SyncWorkspaceStatus struct {
 	Role string `json:"role,omitempty"`
 }
 
+// SyncRepushResult is the daemon's POST /api/sync/repush payload: which
+// workspaces the reset covered and how many documents it voided.
+//
+// The endpoint does two things and callers use it for either. `grove sync
+// adopt` wants only the second — the immediate anti-entropy pass that converts
+// a freshly written subscription into a real scan instead of waiting for the
+// hourly tick — and on a workspace sync has never tracked, DocumentsReset is
+// legitimately 0.
+type SyncRepushResult struct {
+	Workspaces     []string `json:"workspaces"`
+	DocumentsReset int      `json:"documents_reset"`
+}
+
 // SyncHydrationProgress is a snapshot of one workspace's tree-walk reconcile
 // (daemon sync HydrationProgress). The first pass on an empty sync.db is
 // hydration; later passes catch whatever the live watcher missed.
