@@ -131,4 +131,5 @@ const (
 	GitOperationInspect    = tuimux_embed.GitOperationInspect
 	GitOperationUpdateOnly = tuimux_embed.GitOperationUpdateOnly
 	GitOperationLand       = tuimux_embed.GitOperationLand
+	GitOperationReview     = tuimux_embed.GitOperationReview
 )

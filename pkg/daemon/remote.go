@@ -53,6 +53,12 @@ var errEndpointNotFound = errors.New("daemon endpoint not found (stale groved bi
 // "daemon predates <endpoint>" hint instead of a generic failure.
 func IsEndpointNotFound(err error) bool { return errors.Is(err, errEndpointNotFound) }
 
+// ErrEndpointNotFound is the exported spelling of the same sentinel. Callers
+// detect it with IsEndpointNotFound; this exists so they can also CONSTRUCT it
+// — a surface whose fake daemon client needs to exercise its own stale-binary
+// branch has no other way to produce an error IsEndpointNotFound accepts.
+var ErrEndpointNotFound = errEndpointNotFound
+
 // ErrSubjobDaemonUpgradeRequired means groved predates the subjob API.
 var ErrSubjobDaemonUpgradeRequired = errors.New("groved upgrade required for subjob monitoring")
 
@@ -520,6 +526,40 @@ func (c *RemoteClient) SyncRepush(ctx context.Context, workspace string) (*model
 		return nil, fmt.Errorf("failed to decode repush result: %w", err)
 	}
 	return &out, nil
+}
+
+// GetForgeState fetches the forge poller's whole cache (GET /api/forge/state).
+//
+// This is the git-viewer PRs page's only data path, and it is a pure read of
+// state the daemon already holds — the poller owns every network call, so this
+// never reaches a forge no matter how often a surface asks. A daemon with no
+// poller running answers 200 with Enabled=false rather than an empty list, so
+// the caller can say "forge poller off" instead of "no pull requests"; a daemon
+// predating the endpoint answers 404, surfaced as errEndpointNotFound.
+func (c *RemoteClient) GetForgeState(ctx context.Context) (*models.ForgeStateSnapshot, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/forge/state", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get forge state from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var snapshot models.ForgeStateSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		return nil, fmt.Errorf("failed to decode forge state: %w", err)
+	}
+	return &snapshot, nil
 }
 
 // GetConfig returns the running configuration of the daemon.

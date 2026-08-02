@@ -534,6 +534,24 @@ type Client interface {
 	// for the hourly tick.
 	SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error)
 
+	// --- Forge ---
+
+	// GetForgeState returns the daemon forge poller's whole cache
+	// (GET /api/forge/state): every watched repository with its pull requests,
+	// check rollups and explicit freshness, plus whether the poller is running
+	// at all.
+	//
+	// It is a READ of daemon-owned state and never contacts a forge: the daemon
+	// owns polling, and a caller asking twice in a row costs two map reads. The
+	// Enabled flag is the load-bearing part — a caller must not render an empty
+	// Repos list as "no pull requests" without it (STATE.md D4).
+	//
+	// A daemon predating the endpoint answers 404, surfaced as
+	// errEndpointNotFound so callers can render "forge state unavailable"
+	// rather than an empty list. LocalClient has no poller and returns
+	// ErrNotSupported.
+	GetForgeState(ctx context.Context) (*models.ForgeStateSnapshot, error)
+
 	// --- Claude Trust Seeding ---
 
 	// SeedTrust asks the (unsandboxed) daemon to pre-seed Claude Code

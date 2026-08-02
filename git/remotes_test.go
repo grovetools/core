@@ -339,3 +339,46 @@ func TestFetchRemote_RefusesBadNames(t *testing.T) {
 	assert.Error(t, FetchRemote(context.Background(), dir, "   "), "blank remote refused")
 	assert.Error(t, FetchRemote(context.Background(), dir, "--upload-pack=x"), "flag-shaped remote refused")
 }
+
+// TestFetchRemoteBranch_FetchesOnlyThatBranch pins the narrowing that makes the
+// PRs page's fetch action cheap: asking for one branch lands THAT branch's
+// tracking ref and leaves the repo's other branches untouched.
+func TestFetchRemoteBranch_FetchesOnlyThatBranch(t *testing.T) {
+	dir := setupRebaseRepo(t)
+	origin := bareRemote(t)
+	runGitCommand(t, dir, "remote", "add", "origin", origin)
+	runGitCommand(t, dir, "push", "origin", "main")
+	runGitCommand(t, dir, "fetch", "origin")
+
+	// A second checkout publishes two new branches; only one is asked for.
+	other := t.TempDir()
+	runGitCommand(t, other, "clone", origin, ".")
+	runGitCommand(t, other, "checkout", "-q", "-b", "feature/wanted")
+	writeAndCommit(t, other, "wanted.txt", "w\n", "wanted")
+	runGitCommand(t, other, "push", "origin", "feature/wanted")
+	runGitCommand(t, other, "checkout", "-q", "-b", "feature/unwanted")
+	writeAndCommit(t, other, "unwanted.txt", "u\n", "unwanted")
+	runGitCommand(t, other, "push", "origin", "feature/unwanted")
+
+	require.False(t, RemoteBranchExists(dir, "origin", "feature/wanted"),
+		"nothing may have fetched on its own")
+
+	require.NoError(t, FetchRemoteBranch(context.Background(), dir, "origin", "feature/wanted"))
+	assert.True(t, RemoteBranchExists(dir, "origin", "feature/wanted"),
+		"the requested branch's tracking ref must land where RemoteTrackingRef says to look")
+	assert.False(t, RemoteBranchExists(dir, "origin", "feature/unwanted"),
+		"a single-ref fetch must not drag in every other branch")
+}
+
+// TestFetchRemoteBranch_RefusesBadNames proves neither argument can smuggle a
+// flag or a traversal into the argv.
+func TestFetchRemoteBranch_RefusesBadNames(t *testing.T) {
+	dir := setupRebaseRepo(t)
+	ctx := context.Background()
+	assert.Error(t, FetchRemoteBranch(ctx, dir, "", "main"), "empty remote refused")
+	assert.Error(t, FetchRemoteBranch(ctx, dir, "origin", ""), "empty branch refused")
+	assert.Error(t, FetchRemoteBranch(ctx, dir, "origin", "   "), "blank branch refused")
+	assert.Error(t, FetchRemoteBranch(ctx, dir, "--upload-pack=x", "main"), "flag-shaped remote refused")
+	assert.Error(t, FetchRemoteBranch(ctx, dir, "origin", "--upload-pack=x"), "flag-shaped branch refused")
+	assert.Error(t, FetchRemoteBranch(ctx, dir, "origin", "a/../../b"), "traversal branch refused")
+}

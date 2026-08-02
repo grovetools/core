@@ -864,5 +864,13 @@ func (c *LocalClient) SyncRepush(ctx context.Context, workspace string) (*models
 	return nil, ErrNotSupported
 }
 
+// GetForgeState requires the daemon: the forge poller and its cache live in the
+// global daemon, so there is nothing to report without one. ErrNotSupported is
+// what lets a surface say "daemon unreachable" instead of showing an empty PR
+// list that reads as "no pull requests".
+func (c *LocalClient) GetForgeState(ctx context.Context) (*models.ForgeStateSnapshot, error) {
+	return nil, ErrNotSupported
+}
+
 // Ensure LocalClient implements Client interface.
 var _ Client = (*LocalClient)(nil)

@@ -357,6 +357,49 @@ func FetchRemote(ctx context.Context, repoPath, remote string) error {
 	return nil
 }
 
+// FetchRemoteBranch fetches ONE branch from a remote into its remote-tracking
+// ref, rather than everything the remote has.
+//
+// Same contract as FetchRemote — the only network path here, a network READ,
+// never called by any read function, only ever in response to an explicit user
+// action — narrowed to a single ref. The narrowing is the point: a surface that
+// wants one pull request's head so it can diff it should not pull down every
+// branch a repository has.
+//
+// The refspec is written explicitly rather than relying on the remote's
+// configured fetch refspec, so the ref lands at refs/remotes/<remote>/<branch>
+// (where git.RemoteTrackingRef says to look for it) for any remote, including
+// one configured with a narrow or unusual refspec. No --prune, no force, no
+// push.
+func FetchRemoteBranch(ctx context.Context, repoPath, remote, branch string) error {
+	remote = strings.TrimSpace(remote)
+	branch = strings.TrimSpace(branch)
+	if remote == "" {
+		return fmt.Errorf("cannot fetch: empty remote name")
+	}
+	if branch == "" {
+		return fmt.Errorf("cannot fetch: empty branch name")
+	}
+	if !validRefComponent(remote) {
+		return fmt.Errorf("refusing to fetch remote %q: illegal remote name", remote)
+	}
+	if !validRefComponent(branch) {
+		return fmt.Errorf("refusing to fetch %q: illegal branch name", branch)
+	}
+	refspec := "refs/heads/" + branch + ":" + RemoteTrackingRef(remote, branch)
+	cmdBuilder := command.NewSafeBuilder()
+	cmd, err := cmdBuilder.Build(ctx, "git", "fetch", "--", remote, refspec)
+	if err != nil {
+		return fmt.Errorf("failed to build command: %w", err)
+	}
+	execCmd := cmd.Exec()
+	execCmd.Dir = repoPath
+	if output, err := execCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git fetch %s %s failed: %s", remote, branch, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // validRefComponent rejects names that would be read as flags by the git
 // commands that carry them, or that could escape the ref path they are pasted
 // into. Remote names reaching here come from git's own config or from user
