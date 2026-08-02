@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -39,11 +40,15 @@ var DefaultHooks = []ConfigHook{
 
 // ConfigWatcher watches the config directory for changes and triggers hooks.
 type ConfigWatcher struct {
-	watcher      *fsnotify.Watcher
-	hooks        []ConfigHook
-	debounceMs   int
-	lastChange   time.Time
-	mu           sync.Mutex
+	watcher    *fsnotify.Watcher
+	hooks      []ConfigHook
+	debounceMs int
+	mu         sync.Mutex
+	// pending accumulates the files changed since the last flush, and timer
+	// fires the flush once the writes go quiet. The debounce is TRAILING, not
+	// leading: see handleChange.
+	pending      map[string]struct{}
+	timer        *time.Timer
 	logger       *logrus.Entry
 	onReload     func(file string) // Callback to broadcast event
 	targetToLink map[string]string // Maps target file paths to their symlink names in config dir
@@ -120,6 +125,7 @@ func NewConfigWatcher(debounceMs int, onReload func(string)) (*ConfigWatcher, er
 		watcher:      watcher,
 		hooks:        DefaultHooks,
 		debounceMs:   debounceMs,
+		pending:      make(map[string]struct{}),
 		logger:       logger,
 		onReload:     onReload,
 		targetToLink: targetToLink,
@@ -168,41 +174,86 @@ func (w *ConfigWatcher) Start(ctx context.Context) {
 			}
 			w.logger.Errorf("Watcher error: %v", err)
 		case <-ctx.Done():
+			w.stopDebounce()
 			w.watcher.Close()
 			return
 		}
 	}
 }
 
-// handleChange processes a config file change with debouncing.
+// handleChange records a config file change and arms the debounce.
+//
+// The debounce is TRAILING and COALESCING: a change inside the quiet window
+// extends the window, and every distinct file that changed during it is
+// processed once when the writes stop. It used to be leading-and-dropping —
+// the first write in a window was processed and every later one discarded —
+// which silently lost real reloads:
+//
+//	`grove ecosystem materialize` writes machine.toml, clones, then appends the
+//	peer subscription to sync.toml. Against local remotes those two writes land
+//	~90ms apart, inside the default 100ms window, so the daemon reloaded on the
+//	machine.toml it saw BEFORE the subscription existed and never saw the
+//	sync.toml write at all. The machine's presence note went on reporting the
+//	ecosystem as declared-missing until the next daemon restart. A dropped
+//	debounce is not a delayed reload, it is a missing one.
+//
+// (Found by grove's identity-unified-loop E2E.)
 func (w *ConfigWatcher) handleChange(file string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// Debounce rapid writes
-	elapsed := time.Since(w.lastChange)
-	if elapsed < time.Duration(w.debounceMs)*time.Millisecond {
-		w.logger.Debugf("Debounced: %s (only %v since last change)", filepath.Base(file), elapsed)
+	w.pending[file] = struct{}{}
+	delay := time.Duration(w.debounceMs) * time.Millisecond
+	if w.timer == nil {
+		w.timer = time.AfterFunc(delay, w.flush)
 		return
 	}
-	w.lastChange = time.Now()
+	w.timer.Reset(delay)
+}
 
-	w.logger.Infof("Config changed: %s", filepath.Base(file))
+// flush processes every file that changed during the quiet window.
+func (w *ConfigWatcher) flush() {
+	w.mu.Lock()
+	files := make([]string, 0, len(w.pending))
+	for f := range w.pending {
+		files = append(files, f)
+	}
+	w.pending = make(map[string]struct{})
+	w.mu.Unlock()
 
-	// Run hooks if affected
-	for _, hook := range w.hooks {
-		if w.sectionAffected(file, hook.Section) {
-			w.logger.Infof("Running config hook: %s", hook.Name)
-			cmd := exec.Command(hook.Command[0], hook.Command[1:]...) //nolint:gosec // hook commands from trusted config
-			if err := cmd.Run(); err != nil {
-				w.logger.Errorf("Hook %s failed: %v", hook.Name, err)
+	// Deterministic order: hooks and reload callbacks are observable, and a
+	// map's iteration order would make the daemon's log non-reproducible.
+	sort.Strings(files)
+
+	for _, file := range files {
+		w.logger.Infof("Config changed: %s", filepath.Base(file))
+
+		// Run hooks if affected
+		for _, hook := range w.hooks {
+			if w.sectionAffected(file, hook.Section) {
+				w.logger.Infof("Running config hook: %s", hook.Name)
+				cmd := exec.Command(hook.Command[0], hook.Command[1:]...) //nolint:gosec // hook commands from trusted config
+				if err := cmd.Run(); err != nil {
+					w.logger.Errorf("Hook %s failed: %v", hook.Name, err)
+				}
 			}
 		}
-	}
 
-	// Trigger broadcast callback
-	if w.onReload != nil {
-		w.onReload(filepath.Base(file))
+		// Trigger broadcast callback
+		if w.onReload != nil {
+			w.onReload(filepath.Base(file))
+		}
+	}
+}
+
+// stopDebounce cancels a pending flush. Called when the watcher shuts down so
+// a timer cannot fire a callback against a torn-down daemon.
+func (w *ConfigWatcher) stopDebounce() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.timer != nil {
+		w.timer.Stop()
+		w.timer = nil
 	}
 }
 

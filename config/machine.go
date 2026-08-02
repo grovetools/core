@@ -161,7 +161,15 @@ func LoadMachineConfigFrom(path string) (*MachineConfig, error) {
 		return nil, fmt.Errorf("failed to read machine config %s: %w", path, err)
 	}
 
-	expanded := expandEnvVars(string(data))
+	return ParseMachineConfigContent(path, string(data))
+}
+
+// ParseMachineConfigContent decodes machine.toml content through exactly the
+// path LoadMachineConfigFrom uses — env expansion, TOML decode, Validate — so
+// what a writer verifies before persisting is what the loader will accept.
+// `path` is used only in error messages.
+func ParseMachineConfigContent(path, content string) (*MachineConfig, error) {
+	expanded := expandEnvVars(content)
 	var cfg MachineConfig
 	if err := toml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse machine config %s: %w", path, err)
