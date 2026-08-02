@@ -254,13 +254,19 @@ func (p *Provider) Checks(ctx context.Context, repo forge.Repo, ref string) (for
 // getJSON performs a bounded GET against the instance API and decodes the
 // response into out. Every failure is classified (see classifyStatus).
 func (p *Provider) getJSON(ctx context.Context, op, path string, query url.Values, out any) error {
-	endpoint := *p.baseURL
-	endpoint.Path = strings.TrimSuffix(endpoint.Path, "/") + "/api/v1/" + strings.TrimPrefix(path, "/")
+	// path arrives with its segments already percent-escaped (repoPath,
+	// url.PathEscape on refs). It must therefore be joined as a STRING, never
+	// assigned to url.URL.Path: that field holds the decoded form, so String()
+	// would re-escape our escapes and a slashed ref's %2F would go out as
+	// %252F — which Forgejo answers with 200 + [] rather than an error,
+	// silently reporting zero checks. Parsing the joined string keeps the
+	// escaped form in RawPath, so it reaches the wire verbatim.
+	full := strings.TrimSuffix(p.baseURL.String(), "/") + "/api/v1/" + strings.TrimPrefix(path, "/")
 	if query != nil {
-		endpoint.RawQuery = query.Encode()
+		full += "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, full, nil)
 	if err != nil {
 		return forge.Errorf(forge.ClassPermanent, providerName, op, err, "could not build request")
 	}

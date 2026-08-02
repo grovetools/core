@@ -284,3 +284,40 @@ func TestChecksTruncationIsUnknown(t *testing.T) {
 		t.Errorf("fetched %d checks, want the bound of %d", len(got.Checks), forge.MaxItems)
 	}
 }
+
+// TestSlashedRefReachesWireSingleEscaped pins the fix for the live-trial
+// finding: Checks("feature/x") must hit the API with the ref escaped exactly
+// once (%2F), never double-escaped (%252F). The failure mode is silent —
+// Forgejo answers an unknown ref with 200 + [], so a double-escaped request
+// reports zero checks instead of erroring — which is why this asserts on the
+// wire-level RequestURI rather than on the decoded r.URL.Path (identical in
+// both the correct and the broken case).
+func TestSlashedRefReachesWireSingleEscaped(t *testing.T) {
+	var gotURI string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURI = r.URL.RequestURI()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"context":"grove/tests","status":"success"}]`))
+	}))
+	defer srv.Close()
+
+	p, err := forgejo.New(srv.URL, forgejo.WithHTTPClient(srv.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := forge.Repo{Host: "forge.test", Owner: "grove", Name: "flow"}
+	rollup, err := p.Checks(context.Background(), repo, "feature/x")
+	if err != nil {
+		t.Fatalf("Checks failed: %v", err)
+	}
+
+	if !strings.Contains(gotURI, "feature%2Fx") {
+		t.Errorf("request URI = %q, want the ref escaped exactly once as feature%%2Fx", gotURI)
+	}
+	if strings.Contains(gotURI, "%252F") {
+		t.Errorf("request URI = %q — the ref was double-escaped", gotURI)
+	}
+	if len(rollup.Checks) != 1 {
+		t.Errorf("rollup carried %d checks, want 1 — the status never made it back", len(rollup.Checks))
+	}
+}
