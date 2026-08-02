@@ -187,11 +187,20 @@ func Save(dir string, state State) error {
 	if root, ok := workspace.WorktreeRootForPath(dir); ok {
 		id := pathutil.WorktreeID(root)
 		entry, _ := worktreeregistry.Load(id)
-		if entry == nil {
-			entry = &worktreeregistry.Entry{AbsPath: root}
+		// A tombstoned entry is history, and tombstoning deliberately strips
+		// SessionState so an ephemeral session payload cannot fossilize in a
+		// record that now outlives its worktree. Writing it back here — which
+		// is reachable whenever a finished plan's container survives on disk —
+		// would put it straight back, so the registry half of the dual-write
+		// is skipped. The .grove/state.yml half below still runs: that file
+		// lives inside the worktree and dies with it.
+		if !entry.IsFinished() {
+			if entry == nil {
+				entry = &worktreeregistry.Entry{AbsPath: root}
+			}
+			entry.SessionState = map[string]interface{}(state)
+			_ = worktreeregistry.Save(entry)
 		}
-		entry.SessionState = map[string]interface{}(state)
-		_ = worktreeregistry.Save(entry)
 	}
 
 	// .grove/state.yml write (deprecation-window dual-write).

@@ -13,8 +13,70 @@ package worktreeregistry
 
 import "time"
 
+// EntrySchemaVersion is the current shape of the persisted Entry. It is
+// written by Tombstone (the first write path that introduced a shape older
+// readers cannot fully interpret) and is ABSENT on every entry written before
+// it existed. Absent must therefore be read as "the pre-versioned shape", which
+// is byte-compatible with this one — never as an error.
+const EntrySchemaVersion = 1
+
+// Lifecycle status values for Entry.Status. The zero value ("") is the
+// pre-versioned shape and means StatusActive: every registry file written
+// before tombstones existed describes a live worktree.
+const (
+	// StatusActive is a live worktree — the default for an absent status.
+	StatusActive = "active"
+	// StatusFinished is a tombstone: the plan was finished and the worktree
+	// retired, but the binding (plan, repos, labels, final SHAs) is kept as
+	// history instead of being deleted.
+	StatusFinished = "finished"
+)
+
+// RepoFinalState is one repository's last known position at the moment its
+// worktree was tombstoned. Source records HOW the SHA was obtained so a reader
+// can tell a landed-and-receipted repo apart from one whose branch head was
+// simply sampled at teardown.
+type RepoFinalState struct {
+	// Repo is the workspace/repo name as it appears in Entry.Repos.
+	Repo string `json:"repo"`
+	// Branch is the plan branch the SHA was read from, when known.
+	Branch string `json:"branch,omitempty"`
+	// SHA is the repository's final commit at finish time.
+	SHA string `json:"sha,omitempty"`
+	// Source is the provenance of SHA: SHASourceReceipt when it came from a
+	// landing receipt, SHASourceBranchHead when it was read from the live
+	// checkout at finish. Empty when unknown.
+	Source string `json:"source,omitempty"`
+}
+
+// Provenance values for RepoFinalState.Source.
+const (
+	// SHASourceReceipt: the SHA came from a durable landing receipt — the
+	// repository actually landed and the movement is recorded elsewhere too.
+	SHASourceReceipt = "receipt"
+	// SHASourceBranchHead: the SHA was read from the live checkout at finish
+	// time. There is no receipt, so nothing asserts this work landed.
+	SHASourceBranchHead = "branch_head"
+)
+
 // Entry is the JSON payload persisted to StateDir()/worktrees/<id>.json.
 type Entry struct {
+	// SchemaVersion is the persisted shape version. Absent (0) means the
+	// pre-versioned shape, which is compatible — readers must not reject it.
+	SchemaVersion int `json:"schema_version,omitempty"`
+
+	// Status is the entry's lifecycle state: StatusActive or StatusFinished.
+	// Absent means StatusActive (see EffectiveStatus).
+	Status string `json:"status,omitempty"`
+
+	// FinishedAt records when the entry was tombstoned. Zero while active.
+	FinishedAt time.Time `json:"finished_at,omitempty"`
+
+	// FinalSHAs is the per-repo position captured at tombstone time. It is
+	// the durable answer to "what did this worktree end up producing", and it
+	// outlives the branches and checkouts the SHAs were read from.
+	FinalSHAs []RepoFinalState `json:"final_shas,omitempty"`
+
 	// AbsPath is the absolute path to the worktree container directory.
 	// It is authoritative — the registry ID is derived from this field.
 	AbsPath string `json:"abs_path"`
@@ -65,4 +127,22 @@ type Entry struct {
 // worktree no longer lives under any active base.
 func (e *Entry) IsArchived() bool {
 	return !e.ArchivedAt.IsZero()
+}
+
+// EffectiveStatus returns the entry's lifecycle status with the legacy default
+// applied: an absent status is StatusActive, because every registry file
+// written before tombstones existed describes a live worktree.
+func (e *Entry) EffectiveStatus() string {
+	if e == nil || e.Status == "" {
+		return StatusActive
+	}
+	return e.Status
+}
+
+// IsFinished reports whether this entry is a tombstone. Finished entries are
+// history: they are excluded from every default query path (ListAll, Resolve,
+// PlanForPath, FindByRef) and Reconcile never prunes or heals them, because the
+// worktree they describe is gone by design rather than missing by accident.
+func (e *Entry) IsFinished() bool {
+	return e != nil && e.Status == StatusFinished
 }

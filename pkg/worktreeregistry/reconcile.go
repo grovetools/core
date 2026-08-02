@@ -40,6 +40,18 @@ func Reconcile(xdgBase string) error {
 			continue
 		}
 
+		// Tombstones are exempt from the stat-prune. Their worktree is gone BY
+		// DESIGN — finish retired it — so a missing AbsPath is the expected
+		// end state, not the "registry drifted from disk" case this prune
+		// exists to repair. Deleting them here would hand back exactly the
+		// provenance loss tombstoning was introduced to stop, on the next
+		// daemon sweep. They are still recorded as registered so the adopt
+		// step below cannot re-adopt a surviving container over the tombstone.
+		if entry.IsFinished() {
+			registered[entry.AbsPath] = struct{}{}
+			continue
+		}
+
 		// Archived entries pass the stat-prune above because Archive re-keys
 		// AbsPath to the archive location (which exists on disk); they never
 		// live under xdgBase, so the adopt step below ignores them too.

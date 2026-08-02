@@ -108,6 +108,48 @@ func Update(id string, mutate func(*Entry)) error {
 	return Save(entry)
 }
 
+// Tombstone flips the registry entry for id to StatusFinished instead of
+// deleting it, so finishing a plan stops destroying the only record that binds
+// a worktree to its plan, repos and labels. It:
+//
+//   - sets Status=StatusFinished, FinishedAt=now and SchemaVersion;
+//   - records finals as the per-repo final SHAs (nil leaves any existing set
+//     untouched, so a re-tombstone cannot blank what the first one captured);
+//   - STRIPS SessionState. A session payload is ephemeral working state, not
+//     provenance; it is checkpointed separately by the review-packet path and
+//     must never fossilize in a record that now lives forever.
+//
+// It is idempotent: re-tombstoning an already-finished entry keeps the original
+// FinishedAt. A missing entry returns Load's error unchanged, so callers can
+// test it with os.IsNotExist and distinguish "nothing to record" from "the
+// record was lost".
+//
+// Delete remains for callers that genuinely want the entry gone.
+func Tombstone(id string, finals []RepoFinalState) (*Entry, error) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	entry, err := Load(id)
+	if err != nil {
+		return nil, err
+	}
+
+	entry.SchemaVersion = EntrySchemaVersion
+	if !entry.IsFinished() {
+		entry.Status = StatusFinished
+		entry.FinishedAt = time.Now().UTC()
+	}
+	if len(finals) > 0 {
+		entry.FinalSHAs = finals
+	}
+	entry.SessionState = nil
+
+	if err := Save(entry); err != nil {
+		return nil, err
+	}
+	return entry, nil
+}
+
 // Delete removes the registry entry for id. Returns nil when the file was
 // already absent (idempotent).
 func Delete(id string) error {
@@ -118,10 +160,42 @@ func Delete(id string) error {
 	return nil
 }
 
-// ListAll returns every valid registry entry. Entries with unparseable JSON
-// are silently skipped (treat as corrupt / being-written). Returns nil slice
-// and nil error when the registry directory does not yet exist.
+// DeleteUnlessFinished removes the registry entry for id unless it has been
+// tombstoned, reporting whether the entry was kept. Teardown paths that used to
+// end in Delete call this instead: once finish has recorded a worktree's story
+// as a tombstone, the very next teardown step must not erase it. An entry that
+// is absent, unreadable or still active is deleted exactly as Delete would.
+func DeleteUnlessFinished(id string) (kept bool, err error) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	if entry, loadErr := Load(id); loadErr == nil && entry.IsFinished() {
+		return true, nil
+	}
+	return false, Delete(id)
+}
+
+// ListAll returns every valid ACTIVE registry entry. Tombstoned (finished)
+// entries are excluded: they describe worktrees that no longer exist, and every
+// existing caller of this function — skill sync, settings propagation, plan
+// binding, orphan pruning — is asking about live worktrees. Callers that want
+// history call ListAllIncludingFinished.
+//
+// Entries with unparseable JSON are silently skipped (treat as corrupt /
+// being-written). Returns nil slice and nil error when the registry directory
+// does not yet exist.
 func ListAll() ([]*Entry, error) {
+	return listAll(false)
+}
+
+// ListAllIncludingFinished returns every valid registry entry, tombstones
+// included. This is the explicit opt-in for provenance queries ("which work
+// came from which worktree, including worktrees that are gone").
+func ListAllIncludingFinished() ([]*Entry, error) {
+	return listAll(true)
+}
+
+func listAll(includeFinished bool) ([]*Entry, error) {
 	files, err := os.ReadDir(registryDir())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -141,6 +215,9 @@ func ListAll() ([]*Entry, error) {
 		id := strings.TrimSuffix(f.Name(), ".json")
 		entry, err := Load(id)
 		if err != nil {
+			continue
+		}
+		if !includeFinished && entry.IsFinished() {
 			continue
 		}
 		entries = append(entries, entry)

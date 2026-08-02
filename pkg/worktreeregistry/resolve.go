@@ -17,9 +17,22 @@ import (
 // Anchor logic: AnchorOverride is used when it is non-empty AND it matches a
 // member of liveRepos; otherwise the anchor defaults to entry.Owner.
 //
-// Returns (nil, nil) when no registry entry exists for absPath — callers
-// should treat this the same as an empty structural default.
+// Returns (nil, nil) when no registry entry exists for absPath, or when the
+// entry is a tombstone — callers should treat both the same as an empty
+// structural default. ResolveIncludingFinished is the opt-in that also returns
+// tombstones.
 func Resolve(absPath string, liveRepos []string) (*Entry, error) {
+	entry, err := ResolveIncludingFinished(absPath, liveRepos)
+	if err != nil || entry.IsFinished() {
+		return nil, err
+	}
+	return entry, nil
+}
+
+// ResolveIncludingFinished is Resolve without the active-only filter: it
+// returns tombstoned entries too, for callers reconstructing history rather
+// than describing a live worktree.
+func ResolveIncludingFinished(absPath string, liveRepos []string) (*Entry, error) {
 	id := pathutil.WorktreeID(absPath)
 	entry, err := Load(id)
 	if err != nil {
@@ -41,10 +54,11 @@ func Resolve(absPath string, liveRepos []string) (*Entry, error) {
 
 // PlanForPath returns the grove-flow plan recorded for the worktree whose
 // absolute path is absPath (the worktree container root). ok is false when no
-// registry entry exists or it records no plan.
+// registry entry exists, when the entry is a tombstone (the plan is finished —
+// a live path must not be attributed to it), or when it records no plan.
 func PlanForPath(absPath string) (plan string, ok bool) {
 	entry, err := Load(pathutil.WorktreeID(absPath))
-	if err != nil || entry == nil {
+	if err != nil || entry == nil || entry.IsFinished() {
 		return "", false
 	}
 	return entry.Plan, entry.Plan != ""
@@ -61,7 +75,23 @@ func PlanForPath(absPath string) (plan string, ok bool) {
 //
 // Returns a non-nil error when nothing matches or when the reference is
 // ambiguous. This is the reverse of PlanForPath: name|id → entry.
+//
+// Tombstoned (finished) entries are invisible here: a reference that resolves
+// only to finished work is "no worktree found", so no action path can be aimed
+// at a plan that has already been torn down. FindByRefIncludingFinished is the
+// explicit opt-in for history lookups.
 func FindByRef(ref string) (*Entry, error) {
+	return findByRef(ref, false)
+}
+
+// FindByRefIncludingFinished is FindByRef over the whole registry, tombstones
+// included. Use it to answer "which worktree did this come from" after the
+// worktree is gone; never to pick a target for an action.
+func FindByRefIncludingFinished(ref string) (*Entry, error) {
+	return findByRef(ref, true)
+}
+
+func findByRef(ref string, includeFinished bool) (*Entry, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return nil, fmt.Errorf("empty target reference")
@@ -72,6 +102,9 @@ func FindByRef(ref string) (*Entry, error) {
 		entry, err := Load(pathutil.WorktreeID(ref))
 		if err != nil {
 			return nil, fmt.Errorf("no worktree registered at %q: %w", ref, err)
+		}
+		if !includeFinished && entry.IsFinished() {
+			return nil, fmt.Errorf("worktree registered at %q is finished", ref)
 		}
 		return entry, nil
 	}
@@ -85,14 +118,16 @@ func FindByRef(ref string) (*Entry, error) {
 			candidate := filepath.Join(base, ref)
 			if _, statErr := os.Stat(candidate); statErr == nil {
 				if entry, err := Load(pathutil.WorktreeID(candidate)); err == nil {
-					return entry, nil
+					if includeFinished || !entry.IsFinished() {
+						return entry, nil
+					}
 				}
 			}
 		}
 	}
 
-	// 3. Bare plan name → scan ListAll() for Entry.Plan == ref.
-	all, err := ListAll()
+	// 3. Bare plan name → scan the registry for Entry.Plan == ref.
+	all, err := listAll(includeFinished)
 	if err != nil {
 		return nil, fmt.Errorf("list registry: %w", err)
 	}
