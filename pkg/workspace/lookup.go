@@ -12,147 +12,53 @@ import (
 	"github.com/grovetools/core/util/pathutil"
 )
 
-// assignNotebookName sets the NotebookName field for a node based on grove configuration.
-// It finds the most specific grove (longest path match) that contains the node's path
-// and assigns the notebook configured for that grove.
-func assignNotebookName(node *WorkspaceNode, cfg *config.Config) {
-	if cfg == nil || cfg.Groves == nil || len(cfg.Groves) == 0 {
+// applyNotebookBinding sets a node's NotebookName using the unified repo→notebook
+// resolver (config.ResolveNotebook).
+//
+// What this layer contributes is the part config cannot compute: TOPOLOGY. A
+// worktree in the XDG layout (~/.local/share/grove/worktrees/<eco>-<hash>/<plan>/<repo>)
+// lives outside every configured grove and carries no ecosystem card of its
+// own, so its identity has to be read off the repo that owns it. Those owner
+// paths are handed to the resolver as fallback candidates; the precedence
+// ladder itself lives in config.
+func applyNotebookBinding(node *WorkspaceNode, cfg *config.Config) {
+	if node == nil || cfg == nil {
 		return
 	}
-
-	defaultNotebook := ""
-	if cfg.Notebooks != nil && cfg.Notebooks.Rules != nil {
-		defaultNotebook = cfg.Notebooks.Rules.Default
-	}
-
-	// Match the node's own path against the configured groves first.
-	bestMatchNotebook := matchGroveNotebook(node.Path, cfg)
-
-	// A worktree may live outside every configured grove path (XDG layout:
-	// ~/.local/share/grove/worktrees/<ecosystem>-<hash>/<plan>/<repo>). In that
-	// case the spatial match above finds nothing, so fall back to the worktree's
-	// ORIGIN repository — the repo it was created from — which IS under a grove.
-	// This makes a worktree inherit its origin grove's notebook instead of the
-	// global default. GetGroupingKey() returns the owning project path for
-	// project worktrees, mirroring how notebook_locator.go resolves worktrees.
-	if bestMatchNotebook == "" {
-		if originPath := node.GetGroupingKey(); originPath != "" && originPath != node.Path {
-			bestMatchNotebook = matchGroveNotebook(originPath, cfg)
-		}
-	}
-
-	// Ecosystem worktrees (including anchored containers) have GetGroupingKey()
-	// == their own path, so the project-worktree fallback above can't see their
-	// origin grove. Resolve via the worktree's identity instead: the owning
-	// project (the anchor repo / ecosystem root) and the origin ecosystem root,
-	// both of which live UNDER a configured grove. This yields the origin grove's
-	// notebook (e.g. grovetools) rather than the global default.
-	if bestMatchNotebook == "" && node.IsEcosystem() && node.IsWorktree() {
-		if node.ParentProjectPath != "" {
-			bestMatchNotebook = matchGroveNotebook(node.ParentProjectPath, cfg)
-		}
-		if bestMatchNotebook == "" && node.RootEcosystemPath != "" && node.RootEcosystemPath != node.Path {
-			bestMatchNotebook = matchGroveNotebook(node.RootEcosystemPath, cfg)
-		}
-	}
-
-	// A command may be run from a cwd that lives INSIDE a notebook's own
-	// storage tree (e.g. ~/notebooks/grovetools/workspaces/<ws>/inbox). That
-	// tree is often its own git repo, so the upward workspace walk classifies
-	// it as a NonGroveRepo and no configured grove spatially contains it —
-	// bestMatchNotebook is empty and we would otherwise fall back to the global
-	// default notebook, resolving paths to a DIFFERENT (usually stale) notebook
-	// root than the one that actually holds this content. Prefer the notebook
-	// whose configured root_dir contains the node's path so resolution is
-	// cwd-independent: browsing a notebook's storage resolves to that notebook.
-	if bestMatchNotebook == "" {
-		bestMatchNotebook = matchNotebookByRootDir(node.Path, cfg)
-	}
-
-	if bestMatchNotebook != "" {
-		node.NotebookName = bestMatchNotebook
-	} else {
-		node.NotebookName = defaultNotebook
-	}
+	binding := config.ResolveNotebook(config.NotebookQuery{
+		Path:       node.Path,
+		OwnerPaths: notebookOwnerPaths(node),
+	}, cfg)
+	node.NotebookName = binding.Notebook
 }
 
-// matchNotebookByRootDir returns the name of the configured notebook whose
-// root_dir contains targetPath (longest/most-specific match wins), or "" if
-// none do. This recognizes when a path is inside a notebook's own storage tree.
-func matchNotebookByRootDir(targetPath string, cfg *config.Config) string {
-	if cfg == nil || cfg.Notebooks == nil || cfg.Notebooks.Definitions == nil {
-		return ""
+// notebookOwnerPaths lists the paths that carry a node's identity when its own
+// location carries none, most specific first.
+//
+// GetGroupingKey() is the owning project for project worktrees (mirroring how
+// notebook_locator.go resolves them) and the node's own path otherwise.
+// Ecosystem worktrees — including anchored containers, whose owner is a
+// SUB-repo rather than the ecosystem root — group under themselves, so their
+// owner has to come from the parent/root ecosystem fields instead. Sub-projects
+// of an ecosystem worktree are the case that used to lose their identity
+// entirely: they are not worktrees by kind, group under themselves, and sit
+// outside every grove, so before the unified resolver they fell through to the
+// global default notebook.
+func notebookOwnerPaths(node *WorkspaceNode) []string {
+	paths := make([]string, 0, 4)
+	seen := map[string]bool{node.Path: true}
+	add := func(p string) {
+		if p == "" || seen[p] {
+			return
+		}
+		seen[p] = true
+		paths = append(paths, p)
 	}
-
-	normalizedTargetPath, err := pathutil.NormalizeForLookup(targetPath)
-	if err != nil {
-		normalizedTargetPath = targetPath
-	}
-
-	var bestMatchRoot string
-	var bestMatchNotebook string
-
-	for name, nb := range cfg.Notebooks.Definitions {
-		if nb == nil || nb.RootDir == "" {
-			continue
-		}
-		rootDir, err := filepath.Abs(expandPath(nb.RootDir))
-		if err != nil {
-			continue
-		}
-		normalizedRoot, err := pathutil.NormalizeForLookup(rootDir)
-		if err != nil {
-			normalizedRoot = rootDir
-		}
-
-		if normalizedTargetPath == normalizedRoot || strings.HasPrefix(normalizedTargetPath, normalizedRoot+string(filepath.Separator)) {
-			if len(normalizedRoot) > len(bestMatchRoot) {
-				bestMatchRoot = normalizedRoot
-				bestMatchNotebook = name
-			}
-		}
-	}
-
-	return bestMatchNotebook
-}
-
-// matchGroveNotebook returns the notebook of the most specific (longest path
-// match) configured grove that contains targetPath, or "" if none match.
-func matchGroveNotebook(targetPath string, cfg *config.Config) string {
-	// Normalize the target path for comparison
-	normalizedTargetPath, err := pathutil.NormalizeForLookup(targetPath)
-	if err != nil {
-		normalizedTargetPath = targetPath
-	}
-
-	var bestMatchGrove string
-	var bestMatchNotebook string
-
-	for _, groveCfg := range cfg.Groves {
-		// Normalize paths for comparison
-		expandedPath := expandPath(groveCfg.Path)
-		grovePath, err := filepath.Abs(expandedPath)
-		if err != nil {
-			continue
-		}
-
-		// Normalize the grove path for comparison (handles case-insensitive filesystems)
-		normalizedGrovePath, err := pathutil.NormalizeForLookup(grovePath)
-		if err != nil {
-			normalizedGrovePath = grovePath
-		}
-
-		// Check if target path is under this grove path (exact match or subdirectory)
-		if normalizedTargetPath == normalizedGrovePath || strings.HasPrefix(normalizedTargetPath, normalizedGrovePath+string(filepath.Separator)) {
-			// Use the longest matching grove (most specific)
-			if len(normalizedGrovePath) > len(bestMatchGrove) {
-				bestMatchGrove = normalizedGrovePath
-				bestMatchNotebook = groveCfg.Notebook
-			}
-		}
-	}
-
-	return bestMatchNotebook
+	add(node.GetGroupingKey())
+	add(node.ParentProjectPath)
+	add(node.ParentEcosystemPath)
+	add(node.RootEcosystemPath)
+	return paths
 }
 
 // findRootEcosystemPath finds the top-most ecosystem containing a given directory.
@@ -597,7 +503,7 @@ func GetProjectByPath(path string) (*WorkspaceNode, error) {
 	// Assign notebook names to all nodes based on grove configuration
 	if cfg != nil {
 		for _, node := range nodes {
-			assignNotebookName(node, cfg)
+			applyNotebookBinding(node, cfg)
 		}
 	}
 

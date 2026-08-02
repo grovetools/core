@@ -209,7 +209,7 @@ path = "/compiled/grovetools"
 }
 
 // The notebook layer is resolved from groves (findNotebookConfigPath →
-// resolveNotebookContext), so a machine whose only declaration lives in
+// notebookWorkspaceContext), so a machine whose only declaration lives in
 // machine.toml must still resolve it — the reason compilation runs on
 // lookupConfig too, not just on the final merge.
 func TestCompiledGrovesDriveNotebookLayerResolution(t *testing.T) {

@@ -254,7 +254,7 @@ func TransformToWorkspaceNodes(result *DiscoveryResult, cfg *config.Config) []*W
 
 	// Final pass: set NotebookName for all nodes based on which grove they belong to
 	for _, node := range nodes {
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 	}
 
 	return nodes

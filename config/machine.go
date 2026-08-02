@@ -222,7 +222,7 @@ func sortedKeys[V any](m map[string]V) []string {
 
 // compileMachineGroves projects machine.toml's subscriptions and bare roots
 // into the legacy cfg.Groves map, which is what every discovery consumer
-// already reads (DiscoveryService.DiscoverAll, resolveNotebookContext,
+// already reads (DiscoveryService.DiscoverAll, notebookWorkspaceContext,
 // SyncHandler.syntheticNodeFor, ...). Compiling instead of migrating those
 // consumers is the whole point: intent moves to machine.toml without a
 // fifteen-callsite refactor.

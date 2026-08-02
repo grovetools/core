@@ -1047,57 +1047,36 @@ type notebookContext struct {
 	workspaceName   string
 }
 
-// resolveNotebookContext finds the notebook workspace directory and name for a
-// project root, using the global config to match against groves and resolve
-// notebook definitions. Returns nil if the project is not in a grove or has no
-// notebook configured.
-func resolveNotebookContext(projectRoot string, cfg *Config) *notebookContext {
+// notebookWorkspaceContext finds the notebook workspace directory and name for a
+// project root. The notebook itself comes from the unified resolver
+// (ResolveNotebook, notebook_resolver.go); what this adds is the part only this
+// caller needs — the WORKSPACE NAME, which is the project's path relative to
+// its grove root. Returns nil if the project is not in a grove, has no name of
+// its own inside it, or resolves to a notebook with no root_dir.
+func notebookWorkspaceContext(projectRoot string, cfg *Config) *notebookContext {
 	if cfg == nil || len(cfg.Groves) == 0 {
 		return nil
 	}
 
-	absRoot, err := filepath.Abs(projectRoot)
-	if err != nil {
+	// No owner paths: this caller answers "where is THIS project's config
+	// stored", and a path's config lives under its own grove or nowhere. The
+	// worktree→owner walk is the workspace layer's business (it is the layer
+	// that can compute ownership at all).
+	binding := ResolveNotebook(NotebookQuery{Path: projectRoot}, cfg)
+	if binding.groveRootMatch == "" {
 		return nil
 	}
 
-	var bestMatchGrove string
-	var bestMatchNotebook string
-
-	// Find the grove this project belongs to (longest prefix match)
-	for _, grove := range cfg.Groves {
-		if grove.Enabled != nil && !*grove.Enabled {
-			continue
-		}
-		expandedGrove := expandPath(grove.Path)
-		absGrove, err := filepath.Abs(expandedGrove)
-		if err != nil {
-			continue
-		}
-
-		if absRoot == absGrove || strings.HasPrefix(absRoot, absGrove+string(filepath.Separator)) {
-			if len(absGrove) > len(bestMatchGrove) {
-				bestMatchGrove = absGrove
-				bestMatchNotebook = grove.Notebook
-			}
-		}
-	}
-
-	if bestMatchGrove == "" {
+	wsName := relativeWorkspaceName(binding.groveRootMatch, projectRoot)
+	if wsName == "" {
 		return nil
 	}
 
-	// Extract workspace name as relative path from grove root
-	wsName, err := filepath.Rel(bestMatchGrove, absRoot)
-	if err != nil || wsName == "." {
-		return nil
-	}
-
-	// Resolve the notebook name
-	notebookName := bestMatchNotebook
-	if notebookName == "" && cfg.Notebooks != nil && cfg.Notebooks.Rules != nil {
-		notebookName = cfg.Notebooks.Rules.Default
-	}
+	// The historical last resort: a grove with no notebook, no default, and no
+	// other binding still resolves to "nb". It lives here rather than in the
+	// resolver because it is this caller's policy — the workspace-side caller
+	// deliberately reports "no notebook" instead of guessing one.
+	notebookName := binding.Notebook
 	if notebookName == "" {
 		notebookName = "nb"
 	}
@@ -1124,7 +1103,7 @@ func resolveNotebookContext(projectRoot string, cfg *Config) *notebookContext {
 // stored in its notebook directory. It uses the global config to find the grove
 // the project belongs to, determine the notebook name, and construct the path.
 func findNotebookConfigPath(projectRoot string, globalCfg *Config) string {
-	ctx := resolveNotebookContext(projectRoot, globalCfg)
+	ctx := notebookWorkspaceContext(projectRoot, globalCfg)
 	if ctx == nil {
 		return ""
 	}
@@ -1154,7 +1133,7 @@ func ResolveNotebookDir(projectRoot string) (dir, workspaceName string, err erro
 }
 
 func resolveNotebookDirWithConfig(projectRoot string, cfg *Config) (string, string, error) {
-	ctx := resolveNotebookContext(projectRoot, cfg)
+	ctx := notebookWorkspaceContext(projectRoot, cfg)
 	if ctx == nil {
 		if cfg == nil || len(cfg.Groves) == 0 {
 			return "", "", fmt.Errorf("no groves configured")
@@ -1401,7 +1380,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		lookupConfig = mergeConfigs(lookupConfig, layeredConfig.Project)
 	}
 	// Notebook-layer resolution is driven by groves (findNotebookConfigPath →
-	// resolveNotebookContext matches the project against cfg.Groves), so the
+	// notebookWorkspaceContext matches the project against cfg.Groves), so the
 	// machine's subscriptions have to be compiled in BEFORE the lookup — a
 	// machine whose only grove declaration lives in machine.toml would
 	// otherwise resolve no notebook layer at all.

@@ -228,7 +228,7 @@ func TestAssignNotebookName_WorktreeInheritsOriginGrove(t *testing.T) {
 			ParentProjectPath: originRepo,
 		}
 
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 
 		// Without the fix this would be "nb" (the default); with the fix it
 		// inherits the origin grove's notebook.
@@ -243,7 +243,7 @@ func TestAssignNotebookName_WorktreeInheritsOriginGrove(t *testing.T) {
 			Kind: KindStandaloneProject,
 		}
 
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 		assert.Equal(t, "grovetools", node.NotebookName)
 	})
 
@@ -256,7 +256,7 @@ func TestAssignNotebookName_WorktreeInheritsOriginGrove(t *testing.T) {
 			Kind: KindStandaloneProject,
 		}
 
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 		assert.Equal(t, "nb", node.NotebookName)
 	})
 }
@@ -294,7 +294,7 @@ func TestAssignNotebookName_InsideNotebookStorageTree(t *testing.T) {
 			Path: grovetoolsRoot,
 			Kind: KindNonGroveRepo,
 		}
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 		assert.Equal(t, "grovetools", node.NotebookName,
 			"a path inside a notebook's storage tree should resolve to that notebook, not the default")
 	})
@@ -307,7 +307,7 @@ func TestAssignNotebookName_InsideNotebookStorageTree(t *testing.T) {
 			Path: deep,
 			Kind: KindNonGroveRepo,
 		}
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 		assert.Equal(t, "grovetools", node.NotebookName)
 	})
 
@@ -319,7 +319,7 @@ func TestAssignNotebookName_InsideNotebookStorageTree(t *testing.T) {
 			Path: underGrove,
 			Kind: KindStandaloneProject,
 		}
-		assignNotebookName(node, cfg)
+		applyNotebookBinding(node, cfg)
 		assert.Equal(t, "grovetools", node.NotebookName)
 	})
 }

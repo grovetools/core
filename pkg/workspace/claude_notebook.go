@@ -34,7 +34,8 @@
 //   - Notebook mapping: per-member-repo subdir is resolved via
 //     GetProjectByPath(<worktree>/<repo>), whose discovery assigns NotebookName
 //     through the anchored-worktree / origin-grove rules (lookup.go
-//     assignNotebookName ~50). Verified live: `nb context --json` from
+//     applyNotebookBinding → config.ResolveNotebook). Verified live:
+//     `nb context --json` from
 //     <worktree>/nb resolves notebook_name=grovetools and paths under
 //     ~/notebooks/grovetools/workspaces/nb/, exactly the union member we want.
 //   - Settings-merge helper: claudenotebook.SeedNotebookDirs (core/pkg/

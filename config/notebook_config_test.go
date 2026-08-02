@@ -58,36 +58,36 @@ func TestResolveNotebookContext(t *testing.T) {
 	}
 
 	t.Run("project in grove resolves correctly", func(t *testing.T) {
-		ctx := resolveNotebookContext(filepath.Join(groveDir, "my-app"), cfg)
+		ctx := notebookWorkspaceContext(filepath.Join(groveDir, "my-app"), cfg)
 		require.NotNil(t, ctx)
 		assert.Equal(t, "my-app", ctx.workspaceName)
 		assert.Equal(t, notebookDir, ctx.notebookRootDir)
 	})
 
 	t.Run("project in nested grove uses longest match", func(t *testing.T) {
-		ctx := resolveNotebookContext(filepath.Join(nestedGroveDir, "my-app"), cfg)
+		ctx := notebookWorkspaceContext(filepath.Join(nestedGroveDir, "my-app"), cfg)
 		require.NotNil(t, ctx)
 		assert.Equal(t, "my-app", ctx.workspaceName)
 		assert.Equal(t, customNbDir, ctx.notebookRootDir)
 	})
 
 	t.Run("project in disabled grove returns nil", func(t *testing.T) {
-		ctx := resolveNotebookContext(filepath.Join(tmpDir, "disabled", "my-app"), cfg)
+		ctx := notebookWorkspaceContext(filepath.Join(tmpDir, "disabled", "my-app"), cfg)
 		assert.Nil(t, ctx)
 	})
 
 	t.Run("project not in any grove returns nil", func(t *testing.T) {
-		ctx := resolveNotebookContext(filepath.Join(tmpDir, "elsewhere", "my-app"), cfg)
+		ctx := notebookWorkspaceContext(filepath.Join(tmpDir, "elsewhere", "my-app"), cfg)
 		assert.Nil(t, ctx)
 	})
 
 	t.Run("grove root itself returns nil", func(t *testing.T) {
-		ctx := resolveNotebookContext(groveDir, cfg)
+		ctx := notebookWorkspaceContext(groveDir, cfg)
 		assert.Nil(t, ctx, "grove root has workspaceName '.' and should be rejected")
 	})
 
 	t.Run("nil config returns nil", func(t *testing.T) {
-		ctx := resolveNotebookContext(filepath.Join(groveDir, "app"), nil)
+		ctx := notebookWorkspaceContext(filepath.Join(groveDir, "app"), nil)
 		assert.Nil(t, ctx)
 	})
 
@@ -97,7 +97,7 @@ func TestResolveNotebookContext(t *testing.T) {
 				"code": {Path: groveDir, Enabled: &enabled},
 			},
 		}
-		ctx := resolveNotebookContext(filepath.Join(groveDir, "app"), cfgNoNb)
+		ctx := notebookWorkspaceContext(filepath.Join(groveDir, "app"), cfgNoNb)
 		assert.Nil(t, ctx)
 	})
 
@@ -112,7 +112,7 @@ func TestResolveNotebookContext(t *testing.T) {
 				},
 			},
 		}
-		ctx := resolveNotebookContext(filepath.Join(groveDir, "app"), cfgNoDefault)
+		ctx := notebookWorkspaceContext(filepath.Join(groveDir, "app"), cfgNoDefault)
 		require.NotNil(t, ctx)
 		assert.Equal(t, notebookDir, ctx.notebookRootDir)
 	})
