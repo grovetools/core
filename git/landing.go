@@ -36,9 +36,12 @@ import (
 //   - Ahead/Behind are HEAD vs Onto (`rev-list --left-right --count
 //     <onto>...HEAD`), computed for every checkout including a main/master one
 //     (where they are 0/0 because HEAD is that ref).
-//   - HasRemote/BehindOrigin are the push distance: whether origin/<branch>
-//     exists and how far HEAD trails it. Surfaces render the distance ONLY when
-//     HasRemote, leaving un-pushed branches blank.
+//   - HasRemote/BehindOrigin are the push distance against the DEFAULT remote
+//     (git.DefaultRemoteName): whether origin/<branch> exists and how far HEAD
+//     trails it. Surfaces render the distance ONLY when HasRemote, leaving
+//     un-pushed branches blank. Divergence against any OTHER remote is not part
+//     of this shape — it is the Remotes surface's question, answered live by
+//     git.ListRemoteBranchStates rather than cached here.
 //   - LastCommitAt is HEAD's author date, so an age column costs no extra fork
 //     at the consumer.
 //
@@ -88,11 +91,9 @@ func GetLandingState(repoPath, branch string) *LandingState {
 	state := LandingState{Computed: true}
 	state.Onto = LocalMainBranch(cleanPath)
 
-	if HasRemoteBranch(cleanPath, branch) {
+	if exists, behind := RemoteBranchDistance(cleanPath, DefaultRemoteName, branch); exists {
 		state.HasRemote = true
-		if _, behind, err := GetCommitsDivergence(cleanPath, "origin/"+branch, "HEAD"); err == nil {
-			state.BehindOrigin = behind
-		}
+		state.BehindOrigin = behind
 	}
 
 	if state.Onto != "" {
@@ -199,7 +200,7 @@ func resolveLandingFingerprint(cleanPath, branch string) (landingFingerprint, bo
 	// A cleanly-absent origin/<branch> is a real answer ("not pushed"), so it
 	// fingerprints as the empty SHA rather than refusing the cache.
 	if !IsDetachedHead(branch) {
-		ref := "refs/remotes/origin/" + branch
+		ref := RemoteTrackingRef(DefaultRemoteName, branch)
 		switch sha, err := resolveRefSHA(commonDir, ref); {
 		case err == nil:
 			fp.originRef, fp.originSHA = ref, sha

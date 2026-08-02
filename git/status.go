@@ -419,21 +419,12 @@ func IsDetachedHead(branch string) bool {
 }
 
 // HasRemoteBranch reports whether origin/<branch> exists in the repo — i.e.
-// the branch has been pushed. It runs `git show-ref --verify --quiet
-// refs/remotes/origin/<branch>`, the same probe LocalMainBranch uses for local
-// refs. A detached branch name is never remote-tracked.
+// the branch has been pushed to the DEFAULT remote. It is the origin-only
+// spelling of RemoteBranchExists (see remotes.go), kept as its own name because
+// every caller of it means "pushed" in the single-remote sense; a caller that
+// cares which remote should ask RemoteBranchExists directly.
 func HasRemoteBranch(repoPath, branch string) bool {
-	if IsDetachedHead(branch) {
-		return false
-	}
-	cmdBuilder := command.NewSafeBuilder()
-	cmd, err := cmdBuilder.Build(context.Background(), "git", "show-ref", "--verify", "--quiet", "refs/remotes/origin/"+branch)
-	if err != nil {
-		return false
-	}
-	execCmd := cmd.Exec()
-	execCmd.Dir = repoPath
-	return execCmd.Run() == nil
+	return RemoteBranchExists(repoPath, DefaultRemoteName, branch)
 }
 
 // GetChangedFilesSinceMain returns the per-file change list between the local
