@@ -491,10 +491,18 @@ type SyncOutboxEntry struct {
 // (daemon server syncConflictResponse): a conflict artifact on disk plus the
 // 3-way-merge base recovered from sync.db.
 type SyncConflict struct {
-	Workspace       string `json:"workspace"`
-	Path            string `json:"path"`        // original wire path of the conflicted document
-	DocumentID      string `json:"document_id"` // parsed from the artifact filename
-	Artifact        string `json:"artifact"`    // artifact filename, workspace-relative (slash form)
+	Workspace  string `json:"workspace"`
+	Path       string `json:"path"`        // original wire path of the conflicted document
+	DocumentID string `json:"document_id"` // parsed from the artifact filename
+	// Kind is what went wrong: "merge" (overlapping edits, the historical and
+	// still-dominant case) or a named kind such as "registry_foreign_write"
+	// (someone else wrote this machine's single-writer registry note). It
+	// travels in the artifact FILENAME, which is why it survives a daemon
+	// restart — the conflicts endpoint rebuilds each row from disk and has no
+	// other record of the broadcast. Empty on a daemon predating the field;
+	// render that as "merge", the behavior it had.
+	Kind            string `json:"kind,omitempty"`
+	Artifact        string `json:"artifact"` // artifact filename, workspace-relative (slash form)
 	ArtifactContent string `json:"artifact_content"`
 	BaseContent     string `json:"base_content,omitempty"` // 3-way base from sync_documents, when resolvable
 }
