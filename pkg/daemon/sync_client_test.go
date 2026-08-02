@@ -26,6 +26,7 @@ func serveSyncUnix(t *testing.T, sockPath string, lastWorkspace *string) {
 			"enabled": true,
 			"db_path": "/tmp/sync.db",
 			"origin_id": "laptop-1",
+			"server": "https://sync.example.com",
 			"documents": 42,
 			"documents_diverged": 1,
 			"outbox_pending": 3,
@@ -34,6 +35,9 @@ func serveSyncUnix(t *testing.T, sockPath string, lastWorkspace *string) {
 				"name": "notes",
 				"cursor": 137,
 				"last_synced_at": "2026-07-12T10:00:00Z",
+				"pull": true,
+				"mode": "full",
+				"role": "peer",
 				"hydration": {
 					"workspace": "notes",
 					"running": true,
@@ -43,6 +47,10 @@ func serveSyncUnix(t *testing.T, sockPath string, lastWorkspace *string) {
 					"started_at": "2026-07-12T09:59:00Z",
 					"files_per_sec": 83.5
 				}
+			}, {
+				"name": "wiki",
+				"cursor": 4,
+				"mode": "search-only"
 			}]
 		}`))
 	})
@@ -99,15 +107,26 @@ func TestGetSyncStatusDecodesWirePayload(t *testing.T) {
 		t.Fatalf("GetSyncStatus: %v", err)
 	}
 	if !st.Enabled || st.OriginID != "laptop-1" || st.Documents != 42 ||
-		st.DocumentsDiverged != 1 || st.OutboxPending != 3 || st.OutboxParked != 2 {
+		st.DocumentsDiverged != 1 || st.OutboxPending != 3 || st.OutboxParked != 2 ||
+		st.Server != "https://sync.example.com" {
 		t.Fatalf("headline fields mis-decoded: %+v", st)
 	}
-	if len(st.Workspaces) != 1 {
-		t.Fatalf("want 1 workspace, got %d", len(st.Workspaces))
+	if len(st.Workspaces) != 2 {
+		t.Fatalf("want 2 workspaces, got %d", len(st.Workspaces))
 	}
 	w := st.Workspaces[0]
 	if w.Name != "notes" || w.Cursor != 137 || w.LastSyncedAt.IsZero() {
 		t.Fatalf("workspace fields mis-decoded: %+v", w)
+	}
+	// Direction: an explicit pull on the first entry, the push-only default
+	// (an absent "pull" key) plus a filtered mode on the second.
+	if !w.Pull || w.Mode != "full" || w.Role != "peer" {
+		t.Fatalf("direction fields mis-decoded: %+v", w)
+	}
+	// The second entry is LEGACY — no role key at all — and must decode as an
+	// empty role rather than borrowing the first entry's.
+	if w2 := st.Workspaces[1]; w2.Pull || w2.Mode != "search-only" || w2.Role != "" {
+		t.Fatalf("push-only workspace mis-decoded: %+v", w2)
 	}
 	if w.Hydration == nil || !w.Hydration.Running || w.Hydration.Scanned != 500 ||
 		w.Hydration.Enqueued != 12 || w.Hydration.Quarantined != 1 || w.Hydration.FilesPerSec != 83.5 {

@@ -359,6 +359,37 @@ func (c *RemoteClient) ReloadSatellites(ctx context.Context) (*models.SatelliteR
 // to the global daemon, which owns sync.db — no client-side special-casing
 // needed. A 404 (groved predating the sync API) yields errEndpointNotFound so
 // callers can soft-fail and hide the sync surface.
+// GetMachineStatus fetches GET /api/machine: this host's identity plus its
+// declared intent reconciled against the disk. Returns errEndpointNotFound
+// against a daemon that predates the route, so callers can fall back to
+// computing it locally (which is always possible — the answer is derived from
+// config and the filesystem, not from daemon state).
+func (c *RemoteClient) GetMachineStatus(ctx context.Context) (*models.MachineStatus, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/machine", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get machine status from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var status models.MachineStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, fmt.Errorf("failed to decode machine status: %w", err)
+	}
+	return &status, nil
+}
+
 func (c *RemoteClient) GetSyncStatus(ctx context.Context) (*models.SyncStatus, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/sync/status", nil)
 	if err != nil {

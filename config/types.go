@@ -1296,6 +1296,57 @@ type TestScopeConfig struct {
 	Scenarios []string `yaml:"scenarios" toml:"scenarios" jsonschema:"description=List of tend scenarios to trigger"`
 }
 
+// EcosystemCard is the `[ecosystem]` table in an ecosystem's own grove
+// manifest — its repo-side identity, committed and therefore travelling with
+// every clone.
+//
+// It is deliberately a *core* key rather than an extension: identity is
+// first-class, not plugin config. The card answers "which ecosystem is this,
+// how is it laid out, where does it come from, and which notebooks belong to
+// it" for a machine that has just cloned the repo and has no registry access
+// at all.
+//
+// Nothing consumes the card yet beyond load-and-expose; the binding
+// precedence (card → machine override → grove-root notebook → default rule)
+// arrives with the resolver phase.
+type EcosystemCard struct {
+	// ID is a ULID minted once by `grove ecosystem init` (or backfilled once
+	// by `grove ecosystem adopt`) and never rewritten by any code path. It is
+	// what makes an ecosystem the same ecosystem across machines, clones, and
+	// renames — including from a synthetic worktree, which resolves to its
+	// owner and reads the owner's card.
+	ID string `yaml:"id,omitempty" toml:"id,omitempty" jsonschema:"description=Stable ULID identifying this ecosystem across machines and clones (minted once; never edited)" jsonschema_extras:"x-layer=ecosystem,x-priority=12,x-important=true"`
+	// Layout declares how a peer materializes this ecosystem: "superrepo" (the
+	// primary remote is a superrepo whose submodules are the member repos) or
+	// "flat" (the remotes list enumerates independent repos). Auto-detected at
+	// init/adopt from the presence of .gitmodules at the ecosystem root.
+	Layout string `yaml:"layout,omitempty" toml:"layout,omitempty" jsonschema:"description=How this ecosystem is materialized: superrepo (submodules under one root repo) or flat (independent repos),enum=superrepo,enum=flat" jsonschema_extras:"x-layer=ecosystem,x-priority=13,x-important=true"`
+	// Remotes are the git remotes a peer clones from. Git remotes are the only
+	// durable transport for repos; bundles never are.
+	Remotes []EcosystemRemote `yaml:"remotes,omitempty" toml:"remotes,omitempty" jsonschema:"description=Git remotes a peer clones this ecosystem from" jsonschema_extras:"x-layer=ecosystem,x-priority=14"`
+	// Notebooks is the ecosystem→notebook binding, keyed by notebook name.
+	// This is the default binding that travels with the clone; a machine may
+	// still override it locally.
+	Notebooks map[string]EcosystemNotebook `yaml:"notebooks,omitempty" toml:"notebooks,omitempty" jsonschema:"description=Notebooks bound to this ecosystem keyed by notebook name" jsonschema_extras:"x-layer=ecosystem,x-priority=15"`
+}
+
+// EcosystemRemote is one `[[ecosystem.remotes]]` entry.
+type EcosystemRemote struct {
+	Name string `yaml:"name" toml:"name" jsonschema:"description=Git remote name (e.g. origin)"`
+	URL  string `yaml:"url" toml:"url" jsonschema:"description=Git remote URL a peer clones from"`
+}
+
+// EcosystemNotebook is one `[ecosystem.notebooks.<name>]` entry.
+type EcosystemNotebook struct {
+	// Default marks the notebook a repo in this ecosystem binds to when
+	// nothing overrides it. At most one entry should set it.
+	Default bool `yaml:"default,omitempty" toml:"default,omitempty" jsonschema:"description=This is the ecosystem's default notebook"`
+	// Audience is a free-form label distinguishing e.g. a personal notebook
+	// from an org one. It is descriptive here; the projection phase gives it
+	// behavior.
+	Audience string `yaml:"audience,omitempty" toml:"audience,omitempty" jsonschema:"description=Audience label for this notebook (e.g. personal org)"`
+}
+
 // Config represents the grove.yml configuration
 type Config struct {
 	Name       string   `yaml:"name,omitempty" toml:"name,omitempty" jsonschema:"description=Name of the project or ecosystem"`
@@ -1312,7 +1363,13 @@ type Config struct {
 	Environment  *EnvironmentConfig            `yaml:"environment,omitempty" toml:"environment,omitempty" jsonschema:"description=Development environment provider configuration"`
 	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty" toml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag"`
 
-	Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems"`
+	// Groves is the compiled discovery surface: every consumer reads it, but
+	// it is no longer where intent is AUTHORED. Ecosystem subscriptions and
+	// bare scan roots belong in ~/.config/grove/machine.toml, which compiles
+	// into this map at load time (compileMachineGroves). Explicit entries here
+	// still win — the migration window — so nothing breaks until the user runs
+	// `grove machine migrate` and deletes them.
+	Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty" jsonschema:"description=DEPRECATED: declare ecosystems and bare roots in machine.toml instead,deprecated=true" jsonschema_extras:"x-deprecated=true,x-deprecated-message=Move these to ~/.config/grove/machine.toml with 'grove machine migrate',x-deprecated-replacement=machine.toml [machine.ecosystems.*],x-deprecated-version=v0.6.0"`
 	SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" toml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
 	ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" toml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
 
@@ -1324,6 +1381,10 @@ type Config struct {
 	Onboarding *OnboardingConfig `yaml:"onboarding,omitempty" toml:"onboarding,omitempty" jsonschema:"description=First-run onboarding progress (completed marker + resume step)"`
 
 	Security *SecurityConfig `yaml:"security,omitempty" toml:"security,omitempty" jsonschema:"description=Security policy (exec-bearing config trust gate)"`
+
+	// Ecosystem is the repo-side identity card. It is only ever authored in an
+	// ecosystem's own manifest, never in the global layer.
+	Ecosystem *EcosystemCard `yaml:"ecosystem,omitempty" toml:"ecosystem,omitempty" jsonschema:"description=Repo-side ecosystem identity card (id layout remotes notebooks)"`
 
 	// Extensions captures all other top-level keys for extensibility.
 	Extensions map[string]interface{} `yaml:",inline" toml:"-" jsonschema:"-"`
@@ -1389,7 +1450,12 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Worktree         *WorktreeConfig               `yaml:"worktree,omitempty"`
 		Onboarding       *OnboardingConfig             `yaml:"onboarding,omitempty"`
 		Security         *SecurityConfig               `yaml:"security,omitempty"`
-		Extensions       map[string]interface{}        `yaml:",inline"`
+		// Ecosystem MUST be declared here, not only on Config: the inline
+		// Extensions map below swallows every key rawConfig does not name, so
+		// omitting it would silently demote the identity card to an extension
+		// on the YAML path while the TOML path typed it correctly.
+		Ecosystem  *EcosystemCard         `yaml:"ecosystem,omitempty"`
+		Extensions map[string]interface{} `yaml:",inline"`
 
 		// --- Legacy Fields for Backward Compatibility ---
 		SearchPaths       map[string]SearchPathConfig `yaml:"search_paths,omitempty"`        // Old name for Groves
@@ -1421,6 +1487,7 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Worktree = raw.Worktree
 	c.Onboarding = raw.Onboarding
 	c.Security = raw.Security
+	c.Ecosystem = raw.Ecosystem
 	c.Extensions = raw.Extensions
 
 	// Handle backward compatibility for `search_paths` -> `groves`

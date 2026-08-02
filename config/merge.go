@@ -532,6 +532,14 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge the ecosystem identity card. Whole-card replacement, deliberately:
+	// a card is one repo's identity, and field-wise merging two cards would
+	// produce a chimera (one ecosystem's id wearing another's remotes). The
+	// nearest layer that declares a card wins outright.
+	if override.Ecosystem != nil {
+		result.Ecosystem = override.Ecosystem
+	}
+
 	// Merge TUI configuration
 	if override.TUI != nil {
 		if result.TUI == nil {

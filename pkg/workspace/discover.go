@@ -300,8 +300,12 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		s.logger.Warnf("Failed to load layered config: %v. No 'groves' to scan.", err)
 		return result, nil // Not a fatal error, just means no paths to scan.
 	}
-	if layeredCfg.Global == nil {
-		s.logger.Debug("no global grove config found; workspace scan skipped")
+	// A missing global grove.toml used to mean "nothing to scan". It no longer
+	// does: machine.toml is a standalone typed layer compiled into Final.Groves,
+	// so a machine whose only declaration is [machine.ecosystems.*] has groves
+	// to walk with no global config file at all.
+	if layeredCfg.Global == nil && len(layeredCfg.Final.Groves) == 0 {
+		s.logger.Debug("no global grove config and no machine subscriptions; workspace scan skipped")
 		return result, nil
 	}
 

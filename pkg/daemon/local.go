@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/env"
+	"github.com/grovetools/core/pkg/machine"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/repo"
@@ -759,6 +762,82 @@ func (c *LocalClient) GetSatelliteStatuses(ctx context.Context) (map[string]*mod
 // up`/`down` fall back to the manual reload instruction.
 func (c *LocalClient) ReloadSatellites(ctx context.Context) (*models.SatelliteReloadSummary, error) {
 	return nil, ErrNotSupported
+}
+
+// GetMachineStatus is answered locally. Machine identity and intent live in
+// files this process can read (state ULID + machine.toml) and the
+// reconciliation is a stat of each declared path, so a missing daemon is no
+// reason to refuse — `grove machine status` has to work on a fresh host where
+// nothing is running yet.
+func (c *LocalClient) GetMachineStatus(ctx context.Context) (*models.MachineStatus, error) {
+	return LocalMachineStatus()
+}
+
+// LocalMachineStatus computes the machine status without any daemon. It is the
+// shared implementation behind LocalClient.GetMachineStatus and the CLI's
+// fallback when a daemon is running but predates the /api/machine route.
+func LocalMachineStatus() (*models.MachineStatus, error) {
+	out := &models.MachineStatus{
+		Name:       config.ResolveMachineName(),
+		ConfigPath: config.MachineConfigPath(),
+	}
+	// Load, never EnsureIdentity: asking a machine what it is must not decide
+	// what it is. An unminted host reports an empty ID and the CLI points at
+	// `grove machine init`. (The daemon's own /api/machine handler DOES mint —
+	// it is a long-lived process for which boot-time minting is intended.)
+	if id, err := machine.Load(); err == nil && id != nil {
+		out.ID = id.ID
+	}
+	machineCfg, err := config.LoadMachineConfig()
+	if err != nil {
+		return out, err
+	}
+	for _, st := range config.ReconcileMachineEcosystems(machineCfg) {
+		out.Ecosystems = append(out.Ecosystems, models.MachineEcosystemState{
+			Name:     st.Name,
+			Path:     st.Path,
+			Notebook: st.Notebook,
+			State:    st.State,
+			Manifest: st.Manifest,
+			Enabled:  st.Enabled,
+		})
+	}
+	if machineCfg != nil {
+		names := make([]string, 0, len(machineCfg.Machine.Roots))
+		for name := range machineCfg.Machine.Roots {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			root := machineCfg.Machine.Roots[name]
+			path := expandLocalPath(root.Path)
+			info, statErr := os.Stat(path)
+			out.Roots = append(out.Roots, models.MachineRootState{
+				Name:     name,
+				Path:     path,
+				Notebook: root.Notebook,
+				Enabled:  root.Enabled == nil || *root.Enabled,
+				Exists:   statErr == nil && info.IsDir(),
+			})
+		}
+	}
+	return out, nil
+}
+
+// expandLocalPath resolves env vars, a leading ~/, and makes the result
+// absolute — the same normalization the reconciliation applies to ecosystem
+// paths, so both halves of the status read alike.
+func expandLocalPath(path string) string {
+	path = os.ExpandEnv(path)
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }
 
 // GetSyncStatus requires the daemon: sync.db lives in the global daemon, so

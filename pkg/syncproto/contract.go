@@ -90,7 +90,7 @@ type CapabilitiesRequest struct {
 	ClientVersion    string `json:"client_version,omitempty"` // Client build version
 	ProtocolVersions []int  `json:"protocol_versions"`        // Versions the client speaks
 	OriginID         string `json:"origin_id,omitempty"`      // Persistent per-install origin id
-	DeviceID         string `json:"device_id,omitempty"`      // Machine identity (from ~/.config/grove/machines)
+	DeviceID         string `json:"device_id,omitempty"`      // Durable machine identity (ULID; core/pkg/machine, XDG state)
 }
 
 // CapabilitiesResponse is the server's half of the handshake.

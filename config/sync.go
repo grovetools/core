@@ -37,9 +37,37 @@ type SyncProviderConfig struct {
 	PRsType    string `yaml:"prs_type,omitempty" toml:"prs_type,omitempty" jsonschema:"description=Note type used for imported pull requests"`
 }
 
+// Sync workspace roles (SyncWorkspace.Role) — what RELATIONSHIP this machine
+// has with the peer holding the workspace. The role, not the pull flag, is
+// what decides whether pulling is legitimate.
+const (
+	// SyncRoleSatellite: the peer is a disposable VM this machine provisions.
+	// PUSH-ONLY, always: a pulling laptop would let the satellite overwrite
+	// local notebooks, which is the invariant `grove satellite up` exists to
+	// protect.
+	SyncRoleSatellite = "satellite"
+	// SyncRolePeer: another machine of the same operator, mirroring the same
+	// notebook. Pulling is the whole point — a fresh machine materializing its
+	// own workspace has to write locally.
+	SyncRolePeer = "peer"
+	// SyncRoleRegistry: the reserved machine-presence workspace. Pulling is
+	// required to see other machines at all.
+	SyncRoleRegistry = "registry"
+)
+
 // SyncWorkspace is a per-workspace sync subscription.
 type SyncWorkspace struct {
 	Name string `yaml:"name" toml:"name" jsonschema:"description=Workspace name to sync"`
+	// Role names the relationship with the peer holding this workspace:
+	// satellite, peer, or registry.
+	//
+	// EMPTY IS LOAD-BEARING. An entry with no role is a LEGACY entry, and
+	// legacy means push-only: every guard that used to reject `pull = true`
+	// outright still rejects it for role-less entries, byte for byte. Only an
+	// explicitly-roled entry can opt into pulling, and only when its role
+	// permits it. That is what lets peers and the registry pull without
+	// weakening the satellite guarantee by a single line.
+	Role string `yaml:"role,omitempty" toml:"role,omitempty" jsonschema:"description=Relationship with the peer holding this workspace,enum=satellite,enum=peer,enum=registry"`
 	// Mode selects the subscription filter: full, plans-only, or search-only.
 	Mode string `yaml:"mode,omitempty" toml:"mode,omitempty" jsonschema:"description=Subscription mode,enum=full,enum=plans-only,enum=search-only,default=full"`
 	// Pull opts this machine into writing pulled changes to the local
@@ -130,6 +158,12 @@ func (s *SyncConfig) Validate() error {
 			return fmt.Errorf("sync workspace %q has invalid mode %q (expected %s, %s, or %s)",
 				ws.Name, ws.Mode, SyncModeFull, SyncModePlansOnly, SyncModeSearchOnly)
 		}
+		switch ws.Role {
+		case "", SyncRoleSatellite, SyncRolePeer, SyncRoleRegistry:
+		default:
+			return fmt.Errorf("sync workspace %q has invalid role %q (expected %s, %s, or %s; empty means legacy push-only)",
+				ws.Name, ws.Role, SyncRoleSatellite, SyncRolePeer, SyncRoleRegistry)
+		}
 		if ws.MaxFileSize < 0 {
 			return fmt.Errorf("sync workspace %q has negative max_file_size %d", ws.Name, ws.MaxFileSize)
 		}
@@ -140,6 +174,17 @@ func (s *SyncConfig) Validate() error {
 		}
 	}
 	return nil
+}
+
+// RolePushOnly reports whether a role forbids `pull = true`.
+//
+// The rule is deliberately narrow: only the SATELLITE relationship and LEGACY
+// (role-less) entries are push-only. The invariant it enforces is "a
+// disposable VM must never be able to write this machine's notebooks" — it was
+// never "this machine may not pull", and reading it that way is what kept a
+// workstation from mirroring its own notebook.
+func RolePushOnly(role string) bool {
+	return role == "" || role == SyncRoleSatellite
 }
 
 // ResolveToken resolves the sync bearer token using three-tier resolution,

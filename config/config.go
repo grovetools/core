@@ -154,6 +154,7 @@ var coreConfigKeys = map[string]bool{
 	"worktree":          true,
 	"onboarding":        true,
 	"security":          true,
+	"ecosystem":         true, // Repo-side ecosystem identity card (EcosystemCard)
 	"_grove":            true, // Meta section for config metadata (priority, etc.)
 }
 
@@ -360,6 +361,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		// Glob and merge additional modular TOML files from config directory
 		// Files are sorted by priority ([_grove].priority), then alphabetically within same priority
 		globalDir := filepath.Dir(globalPath)
+		warnLegacyMachinesDir(globalDir, logger)
 		pattern := filepath.Join(globalDir, "*.toml")
 		if files, err := filepath.Glob(pattern); err == nil {
 			// First pass: collect fragments with their priorities
@@ -367,8 +369,9 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 			for _, file := range files {
 				baseName := filepath.Base(file)
 				// Skip main config, override files, and the dedicated sync
-				// client config (parsed separately via LoadSyncConfig)
-				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" || baseName == "sync.toml" {
+				// and machine client configs (parsed separately via
+				// LoadSyncConfig / LoadMachineConfig)
+				if isExcludedGlobalFragment(baseName) {
 					continue
 				}
 
@@ -689,6 +692,12 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		finalConfig = &Config{}
 	}
 
+	// Compile machine.toml's subscriptions and bare roots into Groves. This
+	// runs after the final merge (so an explicit [groves.*] from any layer
+	// wins) and before SetDefaults (so compiled entries get the same
+	// Enabled=true default every other grove entry gets).
+	finalConfig = compileMachineGroves(finalConfig, loadMachineConfigForCompile())
+
 	// Set defaults
 	finalConfig.SetDefaults()
 
@@ -738,10 +747,16 @@ func LoadFromBytes(data []byte) (*Config, error) {
 	// failure on otherwise-usable configs.
 	validateAndWarn(&config, logrus.StandardLogger(), "config bytes")
 
-	// Set defaults
-	config.SetDefaults()
+	// Compile machine.toml here too: Load(path) funnels through the bytes
+	// loaders, so a caller that reads one config file directly still sees the
+	// machine's subscriptions. Fill-absent-only, so anything the bytes declare
+	// wins.
+	out := compileMachineGroves(&config, loadMachineConfigForCompile())
 
-	return &config, nil
+	// Set defaults
+	out.SetDefaults()
+
+	return out, nil
 }
 
 // LoadFromTOMLBytes parses configuration from TOML byte array
@@ -775,10 +790,13 @@ func LoadFromTOMLBytes(data []byte) (*Config, error) {
 	// Warn-only schema check. Never fatal — see the note in LoadFromBytes.
 	validateAndWarn(&config, logrus.StandardLogger(), "config TOML bytes")
 
-	// Set defaults
-	config.SetDefaults()
+	// Compile machine.toml (see LoadFromBytes).
+	out := compileMachineGroves(&config, loadMachineConfigForCompile())
 
-	return &config, nil
+	// Set defaults
+	out.SetDefaults()
+
+	return out, nil
 }
 
 // FindConfigFile searches for grove configuration files with the following precedence:
@@ -1190,8 +1208,9 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			for _, file := range files {
 				baseName := filepath.Base(file)
 				// Skip main config, override files, and the dedicated sync
-				// client config (parsed separately via LoadSyncConfig)
-				if baseName == "grove.toml" || baseName == "grove.yml" || baseName == "grove.override.toml" || baseName == "sync.toml" {
+				// and machine client configs (parsed separately via
+				// LoadSyncConfig / LoadMachineConfig)
+				if isExcludedGlobalFragment(baseName) {
 					continue
 				}
 
@@ -1381,6 +1400,12 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	if layeredConfig.Project != nil {
 		lookupConfig = mergeConfigs(lookupConfig, layeredConfig.Project)
 	}
+	// Notebook-layer resolution is driven by groves (findNotebookConfigPath →
+	// resolveNotebookContext matches the project against cfg.Groves), so the
+	// machine's subscriptions have to be compiled in BEFORE the lookup — a
+	// machine whose only grove declaration lives in machine.toml would
+	// otherwise resolve no notebook layer at all.
+	lookupConfig = compileMachineGroves(lookupConfig, loadMachineConfigForCompile())
 
 	projectRoot := startDir
 	if projectPath != "" {
@@ -1486,6 +1511,10 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			finalConfig = mergeConfigs(finalConfig, override.Config)
 		}
 	}
+
+	// Compile machine.toml last, so an explicit [groves.*] from any layer wins,
+	// and before SetDefaults so compiled entries pick up Enabled=true.
+	finalConfig = compileMachineGroves(finalConfig, loadMachineConfigForCompile())
 
 	// Set defaults for the final merged config
 	finalConfig.SetDefaults()

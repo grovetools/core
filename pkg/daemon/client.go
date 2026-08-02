@@ -503,6 +503,14 @@ type Client interface {
 	// so callers can soft-fail and hide the sync surface. LocalClient has no
 	// sync.db and returns ErrNotSupported.
 
+	// GetMachineStatus returns this host's identity (config-held name +
+	// state-held ULID) and its declared intent reconciled against the disk —
+	// which subscriptions are present, declared-missing, or unmanifested
+	// (GET /api/machine). Unlike the sync routes this one does not need a
+	// daemon: the answer is derived from config and the filesystem, so
+	// LocalClient computes it rather than refusing.
+	GetMachineStatus(ctx context.Context) (*models.MachineStatus, error)
+
 	// GetSyncStatus returns the sync engine's headline status
 	// (GET /api/sync/status): enabled flag, document/outbox counters and
 	// per-workspace cursor + hydration progress. Enabled=false (with a nil

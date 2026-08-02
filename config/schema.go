@@ -96,13 +96,14 @@ func GenerateSchemaWithThemeNames(themeNames []string) ([]byte, error) {
 		Context          *ContextConfig                `yaml:"context,omitempty" jsonschema:"description=Configuration for the cx (context) tool" jsonschema_extras:"x-layer=global,x-priority=80"`
 		Environment      *EnvironmentConfig            `yaml:"environment,omitempty" jsonschema:"description=Default environment provider configuration" jsonschema_extras:"x-layer=project,x-priority=25"`
 		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag" jsonschema_extras:"x-layer=project,x-priority=26"`
-		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty" jsonschema:"description=Root directories to search for projects and ecosystems" jsonschema_extras:"x-layer=global,x-priority=1,x-important=true"`
+		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty" jsonschema:"description=DEPRECATED: declare ecosystems and bare roots in machine.toml instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1,x-deprecated=true,x-deprecated-message=Move these to ~/.config/grove/machine.toml with 'grove machine migrate' ([machine.ecosystems.*] / [machine.roots.*]); entries here still win until deleted,x-deprecated-replacement=machine.toml [machine.ecosystems.*],x-deprecated-version=v0.6.0"`
 		SearchPaths      map[string]SearchPathConfig   `yaml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-layer=global,x-priority=1000,x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
 		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery" jsonschema_extras:"x-layer=global,x-priority=5"`
 		Commands         map[string]string             `yaml:"commands,omitempty" jsonschema:"description=Command overrides per verb (e.g. build check fmt lint)" jsonschema_extras:"x-layer=project,x-priority=22"`
 		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty" jsonschema:"description=Smart test triggering scopes" jsonschema_extras:"x-layer=project,x-priority=23"`
 		Onboarding       *OnboardingConfig             `yaml:"onboarding,omitempty" jsonschema:"description=First-run onboarding progress (completed marker + resume step)" jsonschema_extras:"x-layer=global,x-priority=90"`
 		Security         *SecurityConfig               `yaml:"security,omitempty" jsonschema:"description=Security policy (exec-bearing config trust gate)" jsonschema_extras:"x-layer=global,x-priority=95"`
+		Ecosystem        *EcosystemCard                `yaml:"ecosystem,omitempty" jsonschema:"description=Repo-side ecosystem identity card (id layout remotes notebooks); written by 'grove ecosystem init/adopt' and committed so it travels with clones" jsonschema_extras:"x-layer=ecosystem,x-priority=12,x-important=true"`
 	}
 
 	schema := r.Reflect(&BaseConfig{})

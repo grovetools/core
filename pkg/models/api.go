@@ -354,14 +354,77 @@ type SatelliteReloadSummary struct {
 	Unchanged []string `json:"unchanged"`
 }
 
+// MachineStatus mirrors the daemon's GET /api/machine payload (daemon server
+// machineStatusResponse): this host's identity plus its declared intent
+// reconciled against the disk.
+//
+// Identity is state (a ULID that never travels); intent is config
+// (machine.toml, dotfiles-portable on purpose). The reconciliation is derived
+// from the two: it is what "declared but missing" means, and it is the
+// materialization verb's input.
+type MachineStatus struct {
+	// Name is the config-held display name (machine.toml, hostname default).
+	// Never render it alone — names collide across machines restored from one
+	// dotfiles repo; pair it with the short id via machine.Describe.
+	Name string `json:"name"`
+	// ID is the state-held ULID, empty only if it could not be minted.
+	ID string `json:"id,omitempty"`
+	// ConfigPath is where the intent was read from.
+	ConfigPath string `json:"config_path,omitempty"`
+	// Ecosystems is every [machine.ecosystems.*] subscription reconciled
+	// against the disk, sorted by name.
+	Ecosystems []MachineEcosystemState `json:"ecosystems,omitempty"`
+	// Roots is every [machine.roots.*] bare scan root. Roots are never
+	// reconciled — nothing can materialize one.
+	Roots []MachineRootState `json:"roots,omitempty"`
+}
+
+// MachineEcosystemState is one reconciled subscription (core config
+// MachineEcosystemState).
+type MachineEcosystemState struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Notebook string `json:"notebook,omitempty"`
+	// State is "present", "declared-missing", or "unmanifested".
+	State    string `json:"state"`
+	Manifest string `json:"manifest,omitempty"`
+	Enabled  bool   `json:"enabled"`
+}
+
+// MachineRootState is one declared bare scan root.
+type MachineRootState struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Notebook string `json:"notebook,omitempty"`
+	Enabled  bool   `json:"enabled"`
+	// Exists is a plain stat, reported for diagnosis only: a missing root is
+	// not actionable the way a missing ecosystem is.
+	Exists bool `json:"exists"`
+}
+
 // SyncStatus mirrors the daemon's GET /api/sync/status payload
 // (daemon server syncStatusResponse). The route is served on the 0600 unix
 // socket only; scoped daemons proxy it to the global daemon, which owns
 // sync.db. Enabled=false means sync is not configured on the global daemon.
 type SyncStatus struct {
-	Enabled           bool   `json:"enabled"`
-	DBPath            string `json:"db_path,omitempty"`
-	OriginID          string `json:"origin_id,omitempty"`
+	Enabled bool   `json:"enabled"`
+	DBPath  string `json:"db_path,omitempty"`
+	// MachineName/MachineID are this host's identity: the config-held display
+	// name (machine.toml, hostname default) and the state-held ULID
+	// (core/pkg/machine). Present whether or not sync is enabled. Render them
+	// together as "name (short id)" via machine.Describe — never the name
+	// alone, which collides across machines restored from one dotfiles repo.
+	// Empty on a daemon that predates the fields.
+	MachineName string `json:"machine_name,omitempty"`
+	MachineID   string `json:"machine_id,omitempty"`
+	// OriginID is the per-sync.db install id and dies with that DB — a
+	// diagnostic (same MachineID + new OriginID = wiped sync.db), not this
+	// machine's identity.
+	OriginID string `json:"origin_id,omitempty"`
+	// Server is the configured grove-syncd base URL this machine pushes to
+	// and pulls from — the "where" behind the counters. Empty on a daemon
+	// that predates the field or has no sync server configured.
+	Server            string `json:"server,omitempty"`
 	Documents         int    `json:"documents"`
 	DocumentsDiverged int    `json:"documents_diverged"`
 	// OutboxPending is the TOTAL unsynced count, parked included;
@@ -378,6 +441,18 @@ type SyncWorkspaceStatus struct {
 	Cursor       int64                  `json:"cursor"`
 	LastSyncedAt time.Time              `json:"last_synced_at,omitzero"`
 	Hydration    *SyncHydrationProgress `json:"hydration,omitempty"`
+	// Pull and Mode mirror this workspace's sync subscription
+	// (config.SyncWorkspace): Pull=false means push-only (pulled changes are
+	// never written to the local tree), Mode filters what is subscribed
+	// (full, plans-only, search-only). Both are zero when sync.db holds state
+	// for a workspace the config no longer subscribes to.
+	Pull bool   `json:"pull,omitempty"`
+	Mode string `json:"mode,omitempty"`
+	// Role is the relationship with the peer holding this workspace:
+	// satellite, peer, or registry. EMPTY means a legacy (role-less) entry,
+	// which is push-only — render it as a bare direction glyph rather than
+	// inventing a role it never declared.
+	Role string `json:"role,omitempty"`
 }
 
 // SyncHydrationProgress is a snapshot of one workspace's tree-walk reconcile

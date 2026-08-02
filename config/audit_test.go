@@ -141,13 +141,16 @@ func TestAuditNestedCoreStructs(t *testing.T) {
 	projectConfig := `
 version = "1.0"
 
+[notebooks.definitions.personal]
+root_dir = "~/notebooks/personal"
+plans_path_template = "plans"
+
+[notebooks.definitions.work]
+root_dir = "~/notebooks/work"
+not_a_field = true
+
 [groves.personal]
 path = "~/code"
-description = "personal projects"
-
-[groves.work]
-path = "~/work"
-not_a_field = true
 
 [daemon]
 bogus_daemon_key = 1
@@ -161,10 +164,15 @@ bogus_daemon_key = 1
 		t.Fatalf("Audit failed: %v", err)
 	}
 
-	requireClass(t, findings, "groves.personal.path", AuditKnownCore)
-	requireClass(t, findings, "groves.personal.description", AuditKnownCore)
-	requireClass(t, findings, "groves.work.not_a_field", AuditUnknownNested)
+	requireClass(t, findings, "notebooks.definitions.personal.root_dir", AuditKnownCore)
+	requireClass(t, findings, "notebooks.definitions.personal.plans_path_template", AuditKnownCore)
+	requireClass(t, findings, "notebooks.definitions.work.not_a_field", AuditUnknownNested)
 	requireClass(t, findings, "daemon.bogus_daemon_key", AuditUnknownNested)
+
+	// [groves.*] carries deprecation tags now that machine.toml is where
+	// ecosystems and bare roots are declared, so the audit classifies the
+	// whole key as deprecated (and stops descending) rather than orphan.
+	requireClass(t, findings, "groves", AuditDeprecated)
 }
 
 // TestAuditKeybindingsFreeForm verifies that arbitrary package names under

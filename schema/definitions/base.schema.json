@@ -387,6 +387,80 @@
       },
       "type": "object"
     },
+    "EcosystemCard": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable ULID identifying this ecosystem across machines and clones (minted once; never edited)",
+          "type": "string",
+          "x-important": true,
+          "x-layer": "ecosystem",
+          "x-priority": "12"
+        },
+        "layout": {
+          "description": "How this ecosystem is materialized: superrepo (submodules under one root repo) or flat (independent repos)",
+          "enum": [
+            "superrepo",
+            "flat"
+          ],
+          "type": "string",
+          "x-important": true,
+          "x-layer": "ecosystem",
+          "x-priority": "13"
+        },
+        "notebooks": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EcosystemNotebook"
+          },
+          "description": "Notebooks bound to this ecosystem keyed by notebook name",
+          "type": "object",
+          "x-layer": "ecosystem",
+          "x-priority": "15"
+        },
+        "remotes": {
+          "description": "Git remotes a peer clones this ecosystem from",
+          "items": {
+            "$ref": "#/$defs/EcosystemRemote"
+          },
+          "type": "array",
+          "x-layer": "ecosystem",
+          "x-priority": "14"
+        }
+      },
+      "type": "object"
+    },
+    "EcosystemNotebook": {
+      "additionalProperties": false,
+      "properties": {
+        "audience": {
+          "description": "Audience label for this notebook (e.g. personal org)",
+          "type": "string"
+        },
+        "default": {
+          "description": "This is the ecosystem's default notebook",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "EcosystemRemote": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Git remote name (e.g. origin)",
+          "type": "string"
+        },
+        "url": {
+          "description": "Git remote URL a peer clones from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ],
+      "type": "object"
+    },
     "EnvironmentConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1542,6 +1616,13 @@
       "x-layer": "global",
       "x-priority": "80"
     },
+    "ecosystem": {
+      "$ref": "#/$defs/EcosystemCard",
+      "description": "Repo-side ecosystem identity card (id layout remotes notebooks); written by 'grove ecosystem init/adopt' and committed so it travels with clones",
+      "x-important": true,
+      "x-layer": "ecosystem",
+      "x-priority": "12"
+    },
     "environment": {
       "$ref": "#/$defs/EnvironmentConfig",
       "description": "Default environment provider configuration",
@@ -1570,9 +1651,12 @@
       "additionalProperties": {
         "$ref": "#/$defs/GroveSourceConfig"
       },
-      "description": "Root directories to search for projects and ecosystems",
+      "description": "DEPRECATED: declare ecosystems and bare roots in machine.toml instead",
       "type": "object",
-      "x-important": true,
+      "x-deprecated": true,
+      "x-deprecated-message": "Move these to ~/.config/grove/machine.toml with 'grove machine migrate' ([machine.ecosystems.*] / [machine.roots.*]); entries here still win until deleted",
+      "x-deprecated-replacement": "machine.toml [machine.ecosystems.*]",
+      "x-deprecated-version": "v0.6.0",
       "x-layer": "global",
       "x-priority": "1"
     },
