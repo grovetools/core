@@ -424,9 +424,17 @@ type SyncStatus struct {
 	// Server is the configured grove-syncd base URL this machine pushes to
 	// and pulls from — the "where" behind the counters. Empty on a daemon
 	// that predates the field or has no sync server configured.
-	Server            string `json:"server,omitempty"`
-	Documents         int    `json:"documents"`
-	DocumentsDiverged int    `json:"documents_diverged"`
+	Server string `json:"server,omitempty"`
+	// AuthError is non-empty while the sync server is REJECTING this machine's
+	// bearer token (401) — the stale-token trap a destroyed-and-recreated
+	// server leaves behind. It matters because every other field below stays
+	// plausible while nothing at all replicates, so surfaces must render it
+	// prominently rather than as one more diagnostic. AuthErrorSince marks
+	// when the rejection began. Empty on a daemon that predates the fields.
+	AuthError         string    `json:"auth_error,omitempty"`
+	AuthErrorSince    time.Time `json:"auth_error_since,omitzero"`
+	Documents         int       `json:"documents"`
+	DocumentsDiverged int       `json:"documents_diverged"`
 	// OutboxPending is the TOTAL unsynced count, parked included;
 	// OutboxParked splits out the parked subset.
 	OutboxPending int                   `json:"outbox_pending"`
