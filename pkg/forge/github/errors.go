@@ -52,13 +52,34 @@ func classify(op string, stderr []byte, err error) error {
 			"gh is not authenticated: %s", trimmed)
 
 	case containsAny(msg,
+		// This list is wider than the shapes plain `gh` emits, on purpose. The
+		// pipeline-live trial (plan hosted-git-and-prs,
+		// .artifacts/forge-pipeline-live/report.md finding 3) pointed the
+		// provider at a dead port and got `(permanent)` in the poller cache:
+		// the transport in front of gh worded its refusal differently, nothing
+		// here matched, and the unclassifiable fallthrough below took it. A
+		// refused, reset, unroutable or unresolvable endpoint is never a
+		// permanent statement ABOUT A REPOSITORY — it says the network is
+		// broken, which is what ClassUnavailable means and what makes a
+		// surface render "we could not ask" instead of a verdict.
 		"dial tcp",
 		"no such host",
 		"network is unreachable",
+		"network is down",
 		"connection refused",
+		"econnrefused",
+		"refused connection",
+		"urlerror",
 		"connection reset",
+		"no route to host",
 		"tls handshake",
 		"i/o timeout",
+		"connection timed out",
+		"operation timed out",
+		"context deadline exceeded",
+		"unexpected eof",
+		"proxyconnect",
+		"server misbehaving",
 		"temporary failure in name resolution",
 	):
 		return forge.Errorf(forge.ClassUnavailable, providerName, op, err,

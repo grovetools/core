@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -27,16 +28,22 @@ const DefaultForgeRemoteName = "forge"
 
 // ForgeConfig is the typed [forge] block.
 //
-// The self-hosted-instance fields (URL, RemoteName, TokenCommand) remain
-// parse-only: no code contacts the URL, enrolls the remote, or executes
-// TokenCommand. Resolving TokenCommand is the daemon's job — core/pkg/forge
-// accepts an already-resolved token and never shells out for one — so this
-// struct carries the string and nothing more.
+// The instance fields (URL, RemoteName, TokenCommand) are no longer inert: the
+// GLOBAL DAEMON reads them to construct a forgejo provider and resolves
+// TokenCommand itself (see ForgePollConfig and the daemon's forge poller).
+// Token custody stays daemon-side by construction — core/pkg/forge accepts an
+// already-resolved token and never shells out for one, and no CLI or TUI in the
+// ecosystem executes TokenCommand. This struct still only carries the string.
 //
-// The one field that IS acted on is Poll, the daemon forge poller's opt-in.
-// It sits here because it configures forge integration, not because it
-// configures the instance above it: the poller reads whatever forge a repo's
-// origin resolves to (GitHub today) and works fine with no [forge] URL at all.
+// Poll is the daemon forge poller's opt-in. It sits here because it configures
+// forge integration, not because it configures the instance above it: with no
+// URL at all the poller falls back to GitHub-via-`gh` over repo origins.
+//
+// Infra and Services configure `grove forge up` — the services VM that HOSTS
+// the instance URL points at. They are CLI-side inputs the daemon never reads,
+// nested under [forge] rather than parked in a sibling top-level key because
+// every other host-lifecycle block in grove nests under the noun it belongs to
+// ([satellites.<name>.infra], [satellites.<name>.provision]).
 type ForgeConfig struct {
 	// URL is the base URL of the self-hosted forge instance.
 	URL string `yaml:"url,omitempty" toml:"url,omitempty" jsonschema:"description=Base URL of the self-hosted forge instance"`
@@ -44,12 +51,38 @@ type ForgeConfig struct {
 	// DefaultForgeRemoteName; see EffectiveRemoteName.
 	RemoteName string `yaml:"remote_name,omitempty" toml:"remote_name,omitempty" jsonschema:"description=Git remote name for the forge,default=forge"`
 	// TokenCommand is a shell command whose trimmed stdout is the forge API
-	// token. It is stored, never executed here.
-	TokenCommand string `yaml:"token_command,omitempty" toml:"token_command,omitempty" jsonschema:"description=Shell command that prints the forge API token" jsonschema_extras:"x-sensitive=true,x-hint=Prefer token_command over embedding a token in config"`
+	// token. It is stored here, and executed ONLY by the global daemon.
+	TokenCommand string `yaml:"token_command,omitempty" toml:"token_command,omitempty" jsonschema:"description=Shell command that prints the forge API token (executed by the global daemon only)" jsonschema_extras:"x-sensitive=true,x-hint=Prefer token_command over embedding a token in config"`
+	// Provider selects which forge provider the daemon poller constructs. See
+	// the ForgeProvider* constants; empty means ForgeProviderAuto.
+	Provider string `yaml:"provider,omitempty" toml:"provider,omitempty" jsonschema:"description=Forge provider the daemon poller uses: auto|forgejo|github,default=auto"`
 	// Poll is the [forge.poll] sub-block configuring the daemon's read-only
 	// forge poller. Absent means the poller stays off.
 	Poll *ForgePollConfig `yaml:"poll,omitempty" toml:"poll,omitempty" jsonschema:"description=Daemon read-only forge poller (PR + checks state)"`
+	// Infra is the [forge.infra] sub-block: terraform inputs for the services
+	// VM `grove forge up` provisions.
+	Infra *ForgeInfraConfig `yaml:"infra,omitempty" toml:"infra,omitempty" jsonschema:"description=Terraform inputs for the grove forge services VM"`
+	// Services is the [forge.services] sub-block: what the services VM runs
+	// (Forgejo, grove-syncd) and how it terminates TLS.
+	Services *ForgeServicesConfig `yaml:"services,omitempty" toml:"services,omitempty" jsonschema:"description=Services colocated on the grove forge VM"`
 }
+
+// Forge provider selectors for [forge] provider.
+//
+// The default is deliberately derived rather than fixed: a machine that has
+// declared a [forge] url wants that instance polled, and one that has not still
+// wants the GitHub-over-origin behavior the poller shipped with. Naming a
+// provider explicitly is the escape hatch for the mixed case (a forge VM
+// configured for hosting, but PRs still watched on GitHub).
+const (
+	// ForgeProviderAuto picks forgejo when a URL is configured, else github.
+	ForgeProviderAuto = "auto"
+	// ForgeProviderForgejo forces the Forgejo/Gitea REST provider. It requires
+	// a URL.
+	ForgeProviderForgejo = "forgejo"
+	// ForgeProviderGitHub forces the GitHub-via-`gh` provider, ignoring URL.
+	ForgeProviderGitHub = "github"
+)
 
 // Poller cadence bounds. The floor exists so a typo cannot turn the daemon into
 // a request generator against someone else's API; the defaults are what a
@@ -154,6 +187,320 @@ func (f *ForgeConfig) EffectiveRemoteName() string {
 	return strings.TrimSpace(f.RemoteName)
 }
 
+// EffectiveProvider resolves Provider, including the "auto" derivation: a
+// configured URL means the self-hosted instance is the thing worth polling.
+// An unrecognized value resolves to auto rather than erroring — Validate is
+// where a typo is reported, and an optional read-only poller must never be a
+// reason the daemon does not boot.
+func (f *ForgeConfig) EffectiveProvider() string {
+	raw := ""
+	if f != nil {
+		raw = strings.ToLower(strings.TrimSpace(f.Provider))
+	}
+	switch raw {
+	case ForgeProviderForgejo, ForgeProviderGitHub:
+		return raw
+	}
+	if f.IsConfigured() {
+		return ForgeProviderForgejo
+	}
+	return ForgeProviderGitHub
+}
+
+// Host is the hostname of the configured forge URL, lowercased — the value a
+// caller compares a git remote's host against. Empty when no URL is set or it
+// does not parse.
+func (f *ForgeConfig) Host() string {
+	if f == nil {
+		return ""
+	}
+	raw := strings.TrimSpace(f.URL)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// ---- [forge.infra] --------------------------------------------------------
+
+// Defaults for the services VM. e2-medium rather than the trial's e2-small:
+// two services (Forgejo's Go binary plus grove-syncd) on 2 GB was tight, and
+// the difference is a few dollars a month on a machine that is a pet.
+const (
+	// DefaultForgeVMName is the instance name (also the network tag and the
+	// firewall-rule prefix) when [forge.infra] does not say otherwise.
+	DefaultForgeVMName = "grove-forge"
+	// DefaultForgeMachineType is the GCE machine type for the services VM.
+	DefaultForgeMachineType = "e2-medium"
+	// DefaultForgeZone matches the satellite module's default zone.
+	DefaultForgeZone = "us-east1-b"
+	// DefaultForgeDiskSizeGB sizes the boot disk. The forge accumulates
+	// durable refs, so this is the one dimension worth over-provisioning.
+	DefaultForgeDiskSizeGB = 50
+	// DefaultForgeImageFamily/Project pin Debian 12 (the concept's choice; the
+	// satellite module's Ubuntu is a build host, this is a service host).
+	DefaultForgeImageFamily  = "debian-12"
+	DefaultForgeImageProject = "debian-cloud"
+)
+
+// ForgeInfraConfig is the [forge.infra] block: the terraform inputs for the
+// services VM. It mirrors [satellites.<name>.infra] key-for-key where the two
+// overlap, so an operator who has provisioned a satellite already knows this
+// block — but it is a SEPARATE block under a separate noun, because the forge
+// is a pet and the satellite verbs are cattle verbs.
+type ForgeInfraConfig struct {
+	// Project is the GCP project id (terraform var project_id). Required.
+	Project string `yaml:"project,omitempty" toml:"project,omitempty" jsonschema:"description=GCP project id for the forge VM"`
+	// Zone is the GCP zone (terraform var zone).
+	Zone string `yaml:"zone,omitempty" toml:"zone,omitempty" jsonschema:"description=GCP zone for the forge VM,default=us-east1-b"`
+	// VMName is the instance name, network tag and firewall-rule prefix.
+	VMName string `yaml:"vm_name,omitempty" toml:"vm_name,omitempty" jsonschema:"description=Forge VM instance name,default=grove-forge"`
+	// MachineType is the GCE machine type.
+	MachineType string `yaml:"machine_type,omitempty" toml:"machine_type,omitempty" jsonschema:"description=GCE machine type,default=e2-medium"`
+	// DiskSizeGB sizes the boot disk (which holds every git ref the forge ever
+	// accepts, plus its SQLite database).
+	DiskSizeGB int `yaml:"disk_size_gb,omitempty" toml:"disk_size_gb,omitempty" jsonschema:"description=Boot disk size in GB,default=50"`
+	// ImageFamily/ImageProject select the OS image.
+	ImageFamily  string `yaml:"image_family,omitempty" toml:"image_family,omitempty" jsonschema:"description=OS image family,default=debian-12"`
+	ImageProject string `yaml:"image_project,omitempty" toml:"image_project,omitempty" jsonschema:"description=Project owning the OS image,default=debian-cloud"`
+	// SSHUser is the login user provisioned via instance metadata. Required.
+	SSHUser string `yaml:"ssh_user,omitempty" toml:"ssh_user,omitempty" jsonschema:"description=SSH login user on the forge VM"`
+	// SSHPubkeyFile is the public key authorized for SSHUser.
+	SSHPubkeyFile string `yaml:"ssh_pubkey_file,omitempty" toml:"ssh_pubkey_file,omitempty" jsonschema:"description=SSH public key granted access,default=~/.ssh/id_ed25519.pub"`
+	// IdentityFile is the private key `grove forge` uses to reach the VM.
+	IdentityFile string `yaml:"identity_file,omitempty" toml:"identity_file,omitempty" jsonschema:"description=SSH private key used to reach the forge VM"`
+	// CIDR is the operator CIDR allowed to reach tcp/22 and the service ports.
+	// 0.0.0.0/0 is refused, here and in the terraform module.
+	CIDR string `yaml:"cidr,omitempty" toml:"cidr,omitempty" jsonschema:"description=Operator CIDR allowed to reach SSH and the service ports (never 0.0.0.0/0)"`
+	// ServiceAccountEmail attaches an EXISTING service account. Empty is the
+	// recommended value: the module then creates a dedicated one with no IAM
+	// roles and no OAuth scopes, closing the trial's finding that the default
+	// compute SA can read every bucket in the project.
+	ServiceAccountEmail string `yaml:"service_account_email,omitempty" toml:"service_account_email,omitempty" jsonschema:"description=Existing service account to attach; empty means create a dedicated no-scope one"`
+	// EnableIAPSSH adds the IAP TCP-forwarding range (35.235.240.0/20) to the
+	// SSH rule, so SSH survives a laptop IP rotation. Nil means enabled.
+	EnableIAPSSH *bool `yaml:"enable_iap_ssh,omitempty" toml:"enable_iap_ssh,omitempty" jsonschema:"description=Allow IAP TCP forwarding to tcp/22,default=true"`
+}
+
+// EffectiveZone and friends resolve one field each against its default. They
+// are nil-safe: an absent [forge.infra] block still yields a usable plan for
+// everything that HAS a default, and the required fields are reported by
+// Validate rather than defaulted to something wrong.
+func (i *ForgeInfraConfig) EffectiveZone() string {
+	return forgeStringDefault(i.rawZone(), DefaultForgeZone)
+}
+
+func (i *ForgeInfraConfig) EffectiveVMName() string {
+	return forgeStringDefault(i.rawVMName(), DefaultForgeVMName)
+}
+
+func (i *ForgeInfraConfig) EffectiveMachineType() string {
+	return forgeStringDefault(i.rawMachineType(), DefaultForgeMachineType)
+}
+
+func (i *ForgeInfraConfig) EffectiveImageFamily() string {
+	return forgeStringDefault(i.rawImageFamily(), DefaultForgeImageFamily)
+}
+
+func (i *ForgeInfraConfig) EffectiveImageProject() string {
+	return forgeStringDefault(i.rawImageProject(), DefaultForgeImageProject)
+}
+
+// EffectiveDiskSizeGB clamps a nonsensical (zero or negative) size up to the
+// default rather than shipping it to terraform.
+func (i *ForgeInfraConfig) EffectiveDiskSizeGB() int {
+	if i == nil || i.DiskSizeGB <= 0 {
+		return DefaultForgeDiskSizeGB
+	}
+	return i.DiskSizeGB
+}
+
+// IAPSSHEnabled reports whether the IAP range joins the SSH rule. Absent means
+// enabled: the alternative to IAP is pinning a laptop IP that rotates, and the
+// trial's hardening ledger already had to un-wedge exactly that.
+func (i *ForgeInfraConfig) IAPSSHEnabled() bool {
+	if i == nil || i.EnableIAPSSH == nil {
+		return true
+	}
+	return *i.EnableIAPSSH
+}
+
+func (i *ForgeInfraConfig) rawZone() string {
+	if i == nil {
+		return ""
+	}
+	return i.Zone
+}
+
+func (i *ForgeInfraConfig) rawVMName() string {
+	if i == nil {
+		return ""
+	}
+	return i.VMName
+}
+
+func (i *ForgeInfraConfig) rawMachineType() string {
+	if i == nil {
+		return ""
+	}
+	return i.MachineType
+}
+
+func (i *ForgeInfraConfig) rawImageFamily() string {
+	if i == nil {
+		return ""
+	}
+	return i.ImageFamily
+}
+
+func (i *ForgeInfraConfig) rawImageProject() string {
+	if i == nil {
+		return ""
+	}
+	return i.ImageProject
+}
+
+// ---- [forge.services] -----------------------------------------------------
+
+// TLS modes for the services VM.
+const (
+	// ForgeTLSSelfSigned generates a certificate on the VM at first boot and
+	// pins it by fingerprint (surfaced by `grove forge status`). It is the
+	// default because it needs no DNS, no registrar, and — unlike an ACME
+	// HTTP-01 challenge — no 0.0.0.0/0 ingress on :80.
+	ForgeTLSSelfSigned = "self-signed"
+	// ForgeTLSACME obtains a real certificate via ACME DNS-01. HTTP-01 is
+	// deliberately not offered: it would require opening :80 to the world,
+	// which this module refuses to do for any port.
+	ForgeTLSACME = "acme"
+)
+
+// Service defaults.
+const (
+	// DefaultForgejoHTTPPort is Forgejo's HTTP port (its own default).
+	DefaultForgejoHTTPPort = 3000
+	// DefaultForgeSyncdPort is the grove-syncd bind port, matching the
+	// satellite sync contract's remote default (127.0.0.1:8788).
+	DefaultForgeSyncdPort = 8788
+)
+
+// ForgeServicesConfig is the [forge.services] block: what runs on the VM.
+//
+// Forgejo and grove-syncd are colocated deliberately (forge-hosting.md): same
+// TLS discipline, same token discipline, one box to administer and back up.
+type ForgeServicesConfig struct {
+	// Domain is the DNS name the services are reached at. Empty means the
+	// external IP is the only address, which forces ForgeTLSSelfSigned.
+	Domain string `yaml:"domain,omitempty" toml:"domain,omitempty" jsonschema:"description=DNS name of the forge services VM"`
+	// TLSMode is ForgeTLSSelfSigned (default) or ForgeTLSACME.
+	TLSMode string `yaml:"tls_mode,omitempty" toml:"tls_mode,omitempty" jsonschema:"description=TLS strategy: self-signed|acme,default=self-signed"`
+	// ACMEEmail is the registration contact for ForgeTLSACME.
+	ACMEEmail string `yaml:"acme_email,omitempty" toml:"acme_email,omitempty" jsonschema:"description=ACME account email (tls_mode = acme)"`
+	// ACMEDNSProvider is the lego DNS-01 provider code (e.g. "cloudflare",
+	// "gcloud"). Required for ForgeTLSACME — see the TLS mode comment for why
+	// DNS-01 is the only challenge offered.
+	ACMEDNSProvider string `yaml:"acme_dns_provider,omitempty" toml:"acme_dns_provider,omitempty" jsonschema:"description=lego DNS-01 provider code (tls_mode = acme)"`
+	// Forgejo configures the Forgejo service.
+	Forgejo *ForgejoServiceConfig `yaml:"forgejo,omitempty" toml:"forgejo,omitempty" jsonschema:"description=Forgejo service on the forge VM"`
+	// Syncd configures the colocated grove-syncd service.
+	Syncd *ForgeSyncdServiceConfig `yaml:"syncd,omitempty" toml:"syncd,omitempty" jsonschema:"description=grove-syncd service on the forge VM"`
+}
+
+// ForgejoServiceConfig is [forge.services.forgejo].
+//
+// Registration-off and INSTALL_LOCK are NOT configurable: an open forge is a
+// posture change, not a preference, and the trial already proved the headless
+// install path works with both nailed down.
+type ForgejoServiceConfig struct {
+	// Version is the Forgejo release to install (e.g. "16.0.2"). Required to
+	// provision: an unpinned forge is one upstream release away from a
+	// surprise.
+	Version string `yaml:"version,omitempty" toml:"version,omitempty" jsonschema:"description=Forgejo release version to install"`
+	// SHA256 is the hex checksum of the release binary. Required alongside
+	// Version — a pinned version with an unverified download is not a pin.
+	SHA256 string `yaml:"sha256,omitempty" toml:"sha256,omitempty" jsonschema:"description=SHA-256 of the Forgejo release binary"`
+	// HTTPPort is the port Forgejo listens on. Exposure stays limited to the
+	// operator CIDR regardless; see the module's firewall rules.
+	HTTPPort int `yaml:"http_port,omitempty" toml:"http_port,omitempty" jsonschema:"description=Forgejo HTTP port,default=3000"`
+	// SiteName is Forgejo's APP_NAME.
+	SiteName string `yaml:"site_name,omitempty" toml:"site_name,omitempty" jsonschema:"description=Forgejo site name,default=grove forge"`
+}
+
+// EffectiveHTTPPort resolves HTTPPort against Forgejo's own default.
+func (f *ForgejoServiceConfig) EffectiveHTTPPort() int {
+	if f == nil || f.HTTPPort <= 0 {
+		return DefaultForgejoHTTPPort
+	}
+	return f.HTTPPort
+}
+
+// EffectiveSiteName resolves SiteName.
+func (f *ForgejoServiceConfig) EffectiveSiteName() string {
+	if f == nil || strings.TrimSpace(f.SiteName) == "" {
+		return "grove forge"
+	}
+	return strings.TrimSpace(f.SiteName)
+}
+
+// ForgeSyncdServiceConfig is [forge.services.syncd].
+type ForgeSyncdServiceConfig struct {
+	// Enabled colocates grove-syncd on the forge VM. Nil means enabled — the
+	// colocation IS the design (one box, one TLS story).
+	Enabled *bool `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Colocate grove-syncd on the forge VM,default=true"`
+	// Port is the TLS bind port. grove-syncd refuses a non-loopback bind
+	// without TLS, and this module never disables that.
+	Port int `yaml:"port,omitempty" toml:"port,omitempty" jsonschema:"description=grove-syncd TLS bind port,default=8788"`
+}
+
+// SyncdEnabled reports whether grove-syncd is colocated (nil-safe, default on).
+func (s *ForgeServicesConfig) SyncdEnabled() bool {
+	if s == nil || s.Syncd == nil || s.Syncd.Enabled == nil {
+		return true
+	}
+	return *s.Syncd.Enabled
+}
+
+// EffectiveSyncdPort resolves the syncd bind port.
+func (s *ForgeServicesConfig) EffectiveSyncdPort() int {
+	if s == nil || s.Syncd == nil || s.Syncd.Port <= 0 {
+		return DefaultForgeSyncdPort
+	}
+	return s.Syncd.Port
+}
+
+// EffectiveTLSMode resolves TLSMode. An ACME mode with no domain degrades to
+// self-signed rather than rendering a plan that cannot possibly succeed;
+// Validate reports the misconfiguration to whoever asked.
+func (s *ForgeServicesConfig) EffectiveTLSMode() string {
+	raw := ""
+	if s != nil {
+		raw = strings.ToLower(strings.TrimSpace(s.TLSMode))
+	}
+	if raw == ForgeTLSACME && s.EffectiveDomain() != "" {
+		return ForgeTLSACME
+	}
+	return ForgeTLSSelfSigned
+}
+
+// EffectiveDomain resolves Domain (nil-safe, trimmed, lowercased).
+func (s *ForgeServicesConfig) EffectiveDomain() string {
+	if s == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(s.Domain))
+}
+
+func forgeStringDefault(raw, def string) string {
+	if trimmed := strings.TrimSpace(raw); trimmed != "" {
+		return trimmed
+	}
+	return def
+}
+
 // IsConfigured reports whether a usable forge is declared. An empty or
 // missing block means "no forge", which is the normal state for every
 // worktree today.
@@ -187,6 +534,21 @@ func (f *ForgeConfig) Validate() error {
 			return err
 		}
 	}
+	switch strings.ToLower(strings.TrimSpace(f.Provider)) {
+	case "", ForgeProviderAuto, ForgeProviderForgejo, ForgeProviderGitHub:
+	default:
+		return fmt.Errorf("forge provider %q must be one of %q, %q, %q", f.Provider,
+			ForgeProviderAuto, ForgeProviderForgejo, ForgeProviderGitHub)
+	}
+	if strings.EqualFold(strings.TrimSpace(f.Provider), ForgeProviderForgejo) && !f.IsConfigured() {
+		return fmt.Errorf("forge provider %q needs a [forge] url to poll", ForgeProviderForgejo)
+	}
+	if err := f.Infra.Validate(); err != nil {
+		return err
+	}
+	if err := f.Services.Validate(); err != nil {
+		return err
+	}
 	if f.Poll != nil {
 		// Report a typo'd duration to whoever asked for validation. The runtime
 		// path never consults this: EffectiveInterval/EffectiveStaleAfter fall
@@ -207,6 +569,173 @@ func (f *ForgeConfig) Validate() error {
 			if parsed <= 0 {
 				return fmt.Errorf("forge poll %s %q must be positive", d.field, d.raw)
 			}
+		}
+	}
+	return nil
+}
+
+// Validate checks the [forge.infra] block's structure. Like ForgeConfig.Validate
+// it is never called on the config load path.
+func (i *ForgeInfraConfig) Validate() error {
+	if i == nil {
+		return nil
+	}
+	if cidr := strings.TrimSpace(i.CIDR); cidr != "" {
+		if err := validateForgeCIDR("forge infra cidr", cidr); err != nil {
+			return err
+		}
+	}
+	if name := strings.TrimSpace(i.VMName); name != "" {
+		// The name becomes a GCE resource name and a firewall-rule prefix, both
+		// of which are RFC1035-shaped. Rejecting here beats a terraform apply
+		// failing halfway through creating a firewall rule.
+		if err := validateForgeResourceName("forge infra vm_name", name); err != nil {
+			return err
+		}
+	}
+	if i.DiskSizeGB < 0 {
+		return fmt.Errorf("forge infra disk_size_gb %d must be positive", i.DiskSizeGB)
+	}
+	return nil
+}
+
+// Validate checks the [forge.services] block's structure.
+func (s *ForgeServicesConfig) Validate() error {
+	if s == nil {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(s.TLSMode)) {
+	case "", ForgeTLSSelfSigned:
+	case ForgeTLSACME:
+		if s.EffectiveDomain() == "" {
+			return fmt.Errorf("forge services tls_mode %q needs a domain", ForgeTLSACME)
+		}
+		if strings.TrimSpace(s.ACMEDNSProvider) == "" {
+			// HTTP-01 would need :80 open to the world, which the module
+			// refuses; so an ACME setup without a DNS provider has no challenge
+			// it can actually complete.
+			return fmt.Errorf("forge services tls_mode %q needs acme_dns_provider (only the DNS-01 challenge is offered — HTTP-01 would require 0.0.0.0/0 on :80)", ForgeTLSACME)
+		}
+		if strings.TrimSpace(s.ACMEEmail) == "" {
+			return fmt.Errorf("forge services tls_mode %q needs acme_email", ForgeTLSACME)
+		}
+	default:
+		return fmt.Errorf("forge services tls_mode %q must be %q or %q", s.TLSMode, ForgeTLSSelfSigned, ForgeTLSACME)
+	}
+	if s.Forgejo != nil {
+		if err := validateForgePort("forge services forgejo http_port", s.Forgejo.HTTPPort); err != nil {
+			return err
+		}
+		if v := strings.TrimSpace(s.Forgejo.Version); v != "" {
+			if strings.TrimSpace(s.Forgejo.SHA256) == "" {
+				return fmt.Errorf("forge services forgejo version %q needs a sha256 (a pinned version with an unverified download is not a pin)", v)
+			}
+		}
+		if sum := strings.TrimSpace(s.Forgejo.SHA256); sum != "" {
+			if err := validateForgeSHA256("forge services forgejo sha256", sum); err != nil {
+				return err
+			}
+		}
+	}
+	if s.Syncd != nil {
+		if err := validateForgePort("forge services syncd port", s.Syncd.Port); err != nil {
+			return err
+		}
+	}
+	if s.Forgejo != nil && s.Syncd != nil &&
+		s.Forgejo.EffectiveHTTPPort() == s.EffectiveSyncdPort() {
+		return fmt.Errorf("forge services forgejo http_port and syncd port are both %d — colocated services cannot share a port", s.EffectiveSyncdPort())
+	}
+	return nil
+}
+
+// ValidateForProvision is the STRICTER gate `grove forge up`/`plan` runs: it
+// additionally requires the inputs terraform has no default for, so a
+// provision aborts while it is still free rather than halfway through an apply.
+// Validate stays the structural check for everyone else.
+func (f *ForgeConfig) ValidateForProvision() error {
+	if err := f.Validate(); err != nil {
+		return err
+	}
+	if f == nil || f.Infra == nil {
+		return fmt.Errorf("no [forge.infra] block: `grove forge up` needs project, ssh_user and cidr")
+	}
+	var missing []string
+	if strings.TrimSpace(f.Infra.Project) == "" {
+		missing = append(missing, "project")
+	}
+	if strings.TrimSpace(f.Infra.SSHUser) == "" {
+		missing = append(missing, "ssh_user")
+	}
+	if strings.TrimSpace(f.Infra.CIDR) == "" {
+		missing = append(missing, "cidr")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("[forge.infra] is missing %s (no terraform defaults exist for these)", strings.Join(missing, ", "))
+	}
+	if f.Services == nil || f.Services.Forgejo == nil ||
+		strings.TrimSpace(f.Services.Forgejo.Version) == "" ||
+		strings.TrimSpace(f.Services.Forgejo.SHA256) == "" {
+		return fmt.Errorf("[forge.services.forgejo] needs both version and sha256 — the forge binary is installed by pinned download, never by \"latest\"")
+	}
+	return nil
+}
+
+// validateForgeCIDR rejects a malformed CIDR and, emphatically, the open one.
+// The terraform module refuses 0.0.0.0/0 too; this is the copy of that rule
+// that fires before terraform is ever invoked.
+func validateForgeCIDR(field, cidr string) error {
+	if cidr == "0.0.0.0/0" || cidr == "::/0" {
+		return fmt.Errorf("%s %q is the whole internet — restrict it to your operator address (e.g. 203.0.113.7/32)", field, cidr)
+	}
+	if _, _, err := net.ParseCIDR(cidr); err != nil {
+		return fmt.Errorf("%s %q is not a valid CIDR: %w", field, cidr, err)
+	}
+	return nil
+}
+
+// validateForgeResourceName enforces the RFC1035 shape GCE requires of
+// instance and firewall names.
+func validateForgeResourceName(field, name string) error {
+	if len(name) > 50 {
+		// 50, not 63: the module appends "-allow-forgejo" and friends.
+		return fmt.Errorf("%s %q is too long (max 50 chars — the module appends firewall-rule suffixes)", field, name)
+	}
+	if name[0] < 'a' || name[0] > 'z' {
+		return fmt.Errorf("%s %q must start with a lowercase letter", field, name)
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+		default:
+			return fmt.Errorf("%s %q contains illegal character %q (lowercase letters, digits and '-' only)", field, name, string(r))
+		}
+	}
+	if strings.HasSuffix(name, "-") {
+		return fmt.Errorf("%s %q may not end with '-'", field, name)
+	}
+	return nil
+}
+
+func validateForgePort(field string, port int) error {
+	if port == 0 {
+		return nil // absent — the effective accessor supplies the default
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("%s %d is not a valid TCP port", field, port)
+	}
+	return nil
+}
+
+func validateForgeSHA256(field, sum string) error {
+	if len(sum) != 64 {
+		return fmt.Errorf("%s must be 64 hex characters, got %d", field, len(sum))
+	}
+	for _, r := range sum {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'f', r >= 'A' && r <= 'F':
+		default:
+			return fmt.Errorf("%s contains non-hex character %q", field, string(r))
 		}
 	}
 	return nil

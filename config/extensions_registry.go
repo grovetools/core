@@ -31,7 +31,7 @@ var knownExtensions = map[string]ExtensionInfo{
 	"binary":        {Key: "binary", Repo: "tend", Description: "Binary/tool discovery for test runners"},
 	"anthropic":     {Key: "anthropic", Repo: "grove-anthropic", Description: "Anthropic API access (key sources)"},
 	"claude":        {Key: "claude", Repo: "grove-anthropic", Description: "Claude Code settings profile (also read by core/pkg/claudenotebook)"},
-	"forge":         {Key: "forge", Repo: "core", Description: "Self-hosted forge instance (url, remote_name, token_command); see core/config/forge.go"},
+	"forge":         {Key: "forge", Repo: "core", Description: "Self-hosted forge: instance (url, remote_name, token_command), daemon poller ([forge.poll]), and the services VM `grove forge up` provisions ([forge.infra], [forge.services]); see core/config/forge.go"},
 	"logging":       {Key: "logging", Repo: "core", Description: "Structured logging (levels, sinks)"},
 	"keys":          {Key: "keys", Repo: "core", Description: "Global keybinding registry (core/pkg/keybind, grove keys)"},
 	"nav":           {Key: "nav", Repo: "nav", Description: "Session/window navigation groups"},

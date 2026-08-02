@@ -299,3 +299,57 @@ func TestNoImplicitTokenRead(t *testing.T) {
 		t.Error("a token from the environment leaked into the gh argv")
 	}
 }
+
+// TestTransportFailuresAreNeverPermanent covers the pipeline-live trial's
+// finding 3 (plan hosted-git-and-prs, .artifacts/forge-pipeline-live/report.md):
+// a refused connection surfaced in the poller cache as `(permanent)`, because
+// classification is stderr-substring matching and the wording in front of gh
+// matched nothing — so the fail-closed fallthrough claimed it.
+//
+// The class is what a surface renders. "Permanent" says the repository is gone
+// or forbidden; "unavailable" says we could not ask. A dead port is always the
+// second one, however the transport words it.
+func TestTransportFailuresAreNeverPermanent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake gh is a POSIX shell script")
+	}
+	repo := forge.Repo{Host: "github.com", Owner: "grove", Name: "flow"}
+
+	// Each stderr line is a real refusal wording seen from some transport in
+	// front of, or standing in for, gh.
+	for _, stderr := range []string{
+		"dial tcp 127.0.0.1:1: connect: connection refused",
+		"Post \"http://127.0.0.1:1/api\": dial tcp: connection refused",
+		"<urlopen error [Errno 61] Connection refused> URLError",
+		"ECONNREFUSED 127.0.0.1:1",
+		"read tcp 10.0.0.2:53212->140.82.113.6:443: read: connection reset by peer",
+		"dial tcp: lookup api.github.com: no such host",
+		"connect: no route to host",
+		"context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+		"proxyconnect tcp: dial tcp 127.0.0.1:8080: connect: connection refused",
+		"Get \"https://api.github.com\": net/http: TLS handshake timeout",
+	} {
+		t.Run(stderr, func(t *testing.T) {
+			dir := t.TempDir()
+			script := "#!/bin/sh\nprintf '%s\\n' " + shellQuote(stderr) + " >&2\nexit 1\n"
+			if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil { //nolint:gosec // test fixture must be executable
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			_, err := github.New().ListPRs(context.Background(), repo, forge.ListPROptions{})
+			if err == nil {
+				t.Fatal("ListPRs succeeded against a failing gh")
+			}
+			if class := forge.ClassOf(err); class == forge.ClassPermanent {
+				t.Errorf("class = %q for a transport failure; want retryable or unavailable so the surface renders \"could not ask\" rather than a verdict (err: %v)", class, err)
+			}
+		})
+	}
+}
+
+// shellQuote wraps s in single quotes for a POSIX shell, escaping any it
+// contains.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
