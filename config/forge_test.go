@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestForgeAbsentIsNil(t *testing.T) {
@@ -192,5 +193,155 @@ func TestForgeIsARegisteredExtension(t *testing.T) {
 	}
 	if info.Repo != "core" {
 		t.Errorf("forge extension Repo = %q, want %q", info.Repo, "core")
+	}
+}
+
+// TestForgePollOffByDefault is the wave's default-OFF gate: a [forge] block
+// with no poll sub-block, and no [forge] block at all, must both leave the
+// daemon poller dark.
+func TestForgePollOffByDefault(t *testing.T) {
+	src := `
+version = "1.0"
+
+[forge]
+url = "https://forge.example.com"
+`
+	cfg, err := LoadFromTOMLBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("LoadFromTOMLBytes failed: %v", err)
+	}
+	forge, err := cfg.Forge()
+	if err != nil {
+		t.Fatalf("Forge() failed: %v", err)
+	}
+	if forge.Poll != nil {
+		t.Fatalf("Poll = %+v for a block with no [forge.poll], want nil", forge.Poll)
+	}
+	if forge.PollEnabled() {
+		t.Error("PollEnabled = true for a [forge] block with no poll sub-block")
+	}
+
+	var absent *ForgeConfig
+	if absent.PollEnabled() {
+		t.Error("PollEnabled = true for a nil ForgeConfig")
+	}
+
+	explicitlyOff := &ForgeConfig{Poll: &ForgePollConfig{Enabled: false}}
+	if explicitlyOff.PollEnabled() {
+		t.Error("PollEnabled = true for enabled = false")
+	}
+}
+
+func TestForgePollParsesTOML(t *testing.T) {
+	src := `
+version = "1.0"
+
+[forge.poll]
+enabled = true
+interval = "90s"
+stale_after = "30m"
+`
+	cfg, err := LoadFromTOMLBytes([]byte(src))
+	if err != nil {
+		t.Fatalf("LoadFromTOMLBytes failed: %v", err)
+	}
+	forge, err := cfg.Forge()
+	if err != nil {
+		t.Fatalf("Forge() failed: %v", err)
+	}
+	if forge == nil || forge.Poll == nil {
+		t.Fatalf("Forge()/Poll = %+v, want a parsed poll block", forge)
+	}
+	if !forge.PollEnabled() {
+		t.Error("PollEnabled = false for enabled = true")
+	}
+	if got := forge.Poll.EffectiveInterval(); got != 90*time.Second {
+		t.Errorf("EffectiveInterval = %v, want 90s", got)
+	}
+	if got := forge.Poll.EffectiveStaleAfter(); got != 30*time.Minute {
+		t.Errorf("EffectiveStaleAfter = %v, want 30m", got)
+	}
+	// A poll block does not make a self-hosted forge configured — the two are
+	// independent, which is what lets the poller run against GitHub with no
+	// [forge] url at all.
+	if forge.IsConfigured() {
+		t.Error("IsConfigured = true for a block carrying only [forge.poll]")
+	}
+}
+
+func TestForgePollCadenceBounds(t *testing.T) {
+	cases := []struct {
+		name           string
+		poll           *ForgePollConfig
+		wantInterval   time.Duration
+		wantStaleAfter time.Duration
+	}{
+		{
+			name:           "empty falls back to defaults",
+			poll:           &ForgePollConfig{Enabled: true},
+			wantInterval:   DefaultForgePollInterval,
+			wantStaleAfter: DefaultForgeStaleAfter,
+		},
+		{
+			name:           "sub-floor interval is clamped up",
+			poll:           &ForgePollConfig{Enabled: true, Interval: "1s"},
+			wantInterval:   MinForgePollInterval,
+			wantStaleAfter: DefaultForgeStaleAfter,
+		},
+		{
+			name:           "unparseable durations fall back rather than fail",
+			poll:           &ForgePollConfig{Enabled: true, Interval: "every so often", StaleAfter: "?"},
+			wantInterval:   DefaultForgePollInterval,
+			wantStaleAfter: DefaultForgeStaleAfter,
+		},
+		{
+			name:           "stale window never narrower than the sweep gap",
+			poll:           &ForgePollConfig{Enabled: true, Interval: "30m", StaleAfter: "5m"},
+			wantInterval:   30 * time.Minute,
+			wantStaleAfter: 30 * time.Minute,
+		},
+		{
+			name:           "nil poll config is still answerable",
+			poll:           nil,
+			wantInterval:   DefaultForgePollInterval,
+			wantStaleAfter: DefaultForgeStaleAfter,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.poll.EffectiveInterval(); got != tc.wantInterval {
+				t.Errorf("EffectiveInterval = %v, want %v", got, tc.wantInterval)
+			}
+			if got := tc.poll.EffectiveStaleAfter(); got != tc.wantStaleAfter {
+				t.Errorf("EffectiveStaleAfter = %v, want %v", got, tc.wantStaleAfter)
+			}
+		})
+	}
+}
+
+// TestForgePollValidateReportsBadDuration pins the pairing: Validate tells a
+// human about a typo, while the runtime accessors above silently fall back.
+// A daemon must not fail to boot over a poll cadence.
+func TestForgePollValidateReportsBadDuration(t *testing.T) {
+	bad := &ForgeConfig{Poll: &ForgePollConfig{Enabled: true, Interval: "5 minutes"}}
+	err := bad.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil for an unparseable interval")
+	}
+	if !strings.Contains(err.Error(), "interval") {
+		t.Errorf("Validate() error = %q, want it to name the field", err)
+	}
+	if got := bad.Poll.EffectiveInterval(); got != DefaultForgePollInterval {
+		t.Errorf("EffectiveInterval = %v after a bad value, want the default %v", got, DefaultForgePollInterval)
+	}
+
+	negative := &ForgeConfig{Poll: &ForgePollConfig{Enabled: true, StaleAfter: "-5m"}}
+	if err := negative.Validate(); err == nil {
+		t.Fatal("Validate() = nil for a negative stale_after")
+	}
+
+	ok := &ForgeConfig{Poll: &ForgePollConfig{Enabled: true, Interval: "5m", StaleAfter: "1h"}}
+	if err := ok.Validate(); err != nil {
+		t.Errorf("Validate() = %v for a well-formed poll block", err)
 	}
 }
