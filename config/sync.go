@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"os"
 	"os/exec"
@@ -101,6 +103,16 @@ type SyncConfig struct {
 	Token string `yaml:"token,omitempty" toml:"token,omitempty" jsonschema:"description=Static sync bearer token" jsonschema_extras:"x-sensitive=true,x-hint=Consider using token_command to fetch from a secrets manager"`
 	// TokenCommand is a shell command whose trimmed stdout is the token.
 	TokenCommand string `yaml:"token_command,omitempty" toml:"token_command,omitempty" jsonschema:"description=Shell command to retrieve the sync token (e.g. a secrets manager)"`
+	// CACert is the path to a PEM file whose certificates are the ONLY roots
+	// trusted for the sync server's TLS. It exists for self-signed
+	// deployments (`grove forge`'s `tls_mode = "self-signed"` writes exactly
+	// one such cert): pin the server's own certificate here and stock Go
+	// verification — expiry, and the IP/DNS SAN match — still applies.
+	//
+	// This is a REPLACEMENT root pool, not an addition to the system pool,
+	// and it is deliberately not an "insecure/skip-verify" switch: there is
+	// no configuration that disables certificate verification.
+	CACert string `yaml:"ca_cert,omitempty" toml:"ca_cert,omitempty" jsonschema:"description=Path to a PEM file of certificates to trust as the sole roots for the sync server (for self-signed deployments)"`
 	// Workspaces lists the per-workspace sync subscriptions.
 	Workspaces []SyncWorkspace `yaml:"workspaces,omitempty" toml:"workspaces,omitempty" jsonschema:"description=Per-workspace sync subscriptions"`
 	// Providers holds legacy per-notebook sync provider entries (the old
@@ -144,10 +156,48 @@ func (SyncConfig) JSONSchema() *jsonschema.Schema {
 	}
 }
 
+// CACertPath returns CACert with ~ and environment variables expanded, or
+// "" when no CA file is configured.
+func (s *SyncConfig) CACertPath() string {
+	if s.CACert == "" {
+		return ""
+	}
+	return expandPath(s.CACert)
+}
+
+// TLSClientConfig builds the *tls.Config the sync HTTP client should use.
+// It returns (nil, nil) when no CA file is configured, which leaves the
+// system trust store in play — the correct behavior for a publicly-trusted
+// server.
+//
+// When ca_cert IS set, the returned config's RootCAs contains ONLY those
+// certificates. Everything else about verification is stock: the hostname or
+// IP still has to match a SAN, and expiry still applies.
+func (s *SyncConfig) TLSClientConfig() (*tls.Config, error) {
+	path := s.CACertPath()
+	if path == "" {
+		return nil, nil
+	}
+	pem, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read sync ca_cert %s: %w", path, err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("sync ca_cert %s contains no PEM certificates", path)
+	}
+	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
+}
+
 // Validate checks the structural validity of a SyncConfig. It is not called
 // on the config load path (sync is dark in Phase 0); consumers that activate
 // sync should call it explicitly.
 func (s *SyncConfig) Validate() error {
+	if s.CACert != "" {
+		if _, err := s.TLSClientConfig(); err != nil {
+			return err
+		}
+	}
 	for i, ws := range s.Workspaces {
 		if ws.Name == "" {
 			return fmt.Errorf("sync workspace entry %d missing 'name'", i)
