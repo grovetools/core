@@ -502,9 +502,11 @@ const (
 	// line, an optional second line, a host-owned state enum and an icon key.
 	// No number and no pre-styled text — the host owns every escape code in a
 	// digest row, and a drawer column has no room for a gauge beside a
-	// sentence. A pane whose publisher is not running says so instead ("this
-	// panel publishes no digest"), which is the degenerate case of the feature
-	// rather than a placeholder for it.
+	// sentence. A pane whose publisher is not running says so instead — naming
+	// it, so "pomodoro publishes no digest" (declared, not running) is not
+	// mistaken for "no panel named pomodoro" (a Source that resolves to
+	// nothing) — which is the degenerate case of the feature rather than a
+	// placeholder for it.
 	//
 	// Which panel it projects is [DrawerPaneConfig.Source], defaulting to the
 	// pane's own name.
