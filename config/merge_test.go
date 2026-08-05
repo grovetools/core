@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -1292,6 +1293,19 @@ func TestMergeTUIPluginsAccumulatesAcrossLayers(t *testing.T) {
 	}
 	if len(base.TUI.Plugins) != 1 {
 		t.Errorf("mergeConfigs mutated the base layer: %+v", base.TUI.Plugins)
+	}
+}
+
+func TestMergeTUIPluginOrderUsesLaterGlobalPreference(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{PluginOrder: []string{"first", "second"}}}
+	override := &Config{TUI: &TUIConfig{PluginOrder: []string{"second", "first"}}}
+
+	merged := mergeConfigs(base, override)
+	if got := merged.TUI.PluginOrder; !reflect.DeepEqual(got, []string{"second", "first"}) {
+		t.Errorf("plugin_order = %v, want later layer order", got)
+	}
+	if !reflect.DeepEqual(base.TUI.PluginOrder, []string{"first", "second"}) {
+		t.Errorf("mergeConfigs mutated base plugin_order: %v", base.TUI.PluginOrder)
 	}
 }
 

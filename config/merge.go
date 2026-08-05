@@ -659,6 +659,9 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.Panels != nil {
 			result.TUI.Panels = override.TUI.Panels
 		}
+		if len(override.TUI.PluginOrder) > 0 {
+			result.TUI.PluginOrder = append([]string(nil), override.TUI.PluginOrder...)
+		}
 
 		// Merge [tui.plugins] per entry rather than wholesale. Plugin panels
 		// arrive one file at a time — `grove plugin install` writes one

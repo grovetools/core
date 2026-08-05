@@ -315,6 +315,11 @@ type TUIConfig struct {
 	// case the key is passed through to the PTY. Default: false.
 	VimControlHjklPaneNav bool `yaml:"vim_control_hjkl_pane_nav,omitempty" toml:"vim_control_hjkl_pane_nav,omitempty" jsonschema:"description=Enable Ctrl+hjkl pane navigation (vim-tmux-navigator style),default=false" jsonschema_extras:"x-layer=global,x-priority=59"`
 
+	// PluginOrder lists plugin config keys in the preferred rail order.
+	// Configured plugins omitted from the list follow in key-sorted order;
+	// stale or unknown keys are ignored.
+	PluginOrder []string `yaml:"plugin_order,omitempty" toml:"plugin_order,omitempty" jsonschema:"description=Preferred plugin rail order by plugin ID; omitted plugins follow sorted by ID" jsonschema_extras:"x-layer=global,x-priority=60"`
+
 	// Plugins defines process-based plugin panels that run standalone
 	// executables in PTY panels with their own rail icons.
 	Plugins map[string]*PluginConfig `yaml:"plugins,omitempty" toml:"plugins,omitempty" jsonschema:"description=Process-based plugin panels" jsonschema_extras:"x-layer=global,x-priority=60"`
