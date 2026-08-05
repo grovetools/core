@@ -516,9 +516,19 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Security != nil {
 		if result.Security == nil {
 			result.Security = &SecurityConfig{}
+		} else {
+			// result starts as a shallow copy of base; detach Security before
+			// writing into it so merging does not mutate the base config.
+			copied := *result.Security
+			result.Security = &copied
 		}
 		if override.Security.ExecTrust != "" {
 			result.Security.ExecTrust = override.Security.ExecTrust
+		}
+		// Pointer-valued: nil means "not set at this layer", which must fall
+		// through to the layer below rather than overwrite it with false.
+		if override.Security.InheritWorktreeTrust != nil {
+			result.Security.InheritWorktreeTrust = override.Security.InheritWorktreeTrust
 		}
 	}
 

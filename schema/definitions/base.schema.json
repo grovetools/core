@@ -282,6 +282,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "notebook": {
+          "$ref": "#/$defs/PluginNotebook",
+          "description": "Notebook subtree the panel declares it writes into (declaration only; the host never resolves or enforces the path)"
+        },
         "protocol": {
           "description": "Control-plane protocol for the sidecar; empty means embed/v1",
           "enum": [
@@ -1044,6 +1048,10 @@
           "description": "Display label for the rail item (defaults to the plugin's config key)",
           "type": "string"
         },
+        "notebook": {
+          "$ref": "#/$defs/PluginNotebook",
+          "description": "Notebook subtree the panel declares it writes into (declaration only; the host never resolves or enforces the path)"
+        },
         "position": {
           "default": "rail",
           "description": "Panel position: rail (persistent icon-rail pane). For spawn-on-demand panels use [tui.panels.bindings].",
@@ -1107,6 +1115,23 @@
       ],
       "type": "object"
     },
+    "PluginNotebook": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "What the panel saves there",
+          "type": "string"
+        },
+        "subtree": {
+          "description": "Notebook-relative subtree the panel declares it writes under (e.g. hn/clippings)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subtree"
+      ],
+      "type": "object"
+    },
     "PluginView": {
       "additionalProperties": false,
       "properties": {
@@ -1162,6 +1187,13 @@
           "type": "string",
           "x-layer": "global",
           "x-priority": "95"
+        },
+        "inherit_worktree_trust": {
+          "default": true,
+          "description": "When true (the default) a new worktree inherits its owner checkout's exec-trust decision for member repos whose config carries identical exec values; set false to require a fresh review in every worktree",
+          "type": "boolean",
+          "x-layer": "global",
+          "x-priority": "94"
         }
       },
       "type": "object"

@@ -1348,6 +1348,17 @@ type SecurityConfig struct {
 	//
 	// Overridden by the GROVE_EXEC_TRUST environment variable.
 	ExecTrust string `yaml:"exec_trust,omitempty" toml:"exec_trust,omitempty" jsonschema:"description=Exec-provenance gate policy for config from untrusted (repo-controlled) layers,enum=default,enum=strict,enum=warn,enum=off,default=default" jsonschema_extras:"x-layer=global,x-priority=95"`
+
+	// InheritWorktreeTrust lets a worktree checkout inherit the trust decision
+	// already made about the SAME repo's config in its owner checkout, but only
+	// when the two files carry byte-identical exec values (same digest). A
+	// branch that edits a hook gets a different digest and inherits nothing, so
+	// this never runs a command the user has not reviewed — it only stops
+	// asking twice about content they already reviewed once. See
+	// exectrust_inherit.go.
+	//
+	// Unset means enabled; set false to require a fresh review per worktree.
+	InheritWorktreeTrust *bool `yaml:"inherit_worktree_trust,omitempty" toml:"inherit_worktree_trust,omitempty" jsonschema:"description=When true (the default) a new worktree inherits its owner checkout's exec-trust decision for member repos whose config carries identical exec values; set false to require a fresh review in every worktree,default=true" jsonschema_extras:"x-layer=global,x-priority=94"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling to handle backward compatibility

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/claudetrust"
 	"github.com/grovetools/core/pkg/pitrust"
 	"github.com/grovetools/core/pkg/worktreeregistry"
@@ -212,6 +213,28 @@ func Prepare(ctx context.Context, opts PrepareOptions, setupHandlers ...func(wor
 				} else {
 					fmt.Printf("Warning: failed to pre-seed Claude trust: %v\n", seedErr)
 				}
+			}
+		}
+
+		// Relocate the owner checkout's exec-trust decision onto this worktree's
+		// member repos. The exec-provenance gate keys trust on (config file
+		// PATH, digest), so without this every worktree re-asks about config
+		// the user already reviewed in the owner checkout — ~N repos per
+		// worktree, forever. Inheritance is granted ONLY where the worktree's
+		// grove.toml carries byte-identical exec values (same digest) as the
+		// owner's, so a branch that edited a hook inherits nothing and the gate
+		// stays shut, exactly as the digest binding intends. See
+		// core/config/exectrust_inherit.go.
+		//
+		// Gated on [security] inherit_worktree_trust, read from user-controlled
+		// layers only (default on). Best-effort like the trust seeds above: a
+		// failure here costs approval prompts, never the worktree.
+		if config.InheritWorktreeTrustEnabled(absWorktreePath) {
+			candidates := config.WorktreeInheritCandidates(ownerPath, absWorktreePath, opts.SiblingWorkspaces)
+			if outcomes, inheritErr := config.InheritExecTrust(candidates, true); inheritErr != nil {
+				fmt.Printf("Warning: failed to record inherited exec-trust: %v\n", inheritErr)
+			} else if n := config.InheritGrantedCount(outcomes); n > 0 {
+				logger.WithField("count", n).Debug("Inherited exec-trust from owner checkout")
 			}
 		}
 
