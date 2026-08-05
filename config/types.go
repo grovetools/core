@@ -628,6 +628,12 @@ type DrawerPaneConfig struct {
 	// the two ways [EffectiveView] and [DeclaredView] express. It never reads a
 	// NAME here, which is what keeps the view an open set.
 	Views []PluginView `yaml:"views,omitempty" toml:"views,omitempty" json:"views,omitempty" jsonschema:"description=Views the panel declares it can draw, in declaration order (declaration only; the host reads only each view's drawer suitability, never its name)"`
+	// Notebook mirrors the panel's declared notebook subtree, exactly as
+	// [PluginConfig.Notebook] does — see there for the whole contract, which is
+	// the same contract in both places because it is a fact about the panel
+	// rather than about where it is mounted: declarative, host-ignored, and
+	// deliberately outside the exec gate because no host ever acts on it.
+	Notebook *PluginNotebook `yaml:"notebook,omitempty" toml:"notebook,omitempty" json:"notebook,omitempty" jsonschema:"description=Notebook subtree the panel declares it writes into (declaration only; the host never resolves or enforces the path)"`
 }
 
 // SidecarBacked reports whether this pane asks for a process. Hosts call it
@@ -961,6 +967,19 @@ type PluginConfig struct {
 	// to configure a panel should state every view they can ask that panel for —
 	// and it is where a drawer pane declaration is copied FROM.
 	Views []PluginView `yaml:"views,omitempty" toml:"views,omitempty" jsonschema:"description=Views the panel declares it can draw, in declaration order (declaration only; nothing on the rail reads it)"`
+	// Notebook mirrors the panel's declared notebook subtree — copied here from
+	// the manifest's [panel.notebook] by `grove plugin install`, which is the
+	// claim the user read on the consent screen.
+	//
+	// It is DECLARATIVE and host-ignored, exactly as [Keys] and [Views] are: no
+	// host resolves the path, creates the directory, or fences the panel into
+	// it. The panel writes with whatever authority it already has as a process
+	// the user approved; this field exists so the file the user edits repeats
+	// what that panel said it would do with their notebook. Because no host
+	// ever acts on the value there is no RegisterExecField entry for it — the
+	// same reasoning [Settings] records: the exec gate is for values a host
+	// would act on, and this one is only ever rendered.
+	Notebook *PluginNotebook `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Notebook subtree the panel declares it writes into (declaration only; the host never resolves or enforces the path)"`
 }
 
 // PluginKey is one declared host chord in a plugin's [[tui.plugins.<name>.keys]].
@@ -1000,6 +1019,26 @@ type PluginView struct {
 	// is just ugly, and the host says so rather than substituting a choice the
 	// user did not make.
 	Drawer bool `yaml:"drawer,omitempty" toml:"drawer,omitempty" json:"drawer,omitempty" jsonschema:"description=Whether the author means this view for a drawer pane; the host defaults to the first such view and warns when a view marked false is mounted in a drawer anyway"`
+}
+
+// PluginNotebook is the notebook subtree a panel declares it writes —
+// [tui.plugins.<name>.notebook] or [tui.drawer.panes.<name>.notebook], copied
+// from the manifest's [panel.notebook] by `grove plugin install`.
+//
+// Like [PluginKey] and [PluginView] it is a DECLARATION the host renders and
+// never acts on: nothing resolves the path, nothing creates it, nothing fences
+// the panel into it. It exists so the consent screen's claim about the user's
+// notebook survives into the file they edit, instead of living only in a
+// prompt that scrolled away.
+type PluginNotebook struct {
+	// Subtree is the notebook-relative path the panel says it writes under,
+	// e.g. "hn/clippings". Opaque to every host: it is compared to nothing and
+	// joined with nothing.
+	Subtree string `yaml:"subtree" toml:"subtree" json:"subtree" jsonschema:"description=Notebook-relative subtree the panel declares it writes under (e.g. hn/clippings)"`
+	// Description is what the panel saves there, in the author's words. Read
+	// by people — the consent screen and anyone opening the fragment — and by
+	// no code.
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" json:"description,omitempty" jsonschema:"description=What the panel saves there, in the author's words"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel
