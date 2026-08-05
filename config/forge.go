@@ -70,6 +70,9 @@ type ForgeConfig struct {
 	// services' durable state. Absent means no bucket, no timer, no scopes —
 	// the forge stays a machine with no GCP API access at all.
 	Backup *ForgeBackupConfig `yaml:"backup,omitempty" toml:"backup,omitempty" jsonschema:"description=Off-VM GCS backup of the forge's durable state"`
+	// Wireguard is the optional [forge.wireguard] client block. It is
+	// converged over pinned SSH after provisioning; terraform never sees it.
+	Wireguard *WireGuardConfig `yaml:"wireguard,omitempty" toml:"wireguard,omitempty" jsonschema:"description=Owner-managed WireGuard mesh client (private key remains on the VM)"`
 }
 
 // Forge provider selectors for [forge] provider.
@@ -808,6 +811,9 @@ func (f *ForgeConfig) Validate() error {
 		return err
 	}
 	if err := f.Backup.Validate(); err != nil {
+		return err
+	}
+	if err := f.Wireguard.Validate(); err != nil {
 		return err
 	}
 	if f.Poll != nil {
