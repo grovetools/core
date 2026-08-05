@@ -1337,6 +1337,15 @@
           "x-layer": "global",
           "x-priority": "58"
         },
+        "plugin_order": {
+          "description": "Preferred plugin rail order by plugin ID; omitted plugins follow sorted by ID",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-layer": "global",
+          "x-priority": "60"
+        },
         "plugins": {
           "additionalProperties": {
             "$ref": "#/$defs/PluginConfig"
