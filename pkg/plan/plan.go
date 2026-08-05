@@ -210,6 +210,18 @@ func EnsureRollingPlan(workDir string) (dir string, created bool, err error) {
 	if plansDir == "" {
 		return "", false, fmt.Errorf("no workspace found for %q: cannot resolve rolling plan directory", workDir)
 	}
+	return EnsureRollingPlanIn(plansDir)
+}
+
+// EnsureRollingPlanIn is EnsureRollingPlan for a caller that has ALREADY
+// resolved the plans directory — a TUI whose list is scoped to one plansDir, or
+// a host that resolved it through its own workspace context. Going through
+// EnsureRollingPlan there would re-resolve from a working directory and could
+// land the plan in a different directory than the one the caller is showing.
+func EnsureRollingPlanIn(plansDir string) (dir string, created bool, err error) {
+	if plansDir == "" {
+		return "", false, fmt.Errorf("empty plans directory: cannot resolve rolling plan directory")
+	}
 
 	dir = filepath.Join(plansDir, RollingPlanName)
 	if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
