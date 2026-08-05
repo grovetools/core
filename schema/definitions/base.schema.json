@@ -302,9 +302,20 @@
           "description": "Free-form settings table delivered to the sidecar over embed/v1 (data only; never executed by the host)",
           "type": "object"
         },
+        "source": {
+          "description": "Which panel's digest a digest-backed pane shows; empty means the pane's own name",
+          "type": "string"
+        },
         "view": {
           "description": "Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default.",
           "type": "string"
+        },
+        "views": {
+          "description": "Views the panel declares it can draw",
+          "items": {
+            "$ref": "#/$defs/PluginView"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -1065,6 +1076,13 @@
         "view": {
           "description": "Which of the panel's own named layouts to draw; carried verbatim to the panel and never interpreted by the host. Empty means the panel's default.",
           "type": "string"
+        },
+        "views": {
+          "description": "Views the panel declares it can draw",
+          "items": {
+            "$ref": "#/$defs/PluginView"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -1086,6 +1104,27 @@
       },
       "required": [
         "key"
+      ],
+      "type": "object"
+    },
+    "PluginView": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "What this view shows",
+          "type": "string"
+        },
+        "drawer": {
+          "description": "Whether the author means this view for a drawer pane; the host defaults to the first such view and warns when a view marked false is mounted in a drawer anyway",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The view's name in the panel's own vocabulary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
       ],
       "type": "object"
     },
