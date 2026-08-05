@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -65,6 +66,10 @@ type ForgeConfig struct {
 	// Services is the [forge.services] sub-block: what the services VM runs
 	// (Forgejo, grove-syncd) and how it terminates TLS.
 	Services *ForgeServicesConfig `yaml:"services,omitempty" toml:"services,omitempty" jsonschema:"description=Services colocated on the grove forge VM"`
+	// Backup is the [forge.backup] sub-block: the off-VM GCS backup of both
+	// services' durable state. Absent means no bucket, no timer, no scopes —
+	// the forge stays a machine with no GCP API access at all.
+	Backup *ForgeBackupConfig `yaml:"backup,omitempty" toml:"backup,omitempty" jsonschema:"description=Off-VM GCS backup of the forge's durable state"`
 }
 
 // Forge provider selectors for [forge] provider.
@@ -446,6 +451,259 @@ func (f *ForgejoServiceConfig) EffectiveSiteName() string {
 	return strings.TrimSpace(f.SiteName)
 }
 
+// Forge backup defaults. The retention numbers are deliberately generous for
+// data measured in megabytes: a personal notebook corpus plus a handful of git
+// repos is cheap to keep, and the expensive mistake is keeping too little.
+const (
+	// DefaultForgeBackupSchedule is the systemd OnCalendar expression for the
+	// backup timer.
+	DefaultForgeBackupSchedule = "daily"
+	// DefaultForgeBackupRetentionDays deletes objects (current and noncurrent)
+	// older than this many days.
+	DefaultForgeBackupRetentionDays = 180
+	// DefaultForgeBackupNearlineDays moves live objects to Nearline storage
+	// after this many days.
+	DefaultForgeBackupNearlineDays = 30
+	// DefaultForgeBackupNoncurrentDays deletes superseded object versions
+	// after this many days.
+	DefaultForgeBackupNoncurrentDays = 30
+	// DefaultForgeBackupStaleAfter is how old the LAST_SUCCESS marker may get
+	// before the staleness check alerts.
+	DefaultForgeBackupStaleAfter = "48h"
+	// DefaultForgeBackupLocalKeep is how many snapshots stay on the VM's own
+	// disk after a successful upload.
+	DefaultForgeBackupLocalKeep = 3
+	// ForgeBackupOAuthScope is the ONE OAuth scope the backup adds to the
+	// forge's service account. It is storage-only and read-write, not
+	// cloud-platform: the widening is exactly "may write objects", and the
+	// bucket-level IAM binding is what says WHICH bucket.
+	ForgeBackupOAuthScope = "https://www.googleapis.com/auth/devstorage.read_write"
+)
+
+// ForgeBackupConfig is the [forge.backup] block: an off-VM copy of everything
+// the forge's boot disk holds that cannot be rebuilt from somewhere else.
+//
+// It is OFF by default, and that default is a security property rather than
+// laziness. The module's headline posture is a service account with no IAM
+// roles attached with no OAuth scopes (main.tf item 3); turning backups on is
+// the one deliberate widening of it, and it widens by exactly one scope
+// (ForgeBackupOAuthScope) plus one IAM binding scoped to one bucket. A forge
+// with no [forge.backup] block still has no GCP API access at all.
+//
+// What is backed up, and why it is not `forgejo dump`:
+//
+//   - grove-syncd: `grove-syncd backup` (SQLite VACUUM INTO — consistent while
+//     serving) plus a mirror of the content-addressed blob tier.
+//   - Forgejo: a VACUUM INTO of its SQLite database plus a tar of the repo
+//     tree. Job 17's restore rehearsal found `forgejo dump`'s SQL export is not
+//     restorable on the platform this module provisions — it emits `unistr()`
+//     literals that need SQLite ≥ 3.51, and debian-12 ships 3.40.1, so the load
+//     dies partway and leaves a half-populated database.
+//
+// What is deliberately NOT backed up: Forgejo's app.ini and the secrets file
+// beside it. They hold SECRET_KEY, INTERNAL_TOKEN and the JWT secrets, and an
+// artifact carrying them is a credential at rest in a bucket. The cost is
+// stated rather than hidden: SECRET_KEY-encrypted material (2FA enrolments,
+// stored mirror credentials) does not survive a restore. API tokens and
+// password hashes live in the database and do survive.
+type ForgeBackupConfig struct {
+	// Enabled turns the whole thing on: the bucket, the OAuth scope, the IAM
+	// binding, the on-VM script and the timer. Nil/false means none of it
+	// exists.
+	Enabled *bool `yaml:"enabled,omitempty" toml:"enabled,omitempty" jsonschema:"description=Provision the GCS backup bucket, scope, timer and script,default=false"`
+	// CreateBucket provisions the bucket, rather than joining one that already
+	// exists. Nil means true. False is what a REPLACEMENT forge wants: during a
+	// restore it needs read access to the outgoing forge's bucket, not
+	// ownership of it — and adopting a live bucket into a scratch VM's
+	// terraform state is how a drill destroys the thing it was rehearsing.
+	CreateBucket *bool `yaml:"create_bucket,omitempty" toml:"create_bucket,omitempty" jsonschema:"description=Create the bucket rather than joining an existing one,default=true"`
+	// Bucket is the GCS bucket name (no gs:// prefix). Required when enabled:
+	// there is no safe default, because a guessed bucket name is either
+	// someone else's or a typo that silently backs up nothing.
+	Bucket string `yaml:"bucket,omitempty" toml:"bucket,omitempty" jsonschema:"description=GCS bucket for forge backups (no gs:// prefix)"`
+	// Location is the bucket's GCS location. Empty means the region the VM's
+	// zone sits in.
+	Location string `yaml:"location,omitempty" toml:"location,omitempty" jsonschema:"description=GCS bucket location; empty means the VM's region"`
+	// Prefix namespaces objects inside the bucket, so one bucket can hold more
+	// than one forge. Empty means the VM name.
+	Prefix string `yaml:"prefix,omitempty" toml:"prefix,omitempty" jsonschema:"description=Object prefix inside the bucket; empty means the VM name"`
+	// Schedule is the systemd OnCalendar expression for the backup timer.
+	Schedule string `yaml:"schedule,omitempty" toml:"schedule,omitempty" jsonschema:"description=systemd OnCalendar expression for the backup timer,default=daily"`
+	// RetentionDays deletes objects older than this. NearlineDays moves live
+	// objects to Nearline. NoncurrentDays deletes superseded versions.
+	RetentionDays  int `yaml:"retention_days,omitempty" toml:"retention_days,omitempty" jsonschema:"description=Delete backup objects older than this many days,default=180"`
+	NearlineDays   int `yaml:"nearline_days,omitempty" toml:"nearline_days,omitempty" jsonschema:"description=Move live objects to Nearline after this many days,default=30"`
+	NoncurrentDays int `yaml:"noncurrent_days,omitempty" toml:"noncurrent_days,omitempty" jsonschema:"description=Delete superseded object versions after this many days,default=30"`
+	// LocalKeep is how many snapshots stay on the VM disk post-upload.
+	LocalKeep int `yaml:"local_keep,omitempty" toml:"local_keep,omitempty" jsonschema:"description=Snapshots retained on the VM's own disk,default=3"`
+	// StaleAfter is how old LAST_SUCCESS may get before the staleness timer
+	// alerts. Staleness is the alerting signal precisely because it catches
+	// the failure mode a per-run alert cannot: a timer that stopped firing.
+	StaleAfter string `yaml:"stale_after,omitempty" toml:"stale_after,omitempty" jsonschema:"description=Alert when LAST_SUCCESS is older than this,default=48h"`
+	// NtfyURL and NtfyTopicCommand configure failure alerting over the ntfy
+	// path the ecosystem already uses.
+	//
+	// The topic is resolved by a COMMAND on the laptop and shipped to the VM
+	// over SSH into a 0600 file, exactly like the grove-syncd binary — never
+	// through terraform, whose variables and state are readable by anything
+	// that can read the state file. A topic in tfvars would be a shared secret
+	// sitting in a plan output.
+	NtfyURL          string `yaml:"ntfy_url,omitempty" toml:"ntfy_url,omitempty" jsonschema:"description=ntfy base URL for backup failure alerts"`
+	NtfyTopicCommand string `yaml:"ntfy_topic_command,omitempty" toml:"ntfy_topic_command,omitempty" jsonschema:"description=Shell command printing the ntfy topic; run on the laptop, shipped to the VM over SSH" jsonschema_extras:"x-sensitive=true"`
+}
+
+// BackupEnabled reports whether backups are provisioned (nil-safe, default off).
+func (f *ForgeConfig) BackupEnabled() bool {
+	if f == nil || f.Backup == nil || f.Backup.Enabled == nil {
+		return false
+	}
+	return *f.Backup.Enabled && strings.TrimSpace(f.Backup.Bucket) != ""
+}
+
+// CreateBucketEnabled reports whether terraform owns the bucket (nil-safe,
+// default true).
+func (b *ForgeBackupConfig) CreateBucketEnabled() bool {
+	if b == nil || b.CreateBucket == nil {
+		return true
+	}
+	return *b.CreateBucket
+}
+
+// EffectivePrefix namespaces this forge's objects inside the bucket.
+func (b *ForgeBackupConfig) EffectivePrefix(vmName string) string {
+	if b == nil || strings.TrimSpace(b.Prefix) == "" {
+		return vmName
+	}
+	return strings.Trim(strings.TrimSpace(b.Prefix), "/")
+}
+
+// EffectiveLocation resolves the bucket location, defaulting to the region the
+// zone sits in ("us-east1-b" → "us-east1").
+func (b *ForgeBackupConfig) EffectiveLocation(zone string) string {
+	if b != nil && strings.TrimSpace(b.Location) != "" {
+		return strings.TrimSpace(b.Location)
+	}
+	if i := strings.LastIndex(zone, "-"); i > 0 {
+		return zone[:i]
+	}
+	return zone
+}
+
+func (b *ForgeBackupConfig) EffectiveSchedule() string {
+	if b == nil || strings.TrimSpace(b.Schedule) == "" {
+		return DefaultForgeBackupSchedule
+	}
+	return strings.TrimSpace(b.Schedule)
+}
+
+func (b *ForgeBackupConfig) EffectiveRetentionDays() int {
+	return forgeBackupIntDefault(b != nil, func() int { return b.RetentionDays }, DefaultForgeBackupRetentionDays)
+}
+
+func (b *ForgeBackupConfig) EffectiveNearlineDays() int {
+	return forgeBackupIntDefault(b != nil, func() int { return b.NearlineDays }, DefaultForgeBackupNearlineDays)
+}
+
+func (b *ForgeBackupConfig) EffectiveNoncurrentDays() int {
+	return forgeBackupIntDefault(b != nil, func() int { return b.NoncurrentDays }, DefaultForgeBackupNoncurrentDays)
+}
+
+func (b *ForgeBackupConfig) EffectiveLocalKeep() int {
+	return forgeBackupIntDefault(b != nil, func() int { return b.LocalKeep }, DefaultForgeBackupLocalKeep)
+}
+
+func (b *ForgeBackupConfig) EffectiveStaleAfter() string {
+	if b == nil || strings.TrimSpace(b.StaleAfter) == "" {
+		return DefaultForgeBackupStaleAfter
+	}
+	return strings.TrimSpace(b.StaleAfter)
+}
+
+func (b *ForgeBackupConfig) EffectiveNtfyURL() string {
+	if b == nil || strings.TrimSpace(b.NtfyURL) == "" {
+		return "https://ntfy.sh"
+	}
+	return strings.TrimRight(strings.TrimSpace(b.NtfyURL), "/")
+}
+
+func forgeBackupIntDefault(present bool, get func() int, def int) int {
+	if !present {
+		return def
+	}
+	if v := get(); v > 0 {
+		return v
+	}
+	return def
+}
+
+// ResolveNtfyTopic runs NtfyTopicCommand and returns its trimmed stdout. An
+// empty NtfyTopicCommand yields ("", nil): alerting is optional, and a forge
+// without it still backs up.
+func (b *ForgeBackupConfig) ResolveNtfyTopic() (string, error) {
+	if b == nil || strings.TrimSpace(b.NtfyTopicCommand) == "" {
+		return "", nil
+	}
+	cmd := exec.Command("sh", "-c", b.NtfyTopicCommand) //nolint:gosec // command comes from the operator's own grove config
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("forge backup ntfy_topic_command %q failed: %w", b.NtfyTopicCommand, err)
+	}
+	topic := strings.TrimSpace(string(out))
+	if topic == "" {
+		return "", fmt.Errorf("forge backup ntfy_topic_command %q printed nothing", b.NtfyTopicCommand)
+	}
+	return topic, nil
+}
+
+// Validate checks the [forge.backup] block's structure.
+func (b *ForgeBackupConfig) Validate() error {
+	if b == nil {
+		return nil
+	}
+	enabled := b.Enabled != nil && *b.Enabled
+	bucket := strings.TrimSpace(b.Bucket)
+	if enabled && bucket == "" {
+		return fmt.Errorf("[forge.backup] enabled = true needs a bucket (there is no safe default: a guessed bucket name either belongs to someone else or silently backs up nothing)")
+	}
+	if bucket != "" {
+		if strings.Contains(bucket, "://") {
+			return fmt.Errorf("forge backup bucket %q must be a bare bucket name, not a URL", b.Bucket)
+		}
+		if len(bucket) < 3 || len(bucket) > 63 {
+			return fmt.Errorf("forge backup bucket %q must be 3-63 characters", b.Bucket)
+		}
+	}
+	for _, d := range []struct {
+		field string
+		value int
+	}{
+		{"retention_days", b.RetentionDays},
+		{"nearline_days", b.NearlineDays},
+		{"noncurrent_days", b.NoncurrentDays},
+		{"local_keep", b.LocalKeep},
+	} {
+		if d.value < 0 {
+			return fmt.Errorf("forge backup %s %d must not be negative", d.field, d.value)
+		}
+	}
+	if raw := strings.TrimSpace(b.StaleAfter); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return fmt.Errorf("forge backup stale_after %q is not a valid duration: %w", b.StaleAfter, err)
+		}
+		if parsed <= 0 {
+			return fmt.Errorf("forge backup stale_after %q must be positive", b.StaleAfter)
+		}
+	}
+	if raw := strings.TrimSpace(b.NtfyURL); raw != "" {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			return fmt.Errorf("forge backup ntfy_url %q is not a valid URL", b.NtfyURL)
+		}
+	}
+	return nil
+}
+
 // ForgeSyncdServiceConfig is [forge.services.syncd].
 type ForgeSyncdServiceConfig struct {
 	// Enabled colocates grove-syncd on the forge VM. Nil means enabled — the
@@ -547,6 +805,9 @@ func (f *ForgeConfig) Validate() error {
 		return err
 	}
 	if err := f.Services.Validate(); err != nil {
+		return err
+	}
+	if err := f.Backup.Validate(); err != nil {
 		return err
 	}
 	if f.Poll != nil {
