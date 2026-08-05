@@ -44,6 +44,48 @@ func IconNames() []string {
 	return append([]string(nil), iconNames...)
 }
 
+// ResolveIconOr resolves an icon REFERENCE — a registered name, or a literal
+// glyph — to the string a renderer should draw, falling back when neither
+// reading applies.
+//
+// This exists for the surfaces whose icon arrives as data from OUTSIDE this
+// module: a plugin manifest, a [tui.plugins] fragment, a digest frame. A
+// registry name ("rss") gets the mode-following table entry, same as IconOr —
+// but a third-party plugin is not limited to what this package happened to
+// compile in: any string carrying a non-ASCII rune is taken as a literal
+// glyph (a Nerd Font codepoint, an emoji) and returned verbatim, and a short
+// all-ASCII string ("H", ">>") is a literal too. What does NOT pass through
+// is a longer all-ASCII string that resolves to nothing — that is a name this
+// registry has never heard of ("rss" against an old build, a typo), and
+// rendering the word itself as if it were an icon is the failure this
+// function replaces.
+//
+// In ASCII icon mode a literal non-ASCII glyph returns fallback: the author's
+// glyph cannot degrade the way a registered name can (the table carries an
+// ASCII form per name; a raw codepoint carries nothing), and tofu is worse
+// than a generic mark.
+func ResolveIconOr(ref, fallback string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return fallback
+	}
+	if icon, ok := Icon(ref); ok {
+		return icon
+	}
+	for _, r := range ref {
+		if r > 0x7F {
+			if ASCIIIcons {
+				return fallback
+			}
+			return ref
+		}
+	}
+	if len(ref) <= 2 {
+		return ref
+	}
+	return fallback
+}
+
 // normalizeIconName reduces a name to lowercase alphanumerics, which is the
 // form the generated table is keyed on with hyphens re-inserted. Dropping the
 // separators entirely on both sides is what makes every spelling of a name
