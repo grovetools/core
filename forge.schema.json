@@ -130,6 +130,26 @@
           "type": "boolean",
           "description": "Allow IAP TCP forwarding to tcp/22",
           "default": true
+        },
+        "syncd_ingress_enabled": {
+          "type": "boolean",
+          "description": "Create the public syncd ingress rule",
+          "default": true
+        },
+        "forgejo_ingress_enabled": {
+          "type": "boolean",
+          "description": "Create the IAP Forgejo ingress rule",
+          "default": true
+        },
+        "ssh_ingress": {
+          "type": "string",
+          "enum": [
+            "cidr+iap",
+            "iap",
+            "cidr"
+          ],
+          "description": "SSH ingress source set: cidr+iap|iap|cidr",
+          "default": "cidr+iap"
         }
       },
       "additionalProperties": false,

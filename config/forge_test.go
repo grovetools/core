@@ -269,6 +269,60 @@ stale_after = "30m"
 	}
 }
 
+func TestForgeInfraCutoverDefaultsAndValidation(t *testing.T) {
+	var absent *ForgeInfraConfig
+	if !absent.SyncdIngressIsEnabled() || !absent.ForgejoIngressIsEnabled() {
+		t.Fatal("absent ingress switches must preserve both service rules")
+	}
+	if got := absent.EffectiveSSHIngress(); got != ForgeSSHIngressCIDRAndIAP {
+		t.Fatalf("absent ssh_ingress = %q, want %q", got, ForgeSSHIngressCIDRAndIAP)
+	}
+
+	off := false
+	cutover := &ForgeInfraConfig{
+		SyncdIngressEnabled:   &off,
+		ForgejoIngressEnabled: &off,
+		SSHIngress:            ForgeSSHIngressIAP,
+	}
+	if cutover.SyncdIngressIsEnabled() || cutover.ForgejoIngressIsEnabled() {
+		t.Fatal("explicit false ingress switches were ignored")
+	}
+	if err := cutover.Validate(); err != nil {
+		t.Fatalf("full cutover shape rejected: %v", err)
+	}
+
+	for _, valid := range []string{"", ForgeSSHIngressCIDRAndIAP, ForgeSSHIngressIAP, ForgeSSHIngressCIDR, " IAP "} {
+		if err := (&ForgeInfraConfig{SSHIngress: valid}).Validate(); err != nil {
+			t.Errorf("ssh_ingress %q rejected: %v", valid, err)
+		}
+	}
+	if err := (&ForgeInfraConfig{SSHIngress: "public"}).Validate(); err == nil || !strings.Contains(err.Error(), "ssh_ingress") {
+		t.Fatalf("invalid ssh_ingress error = %v", err)
+	}
+}
+
+func TestForgeInfraCutoverFieldsParseWithoutLoadValidation(t *testing.T) {
+	cfg, err := LoadFromTOMLBytes([]byte(`version = "1.0"
+[forge.infra]
+syncd_ingress_enabled = false
+forgejo_ingress_enabled = false
+ssh_ingress = "invalid-until-used"
+`))
+	if err != nil {
+		t.Fatalf("load must remain parse-only: %v", err)
+	}
+	forge, err := cfg.Forge()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forge == nil || forge.Infra == nil || forge.Infra.SyncdIngressIsEnabled() || forge.Infra.ForgejoIngressIsEnabled() {
+		t.Fatalf("parsed forge infra = %#v", forge)
+	}
+	if err := forge.Validate(); err == nil || !strings.Contains(err.Error(), "ssh_ingress") {
+		t.Fatalf("use-time validation error = %v", err)
+	}
+}
+
 func TestForgePollCadenceBounds(t *testing.T) {
 	cases := []struct {
 		name           string

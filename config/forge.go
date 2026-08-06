@@ -253,6 +253,12 @@ const (
 	// satellite module's Ubuntu is a build host, this is a service host).
 	DefaultForgeImageFamily  = "debian-12"
 	DefaultForgeImageProject = "debian-cloud"
+
+	// ForgeSSHIngressCIDRAndIAP preserves the original module posture. The
+	// narrower values are explicit cutover/rollback controls.
+	ForgeSSHIngressCIDRAndIAP = "cidr+iap"
+	ForgeSSHIngressIAP        = "iap"
+	ForgeSSHIngressCIDR       = "cidr"
 )
 
 // ForgeInfraConfig is the [forge.infra] block: the terraform inputs for the
@@ -292,6 +298,14 @@ type ForgeInfraConfig struct {
 	// EnableIAPSSH adds the IAP TCP-forwarding range (35.235.240.0/20) to the
 	// SSH rule, so SSH survives a laptop IP rotation. Nil means enabled.
 	EnableIAPSSH *bool `yaml:"enable_iap_ssh,omitempty" toml:"enable_iap_ssh,omitempty" jsonschema:"description=Allow IAP TCP forwarding to tcp/22,default=true"`
+	// SyncdIngressEnabled and ForgejoIngressEnabled independently retain or
+	// remove the two service firewall rules. Nil preserves the original
+	// posture: both rules exist.
+	SyncdIngressEnabled   *bool `yaml:"syncd_ingress_enabled,omitempty" toml:"syncd_ingress_enabled,omitempty" jsonschema:"description=Create the public syncd ingress rule,default=true"`
+	ForgejoIngressEnabled *bool `yaml:"forgejo_ingress_enabled,omitempty" toml:"forgejo_ingress_enabled,omitempty" jsonschema:"description=Create the IAP Forgejo ingress rule,default=true"`
+	// SSHIngress selects the source set for tcp/22. Empty preserves the
+	// original operator-CIDR plus IAP posture.
+	SSHIngress string `yaml:"ssh_ingress,omitempty" toml:"ssh_ingress,omitempty" jsonschema:"description=SSH ingress source set: cidr+iap|iap|cidr,default=cidr+iap,enum=cidr+iap,enum=iap,enum=cidr"`
 }
 
 // EffectiveZone and friends resolve one field each against its default. They
@@ -335,6 +349,21 @@ func (i *ForgeInfraConfig) IAPSSHEnabled() bool {
 		return true
 	}
 	return *i.EnableIAPSSH
+}
+
+func (i *ForgeInfraConfig) SyncdIngressIsEnabled() bool {
+	return i == nil || i.SyncdIngressEnabled == nil || *i.SyncdIngressEnabled
+}
+
+func (i *ForgeInfraConfig) ForgejoIngressIsEnabled() bool {
+	return i == nil || i.ForgejoIngressEnabled == nil || *i.ForgejoIngressEnabled
+}
+
+func (i *ForgeInfraConfig) EffectiveSSHIngress() string {
+	if i == nil || strings.TrimSpace(i.SSHIngress) == "" {
+		return ForgeSSHIngressCIDRAndIAP
+	}
+	return strings.ToLower(strings.TrimSpace(i.SSHIngress))
 }
 
 func (i *ForgeInfraConfig) rawZone() string {
@@ -862,6 +891,11 @@ func (i *ForgeInfraConfig) Validate() error {
 	}
 	if i.DiskSizeGB < 0 {
 		return fmt.Errorf("forge infra disk_size_gb %d must be positive", i.DiskSizeGB)
+	}
+	switch i.EffectiveSSHIngress() {
+	case ForgeSSHIngressCIDRAndIAP, ForgeSSHIngressIAP, ForgeSSHIngressCIDR:
+	default:
+		return fmt.Errorf("forge infra ssh_ingress %q must be %q, %q, or %q", i.SSHIngress, ForgeSSHIngressCIDRAndIAP, ForgeSSHIngressIAP, ForgeSSHIngressCIDR)
 	}
 	return nil
 }
