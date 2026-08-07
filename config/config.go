@@ -17,6 +17,7 @@ import (
 
 	"github.com/grovetools/core/errors"
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/plugin"
 )
 
 // loadCacheEntry caches a resolved Config keyed by the absolute startDir passed
@@ -502,7 +503,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 
 		// Also glob ~/.config/grove/plugins/*.toml for per-user plugin manifests
-		pluginPattern := filepath.Join(globalDir, "plugins", "*.toml")
+		pluginPattern := plugin.FragmentPattern(globalDir)
 		if pluginFiles, err := filepath.Glob(pluginPattern); err == nil {
 			for _, file := range pluginFiles {
 				baseName := filepath.Base(file)
@@ -1318,7 +1319,11 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		// of [tui.plugins] (treemux, via LoadLayered) never saw a drop-in.
 		// They are loaded after the ordinary fragments in both loaders, so the
 		// merge order is identical.
-		pluginPattern := filepath.Join(globalDir, "plugins", "*.toml")
+		//
+		// The pattern comes from core/pkg/plugin, which is where the installer
+		// derives the paths it writes: the glob and the files it must find (and
+		// the lockfile it must not) are one fact, stated once.
+		pluginPattern := plugin.FragmentPattern(globalDir)
 		if pluginFiles, err := filepath.Glob(pluginPattern); err == nil {
 			sort.Strings(pluginFiles)
 			for _, file := range pluginFiles {
