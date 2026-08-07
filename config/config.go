@@ -32,8 +32,12 @@ const loadCacheTTL = 2 * time.Second
 
 var loadCache sync.Map // map[string]loadCacheEntry, keyed by absolute startDir
 
-// ResetLoadCache clears the LoadFromWithLogger cache. Tests that mutate config
-// files across sub-cases within the TTL window should call this between them.
+// ResetLoadCache clears both config caches: LoadFromWithLogger's TTL cache and
+// Load's per-file memo (see filecache.go). Tests that mutate config files
+// across sub-cases should call this between them — the TTL cache would
+// otherwise serve the pre-write config for up to loadCacheTTL, and the
+// per-file memo can be fooled by a same-size rewrite landing inside one mtime
+// tick on a coarse-timestamp filesystem.
 //
 // Production code needs it in exactly one shape: a command that WRITES config
 // and then reads the result back inside the same process (`grove subscribe`,
@@ -47,6 +51,7 @@ func ResetLoadCache() {
 		loadCache.Delete(key)
 		return true
 	})
+	resetFileCache()
 }
 
 var envVarRegex = regexp.MustCompile(`\$\{([^}]+)\}`)
@@ -278,21 +283,88 @@ func postProcessTOMLKeybindings(cfg *Config, data []byte) {
 	}
 }
 
-// Load reads and parses a Grove configuration file
+// Load reads and parses a Grove configuration file.
+//
+// An unchanged file is parsed and schema-validated once per process, not once
+// per call: the result is memoized per absolute path and revalidated with a
+// stat. See filecache.go for what "unchanged" covers and for the
+// immutability contract the returned *Config carries.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	abs, err := filepath.Abs(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, errors.ConfigNotFound(path)
-		}
-		return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read config file").
-			WithDetail("path", path)
+		// Unresolvable path: skip the cache entirely rather than key it on
+		// something ambiguous. loadUncached still returns the real error.
+		return loadUncached(path)
 	}
 
+	info, statErr := os.Stat(abs)
+	if statErr != nil || info.IsDir() {
+		// Missing, unreadable, or a directory. Fall through to the original
+		// path so ENOENT and permission errors are produced by exactly the
+		// code that produced them before this cache existed.
+		return loadUncached(path)
+	}
+	self := fileStamp{exists: true, modTime: info.ModTime(), size: info.Size()}
+
+	raw, _ := fileCache.LoadOrStore(abs, &fileCacheEntry{})
+	entry := raw.(*fileCacheEntry)
+
+	// Per-entry lock: concurrent Loads of the same path collapse onto one
+	// parse, Loads of different paths never contend.
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	if entry.fresh(self) {
+		return entry.cfg, nil
+	}
+
+	// Read AFTER stamping. If the file changes between the two, we cache newer
+	// content under an older stamp — the next call stats, sees the newer mtime
+	// and reloads. Stamping after the read would have the opposite, unsafe
+	// skew: older content pinned to a stamp nothing will ever invalidate.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, readConfigError(path, err)
+	}
+
+	cfg, err := parseConfigBytes(path, data)
+	if err != nil {
+		// Parse failures are not cached. They are rare, loud (workspace
+		// classification surfaces them), and re-deriving one costs a parse of
+		// a file the operator is actively fixing.
+		return nil, err
+	}
+
+	entry.store(self, cfg, envRefs(string(data)))
+	return cfg, nil
+}
+
+// loadUncached is Load without memoization: the original read-then-parse body,
+// kept intact so uncacheable paths behave identically to before.
+func loadUncached(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, readConfigError(path, err)
+	}
+	return parseConfigBytes(path, data)
+}
+
+// readConfigError maps a failed read of a config file to the error Load has
+// always returned for it.
+func readConfigError(path string, err error) error {
+	if os.IsNotExist(err) {
+		return errors.ConfigNotFound(path)
+	}
+	return errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read config file").
+		WithDetail("path", path)
+}
+
+// parseConfigBytes dispatches on extension the way Load always has: TOML for
+// .toml, YAML for everything else.
+func parseConfigBytes(path string, data []byte) (*Config, error) {
 	if strings.HasSuffix(path, ".toml") {
 		return LoadFromTOMLBytes(data)
 	}
-
 	return LoadFromBytes(data)
 }
 

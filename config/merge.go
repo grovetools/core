@@ -9,8 +9,12 @@ import (
 
 // LoadWithOverrides loads configuration with override files
 func LoadWithOverrides(baseFile string) (*Config, error) {
-	// Load base configuration
-	config, err := Load(baseFile)
+	// Load the base UNCACHED. mergeConfigs shallow-copies its base and then
+	// writes through the copy's still-shared nested pointers (Worktree, TUI,
+	// …), so handing it a memoized *Config would let an override file edit
+	// the cached entry every other Load caller sees. This path is cold — a
+	// full parse here costs nothing worth defending.
+	config, err := loadUncached(baseFile)
 	if err != nil {
 		return nil, err
 	}

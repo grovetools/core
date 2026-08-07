@@ -20,6 +20,15 @@ import (
 // findGroveConfig checks for various grove config file names in a directory.
 // It returns the path to the found file, the loaded config, and an error if loading fails.
 // If no config file is found, it returns an error.
+//
+// This probes ONE directory — it does not walk ancestors — so its misses cost
+// six stats and nothing else. They were checked for as a possible hidden cost
+// once config.Load stopped re-parsing (2026-08-07): in the preserved groved
+// sample every one of the 29 findGroveConfig samples sat inside config.Load,
+// none in the stat probe, and BenchmarkFindGroveConfigMiss puts a full miss at
+// ~12us against ~11us for a cached hit. There is no negative-lookup storm to
+// cache away, so there is no negative cache — see config/filecache.go for the
+// one that was warranted.
 func findGroveConfig(dir string) (string, *config.Config, error) {
 	configNames := []string{
 		"grove.yml",
