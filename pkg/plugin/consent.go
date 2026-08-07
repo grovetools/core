@@ -86,6 +86,22 @@ type ConsentFacts struct {
 	// the subtree should not pass silently.
 	NotebookSubtree     string `json:"notebook_subtree,omitempty"`
 	NotebookDescription string `json:"notebook_description,omitempty"`
+	// DigestDescription carries the panel's [panel.digest] declaration: what its
+	// projection says, in the author's words. Empty means the manifest declares
+	// none.
+	//
+	// One field rather than a bool and a sentence, because the sentence IS the
+	// declaration — a panel saying only "I publish a digest" gives the user
+	// nothing to decide on. Named for the field rather than for the section
+	// because ConsentFacts.Digest is already the approval hash, and a struct
+	// where `f.Digest` and `f.Digest()` meant different things would be a trap
+	// laid for every later reader.
+	//
+	// Like Keys, Views and the notebook it grants nothing: the host draws the
+	// live frame and reads this nowhere. It is on the screen because a digest is
+	// the panel appearing in surfaces it is not running in, and an update that
+	// starts doing that should not pass silently.
+	DigestDescription string `json:"digest_description,omitempty"`
 	// Settings is the manifest's default settings table, flattened to sorted
 	// "dotted.key = value" lines.
 	//
@@ -200,6 +216,14 @@ func (f ConsentFacts) Digest() string {
 	if len(f.Views) > 0 {
 		parts = append(parts, "views="+strings.Join(f.Views, "\x1f"))
 	}
+	// Appended only when declared, for the reason views are. It sits with the
+	// other manifest declarations and ahead of `dev=`, which is not one — but
+	// the position is a readability choice and nothing more: what makes an
+	// existing approval survive is that a manifest declaring no digest appends
+	// no part at all, at any position.
+	if f.DigestDescription != "" {
+		parts = append(parts, "digest="+f.DigestDescription)
+	}
 	// Appended only when declared, for the reason views are: a manifest without
 	// [panel.notebook] must hash byte-identically to how it did before the
 	// section existed, so no previously-approved plugin re-opens its prompt to
@@ -258,6 +282,10 @@ func Diff(old, next ConsentFacts) []FactChange {
 	// decides the drawer default), and a per-line diff keyed on the view name
 	// would report a reordering as nothing at all.
 	add("views", strings.Join(old.Views, ", "), strings.Join(next.Views, ", "))
+	// Beside the views, and in the same order the consent screen prints them:
+	// both are declarations about what the panel draws and where, and the digest
+	// is the one of them that draws somewhere the panel is not.
+	add("digest", old.DigestDescription, next.DigestDescription)
 	// The subtree and its description diff as one row: what the panel writes
 	// into the notebook is one fact, and a moved subtree with a reworded
 	// description is one change rather than two unrelated ones.

@@ -1296,6 +1296,43 @@ func TestMergeTUIPluginsAccumulatesAcrossLayers(t *testing.T) {
 	}
 }
 
+// The digest declaration needs no merge clause of its own, and this is the test
+// that says so rather than a comment claiming it.
+//
+// [tui.plugins] merges per ENTRY with whole-entry replacement, so a field added
+// to PluginConfig rides along in both directions for free: it survives on an
+// entry no later layer mentions, and it goes away with the rest of an entry a
+// later layer replaces. That second half is the one worth pinning — a user
+// overriding an installed panel's `command` in their own config gets an entry
+// with no digest declaration, which is correct (their entry declares none) and
+// is exactly why absence is read as "declares none" rather than "publishes
+// none".
+func TestMergeTUIPluginsCarriesTheDigestDeclarationPerEntry(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{Plugins: map[string]*PluginConfig{
+		"breaktimer": {Command: "/bin/breaktimer", Digest: &PluginDigest{Description: "state and time left"}},
+		"hn":         {Command: "/bin/hn", Digest: &PluginDigest{Description: "the top story"}},
+	}}}
+	override := &Config{TUI: &TUIConfig{Plugins: map[string]*PluginConfig{
+		"hn": {Command: "/usr/local/bin/hn"},
+	}}}
+
+	merged := mergeConfigs(base, override)
+	bt := merged.TUI.Plugins["breaktimer"]
+	if bt == nil || bt.Digest == nil || bt.Digest.Description != "state and time left" {
+		t.Errorf("an untouched entry lost its digest declaration: %+v", bt)
+	}
+	hn := merged.TUI.Plugins["hn"]
+	if hn == nil || hn.Command != "/usr/local/bin/hn" {
+		t.Fatalf("the later layer's entry did not win: %+v", hn)
+	}
+	if hn.Digest != nil {
+		t.Errorf("a replaced entry kept the earlier layer's digest declaration: %+v", hn.Digest)
+	}
+	if base.TUI.Plugins["hn"].Digest == nil {
+		t.Error("mergeConfigs mutated the base layer's entry")
+	}
+}
+
 func TestMergeTUIPluginOrderUsesLaterGlobalPreference(t *testing.T) {
 	base := &Config{TUI: &TUIConfig{PluginOrder: []string{"first", "second"}}}
 	override := &Config{TUI: &TUIConfig{PluginOrder: []string{"second", "first"}}}

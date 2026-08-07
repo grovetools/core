@@ -985,6 +985,10 @@ type PluginConfig struct {
 	// same reasoning [Settings] records: the exec gate is for values a host
 	// would act on, and this one is only ever rendered.
 	Notebook *PluginNotebook `yaml:"notebook,omitempty" toml:"notebook,omitempty" jsonschema:"description=Notebook subtree the panel declares it writes into (declaration only; the host never resolves or enforces the path)"`
+	// Digest mirrors the panel's declaration that it publishes a digest — copied
+	// here from the manifest's [panel.digest] by `grove plugin install`. See
+	// [PluginDigest].
+	Digest *PluginDigest `yaml:"digest,omitempty" toml:"digest,omitempty" jsonschema:"description=What the panel says its published digest shows (declaration only; a host draws the live digest frame and never reads this)"`
 }
 
 // PluginKey is one declared host chord in a plugin's [[tui.plugins.<name>.keys]].
@@ -1044,6 +1048,34 @@ type PluginNotebook struct {
 	// by people — the consent screen and anyone opening the fragment — and by
 	// no code.
 	Description string `yaml:"description,omitempty" toml:"description,omitempty" json:"description,omitempty" jsonschema:"description=What the panel saves there, in the author's words"`
+}
+
+// PluginDigest is the panel's declaration that it publishes a digest —
+// [tui.plugins.<name>.digest], copied from the manifest's [panel.digest] by
+// `grove plugin install`.
+//
+// The COLD half of a capability that until now existed only while the panel was
+// running: a digest is the panelproto frame a panel pushes so a host can draw a
+// one-line projection of it somewhere the panel itself is not — a
+// [DrawerBackendDigest] pane, a roster row. That frame arrives over a live
+// control plane, so before this field nothing could answer "does this panel
+// publish a digest" about a panel nobody had opened yet, which is precisely when
+// the question gets asked: while reading a roster, or while writing
+// `backend = "digest"` into a drawer page.
+//
+// Like [PluginKey], [PluginView] and [PluginNotebook] it is a DECLARATION and
+// grants nothing. No host ever draws from it — what gets drawn is the live frame
+// — and a panel that publishes without declaring is treated no differently. The
+// asymmetry that follows is worth stating: its ABSENCE means "declares none",
+// not "publishes none", because every fragment written before this field existed
+// lacks it, as does every hand-written [tui.plugins] entry. Read it in the
+// affirmative only.
+type PluginDigest struct {
+	// Description is what the projection says, in the author's words — the
+	// content of the line rather than the fact that there is one, for the reason
+	// [PluginView.Description] is what it is: "publishes a digest" gives a user
+	// nothing to decide about the drawer column they are considering giving it.
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" json:"description,omitempty" jsonschema:"description=What the panel's published digest shows, in the author's words"`
 }
 
 // PanelConfig holds configuration for user-defined ephemeral panel

@@ -78,6 +78,9 @@ const ProtocolEmbedV1 = "embed/v1"
 //	subtree     = "hn/clippings"
 //	description = "stories you clip from the feed"
 //
+//	[panel.digest]
+//	description = "the current state and how long is left of it"
+//
 //	[[panel.keys]]
 //	key         = "ctrl+f"
 //	description = "jump to the notebook"
@@ -170,6 +173,9 @@ type Panel struct {
 	// present only when the panel saves content into the user's notebook. Like
 	// Keys and Views it is reported and bound, never enforced; see [Notebook].
 	Notebook *Notebook `toml:"notebook"`
+	// Digest is the panel's declaration that it publishes a digest —
+	// `[panel.digest]`, present only when it does. See [Digest].
+	Digest *Digest `toml:"digest"`
 }
 
 // View is one of the panel's own layouts, declared so the host can default and
@@ -229,6 +235,41 @@ type Notebook struct {
 	// Description is what the panel saves there, in the author's words.
 	// Required: it is the only thing that tells the user what kind of content
 	// would appear in their notebook.
+	Description string `toml:"description"`
+}
+
+// Digest is the panel's declaration that it publishes a digest —
+// `[panel.digest]`.
+//
+// Nothing to do with the hashes this package computes: a DIGEST here is the
+// panelproto frame a panel pushes so a host can draw a one-line projection of it
+// in a slot the panel itself cannot run in — a drawer column, a roster row.
+//
+// It exists because until now that capability was only ever a RUNTIME fact. The
+// frame arrives over a live control plane, so "does this panel publish a digest"
+// could not be answered about a panel that had not been opened yet — and both
+// places that want the answer ask it cold: a roster listing panels nobody has
+// focused, and a user writing `backend = "digest"` into their drawer config for
+// a panel they have just installed.
+//
+// Like [Key], [View] and [Notebook] it is a DISCLOSURE, not a grant and not a
+// contract. Declaring it obliges no panel to push anything, and a panel that
+// pushes one without declaring it is drawn exactly the same — the host reads the
+// live frame, never this. What the declaration buys is the cold answer, and the
+// consent screen sentence that goes with it: a projection of the panel will be
+// visible in surfaces the panel is not running in, and that is worth reading
+// before approving.
+//
+// Absence means "declares no digest", which is deliberately weaker than "does
+// not publish one": every fragment written before this table existed lacks it,
+// as does every hand-written [tui.plugins] entry. So the declaration is only
+// ever read in the affirmative.
+type Digest struct {
+	// Description is what the projection says, in the author's words — the
+	// content of the line, not the fact that there is one. Required, for the
+	// reason [View]'s is: "publishes a digest" tells a user nothing they can
+	// decide on, and this is the only thing that says what would appear in the
+	// drawer column they are about to give it.
 	Description string `toml:"description"`
 }
 
@@ -416,6 +457,18 @@ func (m *Manifest) Validate() error {
 			return errors.New("panel.notebook.description is required — it is shown at the install consent prompt")
 		}
 		if err := printable("panel.notebook.description", nb.Description); err != nil {
+			return err
+		}
+	}
+	// The digest section is optional and has exactly one key, so declaring it is
+	// declaring the description: an empty `[panel.digest]` is a panel claiming a
+	// surface without saying what would appear there, which is the one thing the
+	// user reading the consent screen is deciding about.
+	if d := m.Panel.Digest; d != nil {
+		if strings.TrimSpace(d.Description) == "" {
+			return errors.New("panel.digest.description is required — it is the only thing that says what the projection would show")
+		}
+		if err := printable("panel.digest.description", d.Description); err != nil {
 			return err
 		}
 	}
