@@ -167,6 +167,7 @@ var iconTable = map[string]*string{
 	"numeric10circleoutline": &IconNumeric10CircleOutline,
 	"statusalpha":            &IconStatusAlpha,
 	"statusbeta":             &IconStatusBeta,
+	"plugin":                 &IconPlugin,
 }
 
 // iconNames is every icon name in canonical hyphenated form, in
@@ -329,4 +330,5 @@ var iconNames = []string{
 	"numeric10-circle-outline",
 	"status-alpha",
 	"status-beta",
+	"plugin",
 }

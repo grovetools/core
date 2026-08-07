@@ -177,6 +177,8 @@ const (
 
 	nerdIconStatusAlpha = "α" // Greek lowercase alpha (U+03B1)
 	nerdIconStatusBeta  = "β" // Greek lowercase beta (U+03B2)
+
+	nerdIconPlugin = "󰐱" // md-puzzle (U+F0431)
 )
 
 // ASCII Fallback Icons (Private Constants)
@@ -345,6 +347,8 @@ const (
 
 	asciiIconStatusAlpha = "[A]" // Alpha status
 	asciiIconStatusBeta  = "[B]" // Beta status
+
+	asciiIconPlugin = "[P]" // Plugin
 )
 
 // Public Icon Variables
@@ -513,6 +517,12 @@ var (
 
 	IconStatusAlpha string
 	IconStatusBeta  string
+
+	// IconPlugin is the puzzle piece a plugin panel wears: treemux's built-in
+	// Plugins manager on the rail, and — because icongen puts every exported
+	// icon in the lookup table — the name "plugin" a grove-plugin.toml or a
+	// [tui.plugins] entry can ask for by string.
+	IconPlugin string
 )
 
 // ASCIIIcons reports whether the ASCII icon set is active (GROVE_ICONS=ascii
@@ -720,6 +730,7 @@ func applyIcons(useASCII bool) {
 		IconNumeric10CircleOutline = asciiIconNumeric10CircleOutline
 		IconStatusAlpha = asciiIconStatusAlpha
 		IconStatusBeta = asciiIconStatusBeta
+		IconPlugin = asciiIconPlugin
 	} else {
 		// Load Nerd Font icons (default)
 		IconTree = nerdIconTree
@@ -878,5 +889,6 @@ func applyIcons(useASCII bool) {
 		IconNumeric10CircleOutline = nerdIconNumeric10CircleOutline
 		IconStatusAlpha = nerdIconStatusAlpha
 		IconStatusBeta = nerdIconStatusBeta
+		IconPlugin = nerdIconPlugin
 	}
 }
