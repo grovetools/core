@@ -1,6 +1,9 @@
 package plugin
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
 
 // Status is one row of `grove plugin list`: a pin, plus whether what it claims
 // is actually there.
@@ -40,4 +43,35 @@ func List() ([]Status, error) {
 		out = append(out, st)
 	}
 	return out, nil
+}
+
+// BuiltCommit reports which version the installed binary was actually built
+// from, read off the link the installer leaves in the grove bin dir:
+//
+//	BinDir()/<binary> -> DataDir()/plugins/versions/<name>/<commit|"dev">/bin/<binary>
+//
+// It is the one thing the lockfile cannot state. Pin.Commit is what is PINNED;
+// this is what is on disk, and the two disagree exactly when it matters — a
+// rebuild that never finished, a binary replaced by hand, or a dev entry, whose
+// answer is the literal "dev" because it was built from a working tree nothing
+// is pinned to.
+//
+// Empty when the link is missing or points outside that layout. A binary
+// somebody put there themselves has no built commit to report, and inventing
+// one would be worse than saying nothing.
+func (p *Pin) BuiltCommit() string {
+	if p == nil || p.Binary == "" {
+		return ""
+	}
+	target, err := os.Readlink(p.Binary)
+	if err != nil {
+		return ""
+	}
+	binDir := filepath.Dir(target)      // .../versions/<name>/<version>/bin
+	versionDir := filepath.Dir(binDir)  // .../versions/<name>/<version>
+	nameDir := filepath.Dir(versionDir) // .../versions/<name>
+	if filepath.Base(binDir) != "bin" || filepath.Base(filepath.Dir(nameDir)) != "versions" {
+		return ""
+	}
+	return filepath.Base(versionDir)
 }
