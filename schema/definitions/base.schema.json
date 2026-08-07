@@ -1100,6 +1100,10 @@
           "description": "Working directory for the command",
           "type": "string"
         },
+        "digest": {
+          "$ref": "#/$defs/PluginDigest",
+          "description": "What the panel says its published digest shows (declaration only; a host draws the live digest frame and never reads this)"
+        },
         "env": {
           "description": "Extra environment variables (KEY=VALUE)",
           "items": {
@@ -1170,6 +1174,16 @@
       "required": [
         "command"
       ],
+      "type": "object"
+    },
+    "PluginDigest": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "What the panel's published digest shows",
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "PluginKey": {
