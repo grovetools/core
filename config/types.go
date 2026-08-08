@@ -936,6 +936,24 @@ type PluginConfig struct {
 	// future host ever wants to act on a settings value itself, that key needs
 	// its own RegisterExecField entry before it ships, not after.
 	Settings map[string]interface{} `yaml:"settings,omitempty" toml:"settings,omitempty" jsonschema:"description=Free-form settings table delivered to the panel over the embed/v1 control plane (data only; never executed by the host)"`
+	// SettingOptions mirrors the vocabularies the panel declares for individual
+	// settings — copied here from the manifest's `[[panel.setting_options]]` by
+	// `grove plugin install`, which is the list the user read on the consent
+	// screen.
+	//
+	// It is the one piece of [Settings] metadata that exists at all, and it is
+	// here rather than inside the table because the table is DATA delivered
+	// verbatim: a description of a setting, carried alongside the setting, would
+	// arrive at the panel as one more setting it never declared.
+	//
+	// Nothing at spawn time reads it — the host forwards Settings and would
+	// forward them identically if this were empty. What reads it is the config
+	// UI: treemux's plugin editor offers the declared values instead of a text
+	// box, which is the difference between a user knowing `palette` takes one of
+	// three words and a user guessing. It grants nothing and refuses nothing —
+	// a settings value outside the list still reaches the panel — for the reason
+	// [Keys] and [Views] do: the manifest is read and reported on, never obeyed.
+	SettingOptions []PluginSettingOptions `yaml:"setting_options,omitempty" toml:"setting_options,omitempty" jsonschema:"description=Vocabularies the panel declares for individual settings (declaration only; a value outside the list still reaches the panel)"`
 	// Keys mirrors the host chords the panel declares it intends to claim —
 	// `grove plugin install` copies them here from the manifest's
 	// [[panel.keys]], which is the list the user read on the consent screen.
@@ -999,6 +1017,37 @@ type PluginKey struct {
 	// Description is the human-readable effect, shown wherever the host lists
 	// the panel's keys.
 	Description string `yaml:"description,omitempty" toml:"description,omitempty" jsonschema:"description=What the chord does, shown in the host's help surfaces"`
+}
+
+// PluginSettingOptions is the vocabulary a panel declares for ONE of its
+// settings — one entry of [[tui.plugins.<name>.setting_options]], copied from
+// the manifest's [[panel.setting_options]] by `grove plugin install`.
+//
+// An array of entries naming their setting, rather than a table keyed by it,
+// because the key is a dotted SETTING PATH: `timer.work_minutes` names a real
+// setting and is not a bare TOML key, so a table form would put quotes into the
+// commonest declaration. See plugin.SettingOptions in core/pkg/plugin, whose
+// fields these mirror one for one.
+type PluginSettingOptions struct {
+	// Setting is the dotted path of the setting, in the form the consent screen
+	// and `grove plugin set` use — "palette", "timer.work_minutes".
+	Setting string `yaml:"setting" toml:"setting" json:"setting" jsonschema:"description=Dotted path of the setting these are the options for"`
+	// Description is what the setting decides, in the author's words. Read by
+	// people — the install consent screen, and the plugin editor's hint column —
+	// and by no code.
+	Description string `yaml:"description,omitempty" toml:"description,omitempty" json:"description,omitempty" jsonschema:"description=What this setting decides, in the author's words"`
+	// Options is the vocabulary, in the order a UI offers it. Values are
+	// compared against the setting's value as TEXT, so the options for a numeric
+	// setting are written as strings.
+	Options []string `yaml:"options,omitempty" toml:"options,omitempty" json:"options,omitempty" jsonschema:"description=The values the author declares for this setting, in the order a UI should offer them"`
+	// AllowCustom says the list is a set of suggestions: a UI should also let
+	// the user type a value of their own into this same setting.
+	AllowCustom bool `yaml:"allow_custom,omitempty" toml:"allow_custom,omitempty" json:"allow_custom,omitempty" jsonschema:"description=Whether a UI should also offer typing a value outside the list into this setting"`
+	// CustomOption and CustomSetting are the other shape of that escape hatch:
+	// choosing CustomOption means the setting named by CustomSetting is the one
+	// that decides. Meaningless apart, so a declaration carries both or neither.
+	CustomOption  string `yaml:"custom_option,omitempty" toml:"custom_option,omitempty" json:"custom_option,omitempty" jsonschema:"description=The option whose choice hands the decision to another setting"`
+	CustomSetting string `yaml:"custom_setting,omitempty" toml:"custom_setting,omitempty" json:"custom_setting,omitempty" jsonschema:"description=The setting that decides when custom_option is chosen"`
 }
 
 // PluginView is one view a panel declares it can draw — one entry of

@@ -74,6 +74,11 @@ const ProtocolEmbedV1 = "embed/v1"
 //	work_minutes  = 25
 //	break_minutes = 5
 //
+//	[[panel.setting_options]]
+//	setting     = "palette"
+//	description = "which colors the panel draws in"
+//	options     = ["hn", "host", "auto"]
+//
 //	[panel.notebook]
 //	subtree     = "hn/clippings"
 //	description = "stories you clip from the feed"
@@ -150,6 +155,24 @@ type Panel struct {
 	// because a value the user has approved is one they should have read. An
 	// update that changes a default re-opens the prompt with a diff.
 	Settings map[string]any `toml:"settings"`
+	// SettingOptions are the CHOICES an author declares for individual settings
+	// — `[[panel.setting_options]]`, one entry per setting that has a closed
+	// vocabulary rather than a free-form value.
+	//
+	// Optional, and absent for most settings: a work interval in minutes is a
+	// number and nothing here would improve it. What the table is for is the
+	// setting whose legal values the author already knows and the user has to
+	// guess — a browser to open links with, a palette, a layout — where a config
+	// UI drawing a text box is asking a question it already has the answer to.
+	//
+	// Like every other declaration in this manifest it is READ AND REPORTED ON,
+	// never obeyed. `grove plugin set` still writes a value outside the list
+	// (the user may know about a browser the author did not), the host still
+	// delivers whatever the settings table says, and the panel remains the only
+	// party that decides what an unrecognized value means. What the declaration
+	// buys is a UI that can offer the list, and a consent screen that shows the
+	// user which values they are approving a panel to be pointed at.
+	SettingOptions []SettingOptions `toml:"setting_options"`
 	// Views are the panel's own named layouts — `[panel.views.<name>]`, keyed by
 	// the name the panel answers to.
 	//
@@ -211,6 +234,61 @@ type View struct {
 type Key struct {
 	Key         string `toml:"key"`
 	Description string `toml:"description"`
+}
+
+// SettingOptions is one setting's declared vocabulary — one entry of
+// `[[panel.setting_options]]`.
+//
+// An ARRAY rather than `[panel.setting_options.<key>]` tables, unlike
+// `[panel.views.<name>]`, because the thing being keyed is a SETTING PATH:
+// `timer.work_minutes` is a legal setting and an illegal bare TOML key, and a
+// declaration whose commonest form has to be written in quotes is one authors
+// will get wrong. Naming the setting in a field also lets this type be the same
+// type in the manifest, in the fragment and in the config — the translation
+// views need (a map, ordered by a recovered declaration order) has nothing to do
+// here.
+type SettingOptions struct {
+	// Setting is the dotted path of the setting these are the options for, in
+	// the form the consent screen and `grove plugin set` already use —
+	// "palette", "timer.work_minutes". It must name a setting `[panel.settings]`
+	// declares, because options for a setting the panel has no default for are
+	// options for nothing.
+	Setting string `toml:"setting"`
+	// Description is what the setting decides, in the author's words. Optional:
+	// a list of browser names says most of what there is to say, and a
+	// declaration that forced a sentence out of every author would get
+	// sentences that repeat the key.
+	Description string `toml:"description"`
+	// Options is the vocabulary, in the order a UI should offer it. Required —
+	// an entry declaring none declares nothing — and the values are compared
+	// against the setting's value as text, so an option for a numeric setting is
+	// still written as a string here ("24", not 24).
+	Options []string `toml:"options"`
+	// AllowCustom says the list is a set of SUGGESTIONS rather than the whole
+	// vocabulary: a UI offering these should also let the user type a value of
+	// their own into this same setting.
+	//
+	// It changes nothing about what may be written — nothing here is enforcement
+	// — it says which of the two a UI should draw, and it is what keeps a
+	// declaration from turning "the seven browsers I tested" into "the only
+	// seven browsers".
+	AllowCustom bool `toml:"allow_custom"`
+	// CustomOption and CustomSetting are the other shape of the same escape
+	// hatch, and the one a panel picks when the custom value needs a home of its
+	// own: choosing CustomOption from the list means the setting named by
+	// CustomSetting is the one that decides.
+	//
+	// It exists because a panel that takes a browser NAME and a panel that takes
+	// an executable PATH are reading two different things, and a single setting
+	// holding either would have to guess which it was given. Two settings, one
+	// of which nominates the other, lets both be typed and both be declared.
+	//
+	// They are meaningless apart, so a manifest declaring one must declare both.
+	// CustomOption must be one of Options — the choice a user makes has to be
+	// choosable — and CustomSetting must be a setting the panel declares, which
+	// is the same rule Setting is held to.
+	CustomOption  string `toml:"custom_option"`
+	CustomSetting string `toml:"custom_setting"`
 }
 
 // Notebook is the panel's declared notebook subtree — `[panel.notebook]`.
@@ -391,6 +469,9 @@ func (m *Manifest) Validate() error {
 		return err
 	}
 	if err := validateSettings("panel.settings", m.Panel.Settings); err != nil {
+		return err
+	}
+	if err := validateSettingOptions(&m.Panel); err != nil {
 		return err
 	}
 	for i, k := range m.Panel.Keys {
@@ -605,6 +686,90 @@ func validateSettingsAt(key string, v any, depth int) error {
 		}
 	case string:
 		return printable(key, v)
+	}
+	return nil
+}
+
+// validateSettingOptions holds a `[[panel.setting_options]]` declaration to the
+// two things that make it useful: it names a setting the panel actually
+// declares, and the setting's own default is one of the values it offers.
+//
+// Both are author errors that are otherwise invisible. Options hung on a
+// mistyped setting path silently do nothing; a default outside its own option
+// list means the panel ships in a state its own declaration says is not
+// available, and a UI offering the list would have no entry to show as current.
+// Neither is a policy about what the USER may set — a value outside the list is
+// still writable, because the list is a declaration and not a gate.
+func validateSettingOptions(p *Panel) error {
+	values := settingValues(p.Settings)
+	seen := make(map[string]bool, len(p.SettingOptions))
+	for i, o := range p.SettingOptions {
+		key := fmt.Sprintf("panel.setting_options[%d]", i)
+		if strings.TrimSpace(o.Setting) == "" {
+			return fmt.Errorf("%s.setting is required — name the setting these are the options for", key)
+		}
+		if err := printable(key+".setting", o.Setting); err != nil {
+			return err
+		}
+		if seen[o.Setting] {
+			return fmt.Errorf("%s.setting %q is declared twice — one setting has one set of options", key, o.Setting)
+		}
+		seen[o.Setting] = true
+		if err := printable(key+".description", o.Description); err != nil {
+			return err
+		}
+		value, declared := values[o.Setting]
+		if !declared {
+			return fmt.Errorf("%s.setting %q names no setting in [panel.settings] — options for a setting the panel has no default for are options for nothing", key, o.Setting)
+		}
+		if len(o.Options) == 0 {
+			return fmt.Errorf("%s.options is required — an entry that offers no values declares nothing about %s", key, o.Setting)
+		}
+		offered := make(map[string]bool, len(o.Options))
+		for j, opt := range o.Options {
+			if strings.TrimSpace(opt) == "" {
+				return fmt.Errorf("%s.options[%d] is empty", key, j)
+			}
+			if err := printable(fmt.Sprintf("%s.options[%d]", key, j), opt); err != nil {
+				return err
+			}
+			if offered[opt] {
+				return fmt.Errorf("%s.options lists %q twice", key, opt)
+			}
+			offered[opt] = true
+		}
+		// The default is compared as TEXT, which is how every other comparison
+		// in this package reads a setting: the consent screen, the update diff
+		// and the host's own editor all hold "24" rather than 24, so an option
+		// list for a numeric setting is written as strings and still matches.
+		if !offered[value] && !o.AllowCustom {
+			return fmt.Errorf("[panel.settings].%s is %s, which is not one of the options %s declares (%s) — set allow_custom if the list is only a suggestion", o.Setting, value, key, strings.Join(o.Options, ", "))
+		}
+		switch {
+		case o.CustomOption == "" && o.CustomSetting == "":
+		case o.CustomOption == "":
+			return fmt.Errorf("%s.custom_setting names %q but %s.custom_option does not say which choice selects it", key, o.CustomSetting, key)
+		case o.CustomSetting == "":
+			return fmt.Errorf("%s.custom_option is %q but %s.custom_setting does not say which setting that choice hands over to", key, o.CustomOption, key)
+		case !offered[o.CustomOption]:
+			return fmt.Errorf("%s.custom_option %q is not one of the options it declares (%s)", key, o.CustomOption, strings.Join(o.Options, ", "))
+		case o.CustomSetting == o.Setting:
+			return fmt.Errorf("%s.custom_setting is %s itself — a setting cannot hand over to itself; allow_custom is how a setting takes a typed value of its own", key, o.Setting)
+		default:
+			if _, ok := values[o.CustomSetting]; !ok {
+				return fmt.Errorf("%s.custom_setting %q names no setting in [panel.settings]", key, o.CustomSetting)
+			}
+		}
+	}
+	return nil
+}
+
+// OptionsFor returns the declaration for one setting path, or nil.
+func (p *Panel) OptionsFor(setting string) *SettingOptions {
+	for i := range p.SettingOptions {
+		if p.SettingOptions[i].Setting == setting {
+			return &p.SettingOptions[i]
+		}
 	}
 	return nil
 }

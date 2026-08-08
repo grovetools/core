@@ -116,6 +116,20 @@ type ConsentFacts struct {
 	// behavior the user approved, and the manifest digest already re-opens the
 	// prompt for it — showing the values is what makes that prompt answerable.
 	Settings []string `json:"settings,omitempty"`
+	// SettingOptions is the manifest's `[[panel.setting_options]]`, flattened to
+	// the same "key = value" line shape Settings uses so an update diff can name
+	// the setting whose vocabulary moved rather than saying "the options
+	// changed".
+	//
+	// It is a fact worth recording for the reason the settings themselves are.
+	// The options are what a config UI will offer, so they decide the states the
+	// panel can be put into WITHOUT the user going back to a text editor — and
+	// an update that adds `custom` to a list of browser names is an update that
+	// starts offering to point the panel at an executable. Nothing here is
+	// enforcement (the list is a declaration, and a value outside it is still
+	// writable), which is exactly why it is on the screen: what it changes is
+	// what gets offered, and the only place to notice that is here.
+	SettingOptions []string `json:"setting_options,omitempty"`
 }
 
 // ViewFacts renders a panel's view declaration the way the consent screen and
@@ -151,6 +165,49 @@ func KeyFacts(p *Panel) []string {
 		keys = append(keys, fmt.Sprintf("%s — %s", k.Key, k.Description))
 	}
 	return keys
+}
+
+// SettingOptionFacts renders a panel's setting-option declarations the way the
+// consent screen and the digest read them: one line per declaration, in the
+// author's order, in the "key = value" shape the settings lines already use so
+// the update diff keys on the setting name.
+//
+// Here beside ViewFacts and KeyFacts for the same reason both of those are: the
+// line format is part of what an approval hashes, and rewording it would orphan
+// every approval already on disk.
+func SettingOptionFacts(p *Panel) []string {
+	out := make([]string, 0, len(p.SettingOptions))
+	for _, o := range p.SettingOptions {
+		line := o.Setting + " = " + strings.Join(o.Options, ", ")
+		if o.AllowCustom {
+			line += ", or a value you type"
+		}
+		if o.CustomSetting != "" {
+			line += fmt.Sprintf(" (%s hands over to %s)", o.CustomOption, o.CustomSetting)
+		}
+		if o.Description != "" {
+			line += " — " + o.Description
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// settingValues is a settings table as leaf path -> the value's flattened text.
+//
+// Through FlattenSettings rather than beside it, so "the value of
+// timer.work_minutes" means one thing in this package: what the consent screen
+// prints, what the update diff compares, and what an option list is matched
+// against are the same string.
+func settingValues(settings map[string]any) map[string]string {
+	lines := FlattenSettings(settings)
+	out := make(map[string]string, len(lines))
+	for _, line := range lines {
+		if key, value, ok := strings.Cut(line, " = "); ok {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 // FlattenSettings renders a settings table as sorted "dotted.key = value"
@@ -215,6 +272,13 @@ func (f ConsentFacts) Digest() string {
 	// about something none of them says.
 	if len(f.Views) > 0 {
 		parts = append(parts, "views="+strings.Join(f.Views, "\x1f"))
+	}
+	// Appended only when there are any, for the reason views are: a manifest
+	// that declares no options hashes exactly as it did before the section
+	// existed, so no plugin already approved re-opens its prompt to be asked
+	// about something it never said.
+	if len(f.SettingOptions) > 0 {
+		parts = append(parts, "setting_options="+strings.Join(f.SettingOptions, "\x1f"))
 	}
 	// Appended only when declared, for the reason views are. It sits with the
 	// other manifest declarations and ahead of `dev=`, which is not one — but
@@ -294,6 +358,10 @@ func Diff(old, next ConsentFacts) []FactChange {
 	// One line per changed setting rather than one "settings" row: an update
 	// that retunes a default should say which one and from what.
 	out = append(out, diffLines("settings", old.Settings, next.Settings)...)
+	// Beside the settings and keyed the same way, because a changed vocabulary
+	// is a change to that setting: "options.palette" reads as one more thing
+	// that moved about `palette`, next to the row saying its default moved.
+	out = append(out, diffLines("options", old.SettingOptions, next.SettingOptions)...)
 	// The icon is cosmetic, but the manifest digest covers it, so a changed
 	// icon alone re-opens the prompt. Showing it keeps the screen from saying
 	// "nothing you approved has changed" while asking about something.
