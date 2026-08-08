@@ -130,6 +130,18 @@ type ConsentFacts struct {
 	// writable), which is exactly why it is on the screen: what it changes is
 	// what gets offered, and the only place to notice that is here.
 	SettingOptions []string `json:"setting_options,omitempty"`
+	// Kind says which kind of plugin the approval covers — "tool", or empty
+	// for a panel. Empty rather than "panel", because every approval and every
+	// lockfile written before tools existed carries no kind, and a field that
+	// spelled the default out would keep them from round-tripping
+	// byte-identically.
+	Kind string `json:"kind,omitempty"`
+	// Provides is the tool's declared CLI surface, one line per phrase as
+	// ToolFacts renders it. It is the tool counterpart of Keys: a declaration
+	// of what typing things at grove will now do, on the screen because an
+	// update that grows it is an update that answers commands the user never
+	// read.
+	Provides []string `json:"provides,omitempty"`
 }
 
 // ViewFacts renders a panel's view declaration the way the consent screen and
@@ -154,6 +166,19 @@ func ViewFacts(p *Panel) []string {
 		views = append(views, line)
 	}
 	return views
+}
+
+// ToolFacts renders a tool's provides declaration the way the consent screen
+// and the digest read it: one line per phrase, spelled as the command it
+// enables — "grove forge up". Here beside ViewFacts and KeyFacts for the same
+// reason both are: the line format is part of what an approval hashes, and
+// rewording it would orphan every approval already on disk.
+func ToolFacts(t *Tool) []string {
+	out := make([]string, 0, len(t.Provides))
+	for _, phrase := range t.Provides {
+		out = append(out, "grove "+phrase)
+	}
+	return out
 }
 
 // KeyFacts renders a panel's key declaration the way the consent screen and the
@@ -295,6 +320,20 @@ func (f ConsentFacts) Digest() string {
 	if f.NotebookSubtree != "" {
 		parts = append(parts, "notebook="+notebookFact(f))
 	}
+	// Appended only for a tool, for the reason views are: every plugin
+	// installed before the kind existed is a panel, and a panel appends no
+	// part, so every one of those approvals hashes exactly as it did when it
+	// was granted. "kind=tool" spelled from the constant rather than from the
+	// field, so no future value of Kind can reshape this part by accident.
+	if f.Kind == "tool" {
+		parts = append(parts, "kind=tool")
+	}
+	// Appended only when there are any, for the reason views are: a panel
+	// declares none, so no approval already on disk re-opens to be asked about
+	// commands it never claimed.
+	if len(f.Provides) > 0 {
+		parts = append(parts, "provides="+strings.Join(f.Provides, "\x1f"))
+	}
 	// Appended only when set, for the same round-tripping reason as views: no
 	// previously-approved plugin re-opens its prompt. When it IS set it must be
 	// in the digest, so an approval granted to a pinned commit can never be
@@ -337,6 +376,14 @@ func Diff(old, next ConsentFacts) []FactChange {
 	}
 	add("source", old.Source, next.Source)
 	add("commit", shortCommit(old.Commit), shortCommit(next.Commit))
+	// A changed kind is the plugin becoming a different sort of thing — a pane
+	// turning into a command or back — which is the largest single fact an
+	// update can carry, so it leads the rows about what the plugin does.
+	add("kind", old.Kind, next.Kind)
+	// One row rather than one per phrase, like views: the list is the tool's
+	// whole claim on the command line, and a reworded phrase is a change to
+	// that claim rather than one removal plus one unrelated addition.
+	add("provides", strings.Join(old.Provides, ", "), strings.Join(next.Provides, ", "))
 	add("build", strings.Join(old.Build, " "), strings.Join(next.Build, " "))
 	add("run", strings.Join(old.Run, " "), strings.Join(next.Run, " "))
 	add("env", strings.Join(old.Env, " "), strings.Join(next.Env, " "))

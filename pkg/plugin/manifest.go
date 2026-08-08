@@ -97,12 +97,31 @@ const ProtocolEmbedV1 = "embed/v1"
 //	[panel.views.compact]
 //	description = "one line: state and time remaining"
 //	drawer      = true
+//
+// A manifest may instead declare a TOOL — a binary grove dispatches to rather
+// than a pane treemux runs. Exactly one of [panel]/[tool]:
+//
+//	[tool]
+//	binary   = "forge"
+//	provides = ["forge up", "forge status"]
 type Manifest struct {
-	SchemaVersion int      `toml:"schema_version"`
-	Plugin        Plugin   `toml:"plugin"`
-	Build         Build    `toml:"build"`
-	Panel         Panel    `toml:"panel"`
-	Unknown       []string `toml:"-"` // keys this grove does not understand
+	SchemaVersion int    `toml:"schema_version"`
+	Plugin        Plugin `toml:"plugin"`
+	Build         Build  `toml:"build"`
+	Panel         Panel  `toml:"panel"`
+	// Tool is the manifest's other kind — see [Tool]. A pointer where Panel is
+	// a value because presence IS the declaration: the kind is inferred from
+	// which section the document contains, not from a field that could
+	// disagree with it.
+	Tool    *Tool    `toml:"tool"`
+	Unknown []string `toml:"-"` // keys this grove does not understand
+	// PanelDeclared reports that the document literally contains a [panel]
+	// section, recovered from the bytes (see panelDeclared) because Panel is a
+	// value and an absent section decodes identically to an empty one. It
+	// exists for exactly one check: a manifest declaring [tool] alongside
+	// [panel] is refused, while a manifest declaring NEITHER stays what it has
+	// always been — a plain PTY panel.
+	PanelDeclared bool `toml:"-"`
 }
 
 // Plugin is the identity section.
@@ -120,6 +139,30 @@ type Plugin struct {
 type Build struct {
 	Command []string `toml:"command"`
 	Binary  string   `toml:"binary"`
+}
+
+// Tool is the manifest's other kind — `[tool]` in place of `[panel]`. A tool
+// is not a pane treemux runs; it is a binary grove installs and dispatches to
+// when the user types one of the verbs it declares (`grove forge up`). Same
+// checkout, same pin, same consent gate — only the host differs.
+type Tool struct {
+	// Binary is the bare command name the tool is installed as. Optional: it
+	// defaults to the basename of build.binary (see Manifest.BinaryName). Held
+	// to namePattern rather than to build.binary's path rules, because it is a
+	// NAME and never a path — it becomes a file in grove's bin dir and the
+	// command dispatch resolves, and a separator here would be a claim about
+	// directories the install does not manage.
+	Binary string `toml:"binary"`
+	// Provides is the CLI phrases the tool answers, exactly as the user would
+	// type them after `grove` — "forge up", "forge status". Required and
+	// non-empty: a tool that answers nothing is not installable as one.
+	//
+	// The set of distinct first tokens is the tool's dispatch verb set,
+	// usually one. Phrases beyond the verb are a DISCLOSURE like a panel's
+	// keys: the consent screen renders each as the command it enables, and an
+	// update that grows the list re-opens the prompt. Dispatch keys on the
+	// verb — nothing checks the tool's real argv surface against this list.
+	Provides []string `toml:"provides"`
 }
 
 // Panel is what the installer turns into a [tui.plugins.<name>] fragment.
@@ -398,9 +441,10 @@ func ParseManifest(data []byte) (*Manifest, error) {
 			m.Unknown = append(m.Unknown, strings.Join(e.Key(), "."))
 		}
 	}
-	// The decode has already accepted the bytes, so this is a second read of a
-	// document known to parse — for the one fact the decoder throws away.
+	// The decode has already accepted the bytes, so these are second reads of a
+	// document known to parse — for the two facts the decoder throws away.
 	m.Panel.ViewOrder = viewOrder(data)
+	m.PanelDeclared = panelDeclared(data)
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -439,6 +483,18 @@ func (m *Manifest) Validate() error {
 	}
 	if err := validateRelPath("build.binary", m.Build.Binary); err != nil {
 		return err
+	}
+
+	// A manifest is exactly one kind, and the kind is which section it wrote.
+	// Declaring both is refused rather than ranked: two hosts each honoring
+	// half a manifest is not a state the user could have approved. Declaring
+	// NEITHER stays what it has always been — a plain PTY panel — because
+	// every manifest written before [tool] existed is one.
+	if m.Tool != nil {
+		if m.PanelDeclared {
+			return errors.New("[tool] and [panel] are both declared — a plugin is one kind: a tool grove dispatches to, or a panel treemux runs")
+		}
+		return validateTool(m.Tool)
 	}
 
 	switch m.Panel.Protocol {
@@ -610,9 +666,63 @@ func (p *Panel) PreferredDrawerView() string {
 	return ""
 }
 
-// BinaryName is the basename the built binary is installed under.
+// Kind is which kind of plugin the manifest declares: "tool", or "panel" —
+// inferred from section presence rather than stated in a field, so the answer
+// can never disagree with the document. "panel" covers a manifest with no
+// [panel] section at all, because that has always meant a plain PTY panel.
+func (m *Manifest) Kind() string {
+	if m.Tool != nil {
+		return "tool"
+	}
+	return "panel"
+}
+
+// BinaryName is the name the built binary is installed under. A tool may pick
+// its own (tool.binary — the command `grove <verb>` resolves is worth naming
+// deliberately); everything else installs as the basename of what the build
+// produces.
 func (m *Manifest) BinaryName() string {
+	if m.Tool != nil && m.Tool.Binary != "" {
+		return m.Tool.Binary
+	}
 	return filepath.Base(filepath.Clean(m.Build.Binary))
+}
+
+// validateTool holds a [tool] declaration to what dispatch and the consent
+// screen need of it: an installable command name, and at least one phrase a
+// user could actually type. Nothing else about the manifest tightens for a
+// tool — the panel checks are skipped because there is no panel to check.
+func validateTool(t *Tool) error {
+	if t.Binary != "" && !namePattern.MatchString(t.Binary) {
+		return fmt.Errorf("tool.binary %q must be a bare command name — lowercase letters, digits and dashes, no path", t.Binary)
+	}
+	if len(t.Provides) == 0 {
+		return errors.New("tool.provides is required — name at least one `grove <verb>` phrase the tool answers")
+	}
+	for i, phrase := range t.Provides {
+		key := fmt.Sprintf("tool.provides[%d]", i)
+		if strings.TrimSpace(phrase) == "" {
+			return fmt.Errorf("%s is empty", key)
+		}
+		if phrase != strings.TrimSpace(phrase) {
+			return fmt.Errorf("%s %q must not begin or end with whitespace — it is rendered verbatim as the command it enables", key, phrase)
+		}
+		if err := printable(key, phrase); err != nil {
+			return err
+		}
+		tokens := strings.Fields(phrase)
+		for _, tok := range tokens {
+			if strings.HasPrefix(tok, "-") {
+				return fmt.Errorf("%s %q contains a flag-shaped token %q — provides declares verbs, not options", key, phrase, tok)
+			}
+		}
+		// The first token is the dispatch verb, so it is held to the same
+		// shape a plugin name is: it has to survive as a subcommand name.
+		if !namePattern.MatchString(tokens[0]) {
+			return fmt.Errorf("%s %q must begin with a bare verb — lowercase letters, digits and dashes", key, phrase)
+		}
+	}
+	return nil
 }
 
 // validateArgv rejects empty and non-printable argv elements. An empty element

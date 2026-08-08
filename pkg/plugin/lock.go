@@ -44,6 +44,10 @@ type Pin struct {
 	// entry is not reproducible from Commit. Omitted when false so every
 	// lockfile written before this field round-trips byte-identically.
 	Dev bool `json:"dev,omitempty"`
+	// Kind is the manifest kind this pin installed — "tool", or empty for a
+	// panel (see Manifest.Kind). Empty rather than "panel" so every lockfile
+	// written before tools existed round-trips byte-identically.
+	Kind string `json:"kind,omitempty"`
 	// ManifestDigest is a hash of the grove-plugin.toml bytes at Commit.
 	ManifestDigest string `json:"manifest_digest"`
 	// ConsentDigest is the digest recorded in the exec-trust store when the

@@ -89,6 +89,62 @@ func TestLockFromANewerGroveIsRefused(t *testing.T) {
 	}
 }
 
+// A tool pin records its kind and keeps it; a panel pin records none, and a
+// lockfile written before Pin.Kind existed round-trips byte-identically —
+// loading and re-saving it must not grow a field its pins never carried.
+func TestPinKindRoundTripsAndStaysAbsentForPanels(t *testing.T) {
+	isolate(t)
+
+	lock, err := LoadLock()
+	if err != nil {
+		t.Fatalf("LoadLock: %v", err)
+	}
+	lock.Set("demo", &Pin{Spec: "github.com/u/r@v1.0.0", Commit: "abc123"}, time.Unix(1700000000, 0))
+	if err := lock.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	path, err := LockPath()
+	if err != nil {
+		t.Fatalf("LockPath: %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if strings.Contains(string(before), `"kind"`) {
+		t.Fatalf("a panel pin wrote a kind field:\n%s", before)
+	}
+	reloaded, err := LoadLock()
+	if err != nil {
+		t.Fatalf("LoadLock: %v", err)
+	}
+	if err := reloaded.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("a kindless lockfile did not round-trip byte-identically:\n%s\n%s", before, after)
+	}
+
+	reloaded.Set("forge", &Pin{Spec: "github.com/u/forge@v1.0.0", Kind: "tool", Commit: "def456"}, time.Unix(1700000000, 0))
+	if err := reloaded.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	again, err := LoadLock()
+	if err != nil {
+		t.Fatalf("LoadLock: %v", err)
+	}
+	if pin := again.Get("forge"); pin == nil || pin.Kind != "tool" {
+		t.Errorf("tool pin did not keep its kind: %+v", pin)
+	}
+	if pin := again.Get("demo"); pin == nil || pin.Kind != "" {
+		t.Errorf("panel pin grew a kind: %+v", pin)
+	}
+}
+
 func TestUsesSourceDirIgnoresThePluginBeingRemoved(t *testing.T) {
 	lock := &Lock{Plugins: map[string]*Pin{
 		"a": {SourceDir: "/src/shared"},

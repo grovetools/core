@@ -18,12 +18,16 @@ import "github.com/pelletier/go-toml/v2/unstable"
 // view is a named thing, and naming it twice (a header and a key) is the shape
 // arrays force, not the shape the declaration wants.
 //
-// This is the one place in the package that reaches past the decoder into
+// This file is the one place in the package that reaches past the decoder into
 // go-toml's `unstable` parser, which is exactly what it is for — walking a
-// document's expressions in the order they appear. It is isolated in this file so
-// an upstream change to that API is one file to repair, and it is only ever a
+// document's expressions in the order they appear. It is isolated here so an
+// upstream change to that API is one file to repair. viewOrder is only ever a
 // refinement of a value the package could also do without: an unrecoverable order
 // degrades to sorted names (see Panel.ViewNames), never to a validation failure.
+// panelDeclared recovers the other fact the decoder throws away — whether the
+// `[panel]` section is literally present, which Panel being a value struct
+// erases (an absent section and an empty one decode identically), and which the
+// [tool]-xor-[panel] check in Validate turns on.
 
 // viewOrder returns the names under `panel.views` in the order the document
 // first mentions each of them.
@@ -69,6 +73,35 @@ func viewOrder(data []byte) []string {
 		}
 	}
 	return order
+}
+
+// panelDeclared reports whether the document contains a `[panel]` section, in
+// any spelling TOML allows for one — a `[panel]` or `[panel.settings]` header,
+// a `[[panel.keys]]` array header, a dotted `panel.protocol = ...` key, or an
+// inline `panel = { ... }` table. Every spelling counts because the author
+// picks the spelling, and a mutual-exclusion check that only saw one would
+// accept the same conflict written another way.
+func panelDeclared(data []byte) bool {
+	var (
+		p      unstable.Parser
+		prefix []string
+	)
+	p.Reset(data)
+	for p.NextExpression() {
+		expr := p.Expression()
+		switch expr.Kind {
+		case unstable.Table, unstable.ArrayTable:
+			prefix = nodeKeyPath(expr, nil)
+			if len(prefix) > 0 && prefix[0] == "panel" {
+				return true
+			}
+		case unstable.KeyValue:
+			if path := nodeKeyPath(expr, prefix); len(path) > 0 && path[0] == "panel" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // nodeKeyPath is a node's own (possibly dotted) key, appended to the table
