@@ -596,7 +596,7 @@ func NewLogger(component string) *logrus.Entry {
 		logger.WithFields(fields).Info("Grove binary started")
 	})
 
-	// Config-load warnings (schema violations, migration nags) buffer inside
+	// Config-load warnings (schema violations) buffer inside
 	// the config package until a logging pipeline exists (config cannot
 	// import this package). The first fully-configured logger becomes their
 	// sink, so early-load warnings — including ones fired at package-init
@@ -619,11 +619,11 @@ func registerConfigWarningSink(logger *logrus.Logger) {
 	config.SetWarningSink(configWarningEmitter(logger))
 }
 
-// configWarningEmitter renders one config warning onto logger. A
-// StructuredOnly warning is marked with the dual-emit context so the console
-// formatter drops it (see dualEmitSuppressingFormatter) while the FileHook
-// still records it: standing nags belong in the audit trail, not on an
-// operator's terminal on every single run.
+// configWarningEmitter renders one config warning onto logger. Every warning
+// on this channel reports a defect in the operator's own config, so it goes
+// to both the console and the file sink; standing conditions do not travel it
+// at all (see config.LegacyMachinesDir) — they are reported by `grove doctor`
+// instead of once per process.
 func configWarningEmitter(logger *logrus.Logger) func(config.Warning) {
 	return func(w config.Warning) {
 		component := w.Component
@@ -636,9 +636,6 @@ func configWarningEmitter(logger *logrus.Logger) func(config.Warning) {
 		}
 		if w.Err != nil {
 			entry = entry.WithError(w.Err)
-		}
-		if w.StructuredOnly {
-			entry = entry.WithContext(dualEmitCtx)
 		}
 		entry.Warn(w.Message)
 	}

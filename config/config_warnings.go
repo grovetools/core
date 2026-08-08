@@ -19,9 +19,16 @@ import (
 // holding its own lock), so the pipeline is injected instead: warnings are
 // deduped per process, buffered until core/logging registers a sink (its
 // first NewLogger call), and mirrored to the fallback logrus logger only when
-// the warning is not StructuredOnly AND its destination cannot be an
-// interactive terminal — the same TTY test logging's StructuredToStderr
-// "auto" mode applies.
+// its destination cannot be an interactive terminal — the same TTY test
+// logging's StructuredToStderr "auto" mode applies.
+//
+// Every warning on this channel reports a DEFECT in the operator's own config
+// (a schema violation), which is why the console fallback is unconditional. A
+// standing condition — "this dead directory still exists" — must NOT be
+// reported here: it is true on every load of every binary forever, so even
+// deduped per process it accumulates one log line per grove invocation. Those
+// belong to `grove doctor` and the command that owns the subject (see
+// LegacyMachinesDir).
 
 // Warning is one deferred config-load warning as the sink sees it. Only the
 // exported fields are meaningful outside this package; construction stays
@@ -37,14 +44,6 @@ type Warning struct {
 	Fields map[string]any
 	// Err is the underlying error, when the warning has one.
 	Err error
-
-	// StructuredOnly keeps the warning out of console output entirely: it is
-	// never mirrored to the pre-sink fallback logger, and the sink marks it so
-	// grove's console formatter drops it while file sinks still record it.
-	// Standing nags set it — every grove binary loads config, so a nag on the
-	// console is noise on every single run; a report of a defect in the
-	// operator's own config does not.
-	StructuredOnly bool
 
 	// dedupeKey collapses repeats within one process. Config is loaded many
 	// times per run (per-directory, per-layer, cache misses), so without it a
@@ -90,8 +89,7 @@ func SetWarningSink(fn func(Warning)) {
 
 // reportWarning emits one warning per dedupe key per process: to the
 // registered sink when logging is up, otherwise buffered for the future sink
-// and — unless the warning is StructuredOnly — mirrored to logger when that
-// cannot corrupt an interactive terminal.
+// and mirrored to logger when that cannot corrupt an interactive terminal.
 func reportWarning(logger *logrus.Logger, w Warning) {
 	warnMu.Lock()
 	if _, dup := warnSeen[w.dedupeKey]; dup {
@@ -109,7 +107,7 @@ func reportWarning(logger *logrus.Logger, w Warning) {
 		sink(w)
 		return
 	}
-	if w.StructuredOnly || logger == nil {
+	if logger == nil {
 		return
 	}
 	if writerIsInteractive(logger.Out) && os.Getenv("GROVE_DEBUG") != "1" {
@@ -141,23 +139,6 @@ func reportSchemaWarning(logger *logrus.Logger, source string, err error) {
 		Fields:    map[string]any{"source": source},
 		Err:       err,
 		dedupeKey: "schema\x00" + source + "\x00" + errText,
-	})
-}
-
-// reportLegacyMachinesDir reports the dead ~/.config/grove/machines
-// directory. Unlike a schema warning this is a standing migration nag, not a
-// defect report: it fires on every config load of every grove binary until
-// the operator migrates, so it is structured-only — the audit trail records
-// it, no console (or TUI drawing on one) ever sees it — and deduped per
-// process. `grove machine` prints the actionable version at the moment the
-// operator is actually looking at machine config.
-func reportLegacyMachinesDir(dir string) {
-	reportWarning(nil, Warning{
-		Component:      "config.machine",
-		Message:        dir + " is ignored; migrate with `grove machine migrate`",
-		Fields:         map[string]any{"path": dir},
-		StructuredOnly: true,
-		dedupeKey:      "legacy-machines-dir\x00" + dir,
 	})
 }
 

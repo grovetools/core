@@ -72,10 +72,13 @@ func TestConfigWarningEmitterHonorsPerWarningComponent(t *testing.T) {
 	}
 }
 
-// A StructuredOnly warning is a standing nag: the file sink (hooks) must
-// record it, the console must not print it. This is the case that used to
-// spray `WARN[0000] ... machines is ignored` over every run and every TUI.
-func TestConfigWarningEmitterKeepsStructuredOnlyOffTheConsole(t *testing.T) {
+// Every warning on this channel reports a defect in the operator's own config,
+// so it reaches BOTH surfaces: the console (a piped run must say the config is
+// off-schema) and the file sink (the audit trail). Standing conditions — the
+// dead machines/ directory that used to spray `... machines is ignored` over
+// every run — no longer travel this channel at all; `grove doctor` reports
+// them as state instead of once per process.
+func TestConfigWarningEmitterReachesConsoleAndFileSink(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logrus.New()
 	logger.SetOutput(&buf)
@@ -85,29 +88,20 @@ func TestConfigWarningEmitterKeepsStructuredOnlyOffTheConsole(t *testing.T) {
 	hook := &captureHook{}
 	logger.AddHook(hook)
 
-	emit := configWarningEmitter(logger)
-	emit(config.Warning{
-		Component:      "config.machine",
-		Message:        "/cfg/machines is ignored; migrate with `grove machine migrate`",
-		StructuredOnly: true,
-	})
-	emit(config.Warning{
+	configWarningEmitter(logger)(config.Warning{
 		Component: "config",
 		Message:   "an ordinary config warning",
 	})
 
-	if out := buf.String(); strings.Contains(out, "grove machine migrate") {
-		t.Fatalf("structured-only warning reached the console:\n%s", out)
-	}
 	if out := buf.String(); !strings.Contains(out, "an ordinary config warning") {
-		t.Fatalf("ordinary warning must still reach the console, got:\n%s", out)
+		t.Fatalf("config warning must reach the console, got:\n%s", out)
 	}
 	// captureHook stands in for the FileHook: it sees every entry regardless
 	// of what the console formatter does with it.
-	if len(hook.entries) != 2 {
-		t.Fatalf("file sink saw %d entries, want both", len(hook.entries))
+	if len(hook.entries) != 1 {
+		t.Fatalf("file sink saw %d entries, want 1", len(hook.entries))
 	}
-	if !strings.Contains(hook.entries[0].Message, "grove machine migrate") {
-		t.Fatalf("file sink missed the structured-only warning: %q", hook.entries[0].Message)
+	if !strings.Contains(hook.entries[0].Message, "an ordinary config warning") {
+		t.Fatalf("file sink missed the warning: %q", hook.entries[0].Message)
 	}
 }

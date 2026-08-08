@@ -441,7 +441,6 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		// Glob and merge additional modular TOML files from config directory
 		// Files are sorted by priority ([_grove].priority), then alphabetically within same priority
 		globalDir := filepath.Dir(globalPath)
-		warnLegacyMachinesDir(globalDir)
 		pattern := filepath.Join(globalDir, "*.toml")
 		if files, err := filepath.Glob(pattern); err == nil {
 			// First pass: collect fragments with their priorities

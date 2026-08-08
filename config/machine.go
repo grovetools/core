@@ -103,8 +103,8 @@ func MachineConfigPath() string {
 const MachineConfigFileName = "machine.toml"
 
 // LegacyMachinesDirName is the dead per-machine config directory. It is never
-// loaded; its presence only produces a load-time warning pointing at
-// `grove machine migrate`.
+// loaded; its presence is only reported, by the surfaces an operator asks
+// (`grove machine`, `grove doctor`), pointing at `grove machine migrate`.
 const LegacyMachinesDirName = "machines"
 
 // isExcludedGlobalFragment reports whether a basename in ~/.config/grove is
@@ -121,24 +121,32 @@ func isExcludedGlobalFragment(baseName string) bool {
 	return false
 }
 
-// warnLegacyMachinesDir emits a one-shot warning when the dead
-// ~/.config/grove/machines/ directory exists. Its contents are never loaded —
-// machine intent lives in machine.toml now — so the only correct response is
-// to tell the operator how to migrate. Called from the same place the global
-// config directory is globbed, i.e. on every config load; the warning itself
-// is deduped and routed through the deferred warning channel (see
-// reportLegacyMachinesDir), so it reaches grove's own logging exactly once
-// per process and never the raw console.
-func warnLegacyMachinesDir(globalDir string) {
-	if globalDir == "" {
-		return
+// LegacyMachinesDir returns the dead ~/.config/grove/machines/ directory when
+// it exists, or "" when it does not. Its contents are never loaded — machine
+// intent lives in machine.toml now — so the only correct response is to tell
+// the operator how to migrate.
+//
+// Deliberately a QUERY, not a warning raised on the config-load path. The dead
+// directory is a standing CONDITION, not an event: it outlives every process,
+// while grove spawns processes constantly (hooks, status polls, daemons, TUI
+// refreshes). A load-path warning is therefore O(processes), not O(conditions)
+// — per-process dedupe still writes one line per invocation, which is how this
+// nag came back as hundreds of identical WARNING lines in the workspace logs
+// after it was moved off the console. Standing conditions belong to the
+// surfaces an operator interrogates: `grove machine` prints it, `grove doctor`
+// checks it (doctorchecks.legacyMachinesDirCheck), and both report the current
+// state of the machine rather than appending to an event stream.
+func LegacyMachinesDir() string {
+	configDir := paths.ConfigDir()
+	if configDir == "" {
+		return ""
 	}
-	dir := filepath.Join(globalDir, LegacyMachinesDirName)
+	dir := filepath.Join(configDir, LegacyMachinesDirName)
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return
+		return ""
 	}
-	reportLegacyMachinesDir(dir)
+	return dir
 }
 
 // LoadMachineConfig loads ~/.config/grove/machine.toml. A missing file is not
