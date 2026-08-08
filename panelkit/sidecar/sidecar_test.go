@@ -262,6 +262,9 @@ func TestNoHostIsNotAnError(t *testing.T) {
 	if err := client.Navigate("p", ""); err != nil {
 		t.Errorf("Navigate() with no host = %v, want nil", err)
 	}
+	if err := client.OpenEditor("/notes/one.md", false); err != nil {
+		t.Errorf("OpenEditor() with no host = %v, want nil", err)
+	}
 	if _, ok := <-client.Events(); ok {
 		t.Error("Events() delivered something with no host")
 	}

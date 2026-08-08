@@ -32,7 +32,7 @@ import (
 // of accumulating four half-initialised states.
 //
 // Client is the connection the welcome arrived on: capturing it here is how a
-// Run model gets to call Log, Navigate, RequestClose, Done and DeclareKeys.
+// Run model gets to call Log, Navigate, OpenEditor, RequestClose, Done and DeclareKeys.
 // Nil only in a no-host run, where no WelcomeMsg is delivered anyway.
 type WelcomeMsg struct {
 	Welcome *panelproto.Welcome

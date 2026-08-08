@@ -131,7 +131,7 @@ type Event interface{ event() }
 // again after a reconnect.
 //
 // Client is the connection the welcome arrived on. It is how a model driven by
-// Run reaches the app→host surface — Log, Navigate, RequestClose, Done,
+// Run reaches the app→host surface — Log, Navigate, OpenEditor, RequestClose, Done,
 // DeclareKeys — without wiring its own pump: capture it from the first
 // WelcomeMsg. Nil only in a no-host run, where no welcome is delivered anyway.
 type WelcomeEvent struct {
@@ -506,6 +506,13 @@ func (c *Client) GrantedKeys() []string {
 // Navigate asks the host to focus a panel, optionally activating a tab.
 func (c *Client) Navigate(panelID, tabID string) error {
 	return c.send(panelproto.TypeNavigate, panelproto.Navigate{PanelID: panelID, TabID: tabID})
+}
+
+// OpenEditor asks the host to open path. A quick open (dedicated=false) reuses
+// the host's singleton editor when available; a dedicated open gets a pinned
+// per-file rail pane. With no host it is a no-op, like every Client send.
+func (c *Client) OpenEditor(path string, dedicated bool) error {
+	return c.send(panelproto.TypeEditRequest, panelproto.EditRequest{Path: path, Dedicated: dedicated})
 }
 
 // RequestClose asks the host to close this panel.

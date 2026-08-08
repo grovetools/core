@@ -85,6 +85,10 @@ const (
 	// TypeNavigate asks the host to focus a panel (and optionally a tab).
 	// Payload: Navigate. Maps to embed.NavigateMsg.
 	TypeNavigate = "navigate"
+	// TypeEditRequest asks the host to open a file in its editor. Payload:
+	// EditRequest. Dedicated=false targets the singleton editor when available;
+	// true asks for a pinned per-file rail pane. Maps to embed.EditRequestMsg.
+	TypeEditRequest = "edit_request"
 	// TypeCloseRequest asks the host to close this panel. No payload.
 	// Maps to embed.CloseRequestMsg, re-addressed to the emitting panel.
 	TypeCloseRequest = "close_request"
@@ -487,6 +491,14 @@ type Theme struct {
 type Navigate struct {
 	PanelID string `json:"panel_id"`
 	TabID   string `json:"tab_id,omitempty"`
+}
+
+// EditRequest asks the host to open Path in an editor. Dedicated chooses a
+// pinned per-file pane rather than the host's reusable singleton editor.
+// The host still owns deduplication, focus and fallback behavior.
+type EditRequest struct {
+	Path      string `json:"path"`
+	Dedicated bool   `json:"dedicated,omitempty"`
 }
 
 // Done reports the sidecar's primary lifecycle completing. Result is any JSON

@@ -134,6 +134,37 @@ func TestLogfConfiguredTakesTheLineInsteadOfTheHost(t *testing.T) {
 	}
 }
 
+func TestOpenEditorSendsQuickAndDedicatedRequests(t *testing.T) {
+	host := startFakeHost(t, panelproto.Welcome{Protocol: panelproto.Version, PanelID: "plugin-gtd"})
+	client, err := Connect(context.Background(), Options{App: "gtd"})
+	if err != nil {
+		t.Fatalf("Connect() = %v", err)
+	}
+	defer client.Close()
+	conn := host.conn()
+	nextEvent(t, client) // welcome
+
+	for _, tc := range []struct {
+		path      string
+		dedicated bool
+	}{{"/notes/one.md", false}, {"/notes/two.md", true}} {
+		if err := client.OpenEditor(tc.path, tc.dedicated); err != nil {
+			t.Fatalf("OpenEditor() = %v", err)
+		}
+		f := nextFrame(t, conn)
+		if f.Type != panelproto.TypeEditRequest {
+			t.Fatalf("frame type = %q, want %q", f.Type, panelproto.TypeEditRequest)
+		}
+		var got panelproto.EditRequest
+		if err := panelproto.DecodePayload(f, &got); err != nil {
+			t.Fatalf("decode edit request: %v", err)
+		}
+		if got.Path != tc.path || got.Dedicated != tc.dedicated {
+			t.Errorf("request = %+v, want path=%q dedicated=%v", got, tc.path, tc.dedicated)
+		}
+	}
+}
+
 // With no host there is no control plane to log over, and the fallback must
 // still not be stderr. The line is dropped and nothing panics.
 func TestLogfWithNoHostDropsTheLine(t *testing.T) {
