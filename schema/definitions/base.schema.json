@@ -1155,6 +1155,13 @@
           "description": "Auto-restart plugin on exit",
           "type": "boolean"
         },
+        "setting_options": {
+          "description": "Vocabularies the panel declares for individual settings (declaration only; a value outside the list still reaches the panel)",
+          "items": {
+            "$ref": "#/$defs/PluginSettingOptions"
+          },
+          "type": "array"
+        },
         "settings": {
           "description": "Free-form settings table delivered to the panel over the embed/v1 control plane (data only; never executed by the host)",
           "type": "object"
@@ -1217,6 +1224,42 @@
       },
       "required": [
         "subtree"
+      ],
+      "type": "object"
+    },
+    "PluginSettingOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_custom": {
+          "description": "Whether a UI should also offer typing a value outside the list into this setting",
+          "type": "boolean"
+        },
+        "custom_option": {
+          "description": "The option whose choice hands the decision to another setting",
+          "type": "string"
+        },
+        "custom_setting": {
+          "description": "The setting that decides when custom_option is chosen",
+          "type": "string"
+        },
+        "description": {
+          "description": "What this setting decides",
+          "type": "string"
+        },
+        "options": {
+          "description": "The values the author declares for this setting",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "setting": {
+          "description": "Dotted path of the setting these are the options for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "setting"
       ],
       "type": "object"
     },
