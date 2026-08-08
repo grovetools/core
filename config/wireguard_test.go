@@ -87,20 +87,21 @@ func TestWireGuardDisabledBlockIsParseOnly(t *testing.T) {
 		t.Fatalf("disabled block validation = %v", err)
 	}
 
+	// A malformed ENABLED block must survive loading and only fail when someone
+	// asks. Core owns the type and this rule; who BINDS the type to a config
+	// block ([forge.wireguard], and one day [satellites.<name>.wireguard]) is
+	// the binder's business — the [forge.wireguard] half of this test moved to
+	// grove-plugin-forge-gcp with the block.
 	src := `version = "1.0"
 [forge.wireguard]
 enabled = true
 address = "not-cidr"
 `
-	loaded, err := LoadFromTOMLBytes([]byte(src))
-	if err != nil {
+	if _, err := LoadFromTOMLBytes([]byte(src)); err != nil {
 		t.Fatalf("parse-only load rejected malformed wireguard block: %v", err)
 	}
-	forge, err := loaded.Forge()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := forge.Validate(); err == nil {
+	on := true
+	if err := (&WireGuardConfig{Enabled: &on, Address: "not-cidr"}).Validate(); err == nil {
 		t.Fatal("explicit use-time validation accepted malformed enabled block")
 	}
 }
