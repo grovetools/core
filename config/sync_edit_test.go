@@ -218,6 +218,161 @@ func TestRolePushOnly(t *testing.T) {
 	}
 }
 
+// THE JOB 52 REGRESSION. Job 22 deliberately left this laptop a sync.toml with
+// every key commented out; joining against it wrote a registry subscription,
+// declared no server, warned about nothing, and reported "the configuration
+// above is complete". The merge path must fill what the file does not declare.
+func TestSyncEditorFillsAbsentScalarsOnAFullyCommentedFile(t *testing.T) {
+	path := syncPath(t)
+	original := `# Notebook sync client config.
+# server = "https://sync.example.com"
+# token_command = "security find-generic-password -s grove-sync -w"
+`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	res, err := ApplySyncEdit(path, SyncEdit{
+		Server:       "https://forge.example.com:8788",
+		TokenCommand: "security find-generic-password -s grove-sync -a solair -w",
+		Workspaces:   []SyncWorkspace{{Name: "registry", Role: SyncRoleRegistry, Pull: true}},
+		Note:         "Added by `grove join`",
+	})
+	if err != nil {
+		t.Fatalf("ApplySyncEdit: %v", err)
+	}
+	if len(res.Filled) != 2 || res.Filled[0] != "server" || res.Filled[1] != "token_command" {
+		t.Fatalf("filled = %v, want [server token_command]", res.Filled)
+	}
+	if !res.Changed() {
+		t.Fatal("a fill did not count as a change")
+	}
+
+	// The post-condition that matters is what the DAEMON will read back.
+	cfg, err := LoadSyncConfigFrom(path)
+	if err != nil || cfg == nil {
+		t.Fatalf("re-parse: %v (%v)", cfg, err)
+	}
+	if cfg.Server != "https://forge.example.com:8788" {
+		t.Errorf("server = %q, want the filled value", cfg.Server)
+	}
+	if !strings.Contains(cfg.TokenCommand, "-a solair") {
+		t.Errorf("token_command = %q, want the account-pinned command", cfg.TokenCommand)
+	}
+	if len(cfg.Workspaces) != 1 || cfg.Workspaces[0].Role != SyncRoleRegistry {
+		t.Errorf("workspaces = %+v, want one registry entry", cfg.Workspaces)
+	}
+	if content := readSync(t, path); !strings.HasPrefix(content, original) {
+		t.Errorf("the commented preamble was not preserved verbatim:\n%s", content)
+	}
+}
+
+// The insertion point is the whole trick: appended after a [[workspaces]]
+// header, `server = ...` is TOML for `workspaces.server` and reads back empty.
+func TestSyncEditorFillsAboveExistingTables(t *testing.T) {
+	path := syncPath(t)
+	original := "[[workspaces]]\nname = \"cloud\"\nrole = \"satellite\"\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := ApplySyncEdit(path, SyncEdit{
+		Server:     "https://forge.example.com:8788",
+		Workspaces: []SyncWorkspace{{Name: "cloud", Role: SyncRoleSatellite}},
+	}); err != nil {
+		t.Fatalf("ApplySyncEdit: %v", err)
+	}
+	cfg, err := LoadSyncConfigFrom(path)
+	if err != nil || cfg == nil {
+		t.Fatalf("re-parse: %v (%v)", cfg, err)
+	}
+	if cfg.Server != "https://forge.example.com:8788" {
+		t.Fatalf("server = %q — the fill landed inside a table:\n%s", cfg.Server, readSync(t, path))
+	}
+	if len(cfg.Workspaces) != 1 || cfg.Workspaces[0].Name != "cloud" {
+		t.Fatalf("the existing entry did not survive: %+v", cfg.Workspaces)
+	}
+}
+
+// A DECLARED scalar is still never rewritten — that half of the contract is
+// what the file-belongs-to-the-user rule protects.
+func TestSyncEditorNeverOverwritesADeclaredScalar(t *testing.T) {
+	path := syncPath(t)
+	original := "server = \"https://elsewhere.example.com\"\ntoken_command = \"op read op://grove/sync\"\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	res, err := ApplySyncEdit(path, SyncEdit{
+		Server:       "https://forge.example.com:8788",
+		TokenCommand: "security find-generic-password -s grove-sync -a solair -w",
+		Workspaces:   []SyncWorkspace{{Name: "registry", Role: SyncRoleRegistry, Pull: true}},
+	})
+	if err != nil {
+		t.Fatalf("ApplySyncEdit: %v", err)
+	}
+	if len(res.Filled) != 0 {
+		t.Errorf("filled = %v, want nothing (both keys were declared)", res.Filled)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "elsewhere.example.com") {
+		t.Errorf("warnings = %v, want the server mismatch", res.Warnings)
+	}
+	if content := readSync(t, path); !strings.HasPrefix(content, original) {
+		t.Errorf("a declared scalar was rewritten:\n%s", content)
+	}
+}
+
+// `server = ""` parses as absent but IS declared. Inserting a second one would
+// be a duplicate-key TOML error; the editor says so in config terms instead.
+func TestSyncEditorReportsADeclaredButEmptyScalar(t *testing.T) {
+	path := syncPath(t)
+	if err := os.WriteFile(path, []byte("server = \"\"\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	res, err := ApplySyncEdit(path, SyncEdit{
+		Server:     "https://forge.example.com:8788",
+		Workspaces: []SyncWorkspace{{Name: "registry", Role: SyncRoleRegistry, Pull: true}},
+	})
+	if err != nil {
+		t.Fatalf("ApplySyncEdit: %v", err)
+	}
+	if len(res.Filled) != 0 {
+		t.Errorf("filled = %v, want nothing", res.Filled)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "leaves it empty") {
+		t.Fatalf("warnings = %v, want the declared-but-empty notice", res.Warnings)
+	}
+	cfg, err := LoadSyncConfigFrom(path)
+	if err != nil {
+		t.Fatalf("the file no longer parses: %v", err)
+	}
+	if cfg.Server != "" {
+		t.Errorf("server = %q, want the user's empty value untouched", cfg.Server)
+	}
+}
+
+// A file that resolves its token some other way keeps doing so: filling a
+// second source would change which credential the daemon presents.
+func TestSyncEditorDoesNotFillTokenCommandBesideALiteralToken(t *testing.T) {
+	path := syncPath(t)
+	if err := os.WriteFile(path, []byte("token = \"literal\"\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	res, err := ApplySyncEdit(path, SyncEdit{
+		Server:       "https://forge.example.com:8788",
+		TokenCommand: "security find-generic-password -s grove-sync -a solair -w",
+		Workspaces:   []SyncWorkspace{{Name: "registry", Role: SyncRoleRegistry, Pull: true}},
+	})
+	if err != nil {
+		t.Fatalf("ApplySyncEdit: %v", err)
+	}
+	if len(res.Filled) != 1 || res.Filled[0] != "server" {
+		t.Fatalf("filled = %v, want [server] only", res.Filled)
+	}
+	cfg, _ := LoadSyncConfigFrom(path)
+	if cfg.TokenCommand != "" {
+		t.Errorf("token_command = %q, want it left absent beside the literal token", cfg.TokenCommand)
+	}
+}
+
 func readSync(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

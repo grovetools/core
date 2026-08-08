@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -23,28 +24,38 @@ import (
 //
 // Four properties are load-bearing and shared by every caller:
 //
-//  1. Append-only merge. An existing file's bytes remain a byte-for-byte
-//     PREFIX of the result: comments, formatting and existing entries are
-//     never rewritten, only new entries appended.
+//  1. Additive merge. Nothing an existing file says is rewritten or removed:
+//     comments, formatting and existing entries survive verbatim. New
+//     [[workspaces]] entries are appended; ABSENT top-level scalars (server,
+//     token_command) are inserted above the first table, because TOML puts
+//     bare keys after a table header INSIDE that table and appending them
+//     would silently produce `workspaces.server`.
 //  2. Rendering is the single choke point. Every entry this package writes
 //     goes through renderSyncWorkspaces, which refuses a pull-enabled entry
 //     whose role forbids it. There is no second path to the file.
 //  3. Re-parse before persisting. Nothing is written that does not parse back
-//     into a valid SyncConfig, and the pull-enabled set may not grow beyond
-//     what the roles allow.
-//  4. The server line is never rewritten. A mismatch is warned about; the file
-//     belongs to the user.
+//     into a valid SyncConfig, the pull-enabled set may not grow beyond what
+//     the roles allow, and a scalar this edit claims to have filled must read
+//     back as that value.
+//  4. A DECLARED scalar is never rewritten. A server that disagrees is warned
+//     about and left alone; only an ABSENT one is filled. The file belongs to
+//     the user, but a file that declares nothing has said nothing to respect —
+//     and leaving it that way is what let `grove join` write a subscription
+//     onto a config with no server and still report completeness.
 
 // SyncEdit is one create-or-merge of a sync.toml.
 type SyncEdit struct {
-	// Server is the syncd base URL, written only when creating the file. On an
-	// existing file a disagreeing server is warned about, never rewritten.
+	// Server is the syncd base URL. It is written when creating the file and
+	// FILLED when an existing file declares none. A file that already declares
+	// a different server is warned about, never rewritten.
 	Server string
-	// TokenCommand is the shell command yielding the bearer token, written
-	// only when creating the file.
+	// TokenCommand is the shell command yielding the bearer token. Same rule as
+	// Server: written on create, filled when absent, never overwritten.
 	TokenCommand string
 	// Token is a static bearer token, written only when creating the file and
-	// only when TokenCommand is empty.
+	// only when TokenCommand is empty. It is deliberately NOT filled into an
+	// existing file: a literal secret is the one value this editor will not
+	// introduce into a config the user is already maintaining.
 	Token string
 	// Workspaces are the subscriptions to ensure exist. An entry whose name is
 	// already present is left exactly as it is — the file is the user's.
@@ -66,13 +77,21 @@ type SyncEditResult struct {
 	Added []string
 	// Present names the workspaces that already existed and were left alone.
 	Present []string
-	// Warnings are non-fatal observations (currently: a server URL that does
-	// not match the one the caller expected).
+	// Filled names the top-level scalar keys ("server", "token_command") this
+	// edit inserted because the existing file declared none. It is what lets a
+	// caller say "filled in the absent server" instead of guessing, and it is
+	// empty on the create path (where Created already says everything).
+	Filled []string
+	// Warnings are non-fatal observations: a server URL that does not match the
+	// one the caller expected, or a key declared-but-empty that this edit
+	// therefore refused to touch.
 	Warnings []string
 }
 
 // Changed reports whether the file was written.
-func (r SyncEditResult) Changed() bool { return r.Created || len(r.Added) > 0 }
+func (r SyncEditResult) Changed() bool {
+	return r.Created || len(r.Added) > 0 || len(r.Filled) > 0
+}
 
 // ApplySyncEdit creates or append-merges the sync config at path.
 func ApplySyncEdit(path string, edit SyncEdit) (SyncEditResult, error) {
@@ -137,17 +156,21 @@ func createSyncConfig(path string, edit SyncEdit) (SyncEditResult, error) {
 	return res, nil
 }
 
-// mergeSyncConfig appends the missing subscriptions to an existing sync.toml.
-// The previous content is kept byte-for-byte as a prefix.
+// mergeSyncConfig converges an existing sync.toml: it appends the missing
+// subscriptions and fills the top-level scalars the file does not declare.
+//
+// "Fills only ABSENT keys" is the rule `grove machine migrate` already states
+// for itself, and applying it here is what makes `grove join` re-runnable —
+// and what makes `--repair` fall out of the existing semantics instead of
+// being a second code path. Before this, an existing-but-empty sync.toml got a
+// subscription, no server, and no warning: a workspace the daemon can never
+// replicate, reported as a complete configuration.
 func mergeSyncConfig(path, content string, edit SyncEdit) (SyncEditResult, error) {
 	res := SyncEditResult{Path: path}
 
 	existing, err := ParseSyncContent(path, content)
 	if err != nil {
 		return res, fmt.Errorf("existing sync config is not usable — fix it (or move it aside) and re-run: %w", err)
-	}
-	if warning := syncServerMismatch(path, existing.Server, edit.Server); warning != "" {
-		res.Warnings = append(res.Warnings, warning)
 	}
 
 	// An existing pull-enabled entry whose role forbids pulling means the file
@@ -159,6 +182,9 @@ func mergeSyncConfig(path, content string, edit SyncEdit) (SyncEditResult, error
 				path, ws.Name, ws.Role)
 		}
 	}
+
+	fills, warnings := planSyncScalarFills(path, content, existing, edit)
+	res.Warnings = append(res.Warnings, warnings...)
 
 	have := make(map[string]bool, len(existing.Workspaces))
 	for _, ws := range existing.Workspaces {
@@ -173,24 +199,36 @@ func mergeSyncConfig(path, content string, edit SyncEdit) (SyncEditResult, error
 		missing = append(missing, ws)
 		have[ws.Name] = true
 	}
-	if len(missing) == 0 {
+	if len(missing) == 0 && len(fills) == 0 {
 		return res, nil
 	}
 
-	appended, err := renderSyncWorkspaces(missing)
-	if err != nil {
-		return res, err
-	}
 	updated := content
-	if !strings.HasSuffix(updated, "\n") {
-		updated += "\n"
+	if len(fills) > 0 {
+		updated = insertSyncScalars(updated, fills, edit.Note)
 	}
-	if edit.Note != "" {
-		updated += "\n# " + edit.Note
+	if len(missing) > 0 {
+		appended, rErr := renderSyncWorkspaces(missing)
+		if rErr != nil {
+			return res, rErr
+		}
+		if !strings.HasSuffix(updated, "\n") {
+			updated += "\n"
+		}
+		if edit.Note != "" {
+			updated += "\n# " + edit.Note
+		}
+		updated += appended
 	}
-	updated += appended
 
 	if err := verifySyncContent(path, updated, append(append([]SyncWorkspace{}, existing.Workspaces...), missing...)); err != nil {
+		return res, err
+	}
+	// The fills are the reason this function exists, so they are checked
+	// against the re-parsed result rather than assumed: an inserted key that
+	// landed under a table header would decode as a table field and read back
+	// empty, which is exactly the silent failure being fixed.
+	if err := verifySyncScalarFills(path, updated, fills); err != nil {
 		return res, err
 	}
 	if wErr := os.WriteFile(path, []byte(updated), 0o600); wErr != nil {
@@ -199,7 +237,158 @@ func mergeSyncConfig(path, content string, edit SyncEdit) (SyncEditResult, error
 	for _, ws := range missing {
 		res.Added = append(res.Added, ws.Name)
 	}
+	for _, f := range fills {
+		res.Filled = append(res.Filled, f.key)
+	}
 	return res, nil
+}
+
+// syncScalarFill is one absent top-level key this edit will insert.
+type syncScalarFill struct {
+	key   string
+	value string
+}
+
+// planSyncScalarFills decides which top-level scalars to fill, and reports
+// what it deliberately left alone.
+//
+// A key is filled only when the caller supplied a value AND the parsed config
+// declares none AND the raw text contains no assignment of it. The last check
+// is not redundant: `server = ""` parses to the empty string, and inserting a
+// second `server` line would produce a duplicate-key TOML error at the verify
+// step — a failure whose message would name TOML rather than the config the
+// user actually has to fix.
+func planSyncScalarFills(path, content string, existing *SyncConfig, edit SyncEdit) ([]syncScalarFill, []string) {
+	var (
+		fills    []syncScalarFill
+		warnings []string
+	)
+	consider := func(key, want, have string) {
+		want = strings.TrimSpace(want)
+		if want == "" {
+			return
+		}
+		if key == "server" {
+			if w := syncServerMismatch(path, have, want); w != "" {
+				warnings = append(warnings, w)
+			}
+		}
+		if strings.TrimSpace(have) != "" {
+			return
+		}
+		if declaresSyncKey(content, key) {
+			warnings = append(warnings, fmt.Sprintf("%s declares %s but leaves it empty; leaving it unchanged — set it by hand or remove the line and re-run", path, key))
+			return
+		}
+		fills = append(fills, syncScalarFill{key: key, value: want})
+	}
+	consider("server", edit.Server, existing.Server)
+	// A file that already resolves a token some other way (a literal `token`,
+	// or its own token_command) is left alone: filling a second source would
+	// change which credential the daemon presents.
+	if strings.TrimSpace(existing.Token) == "" {
+		consider("token_command", edit.TokenCommand, existing.TokenCommand)
+	}
+	return fills, warnings
+}
+
+// syncTableHeader matches a TOML table or array-of-tables header line. It is
+// deliberately strict (no brackets inside) so a multi-line array value is not
+// mistaken for the start of a table.
+var syncTableHeader = regexp.MustCompile(`^\[\[?[^\[\]]+\]\]?$`)
+
+// insertSyncScalars puts the fills at the last position still ABOVE every
+// table header, which for TOML is the only place a bare key means what it
+// looks like. Everything else in the file is preserved verbatim.
+func insertSyncScalars(content string, fills []syncScalarFill, note string) string {
+	block := make([]string, 0, len(fills)+1)
+	if strings.TrimSpace(note) != "" {
+		block = append(block, "# "+strings.TrimSpace(note)+" (filled in keys the file did not declare)")
+	}
+	for _, f := range fills {
+		block = append(block, fmt.Sprintf("%s = %s", f.key, strconv.Quote(f.value)))
+	}
+
+	lines := strings.Split(content, "\n")
+	insertAt := len(lines)
+	for i, line := range lines {
+		if syncTableHeader.MatchString(strings.TrimSpace(line)) {
+			insertAt = i
+			break
+		}
+	}
+	// Land after the preamble's own trailing blank lines rather than in the
+	// middle of them, so the inserted block reads as part of the header.
+	for insertAt > 0 && strings.TrimSpace(lines[insertAt-1]) == "" {
+		insertAt--
+	}
+
+	out := make([]string, 0, len(lines)+len(block)+2)
+	out = append(out, lines[:insertAt]...)
+	if insertAt > 0 {
+		out = append(out, "")
+	}
+	out = append(out, block...)
+	if insertAt < len(lines) {
+		out = append(out, "")
+	}
+	out = append(out, lines[insertAt:]...)
+	joined := strings.Join(out, "\n")
+	if !strings.HasSuffix(joined, "\n") {
+		joined += "\n"
+	}
+	return joined
+}
+
+// declaresSyncKey reports whether the raw text assigns key at the top level,
+// ignoring comments. Only the region above the first table header counts: a
+// `server = ...` under [[workspaces]] is a different key entirely.
+func declaresSyncKey(content, key string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if syncTableHeader.MatchString(trimmed) {
+			return false
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		name, _, ok := strings.Cut(trimmed, "=")
+		if !ok {
+			continue
+		}
+		if strings.Trim(strings.TrimSpace(name), `"'`) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// verifySyncScalarFills re-parses the generated content and asserts every fill
+// reads back as the value that was written. It is the post-condition for the
+// insertion point: an inserted key that landed below a table header parses as
+// that table's field and this catches it before anything is persisted.
+func verifySyncScalarFills(path, content string, fills []syncScalarFill) error {
+	if len(fills) == 0 {
+		return nil
+	}
+	parsed, err := ParseSyncContent(path, content)
+	if err != nil {
+		return fmt.Errorf("refusing to write %s: %w", path, err)
+	}
+	for _, f := range fills {
+		got := ""
+		switch f.key {
+		case "server":
+			got = parsed.Server
+		case "token_command":
+			got = parsed.TokenCommand
+		}
+		if strings.TrimSpace(got) != strings.TrimSpace(f.value) {
+			return fmt.Errorf("internal: generated %s does not read back %s = %q (got %q); refusing to write",
+				path, f.key, f.value, got)
+		}
+	}
+	return nil
 }
 
 // RenderSyncWorkspaces renders [[workspaces]] entries through the same choke
@@ -303,11 +492,17 @@ func ParseSyncContent(path, content string) (*SyncConfig, error) {
 }
 
 // syncServerMismatch returns a warning when an existing sync.toml's server
-// disagrees with the one the caller expected. The file is never rewritten —
+// DISAGREES with the one the caller expected. The file is never rewritten —
 // it is the user's, and silently repointing where their notes go would be the
 // worst kind of helpful.
+//
+// An EMPTY existing server is deliberately not a mismatch and never was; what
+// changed is that it is no longer silence either. It is a FILL, handled by
+// planSyncScalarFills and reported through SyncEditResult.Filled. This guard
+// returning "" for the empty case is what made the whole class invisible: it
+// could not fire on the one input that actually needed saying something about.
 func syncServerMismatch(path, actual, expected string) string {
-	if actual == "" || expected == "" {
+	if strings.TrimSpace(actual) == "" || strings.TrimSpace(expected) == "" {
 		return ""
 	}
 	if strings.TrimRight(actual, "/") == strings.TrimRight(expected, "/") {
