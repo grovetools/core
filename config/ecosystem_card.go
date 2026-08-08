@@ -306,8 +306,9 @@ func renderTOMLEcosystemCard(card EcosystemCard) string {
 // setYAMLEcosystemCard is the YAML dialect of setTOMLEcosystemCard: it
 // replaces the top-level `ecosystem:` mapping (its key line plus every
 // following indented or blank line) and leaves the rest of the document
-// verbatim. `grove ecosystem init` still scaffolds grove.yml, so adopt must be
-// able to backfill a card there.
+// verbatim. `grove ecosystem init` scaffolds TOML now, but every ecosystem
+// created before that — and any created with `--format yaml` — carries a
+// grove.yml, so adopt must be able to backfill a card there.
 func setYAMLEcosystemCard(content string, card EcosystemCard) string {
 	block := renderYAMLEcosystemCard(card)
 

@@ -278,9 +278,9 @@ func TestWriteEcosystemCardNeverRewritesTheID(t *testing.T) {
 	}
 }
 
-// TestWriteEcosystemCardYAML: `grove ecosystem init` still scaffolds
-// grove.yml, so adopt has to be able to backfill a card into a YAML manifest
-// with the same surgical guarantee.
+// TestWriteEcosystemCardYAML: ecosystems scaffolded before `grove ecosystem
+// init` switched to TOML carry a grove.yml, so adopt has to be able to
+// backfill a card into a YAML manifest with the same surgical guarantee.
 func TestWriteEcosystemCardYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "grove.yml")
