@@ -84,7 +84,7 @@ func getSharedValidator() (*SchemaValidator, error) {
 // Delivery goes through reportSchemaWarning: deduped per process (identical
 // warnings would otherwise repeat once per fragment per load), routed to the
 // logging pipeline's sink when available, and never written to an interactive
-// stderr — see schema_warnings.go.
+// stderr — see config_warnings.go.
 func validateAndWarn(cfg *Config, logger *logrus.Logger, source string) {
 	if cfg == nil || logger == nil {
 		return
@@ -441,7 +441,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		// Glob and merge additional modular TOML files from config directory
 		// Files are sorted by priority ([_grove].priority), then alphabetically within same priority
 		globalDir := filepath.Dir(globalPath)
-		warnLegacyMachinesDir(globalDir, logger)
+		warnLegacyMachinesDir(globalDir)
 		pattern := filepath.Join(globalDir, "*.toml")
 		if files, err := filepath.Glob(pattern); err == nil {
 			// First pass: collect fragments with their priorities

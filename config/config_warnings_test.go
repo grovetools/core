@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,8 +26,8 @@ func newWarnCaptureLogger() (*logrus.Logger, *bytes.Buffer) {
 // dedupe: the same warning repeated across fragments/loads must emit once,
 // while a different source or error still gets through.
 func TestReportSchemaWarningDedupes(t *testing.T) {
-	resetSchemaWarningsForTest()
-	t.Cleanup(resetSchemaWarningsForTest)
+	resetWarningsForTest()
+	t.Cleanup(resetWarningsForTest)
 
 	logger, buf := newWarnCaptureLogger()
 	violation := errors.New("tui: additional properties not allowed")
@@ -49,8 +50,8 @@ func TestReportSchemaWarningDedupes(t *testing.T) {
 // for a future sink instead), and GROVE_DEBUG=1 overrides the suppression —
 // mirroring logging's StructuredToStderr "auto" behavior.
 func TestReportSchemaWarningInteractiveGate(t *testing.T) {
-	resetSchemaWarningsForTest()
-	t.Cleanup(resetSchemaWarningsForTest)
+	resetWarningsForTest()
+	t.Cleanup(resetWarningsForTest)
 
 	origIsTerminal := isTerminalFd
 	isTerminalFd = func(uintptr) bool { return true }
@@ -84,15 +85,15 @@ func TestReportSchemaWarningInteractiveGate(t *testing.T) {
 	// The suppressed warning must still be observable: registering a sink
 	// flushes it.
 	var flushed []string
-	SetSchemaWarningSink(func(source string, err error) {
-		flushed = append(flushed, source+": "+err.Error())
+	SetWarningSink(func(w Warning) {
+		flushed = append(flushed, fmt.Sprint(w.Fields["source"])+": "+w.Err.Error())
 	})
 	if len(flushed) != 1 || !strings.Contains(flushed[0], "interactive-gate violation") {
 		t.Fatalf("expected the suppressed warning to flush to the sink, got %v", flushed)
 	}
 
 	// GROVE_DEBUG=1 keeps the raw emission for debugging sessions.
-	resetSchemaWarningsForTest()
+	resetWarningsForTest()
 	t.Setenv("GROVE_DEBUG", "1")
 	reportSchemaWarning(logger, "config bytes", violation)
 	if data := readOutput(); !strings.Contains(data, "does not fully conform") {
@@ -103,12 +104,12 @@ func TestReportSchemaWarningInteractiveGate(t *testing.T) {
 // TestSchemaWarningSinkTakesOver verifies that once a sink is registered,
 // warnings go to it exclusively — the fallback logger sees nothing.
 func TestSchemaWarningSinkTakesOver(t *testing.T) {
-	resetSchemaWarningsForTest()
-	t.Cleanup(resetSchemaWarningsForTest)
+	resetWarningsForTest()
+	t.Cleanup(resetWarningsForTest)
 
 	var sunk []string
-	SetSchemaWarningSink(func(source string, err error) {
-		sunk = append(sunk, source)
+	SetWarningSink(func(w Warning) {
+		sunk = append(sunk, fmt.Sprint(w.Fields["source"]))
 	})
 
 	logger, buf := newWarnCaptureLogger()

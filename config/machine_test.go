@@ -107,8 +107,10 @@ func TestMachineTOMLIsExcludedFromTheFragmentGlob(t *testing.T) {
 }
 
 // The dead ~/.config/grove/machines/ directory is never loaded; its presence
-// warns exactly once per load, naming the migration command.
-func TestLegacyMachinesDirWarnsOncePerLoad(t *testing.T) {
+// warns exactly once per PROCESS — not once per load, which is what made it
+// spam every run — naming the migration command, and it travels the deferred
+// warning channel (grove's own logging) rather than the raw console logger.
+func TestLegacyMachinesDirWarnsOncePerProcess(t *testing.T) {
 	dir := sandboxConfig(t)
 	writeFile(t, filepath.Join(dir, "grove.toml"), "name = \"test\"\n")
 	machinesDir := filepath.Join(dir, LegacyMachinesDirName)
@@ -117,22 +119,45 @@ func TestLegacyMachinesDirWarnsOncePerLoad(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(machinesDir, "old.toml"), "name = \"leaked\"\n")
 
+	resetWarningsForTest()
+	t.Cleanup(resetWarningsForTest)
+	var sunk []Warning
+	SetWarningSink(func(w Warning) { sunk = append(sunk, w) })
+
 	logger, warnings := loggerCapturingWarnings()
 	if _, err := LoadFromWithLogger(t.TempDir(), logger); err != nil {
 		t.Fatalf("LoadFromWithLogger: %v", err)
 	}
+	ResetLoadCache()
+	if _, err := LoadFromWithLogger(t.TempDir(), logger); err != nil {
+		t.Fatalf("LoadFromWithLogger (second load): %v", err)
+	}
 
-	var hits []string
-	for _, w := range *warnings {
-		if strings.Contains(w, machinesDir) {
+	var hits []Warning
+	for _, w := range sunk {
+		if strings.Contains(w.Message, machinesDir) {
 			hits = append(hits, w)
 		}
 	}
 	if len(hits) != 1 {
-		t.Fatalf("machines/ warning fired %d times, want exactly 1: %v", len(hits), *warnings)
+		t.Fatalf("machines/ warning fired %d times across two loads, want exactly 1: %v", len(hits), sunk)
 	}
-	if !strings.Contains(hits[0], "grove machine migrate") {
-		t.Fatalf("warning does not name the migration command: %q", hits[0])
+	if !strings.Contains(hits[0].Message, "grove machine migrate") {
+		t.Fatalf("warning does not name the migration command: %q", hits[0].Message)
+	}
+	if hits[0].Component != "config.machine" {
+		t.Fatalf("warning component = %q, want config.machine", hits[0].Component)
+	}
+	if hits[0].Fields["path"] != machinesDir {
+		t.Fatalf("warning path field = %v, want %s", hits[0].Fields["path"], machinesDir)
+	}
+
+	// Never the raw console logger: it is a standing nag on every config
+	// load of every binary, so stderr (and any TUI drawing on it) stays clean.
+	for _, w := range *warnings {
+		if strings.Contains(w, "grove machine migrate") {
+			t.Fatalf("the migration nag reached the fallback console logger: %q", w)
+		}
 	}
 
 	// And it is a warning ONLY — nothing under machines/ is loaded.
@@ -150,26 +175,31 @@ func TestNoLegacyMachinesDirNoWarning(t *testing.T) {
 	dir := sandboxConfig(t)
 	writeFile(t, filepath.Join(dir, "grove.toml"), "name = \"test\"\n")
 
-	logger, warnings := loggerCapturingWarnings()
+	resetWarningsForTest()
+	t.Cleanup(resetWarningsForTest)
+	var sunk []Warning
+	SetWarningSink(func(w Warning) { sunk = append(sunk, w) })
+
+	logger, _ := loggerCapturingWarnings()
 	if _, err := LoadFromWithLogger(t.TempDir(), logger); err != nil {
 		t.Fatalf("LoadFromWithLogger: %v", err)
 	}
-	for _, w := range *warnings {
-		if strings.Contains(w, LegacyMachinesDirName) {
-			t.Fatalf("unexpected machines/ warning: %q", w)
+	for _, w := range sunk {
+		if strings.Contains(w.Message, LegacyMachinesDirName) {
+			t.Fatalf("unexpected machines/ warning: %q", w.Message)
 		}
 	}
 
 	// A FILE named machines (not a directory) must not trigger it either.
 	writeFile(t, filepath.Join(dir, LegacyMachinesDirName), "")
 	ResetLoadCache()
-	logger, warnings = loggerCapturingWarnings()
+	sunk = nil
 	if _, err := LoadFromWithLogger(t.TempDir(), logger); err != nil {
 		t.Fatalf("LoadFromWithLogger: %v", err)
 	}
-	for _, w := range *warnings {
-		if strings.Contains(w, "grove machine migrate") {
-			t.Fatalf("a plain file named %q triggered the dir warning: %q", LegacyMachinesDirName, w)
+	for _, w := range sunk {
+		if strings.Contains(w.Message, "grove machine migrate") {
+			t.Fatalf("a plain file named %q triggered the dir warning: %q", LegacyMachinesDirName, w.Message)
 		}
 	}
 }

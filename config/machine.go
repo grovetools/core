@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
-	"github.com/sirupsen/logrus"
 
 	"github.com/grovetools/core/pkg/paths"
 )
@@ -125,10 +124,13 @@ func isExcludedGlobalFragment(baseName string) bool {
 // warnLegacyMachinesDir emits a one-shot warning when the dead
 // ~/.config/grove/machines/ directory exists. Its contents are never loaded —
 // machine intent lives in machine.toml now — so the only correct response is
-// to tell the operator how to migrate. Called once per config load, from the
-// same place the global config directory is globbed.
-func warnLegacyMachinesDir(globalDir string, logger *logrus.Logger) {
-	if globalDir == "" || logger == nil {
+// to tell the operator how to migrate. Called from the same place the global
+// config directory is globbed, i.e. on every config load; the warning itself
+// is deduped and routed through the deferred warning channel (see
+// reportLegacyMachinesDir), so it reaches grove's own logging exactly once
+// per process and never the raw console.
+func warnLegacyMachinesDir(globalDir string) {
+	if globalDir == "" {
 		return
 	}
 	dir := filepath.Join(globalDir, LegacyMachinesDirName)
@@ -136,7 +138,7 @@ func warnLegacyMachinesDir(globalDir string, logger *logrus.Logger) {
 	if err != nil || !info.IsDir() {
 		return
 	}
-	logger.Warnf("%s is ignored; migrate with `grove machine migrate`", dir)
+	reportLegacyMachinesDir(dir)
 }
 
 // LoadMachineConfig loads ~/.config/grove/machine.toml. A missing file is not

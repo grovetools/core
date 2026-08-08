@@ -596,30 +596,52 @@ func NewLogger(component string) *logrus.Entry {
 		logger.WithFields(fields).Info("Grove binary started")
 	})
 
-	// Config-load schema warnings buffer inside the config package until a
-	// logging pipeline exists (config cannot import this package). The first
-	// fully-configured logger becomes their sink, so early-load warnings —
-	// including ones fired at package-init time — reach the file sink and
-	// honor the TUI-safe console gating above.
-	schemaWarnSinkOnce.Do(func() { registerSchemaWarningSink(logger) })
+	// Config-load warnings (schema violations, migration nags) buffer inside
+	// the config package until a logging pipeline exists (config cannot
+	// import this package). The first fully-configured logger becomes their
+	// sink, so early-load warnings — including ones fired at package-init
+	// time — reach the file sink and honor the TUI-safe console gating above.
+	configWarnSinkOnce.Do(func() { registerConfigWarningSink(logger) })
 
 	entry := logger.WithField("component", component)
 	loggers[component] = entry
 	return entry
 }
 
-var schemaWarnSinkOnce sync.Once
+var configWarnSinkOnce sync.Once
 
-// registerSchemaWarningSink points config's schema-warning channel at a
+// registerConfigWarningSink points config's deferred-warning channel at a
 // configured logger. The closure can fire inside a config.Load made by
 // NewLogger itself (loggersMu held), so it must log through the captured
-// logger directly and never call NewLogger.
-func registerSchemaWarningSink(logger *logrus.Logger) {
-	entry := logger.WithField("component", "config")
-	config.SetSchemaWarningSink(func(source string, err error) {
-		entry.WithError(err).WithField("source", source).
-			Warn("configuration does not fully conform to the schema (continuing; validation is advisory)")
-	})
+// logger directly and never call NewLogger — which is also why each warning
+// carries its own component as a field rather than getting its own logger.
+func registerConfigWarningSink(logger *logrus.Logger) {
+	config.SetWarningSink(configWarningEmitter(logger))
+}
+
+// configWarningEmitter renders one config warning onto logger. A
+// StructuredOnly warning is marked with the dual-emit context so the console
+// formatter drops it (see dualEmitSuppressingFormatter) while the FileHook
+// still records it: standing nags belong in the audit trail, not on an
+// operator's terminal on every single run.
+func configWarningEmitter(logger *logrus.Logger) func(config.Warning) {
+	return func(w config.Warning) {
+		component := w.Component
+		if component == "" {
+			component = "config"
+		}
+		entry := logger.WithField("component", component)
+		if len(w.Fields) > 0 {
+			entry = entry.WithFields(logrus.Fields(w.Fields))
+		}
+		if w.Err != nil {
+			entry = entry.WithError(w.Err)
+		}
+		if w.StructuredOnly {
+			entry = entry.WithContext(dualEmitCtx)
+		}
+		entry.Warn(w.Message)
+	}
 }
 
 // dualEmitSuppressingFormatter wraps a formatter and emits nothing for
