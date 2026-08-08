@@ -15,12 +15,68 @@ import (
 
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/process"
 	"github.com/grovetools/core/pkg/workspace"
 )
 
 // groveScopeEnv is the env-var override for scope resolution, used when
 // the caller can't pass an explicit dir (e.g. subprocess of treemux).
 const groveScopeEnv = "GROVE_SCOPE"
+
+// GroveDaemonPairPIDEnv names the process any daemon auto-started from this
+// environment must not outlive.
+//
+// It exists for sandboxes that spawn groved INDIRECTLY. A tend scenario never
+// runs `groved start` — it runs `grove ...` inside a sandboxed HOME, and that
+// grove auto-starts a daemon of its own accord. There is no call site for the
+// harness to pass PairWith() to, so the intent has to travel in the
+// environment alongside the HOME/XDG vars that define the sandbox.
+//
+// The effect is that an interrupted run cannot strand a daemon: the harness
+// can be SIGKILLed, skipping every defer it owns, and the daemon still learns
+// of its death from the kernel and shuts itself down. Callers that pass an
+// explicit pairPID win over this variable.
+const GroveDaemonPairPIDEnv = "GROVE_DAEMON_PAIR_PID"
+
+// PairPIDEnv returns the KEY=VALUE assignment a fixture-spawning harness adds
+// to a sandbox environment so that every daemon started inside it dies with
+// the harness. Pair it with the HOME/XDG vars, not with the command: the whole
+// point is to reach daemons the harness never invokes itself.
+//
+// Only ever hand it a PID that will outlive the sandbox. A process that
+// EXPORTS this and then exits — a launcher that sets up a session and returns
+// — publishes a pairing that either does nothing (the PID is already dead when
+// the daemon starts, see PairPIDFromEnv) or kills the daemon seconds after it
+// boots. Neither is what the launcher meant.
+func PairPIDEnv(pid int) string {
+	return fmt.Sprintf("%s=%d", GroveDaemonPairPIDEnv, pid)
+}
+
+// PairPIDFromEnv reads GROVE_DAEMON_PAIR_PID from the current environment,
+// returning 0 when there is nothing usable to pair with.
+//
+// An unset, malformed, non-positive or already-dead value yields 0 (no
+// pairing): pairing to a PID that is already gone would make the daemon shut
+// down the instant it finished booting, which is a far more confusing failure
+// than not pairing at all.
+//
+// It is exported because daemons OTHER than groved honor the same variable —
+// the tuimux daemon reads it directly rather than being told by a flag, so a
+// harness can pair a daemon binary that predates the flag.
+func PairPIDFromEnv() int {
+	raw := os.Getenv(GroveDaemonPairPIDEnv)
+	if raw == "" {
+		return 0
+	}
+	pid, err := strconv.Atoi(raw)
+	if err != nil || pid <= 1 {
+		return 0
+	}
+	if !process.IsProcessAlive(pid) {
+		return 0
+	}
+	return pid
+}
 
 // resolveDir picks the input directory for scope resolution.
 //
@@ -545,6 +601,12 @@ func autoStartDaemon(scope, socketPath, pidPath string, pairPID int, earlyReady,
 	}
 	if pidPath != "" {
 		args = append(args, "--pidfile", pidPath)
+	}
+	// An explicit PairWith() beats the environment: the caller knows which
+	// process it is pairing to, the env var only says "whatever spawns here
+	// belongs to this run".
+	if pairPID <= 0 {
+		pairPID = PairPIDFromEnv()
 	}
 	if pairPID > 0 {
 		args = append(args, "--pair-with-pid", strconv.Itoa(pairPID))
