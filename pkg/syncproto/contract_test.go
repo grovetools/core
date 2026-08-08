@@ -1,6 +1,10 @@
 package syncproto
 
 import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -45,6 +49,108 @@ func TestCapabilitiesHandshakeRoundTrip(t *testing.T) {
 	var decodedResp CapabilitiesResponse
 	require.NoError(t, json.Unmarshal(data, &decodedResp))
 	assert.Equal(t, resp, decodedResp)
+}
+
+func TestCanonicalCapabilitiesBindsEpochNonceAndOrderedOffer(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	req := CapabilitiesRequest{DeviceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", ServerEpoch: "epoch-1",
+		Timestamp: "2026-08-08T12:34:56.123456789Z", Nonce: base64.StdEncoding.EncodeToString(make([]byte, 32)),
+		ProtocolVersions: []int{ProtocolVersionDeviceSession, ProtocolVersionLegacy}}
+	payload, err := CanonicalCapabilities(req)
+	require.NoError(t, err)
+	assert.Contains(t, string(payload), "protocol_versions=2,1\n")
+	require.NoError(t, SetCapabilitiesSignature(&req, ed25519.Sign(private, payload)))
+	require.NoError(t, VerifyCapabilities(req, public))
+	for name, mutate := range map[string]func(*CapabilitiesRequest){
+		"epoch":       func(r *CapabilitiesRequest) { r.ServerEpoch = "epoch-2" },
+		"nonce":       func(r *CapabilitiesRequest) { r.Nonce = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32)) },
+		"offer order": func(r *CapabilitiesRequest) { r.ProtocolVersions = []int{1, 2} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := req
+			mutate(&changed)
+			assert.Error(t, VerifyCapabilities(changed, public))
+		})
+	}
+}
+
+func TestEnrollmentCanonicalSigningAndFingerprint(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = byte(i)
+	}
+	private := ed25519.NewKeyFromSeed(seed)
+	req := EnrollRequest{
+		DeviceID:      "01K1ABCDEFGHJKMNPQRSTVWXYZ",
+		Name:          "solair-air",
+		PublicKey:     base64.StdEncoding.EncodeToString(private.Public().(ed25519.PublicKey)),
+		RequestedUser: "owner",
+		Timestamp:     "2026-08-08T12:34:56.123456789Z",
+	}
+	payload, err := EnrollmentSigningBytes(req)
+	require.NoError(t, err)
+	assert.Equal(t, "grove.sync.enrollment.v1\n"+
+		"device_id=01K1ABCDEFGHJKMNPQRSTVWXYZ\n"+
+		"name=solair-air\n"+
+		"public_key="+req.PublicKey+"\n"+
+		"requested_user=owner\n"+
+		"timestamp=2026-08-08T12:34:56.123456789Z\n", string(payload))
+
+	require.NoError(t, SignEnrollment(&req, private))
+	require.NoError(t, VerifyEnrollment(req))
+
+	tampered := req
+	tampered.Name = "other"
+	assert.Error(t, VerifyEnrollment(tampered))
+}
+
+func TestEnrollmentRejectsNonCanonicalInputs(t *testing.T) {
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	base := EnrollRequest{
+		DeviceID:  "device",
+		Name:      "name",
+		PublicKey: base64.StdEncoding.EncodeToString(private.Public().(ed25519.PublicKey)),
+		Timestamp: "2026-08-08T12:34:56Z",
+	}
+	for name, mutate := range map[string]func(*EnrollRequest){
+		"separator":                func(r *EnrollRequest) { r.Name = "bad\nname" },
+		"offset timestamp":         func(r *EnrollRequest) { r.Timestamp = "2026-08-08T12:34:56+00:00" },
+		"trailing fractional zero": func(r *EnrollRequest) { r.Timestamp = "2026-08-08T12:34:56.100Z" },
+		"noncanonical public key": func(r *EnrollRequest) {
+			r.PublicKey = base64.RawStdEncoding.EncodeToString(private.Public().(ed25519.PublicKey))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := base
+			mutate(&req)
+			_, err := CanonicalEnrollment(req)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestDeviceFingerprintVector(t *testing.T) {
+	// RFC 8032 test vector 1 public key, then SHA-256 over its raw 32 bytes.
+	const publicKey = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+	fingerprint, err := DeviceFingerprint(publicKey)
+	require.NoError(t, err)
+	assert.Equal(t, "21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9", fingerprint)
+}
+
+func TestEnrollmentWireCompatibility(t *testing.T) {
+	req := EnrollRequest{DeviceID: "device", PublicKey: "key", Timestamp: "time", Signature: "sig"}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"device_id":"device","public_key":"key","timestamp":"time","signature":"sig"}`, string(data))
+
+	caps, err := json.Marshal(Capabilities{})
+	require.NoError(t, err)
+	assert.NotContains(t, string(caps), "device_enrollment", "old wire shape must remain unchanged when unsupported")
+	caps, err = json.Marshal(Capabilities{DeviceEnrollment: true})
+	require.NoError(t, err)
+	assert.Contains(t, string(caps), `"device_enrollment":true`)
 }
 
 func TestCapabilitiesSupportsVersion(t *testing.T) {

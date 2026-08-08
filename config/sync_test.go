@@ -303,18 +303,23 @@ func TestSyncConfigResolveToken(t *testing.T) {
 		assert.Empty(t, token)
 	})
 
-	t.Run("failing token_command errors", func(t *testing.T) {
+	t.Run("failing token_command errors without quoting command", func(t *testing.T) {
 		t.Setenv(SyncTokenEnvVar, "")
-		s := &SyncConfig{TokenCommand: "exit 1"}
+		const command = "printf inline-secret >/dev/null; exit 1"
+		s := &SyncConfig{TokenCommand: command}
 		_, err := s.ResolveToken()
 		require.Error(t, err)
+		assert.NotContains(t, err.Error(), command)
+		assert.NotContains(t, err.Error(), "inline-secret")
 	})
 
-	t.Run("empty token_command output errors", func(t *testing.T) {
+	t.Run("empty token_command output errors without quoting command", func(t *testing.T) {
 		t.Setenv(SyncTokenEnvVar, "")
-		s := &SyncConfig{TokenCommand: "true"}
+		const command = "secret-manager-for-private-token"
+		s := &SyncConfig{TokenCommand: command}
 		_, err := s.ResolveToken()
 		require.Error(t, err)
+		assert.NotContains(t, err.Error(), command)
 	})
 }
 

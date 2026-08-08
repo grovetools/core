@@ -254,11 +254,11 @@ func (s *SyncConfig) ResolveToken() (string, error) {
 		cmd := exec.Command("sh", "-c", s.TokenCommand) //nolint:gosec // command comes from user's sync.toml config
 		output, err := cmd.Output()
 		if err != nil {
-			return "", fmt.Errorf("failed to execute sync token_command %q: %w", s.TokenCommand, err)
+			return "", fmt.Errorf("failed to execute sync token_command: %w", err)
 		}
 		token := strings.TrimSpace(string(output))
 		if token == "" {
-			return "", fmt.Errorf("sync token_command %q returned empty output", s.TokenCommand)
+			return "", fmt.Errorf("sync token_command returned empty output")
 		}
 		return token, nil
 	}

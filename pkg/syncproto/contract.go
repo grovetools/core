@@ -19,12 +19,30 @@
 package syncproto
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-// ProtocolVersion is the sync protocol version this package describes.
-const ProtocolVersion = 1
+// Protocol versions are negotiated explicitly. ProtocolVersion remains the
+// legacy alias so existing v1 clients continue to compile unchanged.
+const (
+	ProtocolVersionLegacy        = 1
+	ProtocolVersionDeviceSession = 2
+	ProtocolVersion              = ProtocolVersionLegacy
+)
+
+// SupportedProtocolVersions returns the ordered offer used by new clients.
+// The order is preference order; servers still select the highest common
+// numeric version so reordered offers cannot downgrade a handshake.
+func SupportedProtocolVersions() []int {
+	return []int{ProtocolVersionDeviceSession, ProtocolVersionLegacy}
+}
 
 // Sync event types. Renames are first-class moved events (emitted from nb's
 // typed move notifications), and prefix events cover directory-level
@@ -65,6 +83,7 @@ type Capabilities struct {
 	Blobs            bool     `json:"blobs,omitempty"`             // Content-addressed blob tier for large documents
 	Notify           bool     `json:"notify,omitempty"`            // SSE notify-poke channel ("workspace advanced to seq N")
 	Search           bool     `json:"search,omitempty"`            // Server-side search (Phase 3)
+	DeviceEnrollment bool     `json:"device_enrollment,omitempty"` // Server accepts signed device enrollment requests
 	MaxInlineSize    int64    `json:"max_inline_size,omitempty"`   // Largest document stored inline, in bytes (default 256KB)
 	BlobChunkSize    int64    `json:"blob_chunk_size,omitempty"`   // Fixed chunk size for the blob tier, in bytes (default 4MB)
 	MaxBlobSize      int64    `json:"max_blob_size,omitempty"`     // Largest single blob the server accepts, in bytes (0 = unadvertised)
@@ -91,16 +110,302 @@ type CapabilitiesRequest struct {
 	ProtocolVersions []int  `json:"protocol_versions"`        // Versions the client speaks
 	OriginID         string `json:"origin_id,omitempty"`      // Persistent per-install origin id
 	DeviceID         string `json:"device_id,omitempty"`      // Durable machine identity (ULID; core/pkg/machine, XDG state)
+	ServerEpoch      string `json:"server_epoch,omitempty"`   // exact epoch discovered from GET /sync/identity
+	Timestamp        string `json:"timestamp,omitempty"`      // canonical UTC timestamp for a v2 proof
+	Nonce            string `json:"nonce,omitempty"`          // canonical base64 32-byte random nonce
+	Signature        string `json:"signature,omitempty"`      // canonical base64 Ed25519 signature
+}
+
+// IdentityResponse is the intentionally-public server identity needed to
+// bootstrap a device handshake without a legacy bearer credential.
+type IdentityResponse struct {
+	ServerEpoch      string `json:"server_epoch"`
+	ProtocolVersions []int  `json:"protocol_versions"`
+	ServerName       string `json:"server_name,omitempty"`
 }
 
 // CapabilitiesResponse is the server's half of the handshake.
 type CapabilitiesResponse struct {
-	ServerName      string       `json:"server_name"`              // e.g. "grove-syncd"
-	ServerVersion   string       `json:"server_version,omitempty"` // Server build version
-	ServerEpoch     string       `json:"server_epoch,omitempty"`   // Server database identity, minted on first open; a changed epoch means the server store was recreated and push-only clients must re-push their full document set (empty = pre-epoch server)
-	ProtocolVersion int          `json:"protocol_version"`         // Negotiated version for this connection
-	Capabilities    Capabilities `json:"capabilities"`             // Feature set
-	Error           string       `json:"error,omitempty"`          // Set when negotiation fails (e.g. no common version)
+	ServerName       string       `json:"server_name"`              // e.g. "grove-syncd"
+	ServerVersion    string       `json:"server_version,omitempty"` // Server build version
+	ServerEpoch      string       `json:"server_epoch,omitempty"`   // Server database identity, minted on first open; a changed epoch means the server store was recreated and push-only clients must re-push their full document set (empty = pre-epoch server)
+	ProtocolVersion  int          `json:"protocol_version"`         // Negotiated version for this connection
+	Capabilities     Capabilities `json:"capabilities"`             // Feature set
+	SessionToken     string       `json:"session_token,omitempty"`  // raw v2 session bearer, returned once
+	SessionExpiresAt string       `json:"session_expires_at,omitempty"`
+	Error            string       `json:"error,omitempty"` // Set when negotiation fails (e.g. no common version)
+}
+
+// Device enrollment statuses.
+const (
+	DeviceStatusPending  = "pending"
+	DeviceStatusApproved = "approved"
+	DeviceStatusRevoked  = "revoked"
+)
+
+const (
+	enrollmentSignatureDomain   = "grove.sync.enrollment.v1"
+	capabilitiesSignatureDomain = "grove.sync.capabilities.v2"
+)
+
+// EnrollRequest proves possession of a device public key and asks the server
+// to register it. RequestedUser is only a request hint; an unauthenticated
+// enrollment must never select its own authority.
+type EnrollRequest struct {
+	DeviceID      string `json:"device_id"`
+	Name          string `json:"name,omitempty"`
+	PublicKey     string `json:"public_key"` // canonical base64 of 32 raw Ed25519 bytes
+	RequestedUser string `json:"requested_user,omitempty"`
+	Code          string `json:"code,omitempty"` // optional one-time enrollment voucher
+	Timestamp     string `json:"timestamp"`      // CanonicalTimestamp form
+	Signature     string `json:"signature"`      // canonical base64 Ed25519 signature
+}
+
+// EnrollResponse is returned for both first enrollment and idempotent retries.
+type EnrollResponse struct {
+	DeviceID    string `json:"device_id,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+// DeviceInfo is the public, secret-free representation of a registered device.
+type DeviceInfo struct {
+	DeviceID       string `json:"device_id"`
+	Name           string `json:"name,omitempty"`
+	PublicKey      string `json:"public_key"`
+	Fingerprint    string `json:"fingerprint"`
+	UserID         int64  `json:"user_id"`
+	Status         string `json:"status"`
+	ParentDeviceID string `json:"parent_device_id,omitempty"`
+	EnrolledAt     string `json:"enrolled_at"`
+	ApprovedAt     string `json:"approved_at,omitempty"`
+	ApprovedBy     string `json:"approved_by,omitempty"`
+	LastSeen       string `json:"last_seen,omitempty"`
+}
+
+// DeviceListResponse returns devices without exposing any credential.
+type DeviceListResponse struct {
+	Devices []DeviceInfo `json:"devices"`
+	Error   string       `json:"error,omitempty"`
+}
+
+// DeviceApprovalRequest supplies the authorization assignment made by an
+// administrator. Zero UserID means the server's default owner assignment.
+type DeviceApprovalRequest struct {
+	UserID int64 `json:"user_id,omitempty"`
+}
+
+type EnrollCodeRequest struct {
+	TTLSeconds int64 `json:"ttl_seconds,omitempty"`
+}
+
+type EnrollCodeResponse struct {
+	Code      string `json:"code,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+type DeviceRevokeResponse struct {
+	Devices  int    `json:"devices"`
+	Sessions int    `json:"sessions"`
+	Error    string `json:"error,omitempty"`
+}
+
+// DeviceApprovalResponse reports the row as committed by approval.
+type DeviceApprovalResponse struct {
+	Device DeviceInfo `json:"device"`
+	Error  string     `json:"error,omitempty"`
+}
+
+// CanonicalTimestamp renders signed request times in the one accepted UTC form.
+func CanonicalTimestamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+
+// CanonicalCapabilities returns the bytes covered by a v2 device handshake.
+// The exact ordered protocol offer is signed to prevent negotiation tampering.
+func CanonicalCapabilities(req CapabilitiesRequest) ([]byte, error) {
+	if req.DeviceID == "" || req.ServerEpoch == "" || req.Timestamp == "" || req.Nonce == "" || len(req.ProtocolVersions) == 0 {
+		return nil, fmt.Errorf("device_id, server_epoch, timestamp, nonce, and protocol_versions are required")
+	}
+	fields := []struct{ name, value string }{
+		{"device_id", req.DeviceID},
+		{"server_epoch", req.ServerEpoch},
+		{"timestamp", req.Timestamp},
+		{"nonce", req.Nonce},
+	}
+	for _, field := range fields {
+		if strings.ContainsAny(field.value, "\x00\r\n") {
+			return nil, fmt.Errorf("capabilities %s contains a forbidden separator", field.name)
+		}
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, req.Timestamp)
+	if err != nil || req.Timestamp != CanonicalTimestamp(parsed) {
+		return nil, fmt.Errorf("capabilities timestamp %q is not canonical RFC3339 UTC", req.Timestamp)
+	}
+	nonce, err := base64.StdEncoding.Strict().DecodeString(req.Nonce)
+	if err != nil || len(nonce) != 32 || base64.StdEncoding.EncodeToString(nonce) != req.Nonce {
+		return nil, fmt.Errorf("invalid capabilities nonce encoding")
+	}
+	versions := make([]string, len(req.ProtocolVersions))
+	for i, version := range req.ProtocolVersions {
+		if version <= 0 {
+			return nil, fmt.Errorf("invalid protocol version %d", version)
+		}
+		versions[i] = fmt.Sprint(version)
+	}
+	var b strings.Builder
+	b.WriteString(capabilitiesSignatureDomain)
+	b.WriteByte('\n')
+	for _, field := range fields {
+		b.WriteString(field.name)
+		b.WriteByte('=')
+		b.WriteString(field.value)
+		b.WriteByte('\n')
+	}
+	b.WriteString("protocol_versions=")
+	b.WriteString(strings.Join(versions, ","))
+	b.WriteByte('\n')
+	return []byte(b.String()), nil
+}
+
+func SetCapabilitiesSignature(req *CapabilitiesRequest, signature []byte) error {
+	if req == nil || len(signature) != ed25519.SignatureSize {
+		return fmt.Errorf("invalid capabilities signature")
+	}
+	req.Signature = base64.StdEncoding.EncodeToString(signature)
+	return nil
+}
+
+func VerifyCapabilities(req CapabilitiesRequest, public ed25519.PublicKey) error {
+	payload, err := CanonicalCapabilities(req)
+	if err != nil {
+		return err
+	}
+	signature, err := base64.StdEncoding.Strict().DecodeString(req.Signature)
+	if err != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(public, payload, signature) {
+		return fmt.Errorf("invalid capabilities signature")
+	}
+	return nil
+}
+
+// CanonicalEnrollment returns the versioned, domain-separated bytes covered
+// by an enrollment signature. It intentionally does not marshal JSON.
+func CanonicalEnrollment(req EnrollRequest) ([]byte, error) {
+	fields := []struct {
+		name, value string
+	}{
+		{"device_id", req.DeviceID},
+		{"name", req.Name},
+		{"public_key", req.PublicKey},
+		{"requested_user", req.RequestedUser},
+	}
+	// Preserve the exact Phase-1 canonical bytes when no voucher is present;
+	// code-bearing requests sign the code before the timestamp.
+	if req.Code != "" {
+		fields = append(fields, struct{ name, value string }{"code", req.Code})
+	}
+	fields = append(fields, struct{ name, value string }{"timestamp", req.Timestamp})
+	for _, field := range fields {
+		if strings.ContainsAny(field.value, "\x00\r\n") {
+			return nil, fmt.Errorf("enrollment %s contains a forbidden separator", field.name)
+		}
+	}
+	if req.DeviceID == "" || req.PublicKey == "" || req.Timestamp == "" {
+		return nil, fmt.Errorf("enrollment device_id, public_key, and timestamp are required")
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, req.Timestamp)
+	if err != nil || req.Timestamp != CanonicalTimestamp(parsed) {
+		return nil, fmt.Errorf("enrollment timestamp %q is not canonical RFC3339 UTC", req.Timestamp)
+	}
+	if _, err := DecodeDevicePublicKey(req.PublicKey); err != nil {
+		return nil, err
+	}
+
+	var b strings.Builder
+	b.WriteString(enrollmentSignatureDomain)
+	b.WriteByte('\n')
+	for _, field := range fields {
+		b.WriteString(field.name)
+		b.WriteByte('=')
+		b.WriteString(field.value)
+		b.WriteByte('\n')
+	}
+	return []byte(b.String()), nil
+}
+
+// EnrollmentSigningBytes is the explicit signing-oriented name for
+// CanonicalEnrollment.
+func EnrollmentSigningBytes(req EnrollRequest) ([]byte, error) {
+	return CanonicalEnrollment(req)
+}
+
+// SetEnrollmentSignature installs the canonical base64 representation of a
+// raw Ed25519 signature produced by a custody package.
+func SetEnrollmentSignature(req *EnrollRequest, signature []byte) error {
+	if req == nil {
+		return fmt.Errorf("enrollment request is nil")
+	}
+	if len(signature) != ed25519.SignatureSize {
+		return fmt.Errorf("invalid Ed25519 signature length %d", len(signature))
+	}
+	req.Signature = base64.StdEncoding.EncodeToString(signature)
+	return nil
+}
+
+// SignEnrollment canonicalizes req and fills its Signature.
+func SignEnrollment(req *EnrollRequest, private ed25519.PrivateKey) error {
+	if req == nil {
+		return fmt.Errorf("enrollment request is nil")
+	}
+	if len(private) != ed25519.PrivateKeySize {
+		return fmt.Errorf("invalid Ed25519 private key length %d", len(private))
+	}
+	payload, err := CanonicalEnrollment(*req)
+	if err != nil {
+		return err
+	}
+	req.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(private, payload))
+	return nil
+}
+
+// VerifyEnrollment verifies an enrollment's canonical proof of possession.
+func VerifyEnrollment(req EnrollRequest) error {
+	public, err := DecodeDevicePublicKey(req.PublicKey)
+	if err != nil {
+		return err
+	}
+	payload, err := CanonicalEnrollment(req)
+	if err != nil {
+		return err
+	}
+	signature, err := base64.StdEncoding.Strict().DecodeString(req.Signature)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return fmt.Errorf("invalid enrollment signature encoding")
+	}
+	if !ed25519.Verify(public, payload, signature) {
+		return fmt.Errorf("invalid enrollment signature")
+	}
+	return nil
+}
+
+// DecodeDevicePublicKey parses the canonical wire encoding of a public key.
+func DecodeDevicePublicKey(encoded string) (ed25519.PublicKey, error) {
+	decoded, err := base64.StdEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(decoded) != ed25519.PublicKeySize || base64.StdEncoding.EncodeToString(decoded) != encoded {
+		return nil, fmt.Errorf("invalid Ed25519 public key encoding")
+	}
+	return ed25519.PublicKey(decoded), nil
+}
+
+// DeviceFingerprint returns the full lowercase hexadecimal SHA-256 digest of
+// the decoded raw public key.
+func DeviceFingerprint(encodedPublicKey string) (string, error) {
+	public, err := DecodeDevicePublicKey(encodedPublicKey)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(public)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // SyncEvent is one entry in a workspace's append-only event log. On push the
@@ -127,11 +432,12 @@ type SyncEvent struct {
 	// Content is the inline document body, present only on push for
 	// documents at or below the server's MaxInlineSize. Larger documents go
 	// through the blob tier.
-	Content         []byte `json:"content,omitempty"`
-	ContentEncoding string `json:"content_encoding,omitempty"` // Defaults to plaintext
-	Size            int64  `json:"size,omitempty"`             // Content size in bytes
-	OriginID        string `json:"origin_id,omitempty"`        // Originating installation (echo suppression dedup key)
-	Actor           string `json:"actor,omitempty"`            // Display-only author identity
+	Content          []byte `json:"content,omitempty"`
+	ContentEncoding  string `json:"content_encoding,omitempty"`   // Defaults to plaintext
+	Size             int64  `json:"size,omitempty"`               // Content size in bytes
+	OriginID         string `json:"origin_id,omitempty"`          // Originating installation (echo suppression dedup key)
+	Actor            string `json:"actor,omitempty"`              // Display-only client-asserted author identity
+	VerifiedDeviceID string `json:"verified_device_id,omitempty"` // Server-stamped authenticated device; empty for service credentials
 	// ReceivedAt is the server-arrival timestamp; it defines ordering.
 	// Client timestamps are never compared.
 	ReceivedAt time.Time `json:"received_at,omitzero"`
