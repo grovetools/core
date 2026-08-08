@@ -441,6 +441,26 @@ type ForgeServicesConfig struct {
 	// "gcloud"). Required for ForgeTLSACME — see the TLS mode comment for why
 	// DNS-01 is the only challenge offered.
 	ACMEDNSProvider string `yaml:"acme_dns_provider,omitempty" toml:"acme_dns_provider,omitempty" jsonschema:"description=lego DNS-01 provider code (tls_mode = acme)"`
+	// ACMEDNSResolvers overrides the nameservers lego polls when checking that
+	// its DNS-01 TXT record has propagated. Needed when Domain is a DELEGATED
+	// SUBDOMAIN: lego walks up to the parent zone's SOA and queries the
+	// PARENT's nameservers, which correctly answer that subtree with a
+	// REFERRAL rather than the challenge record, so the pre-check times out
+	// after three minutes even though Let's Encrypt itself validates fine.
+	// Point this at the nameservers the subdomain is delegated TO, host:port.
+	//
+	// Rendered configuration, not a credential: it lands in acme.defaults,
+	// which every converge rewrites, rather than in the operator-installed
+	// acme.env.
+	ACMEDNSResolvers []string `yaml:"acme_dns_resolvers,omitempty" toml:"acme_dns_resolvers,omitempty" jsonschema:"description=Nameservers (host:port) lego polls for DNS-01 propagation; needed for a delegated subdomain"`
+	// ACMEDNSZoneID names the provider's hosted zone directly so lego skips the
+	// project-wide zone LOOKUP it otherwise performs. That lookup is the only
+	// reason the DNS-01 credential needs any project-level permission at all,
+	// so setting this is what makes a zone-scoped grant sufficient.
+	//
+	// Provider-specific by nature; only lego's "gcloud" provider (GCE_ZONE_ID)
+	// is rendered today, matching `grove forge acme install-credentials`.
+	ACMEDNSZoneID string `yaml:"acme_dns_zone_id,omitempty" toml:"acme_dns_zone_id,omitempty" jsonschema:"description=Provider hosted-zone id; lets lego skip the project-wide zone lookup so a zone-scoped credential suffices"`
 	// Forgejo configures the Forgejo service.
 	Forgejo *ForgejoServiceConfig `yaml:"forgejo,omitempty" toml:"forgejo,omitempty" jsonschema:"description=Forgejo service on the forge VM"`
 	// Syncd configures the colocated grove-syncd service.
@@ -784,6 +804,30 @@ func (s *ForgeServicesConfig) EffectiveDomain() string {
 	return strings.ToLower(strings.TrimSpace(s.Domain))
 }
 
+// EffectiveACMEDNSResolvers resolves ACMEDNSResolvers (nil-safe, trimmed,
+// blanks dropped). Empty means "let lego discover the zone's nameservers",
+// which is correct for a domain that is not a delegated subdomain.
+func (s *ForgeServicesConfig) EffectiveACMEDNSResolvers() []string {
+	if s == nil {
+		return nil
+	}
+	var out []string
+	for _, r := range s.ACMEDNSResolvers {
+		if r = strings.TrimSpace(r); r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// EffectiveACMEDNSZoneID resolves ACMEDNSZoneID (nil-safe, trimmed).
+func (s *ForgeServicesConfig) EffectiveACMEDNSZoneID() string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.ACMEDNSZoneID)
+}
+
 func forgeStringDefault(raw, def string) string {
 	if trimmed := strings.TrimSpace(raw); trimmed != "" {
 		return trimmed
@@ -922,6 +966,18 @@ func (s *ForgeServicesConfig) Validate() error {
 		}
 	default:
 		return fmt.Errorf("forge services tls_mode %q must be %q or %q", s.TLSMode, ForgeTLSSelfSigned, ForgeTLSACME)
+	}
+	// Shape-checked in every mode: a malformed resolver surfaces as a
+	// three-minute DNS-01 pre-check timeout on the VM, which is the expensive
+	// place to learn it.
+	for _, r := range s.ACMEDNSResolvers {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			continue
+		}
+		if _, _, err := net.SplitHostPort(r); err != nil {
+			return fmt.Errorf("forge services acme_dns_resolvers entry %q must be host:port (lego takes the port explicitly, e.g. %q)", r, r+":53")
+		}
 	}
 	if s.Forgejo != nil {
 		if err := validateForgePort("forge services forgejo http_port", s.Forgejo.HTTPPort); err != nil {

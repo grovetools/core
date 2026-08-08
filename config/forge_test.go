@@ -301,6 +301,88 @@ func TestForgeInfraCutoverDefaultsAndValidation(t *testing.T) {
 	}
 }
 
+// TestForgeServicesACMEDNSKnobs covers the two knobs that decide whether a
+// DNS-01 setup can work with a zone-scoped credential and a delegated
+// subdomain — both learned the expensive way during the first live issuance.
+func TestForgeServicesACMEDNSKnobs(t *testing.T) {
+	acme := func() *ForgeServicesConfig {
+		return &ForgeServicesConfig{
+			Domain:          "forge.example.test",
+			TLSMode:         ForgeTLSACME,
+			ACMEEmail:       "ops@example.test",
+			ACMEDNSProvider: "gcloud",
+		}
+	}
+
+	// The toml tags are the whole interface an operator touches, and nothing
+	// else in the stack would notice a typo in one.
+	parsed, err := LoadFromTOMLBytes([]byte(`version = "1.0"
+[forge.services]
+domain = "forge.example.test"
+tls_mode = "acme"
+acme_email = "ops@example.test"
+acme_dns_provider = "gcloud"
+acme_dns_resolvers = ["ns1.example.test:53", "ns2.example.test:53"]
+acme_dns_zone_id = "example-zone"
+`))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	forge, err := parsed.Forge()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := forge.Services.EffectiveACMEDNSResolvers(); len(got) != 2 || got[0] != "ns1.example.test:53" {
+		t.Errorf("acme_dns_resolvers did not parse: %#v", got)
+	}
+	if got := forge.Services.EffectiveACMEDNSZoneID(); got != "example-zone" {
+		t.Errorf("acme_dns_zone_id did not parse: %q", got)
+	}
+
+	var absent *ForgeServicesConfig
+	if got := absent.EffectiveACMEDNSResolvers(); got != nil {
+		t.Errorf("nil config resolvers = %v, want nil", got)
+	}
+	if got := absent.EffectiveACMEDNSZoneID(); got != "" {
+		t.Errorf("nil config zone id = %q, want empty", got)
+	}
+
+	// Blanks are dropped rather than rendered as an empty --dns.resolvers,
+	// which lego would reject.
+	s := acme()
+	s.ACMEDNSResolvers = []string{" ns1.example.test:53 ", "", "   ", "ns2.example.test:53"}
+	s.ACMEDNSZoneID = "  example-zone  "
+	if got := s.EffectiveACMEDNSResolvers(); len(got) != 2 || got[0] != "ns1.example.test:53" || got[1] != "ns2.example.test:53" {
+		t.Errorf("resolvers = %#v, want the two trimmed entries", got)
+	}
+	if got := s.EffectiveACMEDNSZoneID(); got != "example-zone" {
+		t.Errorf("zone id = %q, want trimmed", got)
+	}
+	if err := s.Validate(); err != nil {
+		t.Errorf("well-formed resolvers rejected: %v", err)
+	}
+
+	// A bare hostname is the natural mistake, and its cost on the VM is a
+	// three-minute DNS-01 pre-check timeout per attempt — so it is refused
+	// here, where the message can name the fix.
+	bare := acme()
+	bare.ACMEDNSResolvers = []string{"ns1.example.test"}
+	err = bare.Validate()
+	if err == nil || !strings.Contains(err.Error(), "acme_dns_resolvers") {
+		t.Fatalf("a portless resolver must be refused by name, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "ns1.example.test:53") {
+		t.Errorf("the refusal should show the corrected form, got: %v", err)
+	}
+
+	// Shape is checked in every mode: flipping tls_mode back to self-signed
+	// must not park a broken value for the next acme cutover to trip over.
+	selfSigned := &ForgeServicesConfig{ACMEDNSResolvers: []string{"ns1.example.test"}}
+	if err := selfSigned.Validate(); err == nil {
+		t.Error("a malformed resolver must be refused outside acme mode too")
+	}
+}
+
 func TestForgeInfraCutoverFieldsParseWithoutLoadValidation(t *testing.T) {
 	cfg, err := LoadFromTOMLBytes([]byte(`version = "1.0"
 [forge.infra]

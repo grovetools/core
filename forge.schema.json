@@ -195,6 +195,17 @@
           "type": "string",
           "description": "lego DNS-01 provider code (tls_mode = acme)"
         },
+        "acme_dns_resolvers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Nameservers (host:port) lego polls for DNS-01 propagation; needed for a delegated subdomain"
+        },
+        "acme_dns_zone_id": {
+          "type": "string",
+          "description": "Provider hosted-zone id; lets lego skip the project-wide zone lookup so a zone-scoped credential suffices"
+        },
         "forgejo": {
           "$ref": "#/$defs/ForgejoServiceConfig",
           "description": "Forgejo service on the forge VM"
