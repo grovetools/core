@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/sirupsen/logrus"
@@ -20,38 +19,21 @@ import (
 	"github.com/grovetools/core/pkg/plugin"
 )
 
-// loadCacheEntry caches a resolved Config keyed by the absolute startDir passed
-// to LoadFromWithLogger. The TTL is short enough to stay correct for users
-// editing grove.toml interactively, and long enough to absorb thundering-herd
-// callers (60fps TUI renders, 500ms fsnotify batches, long-lived watchers).
-type loadCacheEntry struct {
-	cfg    *Config
-	stored time.Time
-}
-
-const loadCacheTTL = 2 * time.Second
-
-var loadCache sync.Map // map[string]loadCacheEntry, keyed by absolute startDir
-
-// ResetLoadCache clears both config caches: LoadFromWithLogger's TTL cache and
-// Load's per-file memo (see filecache.go). Tests that mutate config files
-// across sub-cases should call this between them — the TTL cache would
-// otherwise serve the pre-write config for up to loadCacheTTL, and the
-// per-file memo can be fooled by a same-size rewrite landing inside one mtime
-// tick on a coarse-timestamp filesystem.
+// ResetLoadCache clears both config caches: LoadFromWithLogger's per-startDir
+// memo (see loadfromcache.go) and Load's per-file memo (see filecache.go).
+// Both revalidate by (mtime, size), so real edits are caught without a reset;
+// what a reset covers is the stamp's blind spot — a same-size rewrite landing
+// inside one mtime tick on a coarse-timestamp filesystem. Tests that mutate
+// config files across sub-cases should call this between them.
 //
 // Production code needs it in exactly one shape: a command that WRITES config
 // and then reads the result back inside the same process (`grove subscribe`,
 // `grove ecosystem materialize`, `grove join` — all of which write
-// machine.toml or sync.toml and immediately resolve against it). Without the
-// reset those reads would be served the pre-write config for up to the TTL and
-// the verb would report on a state it had already changed. Nothing else should
-// call it.
+// machine.toml or sync.toml and immediately resolve against it). Their own
+// write is exactly the same-tick rewrite the stamps can miss. Nothing else
+// should call it.
 func ResetLoadCache() {
-	loadCache.Range(func(key, _ any) bool {
-		loadCache.Delete(key)
-		return true
-	})
+	resetLoadFromCache()
 	resetFileCache()
 }
 
@@ -387,24 +369,46 @@ func LoadFrom(startDir string) (*Config, error) {
 	return LoadFromWithLogger(startDir, logrus.New())
 }
 
-// LoadFromWithLogger loads configuration with hierarchical merging and logging
+// LoadFromWithLogger loads configuration with hierarchical merging and logging.
+//
+// An unchanged hierarchy is loaded once per process, not once per call: the
+// result is memoized per absolute startDir and revalidated against every input
+// the previous load consulted — file stamps, glob membership, discovery
+// lookups, and the env vars the files referenced. See loadfromcache.go for
+// what "unchanged" covers and for the immutability contract the returned
+// *Config carries.
 func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error) {
-	// Short-lived cache keyed by absolute startDir. The full load path stats
-	// and parses ~10 different hierarchical files plus compiles the JSONSchema
-	// validator (~15ms), which shows up as a dominant hot path in long-lived
-	// processes — cx TUI rendering, groved fsnotify handlers, nav ticker
-	// loops, etc. 2s is long enough to absorb bursts from those callers and
-	// short enough that interactive edits to grove.toml feel instant.
 	cacheKey, _ := filepath.Abs(startDir)
 	if cacheKey == "" {
 		cacheKey = startDir
 	}
-	if raw, ok := loadCache.Load(cacheKey); ok {
-		if entry, ok := raw.(loadCacheEntry); ok && time.Since(entry.stored) < loadCacheTTL {
-			return entry.cfg, nil
-		}
+	raw, _ := loadFromCache.LoadOrStore(cacheKey, &loadFromEntry{})
+	entry := raw.(*loadFromEntry)
+
+	// Per-entry lock: concurrent loads of the same startDir collapse onto one
+	// hierarchy walk, loads of different directories never contend.
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	if entry.fresh() {
+		return entry.cfg, nil
 	}
 
+	trace := &loadFromTrace{}
+	cfg, err := loadFromHierarchy(startDir, logger, trace)
+	if err != nil {
+		// Failures are never cached: an error path takes exactly the code path
+		// it took before the memo existed.
+		return nil, err
+	}
+	entry.store(cfg, trace)
+	return cfg, nil
+}
+
+// loadFromHierarchy is the full hierarchical load. It records every file,
+// glob, discovery result, and env reference it consults into trace, which is
+// what lets LoadFromWithLogger serve the result until one of them changes.
+func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTrace) (*Config, error) {
 	// Find project config file first
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
@@ -414,28 +418,39 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 		projectPath = "" // No project file found, proceed without it.
 	}
+	// A config file appearing closer to startDir (or the found one vanishing)
+	// re-anchors the whole cascade; re-running the search is the only cheap
+	// way to notice either. Content changes of the found file are carried by
+	// its read stamp below.
+	trace.lookup(projectPath, func() string {
+		found, err := FindConfigFile(startDir)
+		if err != nil {
+			return ""
+		}
+		return found
+	})
 
 	// Start with an empty config
 	var finalConfig *Config
 
 	// 1. Load global config if it exists (optional)
 	globalPath := getXDGConfigPath()
+	// The XDG resolution depends on the config-dir env and on which of
+	// grove.toml/grove.yml exists there.
+	trace.lookup(globalPath, getXDGConfigPath)
 	if globalPath != "" {
-		if _, err := os.Stat(globalPath); err == nil {
+		if globalData, err := trace.readFile(globalPath); err == nil {
 			logger.WithField("path", globalPath).Debug("Loading global configuration")
 			// Load global config without validation/defaults (raw load)
-			globalData, err := os.ReadFile(globalPath)
-			if err == nil {
-				expanded := expandEnvVars(string(globalData))
-				globalConfig, parseErr := unmarshalConfig(globalPath, []byte(expanded))
-				if parseErr == nil {
-					finalConfig = globalConfig
-				} else {
-					logger.WithError(parseErr).Warn("Failed to parse global configuration, continuing without it")
-				}
+			expanded := expandEnvVars(string(globalData))
+			globalConfig, parseErr := unmarshalConfig(globalPath, []byte(expanded))
+			if parseErr == nil {
+				finalConfig = globalConfig
 			} else {
-				logger.WithError(err).Warn("Failed to read global configuration, continuing without it")
+				logger.WithError(parseErr).Warn("Failed to parse global configuration, continuing without it")
 			}
+		} else if !os.IsNotExist(err) {
+			logger.WithError(err).Warn("Failed to read global configuration, continuing without it")
 		}
 
 		// Glob and merge additional modular TOML files from config directory
@@ -443,6 +458,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		globalDir := filepath.Dir(globalPath)
 		pattern := filepath.Join(globalDir, "*.toml")
 		if files, err := filepath.Glob(pattern); err == nil {
+			trace.glob(pattern, files)
 			// First pass: collect fragments with their priorities
 			var fragments []configFragment
 			for _, file := range files {
@@ -454,7 +470,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 					continue
 				}
 
-				fragmentData, err := os.ReadFile(file)
+				fragmentData, err := trace.readFile(file)
 				if err != nil {
 					logger.WithError(err).Warnf("Failed to read config fragment %s, skipping", baseName)
 					continue
@@ -504,11 +520,12 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		// Also glob ~/.config/grove/plugins/*.toml for per-user plugin manifests
 		pluginPattern := plugin.FragmentPattern(globalDir)
 		if pluginFiles, err := filepath.Glob(pluginPattern); err == nil {
+			trace.glob(pluginPattern, pluginFiles)
 			for _, file := range pluginFiles {
 				baseName := filepath.Base(file)
 				logger.WithField("path", file).Debug("Loading plugin config fragment")
 
-				fragmentData, err := os.ReadFile(file)
+				fragmentData, err := trace.readFile(file)
 				if err != nil {
 					logger.WithError(err).Warnf("Failed to read plugin config %s, skipping", baseName)
 					continue
@@ -538,36 +555,42 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		overrideFiles := globalOverrideFiles(globalDir)
 
 		for _, overridePath := range overrideFiles {
-			if _, err := os.Stat(overridePath); err == nil {
-				logger.WithField("path", overridePath).Debug("Loading global override configuration")
-				overrideData, err := os.ReadFile(overridePath)
-				if err != nil {
-					logger.WithError(err).Warn("Failed to read global override file, skipping")
-					continue
-				}
-				expanded := expandEnvVars(string(overrideData))
-				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
-				if parseErr != nil {
-					logger.WithError(parseErr).Warn("Failed to parse global override file, skipping")
-					continue
-				}
-				if finalConfig == nil {
-					finalConfig = overrideConfig
-				} else {
-					finalConfig = mergeConfigs(finalConfig, overrideConfig)
-				}
-				break // Only load one
+			if _, err := os.Stat(overridePath); err != nil {
+				// An absent candidate must stay absent: creating it would
+				// change which override file wins.
+				trace.absent(overridePath)
+				continue
 			}
+			logger.WithField("path", overridePath).Debug("Loading global override configuration")
+			overrideData, err := trace.readFile(overridePath)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to read global override file, skipping")
+				continue
+			}
+			expanded := expandEnvVars(string(overrideData))
+			overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
+			if parseErr != nil {
+				logger.WithError(parseErr).Warn("Failed to parse global override file, skipping")
+				continue
+			}
+			if finalConfig == nil {
+				finalConfig = overrideConfig
+			} else {
+				finalConfig = mergeConfigs(finalConfig, overrideConfig)
+			}
+			break // Only load one
 		}
 	}
 
 	// Load GROVE_CONFIG_OVERLAY if set (for demo/testing environments)
 	// Any field present in the overlay replaces the corresponding field in base config.
+	// One lookup covers both the env var appearing/changing and its expansion.
+	trace.lookup(overlayLookup(), overlayLookup)
 	if overlayPath := os.Getenv("GROVE_CONFIG_OVERLAY"); overlayPath != "" {
 		overlayPath = expandPath(overlayPath)
 		if _, err := os.Stat(overlayPath); err == nil {
 			logger.WithField("path", overlayPath).Debug("Loading config overlay from GROVE_CONFIG_OVERLAY")
-			overlayData, err := os.ReadFile(overlayPath)
+			overlayData, err := trace.readFile(overlayPath)
 			if err != nil {
 				return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read config overlay").
 					WithDetail("path", overlayPath)
@@ -609,7 +632,7 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	if projectPath != "" {
 		logger.WithField("path", projectPath).Debug("Loading project configuration")
 		// 2. Load and merge project config - also without defaults/validation
-		projectData, err := os.ReadFile(projectPath)
+		projectData, err := trace.readFile(projectPath)
 		if err != nil {
 			return nil, errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read project config").
 				WithDetail("path", projectPath)
@@ -625,10 +648,14 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		// Check if this is a workspace config (has no workspaces field) and look for ecosystem config
 		ecosystemPath := ""
 		if !isGlobalFallback && len(projectConfig.Workspaces) == 0 {
-			// This appears to be a workspace config, look for ecosystem config
-			ecosystemPath = FindEcosystemConfig(filepath.Dir(projectPath))
+			// This appears to be a workspace config, look for ecosystem config.
+			// The traced walk records every candidate it consulted, so an
+			// ecosystem config appearing in a nearer directory — or the found
+			// one changing — invalidates by stamp alone.
+			ecosystemPath = findEcosystemConfigTraced(filepath.Dir(projectPath), trace)
 			if ecosystemPath != "" {
 				logger.WithField("path", ecosystemPath).Debug("Loading ecosystem configuration")
+				// Already stamped by the walk; a plain read avoids a duplicate dep.
 				ecosystemData, err := os.ReadFile(ecosystemPath)
 				if err == nil {
 					expandedEco := expandEnvVars(string(ecosystemData))
@@ -669,11 +696,29 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 			} else {
 				projectRoot = startDir
 			}
+			// The derivation shells out to git, so it is only replayed for
+			// loads that actually took this branch.
+			trace.lookup(projectRoot, func() string {
+				if gitRoot, gitErr := getGitRoot(startDir); gitErr == nil && gitRoot != "" {
+					return gitRoot
+				}
+				return startDir
+			})
 		}
-		notebookConfigPath := findNotebookConfigPath(projectRoot, finalConfig)
+		// Snapshot the cascade the notebook lookup resolves against: later
+		// layers reassign finalConfig, and the replay must see the same inputs
+		// the load saw. Re-running the lookup catches a notebook config
+		// appearing, vanishing, or rebinding (the ecosystem-card probe it rides
+		// on revalidates by stat); content changes of the found file are
+		// carried by its read stamp.
+		nbBase := finalConfig
+		notebookConfigPath := findNotebookConfigPath(projectRoot, nbBase)
+		trace.lookup(notebookConfigPath, func() string {
+			return findNotebookConfigPath(projectRoot, nbBase)
+		})
 		if notebookConfigPath != "" {
 			logger.WithField("path", notebookConfigPath).Debug("Loading project notebook configuration")
-			nbData, err := os.ReadFile(notebookConfigPath)
+			nbData, err := trace.readFile(notebookConfigPath)
 			if err == nil {
 				expandedNb := expandEnvVars(string(nbData))
 				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
@@ -709,34 +754,38 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		overrideFiles := projectOverrideFiles(projectDir)
 
 		for _, overridePath := range overrideFiles {
-			if _, err := os.Stat(overridePath); err == nil {
-				logger.WithField("path", overridePath).Debug("Loading local override configuration")
-
-				overrideData, err := os.ReadFile(overridePath)
-				if err != nil {
-					logger.WithError(err).Warn("Failed to read override file, skipping")
-					continue
-				}
-
-				// Expand environment variables
-				expanded := expandEnvVars(string(overrideData))
-				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
-				if parseErr != nil {
-					logger.WithError(parseErr).Warn("Failed to parse override file, skipping")
-					continue
-				}
-
-				// Only gate when these are the REPO's override files. Under
-				// isGlobalFallback, projectDir is the global config dir, so
-				// projectOverrideFiles() resolves to ~/.config/grove/grove.override.*
-				// — a user-controlled file already merged ungated above. Gating
-				// it here would quarantine the user's own hooks/plugins and warn
-				// about their own config.
-				if !isGlobalFallback {
-					gate.apply(overrideConfig, SourceOverride, overridePath)
-				}
-				finalConfig = mergeConfigs(finalConfig, overrideConfig)
+			if _, err := os.Stat(overridePath); err != nil {
+				// Every existing candidate is merged, so each absent one must
+				// stay absent.
+				trace.absent(overridePath)
+				continue
 			}
+			logger.WithField("path", overridePath).Debug("Loading local override configuration")
+
+			overrideData, err := trace.readFile(overridePath)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to read override file, skipping")
+				continue
+			}
+
+			// Expand environment variables
+			expanded := expandEnvVars(string(overrideData))
+			overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
+			if parseErr != nil {
+				logger.WithError(parseErr).Warn("Failed to parse override file, skipping")
+				continue
+			}
+
+			// Only gate when these are the REPO's override files. Under
+			// isGlobalFallback, projectDir is the global config dir, so
+			// projectOverrideFiles() resolves to ~/.config/grove/grove.override.*
+			// — a user-controlled file already merged ungated above. Gating
+			// it here would quarantine the user's own hooks/plugins and warn
+			// about their own config.
+			if !isGlobalFallback {
+				gate.apply(overrideConfig, SourceOverride, overridePath)
+			}
+			finalConfig = mergeConfigs(finalConfig, overrideConfig)
 		}
 	}
 
@@ -746,10 +795,21 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		if gitRoot, err := getGitRoot(startDir); err == nil && gitRoot != "" {
 			projectRoot = gitRoot
 		}
-		notebookConfigPath := findNotebookConfigPath(projectRoot, finalConfig)
+		trace.lookup(projectRoot, func() string {
+			if gitRoot, err := getGitRoot(startDir); err == nil && gitRoot != "" {
+				return gitRoot
+			}
+			return startDir
+		})
+		// Same snapshot-and-replay as the project branch above.
+		nbBase := finalConfig
+		notebookConfigPath := findNotebookConfigPath(projectRoot, nbBase)
+		trace.lookup(notebookConfigPath, func() string {
+			return findNotebookConfigPath(projectRoot, nbBase)
+		})
 		if notebookConfigPath != "" {
 			logger.WithField("path", notebookConfigPath).Debug("Loading project notebook configuration (no local project config)")
-			nbData, err := os.ReadFile(notebookConfigPath)
+			nbData, err := trace.readFile(notebookConfigPath)
 			if err == nil {
 				expandedNb := expandEnvVars(string(nbData))
 				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
@@ -774,7 +834,12 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 	// Compile machine.toml's subscriptions and bare roots into Groves. This
 	// runs after the final merge (so an explicit [groves.*] from any layer
 	// wins) and before SetDefaults (so compiled entries get the same
-	// Enabled=true default every other grove entry gets).
+	// Enabled=true default every other grove entry gets). Its ABSENCE is as
+	// load-bearing as its content, so the stamp — taken before the read, like
+	// every other dependency — pins either state.
+	machinePath := MachineConfigPath()
+	trace.lookup(machinePath, MachineConfigPath)
+	trace.stat(machinePath)
 	finalConfig = compileMachineGroves(finalConfig, loadMachineConfigForCompile())
 
 	// Set defaults
@@ -801,12 +866,16 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 		}
 	}
 
-	// Populate the short-lived cache for subsequent callers. Callers are
-	// expected to treat the returned *Config as read-only; mutating it would
-	// leak into other callers within the TTL window.
-	loadCache.Store(cacheKey, loadCacheEntry{cfg: finalConfig, stored: time.Now()})
-
 	return finalConfig, nil
+}
+
+// overlayLookup is GROVE_CONFIG_OVERLAY's contribution to the load trace: the
+// expanded overlay path when the variable is set, "" otherwise.
+func overlayLookup() string {
+	if raw := os.Getenv("GROVE_CONFIG_OVERLAY"); raw != "" {
+		return expandPath(raw)
+	}
+	return ""
 }
 
 // LoadFromBytes parses configuration from byte array
@@ -1070,6 +1139,14 @@ func getXDGConfigPath() string {
 // config that has a 'workspaces' field (indicating it's an ecosystem config).
 // TOML is preferred over YAML when both exist with workspaces.
 func FindEcosystemConfig(startDir string) string {
+	return findEcosystemConfigTraced(startDir, nil)
+}
+
+// findEcosystemConfigTraced is FindEcosystemConfig recording every candidate
+// it consulted — absent or read-stamped — into trace. The walk's decisions are
+// pure functions of those files, so unchanged stamps mean an unchanged answer:
+// revalidating the walk costs stats, never a re-parse.
+func findEcosystemConfigTraced(startDir string, trace *loadFromTrace) string {
 	configNames := []string{
 		"grove.toml",
 		"grove.yml",
@@ -1086,26 +1163,29 @@ func FindEcosystemConfig(startDir string) string {
 		// contain a full copy of the ecosystem including grove.yml with workspaces
 		for _, name := range configNames {
 			path := filepath.Join(dir, name)
-			if info, err := os.Stat(path); err == nil && !info.IsDir() {
-				// Check if this config has workspaces field
-				data, err := os.ReadFile(path)
-				if err == nil {
-					expanded := expandEnvVars(string(data))
-					var cfg Config
-					if strings.HasSuffix(name, ".toml") {
-						if err := toml.Unmarshal([]byte(expanded), &cfg); err != nil {
-							continue
-						}
-					} else {
-						if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
-							continue
-						}
-					}
-					// An ecosystem config is identified by having a non-empty 'workspaces' field.
-					if len(cfg.Workspaces) > 0 {
-						return path
-					}
+			if info, err := os.Stat(path); err != nil || info.IsDir() {
+				trace.absent(path)
+				continue
+			}
+			// Check if this config has workspaces field
+			data, err := trace.readFile(path)
+			if err != nil {
+				continue
+			}
+			expanded := expandEnvVars(string(data))
+			var cfg Config
+			if strings.HasSuffix(name, ".toml") {
+				if err := toml.Unmarshal([]byte(expanded), &cfg); err != nil {
+					continue
 				}
+			} else {
+				if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+					continue
+				}
+			}
+			// An ecosystem config is identified by having a non-empty 'workspaces' field.
+			if len(cfg.Workspaces) > 0 {
+				return path
 			}
 		}
 

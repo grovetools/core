@@ -83,6 +83,13 @@ func ResolvePlanBindings(requests []BindingRequest) map[string]PlanBinding {
 		}
 		return out
 	}
+	return ResolvePlanBindingsWithEntries(requests, entries)
+}
+
+// ResolvePlanBindingsWithEntries resolves a portfolio against registry entries
+// the caller already holds. A caller that has just listed the registry for its
+// own enrichment must not pay (or race) a second scan here.
+func ResolvePlanBindingsWithEntries(requests []BindingRequest, entries []*worktreeregistry.Entry) map[string]PlanBinding {
 	return resolvePlanBindings(requests, entries, ResolveTarget)
 }
 
