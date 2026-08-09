@@ -1,10 +1,13 @@
 package tmux
 
 import (
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/grovetools/core/pkg/paths"
 )
@@ -49,7 +52,15 @@ func ReloadAllServers() {
 		return
 	}
 
-	// List all tmux sockets and reload each one.
+	// List all tmux sockets and reload each live one. The liveness gate
+	// matters: tmux never unlinks the socket of a server that died by
+	// SIGKILL, and abandoned test fixtures accumulate dozens of dead
+	// sockets. Forking a tmux client at each of them costs ~5ms apiece and
+	// this function runs under the daemon's nav-bindings lock, so an
+	// ungated sweep turns every bindings write into a multi-hundred-ms
+	// stall. A direct dial answers in microseconds and also skips other
+	// users' sockets (permission denied), which `-L` could never reach
+	// anyway — it resolves against our own uid's socket directory.
 	socketsDir := "/tmp"
 	if entries, err := os.ReadDir(socketsDir); err == nil {
 		for _, entry := range entries {
@@ -63,11 +74,33 @@ func ReloadAllServers() {
 			}
 			for _, sock := range sockets {
 				serverName := sock.Name()
+				if !socketAlive(filepath.Join(socketPath, serverName)) {
+					continue
+				}
 				_ = exec.Command("tmux", "-L", serverName, "source-file", conf).Run()
 			}
 		}
 	}
 
-	// Also try the default server (no -L flag).
-	_ = exec.Command("tmux", "source-file", conf).Run()
+	// Also try the default server (no -L flag), gated the same way. Unlike
+	// the enumeration above, tmux resolves this one via TMUX_TMPDIR, so the
+	// gate must too — it is the only path that reaches servers living
+	// outside /tmp.
+	defaultDir := os.Getenv("TMUX_TMPDIR")
+	if defaultDir == "" {
+		defaultDir = socketsDir
+	}
+	if socketAlive(filepath.Join(defaultDir, fmt.Sprintf("tmux-%d", os.Getuid()), "default")) {
+		_ = exec.Command("tmux", "source-file", conf).Run()
+	}
+}
+
+// socketAlive reports whether a unix socket file has a listening server.
+func socketAlive(path string) bool {
+	conn, err := net.DialTimeout("unix", path, 250*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
