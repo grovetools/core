@@ -674,6 +674,15 @@ func mergeConfigs(base, override *Config) *Config {
 		if len(override.TUI.PluginOrder) > 0 {
 			result.TUI.PluginOrder = append([]string(nil), override.TUI.PluginOrder...)
 		}
+		// experimental_pages is a layer-local opt-in list, so the nearest
+		// explicitly configured layer replaces the earlier list. In particular,
+		// ~/.config/grove/tui.toml is a global fragment (an override here), not
+		// the base global config; without this clause its parsed value was
+		// silently discarded. Preserve nil as "not configured", while allowing
+		// an explicit empty list to clear an inherited opt-in.
+		if override.TUI.ExperimentalPages != nil {
+			result.TUI.ExperimentalPages = append([]string{}, override.TUI.ExperimentalPages...)
+		}
 
 		// Merge [tui.plugins] per entry rather than wholesale. Plugin panels
 		// arrive one file at a time — `grove plugin install` writes one

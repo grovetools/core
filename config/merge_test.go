@@ -1346,6 +1346,27 @@ func TestMergeTUIPluginOrderUsesLaterGlobalPreference(t *testing.T) {
 	}
 }
 
+// experimental_pages is commonly kept in ~/.config/grove/tui.toml. That file
+// is loaded as an override fragment, so the list needs an explicit merge arm;
+// merely parsing it into TUIConfig is not enough.
+func TestMergeTUIExperimentalPagesUsesLaterGlobalFragment(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{Theme: "dark", ExperimentalPages: []string{"memory"}}}
+	override := &Config{TUI: &TUIConfig{ExperimentalPages: []string{"inspector", "logs"}}}
+
+	merged := mergeConfigs(base, override)
+	if got := merged.TUI.ExperimentalPages; !reflect.DeepEqual(got, []string{"inspector", "logs"}) {
+		t.Errorf("experimental_pages = %v, want fragment's list", got)
+	}
+	if !reflect.DeepEqual(base.TUI.ExperimentalPages, []string{"memory"}) {
+		t.Errorf("mergeConfigs mutated base experimental_pages: %v", base.TUI.ExperimentalPages)
+	}
+
+	cleared := mergeConfigs(base, &Config{TUI: &TUIConfig{ExperimentalPages: []string{}}})
+	if cleared.TUI.ExperimentalPages == nil || len(cleared.TUI.ExperimentalPages) != 0 {
+		t.Errorf("explicit empty experimental_pages did not clear inherited list: %#v", cleared.TUI.ExperimentalPages)
+	}
+}
+
 // A same-named entry in a later layer replaces the earlier one, which is how a
 // user's own config overrides something an install wrote.
 func TestMergeTUIPluginsLaterLayerWinsOnTheSameName(t *testing.T) {
