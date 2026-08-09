@@ -190,6 +190,57 @@ type ReviewStats struct {
 	LastError string `json:"last_error,omitempty"`
 }
 
+// MachineSyncSchemaVersion is the current wire shape of MachineSync.
+const MachineSyncSchemaVersion = 1
+
+// MachineSyncState is the bounded tier-0 relationship between this workspace's
+// committed tip and one machine's replicated registry tip. Tier 0 deliberately
+// carries no ahead/behind counts: unequal object IDs prove only divergence,
+// not direction or distance.
+type MachineSyncState string
+
+const (
+	MachineSyncEqual    MachineSyncState = "equal"
+	MachineSyncDiverged MachineSyncState = "diverged_unknown"
+	MachineSyncAbsent   MachineSyncState = "absent"
+	MachineSyncExcluded MachineSyncState = "excluded"
+	MachineSyncUnknown  MachineSyncState = "unknown"
+)
+
+// MachineSyncPeer is one registry machine projected onto a local workspace.
+// LastSeen and AgeSeconds date the replicated note, not a live connection.
+type MachineSyncPeer struct {
+	MachineID string           `json:"machine_id"`
+	Label     string           `json:"label"`
+	State     MachineSyncState `json:"state"`
+	Branch    string           `json:"branch,omitempty"`
+	SHA       string           `json:"sha,omitempty"`
+	// SameBranch is metadata only. Equality is committed-tip equality; two
+	// branch names may legitimately point at the same commit.
+	SameBranch bool   `json:"same_branch"`
+	LastSeen   string `json:"last_seen,omitempty"`
+	// AgeSeconds is nil when last_seen is absent or malformed. Consumers must
+	// not turn nil into a fresh/green age.
+	AgeSeconds *int64 `json:"age_seconds,omitempty"`
+	Suspect    bool   `json:"suspect,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+}
+
+// MachineSync is the daemon's tier-0, per-workspace projection of replicated
+// machine registry notes. It compares committed tips only: dirty worktree state
+// is intentionally outside this contract. Error makes the whole projection
+// unavailable; it must render unknown, never as an empty/equal fleet.
+type MachineSync struct {
+	SchemaVersion  int               `json:"schema_version"`
+	LocalMachineID string            `json:"local_machine_id,omitempty"`
+	RootID         string            `json:"root_id,omitempty"`
+	RepoPath       string            `json:"repo_path,omitempty"`
+	LocalBranch    string            `json:"local_branch,omitempty"`
+	LocalSHA       string            `json:"local_sha,omitempty"`
+	Peers          []MachineSyncPeer `json:"peers"`
+	Error          string            `json:"error,omitempty"`
+}
+
 // ReleaseInfo holds release tag and commit information.
 type ReleaseInfo struct {
 	LatestTag    string `json:"latest_tag"`
@@ -243,6 +294,10 @@ type EnrichedWorkspace struct {
 	// means the poller never spoke about this workspace at all (disabled, no
 	// forge remote, or an older daemon) — which is "unknown", not "no PRs".
 	ReviewStats *ReviewStats `json:"review_stats,omitempty"`
+	// MachineSync is the daemon's committed-tip-only projection of replicated
+	// machine registry notes. Nil means no projection has run (or an older
+	// daemon), which is unknown rather than equal.
+	MachineSync *MachineSync `json:"machine_sync,omitempty"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.
@@ -270,4 +325,7 @@ type WorkspaceDelta struct {
 	// forge poller sets it, and it always sends a complete value — the poller
 	// degrades an entry to stale rather than dropping fields off it.
 	ReviewStats *ReviewStats `json:"review_stats,omitempty"`
+	// MachineSync follows the ReviewStats pointer convention: nil = unchanged;
+	// a non-nil value always replaces the complete projection.
+	MachineSync *MachineSync `json:"machine_sync,omitempty"`
 }

@@ -128,6 +128,12 @@ type NoteEcosystem struct {
 	// another machine able to say "you asked for this and it isn't there".
 	State   string
 	Enabled bool
+	// Repos/Exclude copy subscriber-local partial membership intent. Empty
+	// Repos and Exclude means all card members; they are mutually exclusive in
+	// machine.toml. Publishing them is what lets peers distinguish an
+	// intentionally excluded repo from an absent one.
+	Repos   []string
+	Exclude []string
 	// Card is a COPY of the ecosystem's own repo-side card. There is
 	// deliberately no shared ecosystems/<name>.md note: that would be a
 	// multi-writer document, which the single-writer rule forbids. Readers
@@ -240,6 +246,8 @@ func (n *Note) Render() []byte {
 		writeOptScalar(&b, item, "notebook", e.Notebook)
 		writeScalar(&b, item, "state", e.State)
 		writeBool(&b, item, "enabled", e.Enabled)
+		writeStringSeq(&b, item, "repos", e.Repos)
+		writeStringSeq(&b, item, "exclude", e.Exclude)
 		if e.Card == nil {
 			continue
 		}
@@ -359,6 +367,10 @@ func (n *Note) normalized() *Note {
 	c.Ecosystems = append([]NoteEcosystem(nil), n.Ecosystems...)
 	sort.Slice(c.Ecosystems, func(i, j int) bool { return c.Ecosystems[i].Name < c.Ecosystems[j].Name })
 	for i := range c.Ecosystems {
+		c.Ecosystems[i].Repos = append([]string(nil), c.Ecosystems[i].Repos...)
+		sort.Strings(c.Ecosystems[i].Repos)
+		c.Ecosystems[i].Exclude = append([]string(nil), c.Ecosystems[i].Exclude...)
+		sort.Strings(c.Ecosystems[i].Exclude)
 		if card := c.Ecosystems[i].Card; card != nil {
 			cp := *card
 			cp.Remotes = append([]NoteRemote(nil), card.Remotes...)
@@ -422,6 +434,13 @@ func writeSeqKey(b *strings.Builder, prefix, key string, n int) {
 		return
 	}
 	b.WriteString(prefix + key + ":\n")
+}
+
+func writeStringSeq(b *strings.Builder, prefix, key string, values []string) {
+	writeSeqKey(b, prefix, key, len(values))
+	for _, value := range values {
+		b.WriteString(prefix + "  - " + yamlScalar(value) + "\n")
+	}
 }
 
 // plainScalar matches the values safe to emit unquoted: no leading indicator

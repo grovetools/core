@@ -21,11 +21,13 @@ type noteFrontmatter struct {
 	GrovedVersion string `yaml:"groved_version"`
 
 	Ecosystems []struct {
-		Name     string `yaml:"name"`
-		Path     string `yaml:"path"`
-		Notebook string `yaml:"notebook"`
-		State    string `yaml:"state"`
-		Enabled  bool   `yaml:"enabled"`
+		Name     string   `yaml:"name"`
+		Path     string   `yaml:"path"`
+		Notebook string   `yaml:"notebook"`
+		State    string   `yaml:"state"`
+		Enabled  bool     `yaml:"enabled"`
+		Repos    []string `yaml:"repos"`
+		Exclude  []string `yaml:"exclude"`
 		Card     *struct {
 			ID      string `yaml:"id"`
 			Layout  string `yaml:"layout"`
@@ -115,6 +117,8 @@ func ParseNote(data []byte) (*Note, error) {
 			Notebook: e.Notebook,
 			State:    e.State,
 			Enabled:  e.Enabled,
+			Repos:    append([]string(nil), e.Repos...),
+			Exclude:  append([]string(nil), e.Exclude...),
 		}
 		if e.Card != nil {
 			card := &NoteCard{ID: e.Card.ID, Layout: e.Card.Layout}

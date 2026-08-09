@@ -137,10 +137,24 @@ func renderMachineEcosystem(name string, eco MachineEcosystem) string {
 	if eco.Description != "" {
 		fmt.Fprintf(&b, "description = %s\n", strconv.Quote(eco.Description))
 	}
+	if len(eco.Repos) > 0 {
+		fmt.Fprintf(&b, "repos = %s\n", renderTOMLStringArray(eco.Repos))
+	}
+	if len(eco.Exclude) > 0 {
+		fmt.Fprintf(&b, "exclude = %s\n", renderTOMLStringArray(eco.Exclude))
+	}
 	if eco.Enabled != nil {
 		fmt.Fprintf(&b, "enabled = %t\n", *eco.Enabled)
 	}
 	return b.String()
+}
+
+func renderTOMLStringArray(values []string) string {
+	quoted := make([]string, len(values))
+	for i, value := range values {
+		quoted[i] = strconv.Quote(value)
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
 func renderMachineRoot(name string, root MachineRoot) string {

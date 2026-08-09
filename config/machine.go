@@ -72,6 +72,31 @@ type MachineEcosystem struct {
 	Enabled *bool `toml:"enabled,omitempty" jsonschema:"description=Whether this subscription is active (default: true)"`
 	// Description is a human label carried through to the compiled grove entry.
 	Description string `toml:"description,omitempty" jsonschema:"description=Human-readable description"`
+	// Repos narrows this subscription to the named member repositories. Empty
+	// means every member. It is subscriber-local intent, not ecosystem-card
+	// metadata, so two machines may materialize different subsets of one card.
+	Repos []string `toml:"repos,omitempty" jsonschema:"description=Member repositories to materialize (empty means all)"`
+	// Exclude omits named member repositories when Repos is empty. Repos and
+	// Exclude are mutually exclusive so intent has one unambiguous shape.
+	Exclude []string `toml:"exclude,omitempty" jsonschema:"description=Member repositories to omit"`
+}
+
+// IncludesRepo reports whether a card member belongs to this subscription.
+// The member name is the flat-card remote name or superrepo submodule path.
+func (e MachineEcosystem) IncludesRepo(name string) bool {
+	if len(e.Repos) > 0 {
+		return containsString(e.Repos, name)
+	}
+	return !containsString(e.Exclude, name)
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 // MachineRoot is one [machine.roots.<name>] entry.
@@ -204,8 +229,24 @@ func (m *MachineConfig) Validate() error {
 		if strings.TrimSpace(name) == "" {
 			return fmt.Errorf("[machine.ecosystems] has an entry with an empty name")
 		}
-		if strings.TrimSpace(m.Machine.Ecosystems[name].Path) == "" {
+		eco := m.Machine.Ecosystems[name]
+		if strings.TrimSpace(eco.Path) == "" {
 			return fmt.Errorf("[machine.ecosystems.%s] has no path", name)
+		}
+		if len(eco.Repos) > 0 && len(eco.Exclude) > 0 {
+			return fmt.Errorf("[machine.ecosystems.%s] cannot set both repos and exclude", name)
+		}
+		for field, values := range map[string][]string{"repos": eco.Repos, "exclude": eco.Exclude} {
+			seen := make(map[string]bool, len(values))
+			for _, repo := range values {
+				if strings.TrimSpace(repo) == "" || strings.TrimSpace(repo) != repo {
+					return fmt.Errorf("[machine.ecosystems.%s] %s contains an empty or whitespace-padded repository name", name, field)
+				}
+				if seen[repo] {
+					return fmt.Errorf("[machine.ecosystems.%s] %s contains duplicate repository %q", name, field, repo)
+				}
+				seen[repo] = true
+			}
 		}
 	}
 	for _, name := range sortedKeys(m.Machine.Roots) {

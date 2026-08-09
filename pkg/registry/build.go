@@ -61,6 +61,8 @@ func Build(in BuildInput) *Note {
 			Notebook: state.Notebook,
 			State:    state.State,
 			Enabled:  state.Enabled,
+			Repos:    append([]string(nil), state.Repos...),
+			Exclude:  append([]string(nil), state.Exclude...),
 		}
 		if state.Manifest != "" {
 			if card, err := config.LoadEcosystemCard(state.Manifest); err == nil && card != nil {

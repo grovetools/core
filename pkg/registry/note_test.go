@@ -25,7 +25,7 @@ func sampleNote() *Note {
 			},
 			{
 				Name: "grovetools", Path: "/Users/x/code/grovetools", Notebook: "grovetools",
-				State: StatePresent, Enabled: true,
+				State: StatePresent, Enabled: true, Repos: []string{"nav", "core"},
 				Card: &NoteCard{
 					ID:     "01J8ZZZZZZZZZZZZZZZZZZZZZZ",
 					Layout: "superrepo",
@@ -86,6 +86,9 @@ func TestNoteRoundTrip(t *testing.T) {
 	}
 	if len(card.Notebooks) != 2 || card.Notebooks[0].Name != "org" || !card.Notebooks[1].Default {
 		t.Errorf("card notebooks lost/unsorted: %+v", card.Notebooks)
+	}
+	if len(got.Ecosystems[0].Repos) != 2 || got.Ecosystems[0].Repos[0] != "core" || got.Ecosystems[0].Repos[1] != "nav" {
+		t.Errorf("partial repository intent lost/not sorted: %+v", got.Ecosystems[0].Repos)
 	}
 	if got.Ecosystems[1].State != StateDeclaredMissing {
 		t.Errorf("declared-missing state lost: %+v", got.Ecosystems[1])

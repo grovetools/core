@@ -40,6 +40,11 @@ type MachineEcosystemState struct {
 	// still reconciled — the operator asked for it to exist, just not to be
 	// scanned — but no surface should nag about it.
 	Enabled bool `json:"enabled"`
+	// Repos and Exclude retain the subscriber's member intent. Reconciliation
+	// is ecosystem-level: omitted members are intentional and therefore never
+	// turn an otherwise-present partial ecosystem into a missing state.
+	Repos   []string `json:"repos,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 // Missing reports whether this subscription needs materializing.
@@ -65,6 +70,8 @@ func ReconcileMachineEcosystems(m *MachineConfig) []MachineEcosystemState {
 			Path:     expandPath(eco.Path),
 			Notebook: eco.Notebook,
 			Enabled:  eco.Enabled == nil || *eco.Enabled,
+			Repos:    append([]string(nil), eco.Repos...),
+			Exclude:  append([]string(nil), eco.Exclude...),
 		}
 		if abs, err := filepath.Abs(state.Path); err == nil {
 			state.Path = abs
