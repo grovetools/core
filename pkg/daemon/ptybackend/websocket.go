@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -40,6 +41,30 @@ type AttachOptions struct {
 	RedrawOnAttach bool
 }
 
+// Redraw provocation tuning. The nudge works by making the child observe two
+// DIFFERENT window sizes; everything here exists to guarantee that it does.
+const (
+	// redrawNudgeGap separates the shrink from the restore. Sent back to back
+	// the two ioctls land microseconds apart, and SIGWINCH — an ordinary,
+	// unqueued signal — collapses into one delivery whose handler reads only
+	// the final size. That size is the size the child already had, so a
+	// differential renderer (Ink, and every agent CLI built on it) finds its
+	// layout unchanged, writes nothing, and leaves a replay-free pane blank.
+	// Measured on macOS: without a gap the child observes 40x120 only; with
+	// one it observes 39x120 then 40x120. tuimux's own repaint nudge
+	// (NativeAgentPanel.fireNudge) spaces its jiggle for the same reason.
+	redrawNudgeGap = 50 * time.Millisecond
+	// redrawVerifyWindow is how long a provoked repaint has to produce bytes
+	// before the nudge is presumed lost and retried.
+	redrawVerifyWindow = 400 * time.Millisecond
+	// redrawPollEvery is the granularity of that wait.
+	redrawPollEvery = 25 * time.Millisecond
+	// redrawAttempts bounds the retries. A pane that answers none of them is
+	// not merely mid-render — the agent is wedged or stopped — and further
+	// jiggling would not help.
+	redrawAttempts = 3
+)
+
 // WebSocketBackend streams PTY I/O over a WebSocket connection to a daemon's
 // /api/pty/attach/{id} endpoint. Binary frames carry raw PTY output/input;
 // text frames carry JSON control messages (resize, exit).
@@ -63,8 +88,18 @@ type WebSocketBackend struct {
 	// needsRedraw is set for replay-free initial attachments and reconnects.
 	// The next known size is nudged and restored, forcing fullscreen TUIs to
 	// emit a self-contained repaint instead of relying on truncated raw history.
+	// It is only consulted when no size is known yet: once one is, the redraw
+	// runs on its own goroutine (driveRedraw) because it has to sleep.
 	needsRedraw    bool
 	redrawOnAttach bool
+
+	// redrawGen supersedes an in-flight redraw driver. Each startRedraw takes
+	// the next generation; a driver stops as soon as it is no longer the
+	// current one, so a reconnect's redraw always wins over the attach's.
+	redrawGen atomic.Uint64
+	// bytesIn counts PTY output bytes handed to callers. driveRedraw watches it
+	// to tell a provoked repaint from a nudge the child ignored.
+	bytesIn atomic.Uint64
 
 	readMu     sync.Mutex
 	currentMsg io.Reader
@@ -148,6 +183,7 @@ func (b *WebSocketBackend) Read(p []byte) (int, error) {
 		if b.currentMsg != nil {
 			n, err := b.currentMsg.Read(p)
 			if n > 0 {
+				b.bytesIn.Add(uint64(n))
 				return n, nil
 			}
 			if err == io.EOF {
@@ -246,29 +282,100 @@ func (b *WebSocketBackend) Resize(rows, cols uint16) error {
 	b.mu.Lock()
 	b.lastRows, b.lastCols = rows, cols
 	redraw := b.needsRedraw
+	if redraw {
+		b.needsRedraw = false
+	}
 	b.mu.Unlock()
 
 	if redraw {
-		return b.sendRedraw(rows, cols)
+		b.startRedraw(rows, cols)
+		return nil
 	}
 	return b.sendResize(rows, cols)
 }
 
-func (b *WebSocketBackend) sendRedraw(rows, cols uint16) error {
-	nudgeRows := rows - 1
-	if rows <= 1 {
-		nudgeRows = rows + 1
+// startRedraw hands the provocation to a goroutine. It cannot run on the
+// caller's: the caller is a TUI update loop, and the nudge only works if the
+// two sizes are spaced far enough apart for the child to observe both.
+func (b *WebSocketBackend) startRedraw(rows, cols uint16) {
+	if rows == 0 || cols == 0 {
+		return
 	}
-	if err := b.sendResize(nudgeRows, cols); err != nil {
-		return err
+	go b.driveRedraw(b.redrawGen.Add(1), rows, cols)
+}
+
+// driveRedraw jiggles the winsize until the child answers with output, or the
+// attempts run out. Verifying is the point: a nudge that provokes nothing is
+// indistinguishable on screen from never having attached, and that is exactly
+// what the user sees as a blank agent pane after a treemux restart.
+func (b *WebSocketBackend) driveRedraw(gen uint64, rows, cols uint16) {
+	for attempt := 0; attempt < redrawAttempts; attempt++ {
+		if b.redrawGen.Load() != gen {
+			return
+		}
+		before := b.bytesIn.Load()
+
+		nudgeRows := rows - 1
+		if rows <= 1 {
+			nudgeRows = rows + 1
+		}
+		if err := b.sendResize(nudgeRows, cols); err != nil {
+			return // socket is down; the reconnect path re-arms the redraw
+		}
+		if !b.pause(redrawNudgeGap) {
+			return
+		}
+
+		// Restore to the size most recently asked for, not the one this driver
+		// started with: a real relayout can land mid-jiggle and must win.
+		b.mu.Lock()
+		if b.lastRows > 0 && b.lastCols > 0 {
+			rows, cols = b.lastRows, b.lastCols
+		}
+		b.mu.Unlock()
+		if err := b.sendResize(rows, cols); err != nil {
+			return
+		}
+
+		if b.awaitOutput(gen, before) {
+			return
+		}
 	}
-	if err := b.sendResize(rows, cols); err != nil {
-		return err
+	grovelogging.NewUnifiedLogger("ptybackend.redraw").
+		Warn("PTY redraw provoked no output; pane may be blank").
+		Field("pty_id", b.sessionID).Field("attempts", redrawAttempts).
+		StructuredOnly().Log(context.Background())
+}
+
+// awaitOutput reports whether any PTY output landed within the verify window.
+// A closed backend or a superseded generation counts as done — there is
+// nothing left to provoke either way.
+func (b *WebSocketBackend) awaitOutput(gen, before uint64) bool {
+	for waited := time.Duration(0); waited < redrawVerifyWindow; waited += redrawPollEvery {
+		if !b.pause(redrawPollEvery) {
+			return true
+		}
+		if b.redrawGen.Load() != gen {
+			return true
+		}
+		if b.bytesIn.Load() != before {
+			return true
+		}
 	}
-	b.mu.Lock()
-	b.needsRedraw = false
-	b.mu.Unlock()
-	return nil
+	return false
+}
+
+// pause sleeps unless the backend closes first, reporting whether the full
+// duration elapsed.
+func (b *WebSocketBackend) pause(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-b.closed:
+		return false
+	case <-t.C:
+		return true
+	}
 }
 
 func (b *WebSocketBackend) sendResize(rows, cols uint16) error {
@@ -367,11 +474,13 @@ func (b *WebSocketBackend) reconnect() error {
 			b.mu.Lock()
 			rows, cols := b.lastRows, b.lastCols
 			redraw := b.redrawOnAttach
-			b.needsRedraw = redraw
+			// Arm the flag only when there is no size to redraw at yet, so the
+			// first Resize drives it; otherwise this reconnect owns the redraw.
+			b.needsRedraw = redraw && (rows == 0 || cols == 0)
 			b.mu.Unlock()
 			if rows > 0 && cols > 0 {
 				if redraw {
-					_ = b.sendRedraw(rows, cols)
+					b.startRedraw(rows, cols)
 				} else {
 					_ = b.sendResize(rows, cols)
 				}
