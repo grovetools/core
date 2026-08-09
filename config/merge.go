@@ -706,6 +706,26 @@ func mergeConfigs(base, override *Config) *Config {
 			result.TUI.Plugins = merged
 		}
 
+		// Merge [tui.rail] field-wise (last-non-empty-wins), like the Focus
+		// block below: a layer that only pins the shortcut policy must not
+		// also have to restate max_shortcuts.
+		if override.TUI.Rail != nil {
+			if result.TUI.Rail == nil {
+				result.TUI.Rail = &RailConfig{}
+			} else {
+				// Owned by the merged result — detach before overlaying so
+				// mergeConfigs never writes through into the base layer.
+				copied := *result.TUI.Rail
+				result.TUI.Rail = &copied
+			}
+			if override.TUI.Rail.Shortcuts != "" {
+				result.TUI.Rail.Shortcuts = override.TUI.Rail.Shortcuts
+			}
+			if override.TUI.Rail.MaxShortcuts != 0 {
+				result.TUI.Rail.MaxShortcuts = override.TUI.Rail.MaxShortcuts
+			}
+		}
+
 		// Merge Focus config
 		if override.TUI.Focus != nil {
 			if result.TUI.Focus == nil {

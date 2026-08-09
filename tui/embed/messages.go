@@ -102,6 +102,7 @@ const (
 	SettingDomainDrawerExpanded    = "drawer_expanded"    // [tui] drawer_expanded
 	SettingDomainSidebarExpanded   = "sidebar_expanded"   // [tui] sidebar_expanded
 	SettingDomainIcons             = "icons"              // [tui] icons (live apply lands with theme.SetIcons)
+	SettingDomainRail              = "rail"               // [tui.rail] shortcuts/max_shortcuts
 )
 
 // KeyCaptureMsg is emitted by an embedded TUI's key-capture widget (the

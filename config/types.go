@@ -298,6 +298,10 @@ type TUIConfig struct {
 	// start --welcome` still forces the splash. Default: false.
 	HideSplashOnStartup bool `yaml:"hide_splash_on_startup,omitempty" toml:"hide_splash_on_startup,omitempty" jsonschema:"description=Hide the treemux welcome splash on startup,default=false" jsonschema_extras:"x-layer=global,x-priority=67"`
 
+	// Rail configures the treemux icon rail (left sidebar) itself, as
+	// opposed to whether it starts expanded (SidebarExpanded above).
+	Rail *RailConfig `yaml:"rail,omitempty" toml:"rail,omitempty" json:"rail,omitempty" jsonschema:"description=Icon rail (left sidebar) behavior" jsonschema_extras:"x-layer=global,x-priority=57"`
+
 	// Shortcuts maps key chords to deep-link navigation targets.
 	// Each value uses the syntax "navigate:<panel>[.<tab>]", e.g.
 	// "navigate:context.stats" or "navigate:flow". Parsed by the
@@ -869,6 +873,29 @@ type FocusConfig struct {
 	Thickness int `yaml:"thickness,omitempty" toml:"thickness,omitempty" jsonschema:"description=Indicator thickness in cells,default=1,minimum=1,maximum=4"`
 	// DimInactive dims unfocused panes (requires compositor support).
 	DimInactive bool `yaml:"dim_inactive,omitempty" toml:"dim_inactive,omitempty" jsonschema:"description=Dim unfocused panes (requires compositor support)"`
+}
+
+// RailConfig configures the icon rail's own chrome — today, the pinned
+// workspace-shortcut footer the expanded rail draws under its pane list.
+//
+// The footer is the only part of the rail that is not a pane, so it is the
+// only part that can lose an argument with the pane list: on a short terminal
+// every shortcut row it claims is a pane row nobody can see. Hence a mode
+// rather than a bool — "auto" lets the rail arbitrate by height, and the two
+// absolutes exist for people who have already decided.
+type RailConfig struct {
+	// Shortcuts selects the footer's visibility policy:
+	//   auto   — show it, but never let it take more than its share of a
+	//            short rail; dropped entirely when nothing useful fits.
+	//   always — keep the whole footer, clipping/scrolling the pane list.
+	//   never  — no footer; the leader chord still works.
+	Shortcuts string `yaml:"shortcuts,omitempty" toml:"shortcuts,omitempty" json:"shortcuts,omitempty" jsonschema:"description=When the expanded rail shows its pinned workspace-shortcut footer,enum=auto,enum=always,enum=never,default=auto"`
+
+	// MaxShortcuts caps how many workspace shortcuts the footer lists,
+	// regardless of available height. 0 (unset) lists them all. The
+	// remainder is reported as a +N count on the divider, so a capped
+	// footer never pretends to be the whole set.
+	MaxShortcuts int `yaml:"max_shortcuts,omitempty" toml:"max_shortcuts,omitempty" json:"max_shortcuts,omitempty" jsonschema:"description=Maximum workspace shortcuts listed in the rail footer (0 = all),default=0,minimum=0"`
 }
 
 // PluginConfig defines a process-based plugin that runs in its own PTY panel.

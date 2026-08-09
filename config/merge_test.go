@@ -1466,3 +1466,27 @@ scenarios = ["repo-plugin", "repo-panelkit"]
 		t.Errorf("scenarios = %v", got)
 	}
 }
+
+// TestMergeTUIRailMergesFieldWiseWithoutMutatingBase: [tui.rail] merges one
+// key at a time — a layer that only pins the shortcut policy keeps the
+// max_shortcuts underneath it — and the base layer's block is never written
+// through, since mergeConfigs runs over configs other callers still hold.
+func TestMergeTUIRailMergesFieldWiseWithoutMutatingBase(t *testing.T) {
+	base := &Config{TUI: &TUIConfig{Rail: &RailConfig{Shortcuts: "always", MaxShortcuts: 4}}}
+	override := &Config{TUI: &TUIConfig{Rail: &RailConfig{Shortcuts: "never"}}}
+
+	merged := mergeConfigs(base, override)
+
+	if merged.TUI == nil || merged.TUI.Rail == nil {
+		t.Fatal("expected merged [tui.rail] to be set")
+	}
+	if got := merged.TUI.Rail.Shortcuts; got != "never" {
+		t.Errorf("rail.shortcuts = %q, want never (override layer wins)", got)
+	}
+	if got := merged.TUI.Rail.MaxShortcuts; got != 4 {
+		t.Errorf("rail.max_shortcuts = %d, want 4 (inherited from base)", got)
+	}
+	if base.TUI.Rail.Shortcuts != "always" {
+		t.Errorf("base layer mutated: rail.shortcuts = %q", base.TUI.Rail.Shortcuts)
+	}
+}

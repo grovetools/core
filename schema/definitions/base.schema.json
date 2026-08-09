@@ -1284,6 +1284,28 @@
       ],
       "type": "object"
     },
+    "RailConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_shortcuts": {
+          "default": 0,
+          "description": "Maximum workspace shortcuts listed in the rail footer (0 = all)",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shortcuts": {
+          "default": "auto",
+          "description": "When the expanded rail shows its pinned workspace-shortcut footer",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "SearchPathConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1498,6 +1520,12 @@
           "x-important": true,
           "x-layer": "global",
           "x-priority": "50"
+        },
+        "rail": {
+          "$ref": "#/$defs/RailConfig",
+          "description": "Icon rail (left sidebar) behavior",
+          "x-layer": "global",
+          "x-priority": "57"
         },
         "shortcuts": {
           "additionalProperties": {
