@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -13,6 +14,14 @@ import (
 	"github.com/grovetools/core/config"
 )
 
+func writeTestRoots(t *testing.T, configDir, root string) {
+	t.Helper()
+	content := "[roots.work]\npath = " + strconv.Quote(root) + "\nscan = true\n"
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "roots.toml"), []byte(content), 0o644))
+	notebooks := "default = \"nb\"\n[notebooks.nb]\nroot = " + strconv.Quote(filepath.Join(configDir, "notes")) + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "notebooks.toml"), []byte(notebooks), 0o644))
+}
+
 // setupMockFS creates a mock filesystem structure for testing.
 func setupMockFS(t *testing.T) (string, string) {
 	rootDir := resolveDir(t.TempDir())
@@ -22,8 +31,8 @@ func setupMockFS(t *testing.T) (string, string) {
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	emptyStr := ""
 	globalCfg := config.Config{
-		SearchPaths: map[string]config.SearchPathConfig{
-			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		Groves: map[string]config.GroveSourceConfig{
+			"work": {Path: filepath.Join(rootDir, "work")},
 		},
 		// Disable cx repo discovery so tests don't pick up real user repos
 		Context: &config.ContextConfig{
@@ -32,6 +41,7 @@ func setupMockFS(t *testing.T) (string, string) {
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
 	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
+	writeTestRoots(t, globalConfigDir, filepath.Join(rootDir, "work"))
 
 	// 2. A User Ecosystem with two Projects
 	ecoDir := filepath.Join(rootDir, "work", "my-ecosystem")
@@ -145,13 +155,14 @@ func TestDiscover_PromoteFromEcosystemWorkspaces(t *testing.T) {
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	emptyStr := ""
 	globalCfg := config.Config{
-		SearchPaths: map[string]config.SearchPathConfig{
-			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		Groves: map[string]config.GroveSourceConfig{
+			"work": {Path: filepath.Join(rootDir, "work")},
 		},
 		Context: &config.ContextConfig{ReposDir: &emptyStr},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
 	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
+	writeTestRoots(t, globalConfigDir, filepath.Join(rootDir, "work"))
 
 	// Ecosystem with explicit workspaces enumeration — children are submodules
 	// without their own grove.toml markers.
@@ -231,13 +242,14 @@ func TestDiscoverAll_NestedEcosystem_NoMisattribution(t *testing.T) {
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	emptyStr := ""
 	globalCfg := config.Config{
-		SearchPaths: map[string]config.SearchPathConfig{
-			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		Groves: map[string]config.GroveSourceConfig{
+			"work": {Path: filepath.Join(rootDir, "work")},
 		},
 		Context: &config.ContextConfig{ReposDir: &emptyStr},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
 	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
+	writeTestRoots(t, globalConfigDir, filepath.Join(rootDir, "work"))
 
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))
 	t.Setenv("HOME", filepath.Join(rootDir, "home"))

@@ -14,16 +14,14 @@ func satelliteSeed() ConfigSeed {
 	return ConfigSeed{
 		Provenance:  "Written by `grove satellite up` for satellite \"vm1\".",
 		MachineName: "vm1",
-		Ecosystems: map[string]MachineEcosystem{
-			"grovetools": {
-				Path:        "~/code/grovetools",
-				Notebook:    "grovetools",
-				Description: "Grove ecosystem (satellite)",
-			},
+		CodeRoots: map[string]coderoot.Root{
+			"grovetools": {Path: "~/code/grovetools", Notebook: "grovetools", Description: "Grove ecosystem (satellite)"},
 		},
-		Notebooks:    map[string]string{"grovetools": "~/notebooks/grovetools"},
-		DaemonSSH:    true,
-		LegacyGroves: true,
+		RecordedNotebooks: map[string]coderoot.Notebook{
+			"grovetools": {Root: "~/notebooks/grovetools"},
+		},
+		RecordedDefaultNotebook: "grovetools",
+		DaemonSSH:               true,
 		Sync: &SyncSeed{
 			Server:       "http://127.0.0.1:8788",
 			TokenCommand: "cat ~/.config/grove/sync.token",
@@ -36,7 +34,7 @@ func satelliteSeed() ConfigSeed {
 	}
 }
 
-func TestConfigSeedRendersTheThreeConfigFiles(t *testing.T) {
+func TestConfigSeedRendersTheFiveConfigFiles(t *testing.T) {
 	files, err := satelliteSeed().Files()
 	if err != nil {
 		t.Fatalf("Files: %v", err)
@@ -45,7 +43,7 @@ func TestConfigSeedRendersTheThreeConfigFiles(t *testing.T) {
 	for _, f := range files {
 		got[f.Name] = f
 	}
-	for _, name := range []string{SeedFileGroveTOML, SeedFileMachineTOML, SeedFileSyncTOML} {
+	for _, name := range []string{SeedFileGroveTOML, SeedFileMachineTOML, SeedFileRootsTOML, SeedFileNotebooksTOML, SeedFileSyncTOML} {
 		if _, ok := got[name]; !ok {
 			t.Fatalf("seed did not render %s (rendered %v)", name, files)
 		}
@@ -57,33 +55,11 @@ func TestConfigSeedRendersTheThreeConfigFiles(t *testing.T) {
 		t.Errorf("grove.toml mode = %o, want 644", mode)
 	}
 
-	// machine.toml carries the intent; grove.toml carries host topology plus
-	// the migration-window [groves.*] mirror.
-	if !strings.Contains(got[SeedFileMachineTOML].Content, "[machine.ecosystems.grovetools]") {
-		t.Errorf("machine.toml missing the ecosystem subscription:\n%s", got[SeedFileMachineTOML].Content)
-	}
-	if !strings.Contains(got[SeedFileGroveTOML].Content, "[groves.grovetools]") {
-		t.Errorf("grove.toml missing the LegacyGroves mirror:\n%s", got[SeedFileGroveTOML].Content)
-	}
-	if !strings.Contains(got[SeedFileGroveTOML].Content, "[notebooks.definitions.grovetools]") {
-		t.Errorf("grove.toml missing the notebook definition:\n%s", got[SeedFileGroveTOML].Content)
+	if strings.Contains(got[SeedFileMachineTOML].Content, "ecosystems") || strings.Contains(got[SeedFileGroveTOML].Content, "groves") {
+		t.Fatalf("seed emitted legacy topology: machine=%q grove=%q", got[SeedFileMachineTOML].Content, got[SeedFileGroveTOML].Content)
 	}
 	if !strings.Contains(got[SeedFileGroveTOML].Content, "[daemon.ssh]") {
 		t.Errorf("grove.toml missing [daemon.ssh]:\n%s", got[SeedFileGroveTOML].Content)
-	}
-}
-
-func TestConfigSeedOmitsTheLegacyGrovesMirrorWhenNotAsked(t *testing.T) {
-	seed := satelliteSeed()
-	seed.LegacyGroves = false
-	files, err := seed.Files()
-	if err != nil {
-		t.Fatalf("Files: %v", err)
-	}
-	for _, f := range files {
-		if f.Name == SeedFileGroveTOML && strings.Contains(f.Content, "[groves.") {
-			t.Fatalf("LegacyGroves=false still emitted a [groves.*] mirror:\n%s", f.Content)
-		}
 	}
 }
 
@@ -175,8 +151,8 @@ func TestApplyConfigSeedWritesLoadableConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyConfigSeed: %v", err)
 	}
-	if len(written) != 3 {
-		t.Fatalf("wrote %d files, want 3: %v", len(written), written)
+	if len(written) != 5 {
+		t.Fatalf("wrote %d files, want 5: %v", len(written), written)
 	}
 
 	mc, err := LoadMachineConfigFrom(filepath.Join(configDir, SeedFileMachineTOML))
@@ -186,8 +162,8 @@ func TestApplyConfigSeedWritesLoadableConfig(t *testing.T) {
 	if mc == nil || mc.Machine.Name != "vm1" {
 		t.Fatalf("machine.toml did not round-trip: %+v", mc)
 	}
-	if eco, ok := mc.Machine.Ecosystems["grovetools"]; !ok || eco.Path != "~/code/grovetools" {
-		t.Fatalf("ecosystem subscription did not round-trip: %+v", mc.Machine.Ecosystems)
+	if _, err := coderoot.LoadFrom(filepath.Join(configDir, SeedFileRootsTOML), filepath.Join(configDir, SeedFileNotebooksTOML)); err != nil {
+		t.Fatalf("recorded routing did not round-trip: %v", err)
 	}
 
 	sc, err := LoadSyncConfigFrom(filepath.Join(configDir, SeedFileSyncTOML))
@@ -263,7 +239,6 @@ func TestConfigSeedEmptyRendersNothing(t *testing.T) {
 
 func TestConfigSeedRecordedFiveFilePath(t *testing.T) {
 	seed := satelliteSeed()
-	seed.LegacyGroves = false
 	seed.CodeRoots = map[string]coderoot.Root{
 		"grovetools": {Path: "/srv/grovetools", Notebook: "grovetools"},
 	}

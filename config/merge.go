@@ -871,26 +871,6 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
-	// Merge Groves map
-	if override.Groves != nil {
-		if result.Groves == nil {
-			result.Groves = make(map[string]GroveSourceConfig)
-		}
-		for k, v := range override.Groves {
-			result.Groves[k] = v
-		}
-	}
-
-	// Merge SearchPaths map (legacy support)
-	if override.SearchPaths != nil {
-		if result.SearchPaths == nil {
-			result.SearchPaths = make(map[string]SearchPathConfig)
-		}
-		for k, v := range override.SearchPaths {
-			result.SearchPaths[k] = v
-		}
-	}
-
 	// Merge Context configuration
 	// keep this list in sync with the ContextConfig struct in types.go
 	if override.Context != nil {

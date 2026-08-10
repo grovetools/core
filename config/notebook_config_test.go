@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/grovetools/core/pkg/coderoot"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -208,21 +209,11 @@ func TestLoadFromWithLogger_NotebookConfig(t *testing.T) {
 
 	globalConfig := `
 version: "1.0"
-groves:
-  code:
-    path: ` + groveDir + `
-    enabled: true
-notebooks:
-  rules:
-    default: nb
-  definitions:
-    nb:
-      root_dir: ` + notebookDir + `
-
 monitoring:
   interval: 10
 `
 	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644))
+	writeNotebookTestRouting(t, fakeConfigDir, groveDir, notebookDir)
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
@@ -311,18 +302,9 @@ func TestLoadLayered_NotebookConfig(t *testing.T) {
 
 	globalConfig := `
 version: "1.0"
-groves:
-  code:
-    path: ` + groveDir + `
-    enabled: true
-notebooks:
-  rules:
-    default: nb
-  definitions:
-    nb:
-      root_dir: ` + notebookDir + `
 `
 	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644))
+	writeNotebookTestRouting(t, fakeConfigDir, groveDir, notebookDir)
 
 	nbConfigPath := filepath.Join(notebookDir, "workspaces", "my-project", "grove.yml")
 	nbConfig := `
@@ -369,12 +351,9 @@ func TestLoadLayered_EcosystemNotebookLookup(t *testing.T) {
 	// Global config defines grove but NOT notebook — notebook comes from ecosystem
 	globalConfig := `
 version: "1.0"
-groves:
-  code:
-    path: ` + groveDir + `
-    enabled: true
 `
 	require.NoError(t, os.WriteFile(filepath.Join(fakeConfigDir, "grove.yml"), []byte(globalConfig), 0o644))
+	writeNotebookTestRouting(t, fakeConfigDir, groveDir, notebookDir)
 
 	// Ecosystem config defines notebook
 	ecoConfig := `
@@ -403,6 +382,18 @@ name: from-eco-notebook
 	if layered.ProjectNotebook != nil {
 		assert.Equal(t, "from-eco-notebook", layered.ProjectNotebook.Name)
 	}
+}
+
+func writeNotebookTestRouting(t *testing.T, dir, groveDir, notebookDir string) {
+	t.Helper()
+	_, err := WriteNotebooks(filepath.Join(dir, coderoot.NotebooksFileName), NotebookEdits{
+		Default: func() *string { v := "nb"; return &v }(), Upserts: map[string]coderoot.Notebook{"nb": {Root: notebookDir}},
+	})
+	require.NoError(t, err)
+	_, err = WriteCodeRoots(filepath.Join(dir, coderoot.RootsFileName), CodeRootEdits{
+		Upserts: map[string]coderoot.Root{"code": {Path: groveDir, Scan: true, Notebook: "nb"}},
+	})
+	require.NoError(t, err)
 }
 
 // initGitRepo creates a real git repository at the given path using git init.

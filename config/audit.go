@@ -23,7 +23,7 @@ const (
 	// are not classified further.
 	AuditKnownExtension AuditClass = "known-extension"
 	// AuditDeprecated: the key maps to a struct field carrying deprecation
-	// tags (e.g. search_paths). Still read, but should be migrated.
+	// tags. Still read, but should be migrated.
 	AuditDeprecated AuditClass = "deprecated"
 	// AuditUnknownNested: a nested key under a known core struct that
 	// matches no field tag — the decoder silently drops it.
@@ -333,7 +333,7 @@ func fieldConfigKey(sf reflect.StructField) string {
 }
 
 // fieldDeprecated reports whether a struct field carries deprecation markers
-// in its schema tags (e.g. search_paths' `deprecated=true` /
+// in its schema tags (`deprecated=true` /
 // `x-deprecated=true`).
 func fieldDeprecated(sf reflect.StructField) bool {
 	return strings.Contains(sf.Tag.Get("jsonschema"), "deprecated=true") ||

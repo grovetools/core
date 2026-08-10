@@ -70,14 +70,6 @@ type ConfigSeed struct {
 
 	// MachineName is [machine] name in machine.toml.
 	MachineName string
-	// Ecosystems are [machine.ecosystems.<name>] entries.
-	Ecosystems map[string]MachineEcosystem
-	// Roots are [machine.roots.<name>] entries.
-	Roots map[string]MachineRoot
-
-	// Notebooks are the temporary legacy [notebooks.definitions.<name>]
-	// values in grove.toml.
-	Notebooks map[string]string
 
 	// CodeRoots and RecordedNotebooks are the authoritative recorded routing
 	// pair. RecordedDefaultNotebook names the default definition.
@@ -86,17 +78,6 @@ type ConfigSeed struct {
 	RecordedDefaultNotebook string
 	// DaemonSSH writes [daemon.ssh] enabled = true.
 	DaemonSSH bool
-	// LegacyGroves additionally compiles Ecosystems into `[groves.<name>]`
-	// entries in grove.toml.
-	//
-	// This exists for one concrete reason: a target host may be running a
-	// grove built from a commit that predates machine.toml support, and would
-	// then discover nothing at all. Explicit `[groves.*]` entries win over
-	// compiled ones (compileMachineGroves fills only ABSENT keys), so writing
-	// both is safe in either direction — the machine.toml is the intent, the
-	// mirror is the migration-window safety net. Drop it once every target
-	// runs a machine.toml-aware grove.
-	LegacyGroves bool
 
 	// Sync, when non-nil, renders sync.toml.
 	Sync *SyncSeed
@@ -187,39 +168,11 @@ func (s ConfigSeed) header(what string) string {
 }
 
 func (s ConfigSeed) renderGroveTOML() (string, error) {
-	if len(s.Notebooks) == 0 && !s.DaemonSSH && !(s.LegacyGroves && len(s.Ecosystems) > 0) {
+	if !s.DaemonSSH {
 		return "", nil
 	}
 	var b strings.Builder
 	b.WriteString(s.header("Host-level grove configuration."))
-
-	if s.LegacyGroves {
-		for _, name := range sortedKeys(s.Ecosystems) {
-			eco := s.Ecosystems[name]
-			if eco.Path == "" {
-				return "", fmt.Errorf("config seed: ecosystem %q has no path", name)
-			}
-			fmt.Fprintf(&b, "\n[groves.%s]\n", tomlKey(name))
-			fmt.Fprintf(&b, "path = %s\n", strconv.Quote(eco.Path))
-			if eco.Notebook != "" {
-				fmt.Fprintf(&b, "notebook = %s\n", strconv.Quote(eco.Notebook))
-			}
-			if eco.Description != "" {
-				fmt.Fprintf(&b, "description = %s\n", strconv.Quote(eco.Description))
-			}
-			enabled := eco.Enabled == nil || *eco.Enabled
-			fmt.Fprintf(&b, "enabled = %t\n", enabled)
-		}
-	}
-
-	for _, name := range sortedKeys(s.Notebooks) {
-		root := s.Notebooks[name]
-		if strings.TrimSpace(root) == "" {
-			return "", fmt.Errorf("config seed: notebook %q has an empty root_dir", name)
-		}
-		fmt.Fprintf(&b, "\n[notebooks.definitions.%s]\n", tomlKey(name))
-		fmt.Fprintf(&b, "root_dir = %s\n", strconv.Quote(root))
-	}
 
 	if s.DaemonSSH {
 		b.WriteString("\n[daemon.ssh]\nenabled = true\n")
@@ -235,33 +188,18 @@ func (s ConfigSeed) renderGroveTOML() (string, error) {
 }
 
 func (s ConfigSeed) renderMachineTOML() (string, error) {
-	if s.MachineName == "" && len(s.Ecosystems) == 0 && len(s.Roots) == 0 {
+	if s.MachineName == "" {
 		return "", nil
 	}
-	probe := MachineConfig{Machine: MachineSettings{
-		Name:       s.MachineName,
-		Ecosystems: s.Ecosystems,
-		Roots:      s.Roots,
-	}}
+	probe := MachineConfig{Machine: MachineSettings{Name: s.MachineName}}
 	if err := probe.Validate(); err != nil {
 		return "", fmt.Errorf("config seed: %w", err)
 	}
 
 	var b strings.Builder
-	b.WriteString(s.header("This machine's grove intent — name, subscriptions, bare roots."))
+	b.WriteString(s.header("This machine's display configuration."))
 	b.WriteString("# Dotfiles-portable on purpose: the identity ULID lives in state, not here.\n")
-
-	if s.MachineName != "" {
-		fmt.Fprintf(&b, "\n[machine]\nname = %s\n", strconv.Quote(s.MachineName))
-	}
-	for _, name := range sortedKeys(s.Ecosystems) {
-		b.WriteString("\n")
-		b.WriteString(renderMachineEcosystem(name, s.Ecosystems[name]))
-	}
-	for _, name := range sortedKeys(s.Roots) {
-		b.WriteString("\n")
-		b.WriteString(renderMachineRoot(name, s.Roots[name]))
-	}
+	fmt.Fprintf(&b, "\n[machine]\nname = %s\n", strconv.Quote(s.MachineName))
 
 	content := b.String()
 	if _, err := ParseMachineConfigContent(SeedFileMachineTOML, content); err != nil {

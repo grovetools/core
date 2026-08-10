@@ -50,8 +50,6 @@ type NotebookSource string
 const (
 	// NotebookSourceNone means nothing bound a notebook, not even a default.
 	NotebookSourceNone NotebookSource = ""
-	// NotebookSourceMachine is an explicit machine.toml override.
-	NotebookSourceMachine NotebookSource = "machine"
 	// NotebookSourceCard is an ecosystem card's default notebook.
 	NotebookSourceCard NotebookSource = "ecosystem-card"
 	// NotebookSourceGrove is a grove entry's `notebook` key.
@@ -75,15 +73,6 @@ type NotebookQuery struct {
 	// and the node's parent/root ecosystem paths — the topology this package
 	// cannot see. Empty is normal for non-worktree queries.
 	OwnerPaths []string
-
-	// Machine is the machine.toml override hook (contract §3 P5). When nil —
-	// the case today — the rung is skipped and machine intent still reaches the
-	// resolver the long way round, compiled into cfg.Groves by
-	// compileMachineGroves. Populating it is what promotes those overrides
-	// ABOVE the ecosystem card, which is the ordering the contract specifies
-	// and which the compiled form cannot express (a compiled entry is
-	// indistinguishable from a hand-written [groves.*] one).
-	Machine *MachineConfig
 }
 
 // NotebookBinding is the answer. A binding with an empty Notebook means no rung
@@ -157,18 +146,7 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 		binding.groveRootMatch = matches[0].root
 	}
 
-	// Rung 1 — machine.toml override.
-	for _, c := range candidates {
-		if nb := machineNotebookOverride(c, q.Machine); nb != "" {
-			binding.Notebook = nb
-			binding.NotebookRoot = notebookRootForName(nb, cfg)
-			binding.Source = NotebookSourceMachine
-			binding.MatchedPath = c
-			return binding
-		}
-	}
-
-	// Rung 2 — ecosystem card. The walk is bounded by the containing grove so
+	// Rung 1 — ecosystem card. The walk is bounded by the containing grove so
 	// resolving a path never turns into a walk to the filesystem root when a
 	// grove already tells us where the ecosystem tree stops.
 	for i, c := range candidates {
@@ -280,50 +258,6 @@ func matchGrove(path string, cfg *Config) groveMatch {
 				notebookRoot: grove.NotebookRoot,
 			}
 		}
-	}
-	return best
-}
-
-// machineNotebookOverride returns the notebook this machine explicitly binds to
-// the ecosystem (or bare root) containing path, or "" when it binds none.
-func machineNotebookOverride(path string, machineCfg *MachineConfig) string {
-	if machineCfg == nil || path == "" {
-		return ""
-	}
-
-	target := normalizeForMatch(path)
-	if target == "" {
-		return ""
-	}
-
-	best := ""
-	bestLen := 0
-	consider := func(declPath, notebook string) {
-		if notebook == "" {
-			return
-		}
-		root := normalizeForMatch(expandPath(declPath))
-		if root == "" || !pathContains(root, target) {
-			return
-		}
-		if len(root) > bestLen {
-			bestLen = len(root)
-			best = notebook
-		}
-	}
-	for _, name := range sortedKeys(machineCfg.Machine.Ecosystems) {
-		eco := machineCfg.Machine.Ecosystems[name]
-		if eco.Enabled != nil && !*eco.Enabled {
-			continue
-		}
-		consider(eco.Path, eco.Notebook)
-	}
-	for _, name := range sortedKeys(machineCfg.Machine.Roots) {
-		root := machineCfg.Machine.Roots[name]
-		if root.Enabled != nil && !*root.Enabled {
-			continue
-		}
-		consider(root.Path, root.Notebook)
 	}
 	return best
 }

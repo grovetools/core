@@ -39,7 +39,7 @@ func NewValidator() (*Validator, error) {
 // document (map[string]interface{}). Serialization goes through YAML rather
 // than JSON on purpose: the core Config struct carries yaml/toml tags but no
 // json tags, so json.Marshal would emit Go field names ("Groves",
-// "SearchPaths", …) that can never match the schema's snake_case properties —
+// Go field names that can never match the schema's snake_case properties —
 // making validation silently vacuous. YAML marshaling honors the same field
 // names the schema was generated from (the reflector uses FieldNameTag:
 // "yaml"). Values that are already generic maps pass through unchanged.

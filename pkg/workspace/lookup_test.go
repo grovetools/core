@@ -28,12 +28,13 @@ func setupMockFSForLookup(t *testing.T) (string, string) {
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0o755))
 	globalCfg := config.Config{
-		SearchPaths: map[string]config.SearchPathConfig{
-			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
+		Groves: map[string]config.GroveSourceConfig{
+			"work": {Path: filepath.Join(rootDir, "work")},
 		},
 	}
 	globalBytes, _ := yaml.Marshal(globalCfg)
 	require.NoError(t, os.WriteFile(filepath.Join(globalConfigDir, "grove.yml"), globalBytes, 0o644))
+	writeTestRoots(t, globalConfigDir, filepath.Join(rootDir, "work"))
 
 	// 2. A User Ecosystem
 	ecoDir := filepath.Join(rootDir, "work", "my-ecosystem")

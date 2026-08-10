@@ -24,8 +24,8 @@ import (
 // every input the result depends on is provably unchanged:
 //
 //   - the config file itself, by (mtime, size);
-//   - ~/.config/grove/machine.toml, roots.toml, and notebooks.toml, each by
-//     path and (mtime, size) — the runtime compilers fold all three into every
+//   - roots.toml and notebooks.toml, each by path and (mtime, size) — the
+//     runtime compiler folds both into every
 //     loaded config, and each file's ABSENCE is equally load-bearing;
 //   - the environment variables the config file, roots.toml, and
 //     notebooks.toml reference through ${VAR}, by value.
@@ -88,8 +88,6 @@ type fileCacheEntry struct {
 	cfg   *Config
 
 	self          fileStamp
-	machinePath   string
-	machine       fileStamp
 	rootsPath     string
 	roots         fileStamp
 	notebooksPath string
@@ -105,12 +103,6 @@ func (e *fileCacheEntry) fresh(self fileStamp) bool {
 		return false
 	}
 	if !e.self.equal(self) {
-		return false
-	}
-	if e.machinePath != MachineConfigPath() {
-		return false
-	}
-	if !e.machine.equal(stampFile(e.machinePath)) {
 		return false
 	}
 	if e.rootsPath != coderoot.RootsPath() || !e.roots.equal(stampFile(e.rootsPath)) {
@@ -139,12 +131,9 @@ func (e *fileCacheEntry) store(self fileStamp, cfg *Config, envNames []string) {
 		envValues[i] = os.Getenv(name)
 	}
 
-	machinePath := MachineConfigPath()
 	rootsPath := coderoot.RootsPath()
 	notebooksPath := coderoot.NotebooksPath()
 	e.self = self
-	e.machinePath = machinePath
-	e.machine = stampFile(machinePath)
 	e.rootsPath = rootsPath
 	e.roots = stampFile(rootsPath)
 	e.notebooksPath = notebooksPath

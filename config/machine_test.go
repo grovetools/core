@@ -57,27 +57,6 @@ func TestLoadMachineConfigReadsName(t *testing.T) {
 // The machine-config phase adds subscriptions and bare roots to machine.toml.
 // Today's minimal loader must tolerate them rather than fail, so a config
 // written for the later phase does not brick this one.
-func TestLoadMachineConfigTolShapesTheNextPhaseAdds(t *testing.T) {
-	dir := sandboxConfig(t)
-	writeFile(t, filepath.Join(dir, "machine.toml"), `[machine]
-name = "mbp"
-
-[machine.ecosystems.grovetools]
-path = "~/code/grovetools"
-
-[machine.roots.chickens]
-path = "~/code/chickens"
-`)
-
-	cfg, err := LoadMachineConfig()
-	if err != nil {
-		t.Fatalf("LoadMachineConfig with future tables: %v", err)
-	}
-	if cfg.Machine.Name != "mbp" {
-		t.Fatalf("name = %q, want mbp", cfg.Machine.Name)
-	}
-}
-
 // F5 containment: machine.toml must NOT be picked up by the global `*.toml`
 // fragment glob, or its [machine] table would land in Config.Extensions and
 // leak into the whole cascade.
@@ -181,92 +160,6 @@ func TestConfigLoadNeverReportsLegacyMachinesDir(t *testing.T) {
 		if strings.Contains(w, LegacyMachinesDirName) {
 			t.Fatalf("config load reported the standing condition on the console: %q", w)
 		}
-	}
-}
-
-func TestWriteMachineNamePreservesEverythingElse(t *testing.T) {
-	dir := sandboxConfig(t)
-	path := filepath.Join(dir, "machine.toml")
-
-	// Fresh file.
-	changed, err := WriteMachineName(path, "mbp")
-	if err != nil {
-		t.Fatalf("WriteMachineName (create): %v", err)
-	}
-	if !changed {
-		t.Fatal("creating machine.toml reported no change")
-	}
-	cfg, err := LoadMachineConfigFrom(path)
-	if err != nil || cfg.Machine.Name != "mbp" {
-		t.Fatalf("after create: cfg=%+v err=%v", cfg, err)
-	}
-
-	// Idempotent: same name is a no-op.
-	changed, err = WriteMachineName(path, "mbp")
-	if err != nil {
-		t.Fatalf("WriteMachineName (same name): %v", err)
-	}
-	if changed {
-		t.Fatal("rewriting the same name reported a change")
-	}
-
-	// Rename in place, preserving comments and unknown tables byte-for-byte.
-	rich := `# my machine
-[machine]
-# the display name
-name = "old"
-
-[machine.ecosystems.grovetools]
-path = "~/code/grovetools"
-`
-	writeFile(t, path, rich)
-	if _, err := WriteMachineName(path, "studio"); err != nil {
-		t.Fatalf("WriteMachineName (rename): %v", err)
-	}
-	got := readFile(t, path)
-	for _, must := range []string{"# my machine", "# the display name", "[machine.ecosystems.grovetools]", `path = "~/code/grovetools"`, `name = "studio"`} {
-		if !strings.Contains(got, must) {
-			t.Errorf("rewritten file lost %q:\n%s", must, got)
-		}
-	}
-	if strings.Contains(got, `name = "old"`) {
-		t.Errorf("old name survived:\n%s", got)
-	}
-}
-
-func TestWriteMachineNameInsertsIntoTheRightTable(t *testing.T) {
-	dir := sandboxConfig(t)
-
-	// [machine] exists but has no name: insert under its own header, NOT into
-	// the nested table that follows.
-	path := filepath.Join(dir, "a.toml")
-	writeFile(t, path, "[machine]\n\n[machine.ecosystems.x]\npath = \"/tmp/x\"\n")
-	if _, err := WriteMachineName(path, "mbp"); err != nil {
-		t.Fatalf("WriteMachineName: %v", err)
-	}
-	cfg, err := LoadMachineConfigFrom(path)
-	if err != nil {
-		t.Fatalf("reparse: %v", err)
-	}
-	if cfg.Machine.Name != "mbp" {
-		t.Fatalf("name = %q, want mbp; file:\n%s", cfg.Machine.Name, readFile(t, path))
-	}
-
-	// No [machine] table at all: append one without disturbing what is there.
-	path = filepath.Join(dir, "b.toml")
-	writeFile(t, path, "[other]\nname = \"not-the-machine\"\n")
-	if _, err := WriteMachineName(path, "studio"); err != nil {
-		t.Fatalf("WriteMachineName: %v", err)
-	}
-	cfg, err = LoadMachineConfigFrom(path)
-	if err != nil {
-		t.Fatalf("reparse: %v", err)
-	}
-	if cfg.Machine.Name != "studio" {
-		t.Fatalf("name = %q, want studio; file:\n%s", cfg.Machine.Name, readFile(t, path))
-	}
-	if !strings.Contains(readFile(t, path), `name = "not-the-machine"`) {
-		t.Fatalf("the [other] table was disturbed:\n%s", readFile(t, path))
 	}
 }
 

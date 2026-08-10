@@ -148,42 +148,6 @@ func TestLoadRereadsAfterEnvChangeWithDefaultForm(t *testing.T) {
 	}
 }
 
-func TestLoadRereadsAfterMachineConfigChange(t *testing.T) {
-	ResetLoadCache()
-	t.Cleanup(ResetLoadCache)
-
-	groveHome := t.TempDir()
-	t.Setenv("GROVE_HOME", groveHome)
-	configDir := filepath.Join(groveHome, "config", "grove")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		t.Fatalf("mkdir config dir: %v", err)
-	}
-
-	path := filepath.Join(t.TempDir(), "grove.toml")
-	writeConfigAt(t, path, "name = \"alpha\"\n", -2*time.Second)
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("first load: %v", err)
-	}
-	if _, ok := cfg.Groves["subscribed"]; ok {
-		t.Fatalf("grove %q present before machine.toml was written", "subscribed")
-	}
-
-	// compileMachineGroves folds machine.toml's subscriptions into every
-	// loaded config, so its appearance has to invalidate the entry.
-	machinePath := filepath.Join(configDir, "machine.toml")
-	writeConfigAt(t, machinePath, "[machine]\n\n[machine.ecosystems.subscribed]\npath = \"/tmp/subscribed\"\n", -1*time.Second)
-
-	cfg, err = Load(path)
-	if err != nil {
-		t.Fatalf("second load: %v", err)
-	}
-	if _, ok := cfg.Groves["subscribed"]; !ok {
-		t.Errorf("grove %q missing after machine.toml appeared; groves=%v", "subscribed", cfg.Groves)
-	}
-}
-
 func TestLoadTracksRecordedRoutingPair(t *testing.T) {
 	ResetLoadCache()
 	t.Cleanup(ResetLoadCache)

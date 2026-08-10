@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -108,80 +111,33 @@ monitoring:
 	}
 }
 
-// TestBackwardCompatibilityGrovesToSearchPaths verifies that old "search_paths" key
-// is automatically migrated to "groves" (new preferred format)
-func TestBackwardCompatibilityGrovesToSearchPaths(t *testing.T) {
-	tests := []struct {
-		name     string
-		yaml     string
-		expected int // expected number of groves
+func TestLegacyTopologyRequiresMigration(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	for _, tc := range []struct {
+		name  string
+		load  func() error
+		table string
 	}{
-		{
-			name: "new groves key",
-			yaml: `
-version: "1.0"
-groves:
-  home:
-    path: ~/Code
-    enabled: true
-  work:
-    path: ~/Work
-    enabled: true
-`,
-			expected: 2,
-		},
-		{
-			name: "old search_paths key",
-			yaml: `
-version: "1.0"
-search_paths:
-  home:
-    path: ~/Code
-    enabled: true
-  work:
-    path: ~/Work
-    enabled: true
-`,
-			expected: 2,
-		},
-		{
-			name: "both keys present (groves wins)",
-			yaml: `
-version: "1.0"
-groves:
-  new:
-    path: ~/NewPath
-    enabled: true
-search_paths:
-  old:
-    path: ~/OldPath
-    enabled: true
-`,
-			expected: 1, // only groves should be used
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := LoadFromBytes([]byte(tt.yaml))
-			if err != nil {
-				t.Fatalf("Failed to load config: %v", err)
-			}
-
-			if len(cfg.Groves) != tt.expected {
-				t.Errorf("Expected %d groves, got %d", tt.expected, len(cfg.Groves))
-			}
-
-			// For the "both keys" test, verify the right one was used
-			if tt.name == "both keys present (groves wins)" {
-				if _, ok := cfg.Groves["new"]; !ok {
-					t.Error("Expected 'new' grove to be present")
-				}
-				if _, ok := cfg.Groves["old"]; ok {
-					t.Error("Expected 'old' grove (from search_paths) to NOT be present")
-				}
+		{"yaml groves", func() error { _, err := LoadFromBytes([]byte("groves: {}\n")); return err }, "groves"},
+		{"toml search paths", func() error { _, err := LoadFromTOMLBytes([]byte("[search_paths.old]\npath = '/code'\n")); return err }, "search_paths"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.load()
+			if err == nil || !strings.Contains(err.Error(), tc.table) || !strings.Contains(err.Error(), "grove migrate") || !strings.Contains(err.Error(), "roots.toml is absent") {
+				t.Fatalf("error = %v", err)
 			}
 		})
+	}
+	if err := os.MkdirAll(filepath.Join(configHome, "grove"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "grove", "roots.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadFromTOMLBytes([]byte("[groves.old]\npath = '/code'\n"))
+	if err == nil || !strings.Contains(err.Error(), "forbidden mixed state") || !strings.Contains(err.Error(), "grove migrate") {
+		t.Fatalf("mixed-state error = %v", err)
 	}
 }
 

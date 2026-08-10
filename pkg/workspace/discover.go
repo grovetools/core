@@ -309,37 +309,14 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 		s.logger.Warnf("Failed to load layered config: %v. No 'groves' to scan.", err)
 		return result, nil // Not a fatal error, just means no paths to scan.
 	}
-	// A missing global grove.toml used to mean "nothing to scan". It no longer
-	// does: machine.toml is a standalone typed layer compiled into Final.Groves,
-	// so a machine whose only declaration is [machine.ecosystems.*] has groves
-	// to walk with no global config file at all.
+	// A missing global grove.toml does not imply nothing to scan: recorded
+	// roots compile independently into Final.Groves.
 	if layeredCfg.Global == nil && len(layeredCfg.Final.Groves) == 0 {
 		s.logger.Debug("no global grove config and no machine subscriptions; workspace scan skipped")
 		return result, nil
 	}
 
-	// Support both Groves (new) and SearchPaths (legacy)
-	// Use Final config to include global overrides
 	groves := layeredCfg.Final.Groves
-	if len(groves) == 0 && len(layeredCfg.Final.SearchPaths) > 0 {
-		// Fallback to SearchPaths for backward compatibility
-		groves = make(map[string]config.GroveSourceConfig)
-		for k, v := range layeredCfg.Final.SearchPaths {
-			var enabledPtr *bool
-			if v.Enabled {
-				trueVal := true
-				enabledPtr = &trueVal
-			} else {
-				falseVal := false
-				enabledPtr = &falseVal
-			}
-			groves[k] = config.GroveSourceConfig{
-				Path:        v.Path,
-				Enabled:     enabledPtr,
-				Description: v.Description,
-			}
-		}
-	}
 
 	if len(groves) == 0 {
 		s.logger.Info("No 'groves' defined in global configuration.")

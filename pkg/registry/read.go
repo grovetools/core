@@ -96,7 +96,7 @@ func (m Machine) DeclaredMissing() []NoteEcosystem {
 	return out
 }
 
-// Ecosystem reconciliation states, mirrored from config.MachineEcosystem* so
+// Ecosystem reconciliation states, mirrored from recorded code-root state so
 // readers of a note do not have to depend on the config package's constants
 // (the values travel in the document, not in a Go type).
 const (

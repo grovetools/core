@@ -51,116 +51,12 @@ func WriteMachineName(path, name string) (bool, error) {
 	return true, nil
 }
 
-// MachineSubscriptions is a batch of machine.toml entries to write. Both maps
-// are keyed by subscription name; an entry replaces the table of the same name
-// and leaves every other byte of the file alone.
-type MachineSubscriptions struct {
-	Ecosystems map[string]MachineEcosystem
-	Roots      map[string]MachineRoot
-	// Header is an optional comment block written above the first table this
-	// call appends to a file that does not have one yet. It exists so
-	// `grove machine migrate` can explain, in the file, where its content came
-	// from. Lines are written verbatim; callers include their own `#`.
-	Header []string
-}
-
-// WriteMachineSubscriptions upserts ecosystem subscriptions and bare roots
-// into machine.toml, creating the file when absent. It reports whether the
-// file changed.
-//
-// Like WriteMachineName, the edit is surgical: only the tables named here are
-// replaced. Comments, key order, the [machine] name, and tables this schema
-// does not model survive byte-for-byte — machine.toml is hand-authored and
-// dotfiles-portable, so a marshaller round-trip would quietly rewrite the
-// user's file.
-func WriteMachineSubscriptions(path string, subs MachineSubscriptions) (bool, error) {
-	if path == "" {
-		return false, fmt.Errorf("machine config path is not resolvable")
-	}
-	if len(subs.Ecosystems) == 0 && len(subs.Roots) == 0 {
-		return false, nil
-	}
-	// Validate the batch before touching the file: a rejected entry must not
-	// leave a half-written config behind.
-	probe := MachineConfig{Machine: MachineSettings{Ecosystems: subs.Ecosystems, Roots: subs.Roots}}
-	if err := probe.Validate(); err != nil {
-		return false, err
-	}
-
-	existing, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("failed to read machine config %s: %w", path, err)
-	}
-
-	updated := string(existing)
-	if len(subs.Header) > 0 && strings.TrimSpace(updated) == "" {
-		updated = strings.Join(subs.Header, "\n") + "\n"
-	}
-	for _, name := range sortedKeys(subs.Ecosystems) {
-		updated = setTOMLTableParts(updated, []string{"machine", "ecosystems", name}, renderMachineEcosystem(name, subs.Ecosystems[name]))
-	}
-	for _, name := range sortedKeys(subs.Roots) {
-		updated = setTOMLTableParts(updated, []string{"machine", "roots", name}, renderMachineRoot(name, subs.Roots[name]))
-	}
-
-	if err == nil && updated == string(existing) {
-		return false, nil
-	}
-
-	verify := func(candidate string) error {
-		_, err := ParseMachineConfigContent(path, candidate)
-		return err
-	}
-	if err := atomicWriteVerified(path, updated, verify); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func renderMachineEcosystem(name string, eco MachineEcosystem) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "[machine.ecosystems.%s]\n", tomlKey(name))
-	fmt.Fprintf(&b, "path = %s\n", strconv.Quote(eco.Path))
-	if eco.Notebook != "" {
-		fmt.Fprintf(&b, "notebook = %s\n", strconv.Quote(eco.Notebook))
-	}
-	if eco.Description != "" {
-		fmt.Fprintf(&b, "description = %s\n", strconv.Quote(eco.Description))
-	}
-	if len(eco.Repos) > 0 {
-		fmt.Fprintf(&b, "repos = %s\n", renderTOMLStringArray(eco.Repos))
-	}
-	if len(eco.Exclude) > 0 {
-		fmt.Fprintf(&b, "exclude = %s\n", renderTOMLStringArray(eco.Exclude))
-	}
-	if eco.Enabled != nil {
-		fmt.Fprintf(&b, "enabled = %t\n", *eco.Enabled)
-	}
-	return b.String()
-}
-
 func renderTOMLStringArray(values []string) string {
 	quoted := make([]string, len(values))
 	for i, value := range values {
 		quoted[i] = strconv.Quote(value)
 	}
 	return "[" + strings.Join(quoted, ", ") + "]"
-}
-
-func renderMachineRoot(name string, root MachineRoot) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "[machine.roots.%s]\n", tomlKey(name))
-	fmt.Fprintf(&b, "path = %s\n", strconv.Quote(root.Path))
-	if root.Notebook != "" {
-		fmt.Fprintf(&b, "notebook = %s\n", strconv.Quote(root.Notebook))
-	}
-	if root.Description != "" {
-		fmt.Fprintf(&b, "description = %s\n", strconv.Quote(root.Description))
-	}
-	if root.Enabled != nil {
-		fmt.Fprintf(&b, "enabled = %t\n", *root.Enabled)
-	}
-	return b.String()
 }
 
 // setTOMLTable replaces the table named by key (header line through the line

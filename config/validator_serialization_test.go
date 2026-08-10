@@ -118,7 +118,7 @@ scenarios = ["coordinator-workflow"]
 // top-level Config tag name must be in the set, including the two that
 // historically drifted.
 func TestCoreConfigKeysTrackStructTags(t *testing.T) {
-	for _, key := range []string{"name", "version", "workspaces", "commands", "test_scopes", "groves", "worktree", "_grove"} {
+	for _, key := range []string{"name", "version", "workspaces", "commands", "test_scopes", "worktree", "_grove"} {
 		if !coreConfigKeys[key] {
 			t.Errorf("coreConfigKeys missing %q", key)
 		}

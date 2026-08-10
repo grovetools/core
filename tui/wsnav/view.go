@@ -103,7 +103,7 @@ func (m *Model) buildTableView(availableHeight int) string {
 	// Get filtered projects from navigator and convert to pointers
 	filtered := m.navigator.GetFiltered()
 	if len(filtered) == 0 {
-		return "No workspaces discovered.\n\nTip: Configure search_paths in ~/.grove/config.yml"
+		return "No workspaces discovered.\n\nTip: Configure recorded code roots in ~/.config/grove/roots.toml"
 	}
 
 	// Convert to pointers for filter functions

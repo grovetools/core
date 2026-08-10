@@ -58,11 +58,9 @@ func setupXDGFixture(t *testing.T) *xdgFixture {
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
 	emptyStr := ""
 	writeGroveYML(t, globalConfigDir, "grove.yml", config.Config{
-		SearchPaths: map[string]config.SearchPathConfig{
-			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
-		},
 		Context: &config.ContextConfig{ReposDir: &emptyStr},
 	})
+	writeTestRoots(t, globalConfigDir, filepath.Join(rootDir, "work"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))
 	t.Setenv("HOME", filepath.Join(rootDir, "home"))
 	t.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(globalConfigDir, "grove.yml"))
@@ -502,11 +500,9 @@ func TestDiscoverAll_AnchoredContainer(t *testing.T) {
 	globalConfigDir := filepath.Join(rootDir, "home", ".config", "grove")
 	emptyStr := ""
 	writeGroveYML(t, globalConfigDir, "grove.yml", config.Config{
-		SearchPaths: map[string]config.SearchPathConfig{
-			"work": {Path: filepath.Join(rootDir, "work"), Enabled: true},
-		},
 		Context: &config.ContextConfig{ReposDir: &emptyStr},
 	})
+	writeTestRoots(t, globalConfigDir, filepath.Join(rootDir, "work"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(rootDir, "home", ".config"))
 	t.Setenv("HOME", filepath.Join(rootDir, "home"))
 	t.Setenv("GROVE_CONFIG_OVERLAY", filepath.Join(globalConfigDir, "grove.yml"))

@@ -184,30 +184,6 @@ func TestLoadFromRereadsAfterGlobalFragmentCreated(t *testing.T) {
 	}
 }
 
-func TestLoadFromRereadsAfterMachineConfigChange(t *testing.T) {
-	projectDir, globalDir := setupLoadFromHierarchy(t)
-
-	cfg, err := LoadFrom(projectDir)
-	if err != nil {
-		t.Fatalf("first load: %v", err)
-	}
-	if _, ok := cfg.Groves["subscribed"]; ok {
-		t.Fatalf("grove %q present before machine.toml was written", "subscribed")
-	}
-
-	// compileMachineGroves folds machine.toml's subscriptions into every
-	// loaded config, so its appearance has to invalidate the entry.
-	writeConfigAt(t, filepath.Join(globalDir, "machine.toml"), "[machine]\n\n[machine.ecosystems.subscribed]\npath = \"/tmp/subscribed\"\n", -1*time.Second)
-
-	cfg, err = LoadFrom(projectDir)
-	if err != nil {
-		t.Fatalf("second load: %v", err)
-	}
-	if _, ok := cfg.Groves["subscribed"]; !ok {
-		t.Errorf("grove %q missing after machine.toml appeared; groves=%v", "subscribed", cfg.Groves)
-	}
-}
-
 func TestLoadFromTracksRecordedRoutingPair(t *testing.T) {
 	projectDir, globalDir := setupLoadFromHierarchy(t)
 	cfg, err := LoadFrom(projectDir)

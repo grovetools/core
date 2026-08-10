@@ -124,7 +124,7 @@ type NoteEcosystem struct {
 	// Notebook is the machine-side override, empty when the card decides.
 	Notebook string
 	// State is "present", "declared-missing", or "unmanifested" (the
-	// config.MachineEcosystem* vocabulary). "declared-missing" is what makes
+	// recorded code-root reconciliation vocabulary). "declared-missing" is what makes
 	// another machine able to say "you asked for this and it isn't there".
 	State   string
 	Enabled bool

@@ -13,14 +13,6 @@ import (
 //go:generate sh -c "cd .. && go run ./tools/schema-composer/"
 //go:generate sh -c "cd .. && go run ./tools/notebook-schema-generator/"
 
-// SearchPathConfig defines the configuration for a single search path.
-// DEPRECATED: Use GroveSourceConfig instead.
-type SearchPathConfig struct {
-	Path        string `yaml:"path" toml:"path"`
-	Enabled     bool   `yaml:"enabled" toml:"enabled"`
-	Description string `yaml:"description,omitempty" toml:"description,omitempty"`
-}
-
 // GroveSourceConfig defines the configuration for a single grove source.
 type GroveSourceConfig struct {
 	Path         string   `yaml:"path" toml:"path" jsonschema:"description=Absolute path to the grove root directory" jsonschema_extras:"x-priority=1,x-important=true"`
@@ -1484,14 +1476,9 @@ type Config struct {
 	Environment  *EnvironmentConfig            `yaml:"environment,omitempty" toml:"environment,omitempty" jsonschema:"description=Development environment provider configuration"`
 	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty" toml:"environments,omitempty" jsonschema:"description=Named environment profiles selected via --env flag"`
 
-	// Groves is the compiled discovery surface: every consumer reads it, but
-	// it is no longer where intent is AUTHORED. Ecosystem subscriptions and
-	// bare scan roots belong in ~/.config/grove/machine.toml, which compiles
-	// into this map at load time (compileMachineGroves). Explicit entries here
-	// still win — the migration window — so nothing breaks until the user runs
-	// `grove machine migrate` and deletes them.
-	Groves           map[string]GroveSourceConfig `yaml:"groves,omitempty" toml:"groves,omitempty" jsonschema:"description=DEPRECATED: declare ecosystems and bare roots in machine.toml instead,deprecated=true" jsonschema_extras:"x-deprecated=true,x-deprecated-message=Move these to ~/.config/grove/machine.toml with 'grove machine migrate',x-deprecated-replacement=machine.toml [machine.ecosystems.*],x-deprecated-version=v0.6.0"`
-	SearchPaths      map[string]SearchPathConfig  `yaml:"search_paths,omitempty" toml:"search_paths,omitempty" jsonschema:"description=DEPRECATED: Use groves instead,deprecated=true" jsonschema_extras:"x-deprecated=true,x-deprecated-message=Use 'groves' for project discovery,x-deprecated-replacement=groves,x-deprecated-version=v0.5.0,x-deprecated-removal=v1.0.0"`
+	// Groves is the internal compiled discovery surface populated solely from
+	// roots.toml and notebooks.toml. It is neither deserializable nor authorable.
+	Groves           map[string]GroveSourceConfig `yaml:"-" toml:"-" jsonschema:"-"`
 	ExplicitProjects []ExplicitProject            `yaml:"explicit_projects,omitempty" toml:"explicit_projects,omitempty" jsonschema:"description=Specific projects to include without discovery"`
 
 	Commands   map[string]string `yaml:"commands,omitempty" toml:"commands,omitempty" jsonschema:"description=Command overrides per verb"`
@@ -1564,7 +1551,6 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Daemon           *DaemonConfig                 `yaml:"daemon,omitempty"`
 		Environment      *EnvironmentConfig            `yaml:"environment,omitempty"`
 		Environments     map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
-		Groves           map[string]GroveSourceConfig  `yaml:"groves,omitempty"`
 		ExplicitProjects []ExplicitProject             `yaml:"explicit_projects,omitempty"`
 		Commands         map[string]string             `yaml:"commands,omitempty"`
 		TestScopes       []TestScopeConfig             `yaml:"test_scopes,omitempty"`
@@ -1578,12 +1564,11 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 		Ecosystem  *EcosystemCard         `yaml:"ecosystem,omitempty"`
 		Extensions map[string]interface{} `yaml:",inline"`
 
-		// --- Legacy Fields for Backward Compatibility ---
-		SearchPaths       map[string]SearchPathConfig `yaml:"search_paths,omitempty"`        // Old name for Groves
-		LegacyNotebooks   map[string]*Notebook        `yaml:"-"`                             // To catch top-level notebooks map
-		LegacyNotebook    *Notebook                   `yaml:"notebook,omitempty"`            // Very old single notebook
-		DefaultNotebook   string                      `yaml:"default_notebook,omitempty"`    // Old top-level default
-		GlobalNotebookDir string                      `yaml:"global_notebook_dir,omitempty"` // Old top-level global dir
+		// --- Legacy notebook fields retained until their separately planned cutover. ---
+		LegacyNotebooks   map[string]*Notebook `yaml:"-"`                             // To catch top-level notebooks map
+		LegacyNotebook    *Notebook            `yaml:"notebook,omitempty"`            // Very old single notebook
+		DefaultNotebook   string               `yaml:"default_notebook,omitempty"`    // Old top-level default
+		GlobalNotebookDir string               `yaml:"global_notebook_dir,omitempty"` // Old top-level global dir
 	}
 
 	var raw rawConfig
@@ -1610,29 +1595,6 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	c.Security = raw.Security
 	c.Ecosystem = raw.Ecosystem
 	c.Extensions = raw.Extensions
-
-	// Handle backward compatibility for `search_paths` -> `groves`
-	if len(raw.Groves) > 0 {
-		c.Groves = raw.Groves
-	} else if len(raw.SearchPaths) > 0 {
-		// Migrate old `search_paths` key to new `groves`
-		c.Groves = make(map[string]GroveSourceConfig)
-		for k, v := range raw.SearchPaths {
-			var enabledPtr *bool
-			if v.Enabled {
-				trueVal := true
-				enabledPtr = &trueVal
-			} else {
-				falseVal := false
-				enabledPtr = &falseVal
-			}
-			c.Groves[k] = GroveSourceConfig{
-				Path:        v.Path,
-				Enabled:     enabledPtr,
-				Description: v.Description,
-			}
-		}
-	}
 
 	// Handle new nested `notebooks` structure
 	c.Notebooks = raw.Notebooks

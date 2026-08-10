@@ -131,7 +131,7 @@ func convertCard(card *config.EcosystemCard) *NoteCard {
 }
 
 // expandRootPath resolves $VARs and a leading ~/ and makes the path absolute,
-// mirroring config's own expandPath (which ReconcileMachineEcosystems applies
+// mirroring config's own code-root reconciliation path expansion
 // to ecosystems) so both kinds of root render the same way.
 func expandRootPath(path string) string {
 	expanded := os.ExpandEnv(path)

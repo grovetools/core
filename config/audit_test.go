@@ -68,9 +68,6 @@ totally_bogus = "nothing reads this"
 [logging]
 level = "debug"
 
-[search_paths.main]
-path = "/tmp/projects"
-
 [some_orphan]
 leftover = true
 `
@@ -107,13 +104,9 @@ default_model = "gemini"
 	}
 	requireClass(t, findings, "tui.totally_bogus", AuditUnknownNested)
 	requireClass(t, findings, "logging", AuditKnownExtension)
-	requireClass(t, findings, "search_paths", AuditDeprecated)
 	requireClass(t, findings, "some_orphan", AuditOrphan)
 
-	// The deprecated and extension namespaces must not be descended into.
-	if f := findFinding(findings, "search_paths.main"); f != nil {
-		t.Errorf("expected no descent under deprecated search_paths, got %+v", f)
-	}
+	// Extension namespaces must not be descended into.
 	if f := findFinding(findings, "logging.level"); f != nil {
 		t.Errorf("expected no descent under extension logging, got %+v", f)
 	}
@@ -149,9 +142,6 @@ plans_path_template = "plans"
 root_dir = "~/notebooks/work"
 not_a_field = true
 
-[groves.personal]
-path = "~/code"
-
 [daemon]
 bogus_daemon_key = 1
 `
@@ -168,11 +158,6 @@ bogus_daemon_key = 1
 	requireClass(t, findings, "notebooks.definitions.personal.plans_path_template", AuditKnownCore)
 	requireClass(t, findings, "notebooks.definitions.work.not_a_field", AuditUnknownNested)
 	requireClass(t, findings, "daemon.bogus_daemon_key", AuditUnknownNested)
-
-	// [groves.*] carries deprecation tags now that machine.toml is where
-	// ecosystems and bare roots are declared, so the audit classifies the
-	// whole key as deprecated (and stops descending) rather than orphan.
-	requireClass(t, findings, "groves", AuditDeprecated)
 }
 
 // TestAuditKeybindingsFreeForm verifies that arbitrary package names under

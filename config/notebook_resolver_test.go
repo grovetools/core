@@ -14,48 +14,6 @@ import (
 func TestResolveNotebook_Precedence(t *testing.T) {
 	f := buildNBTaxonomyFixture(t)
 
-	t.Run("machine override outranks the card", func(t *testing.T) {
-		q := NotebookQuery{
-			Path: f.ecoSub,
-			Machine: &MachineConfig{Machine: MachineSettings{
-				Ecosystems: map[string]MachineEcosystem{
-					"eco": {Path: f.eco, Notebook: "silentnb"},
-				},
-			}},
-		}
-		got := ResolveNotebook(q, f.config())
-		assert.Equal(t, "silentnb", got.Notebook)
-		assert.Equal(t, NotebookSourceMachine, got.Source)
-	})
-
-	t.Run("a machine entry with no notebook does not shadow the card", func(t *testing.T) {
-		q := NotebookQuery{
-			Path: f.ecoSub,
-			Machine: &MachineConfig{Machine: MachineSettings{
-				Ecosystems: map[string]MachineEcosystem{
-					"eco": {Path: f.eco},
-				},
-			}},
-		}
-		got := ResolveNotebook(q, f.config())
-		assert.Equal(t, "cardnb", got.Notebook)
-		assert.Equal(t, NotebookSourceCard, got.Source)
-	})
-
-	t.Run("a disabled machine entry is ignored", func(t *testing.T) {
-		disabled := false
-		q := NotebookQuery{
-			Path: f.ecoSub,
-			Machine: &MachineConfig{Machine: MachineSettings{
-				Ecosystems: map[string]MachineEcosystem{
-					"eco": {Path: f.eco, Notebook: "silentnb", Enabled: &disabled},
-				},
-			}},
-		}
-		got := ResolveNotebook(q, f.config())
-		assert.Equal(t, "cardnb", got.Notebook)
-	})
-
 	t.Run("card outranks the grove entry", func(t *testing.T) {
 		got := ResolveNotebook(NotebookQuery{Path: f.ecoSub}, f.config())
 		assert.Equal(t, "cardnb", got.Notebook)
