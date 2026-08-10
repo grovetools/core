@@ -71,7 +71,7 @@ root = "~/other-notes"
 	}
 }
 
-func TestCompileCodeRootsRecordedNotebookClearsSameNameLegacyFields(t *testing.T) {
+func TestCompileCodeRootsRecordedNotebookPreservesSameNameBehaviorFields(t *testing.T) {
 	rp, np := writeRecordedPair(t, `[roots.code]
 path = "/code"
 `, `default = "nb"
@@ -91,8 +91,10 @@ root = "/recorded-notes"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (&Notebook{RootDir: "/recorded-notes"}); !reflect.DeepEqual(got.Notebooks.Definitions["nb"], want) {
-		t.Fatalf("recorded notebook retained stale legacy fields: got %+v, want %+v", got.Notebooks.Definitions["nb"], want)
+	want := *legacyNotebook
+	want.RootDir = "/recorded-notes"
+	if !reflect.DeepEqual(got.Notebooks.Definitions["nb"], &want) {
+		t.Fatalf("recorded root did not preserve same-name behavior fields: got %+v, want %+v", got.Notebooks.Definitions["nb"], &want)
 	}
 	if legacyNotebook.RootDir != "/legacy-notes" || legacyNotebook.NotesPathTemplate == "" {
 		t.Fatalf("compiler mutated legacy source definition: %+v", legacyNotebook)

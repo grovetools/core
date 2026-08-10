@@ -72,12 +72,21 @@ func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 			notebooksCopy := *cfg.Notebooks
 			cfg.Notebooks = &notebooksCopy
 		}
+		// notebooks.toml owns membership and routing roots. During the migration
+		// window, same-name global definitions still own the orthogonal notebook
+		// behavior that the recorded schema cannot express (templates, types,
+		// sync and Obsidian settings). Preserve those fields while overriding the
+		// root; definitions absent from the recorded file remain removed.
+		legacyDefinitions := cfg.Notebooks.Definitions
 		cfg.Notebooks.Definitions = make(map[string]*Notebook, len(table.Notebooks))
 		for _, name := range table.SortedNotebookNames() {
-			// A recorded definition replaces the same-name legacy definition;
-			// stale templates, note types, and sync integrations must not leak
-			// beneath notebooks.toml's intentionally smaller schema.
-			cfg.Notebooks.Definitions[name] = &Notebook{RootDir: table.NotebookRoot(name)}
+			notebook := &Notebook{}
+			if legacy := legacyDefinitions[name]; legacy != nil {
+				copy := *legacy
+				notebook = &copy
+			}
+			notebook.RootDir = table.NotebookRoot(name)
+			cfg.Notebooks.Definitions[name] = notebook
 		}
 		if cfg.Notebooks.Rules == nil {
 			cfg.Notebooks.Rules = &NotebookRules{}
