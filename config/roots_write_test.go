@@ -1,0 +1,233 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/grovetools/core/pkg/coderoot"
+)
+
+// The writer tests use explicit paths under t.TempDir() only — never the
+// canonical config dir — per the fleet-lab isolation rule: a config test that
+// reads ambient state passes only on a clean machine.
+
+func tmpPair(t *testing.T) (rootsPath, nbPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	return filepath.Join(dir, coderoot.RootsFileName), filepath.Join(dir, coderoot.NotebooksFileName)
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestWriteNotebooksCreatesFile(t *testing.T) {
+	_, nbPath := tmpPair(t)
+	def := "nb"
+	changed, err := WriteNotebooks(nbPath, NotebookEdits{
+		Default: &def,
+		Upserts: map[string]coderoot.Notebook{"nb": {Root: "/notebooks/nb"}},
+		Header:  []string{"# Recorded notebooks. Written by grove.", ""},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected a change")
+	}
+	content := mustRead(t, nbPath)
+	if !strings.Contains(content, "# Recorded notebooks.") {
+		t.Fatalf("header missing:\n%s", content)
+	}
+	nf, err := coderoot.ParseNotebooks(nbPath, []byte(content))
+	if err != nil {
+		t.Fatalf("written file must reload: %v", err)
+	}
+	if nf.Default != "nb" || nf.Notebooks["nb"].Root != "/notebooks/nb" {
+		t.Fatalf("decoded wrong: %+v", nf)
+	}
+}
+
+func TestWriteCodeRootsRequiresResolvableNotebook(t *testing.T) {
+	rootsPath, nbPath := tmpPair(t)
+
+	// With no notebooks.toml sibling, a root binding a notebook must be
+	// refused: the writer never persists a state that does not reload.
+	_, err := WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{"code": {Path: "/code", Scan: true, Notebook: "nb"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "would not reload") {
+		t.Fatalf("expected reload refusal, got %v", err)
+	}
+	if _, statErr := os.Stat(rootsPath); !os.IsNotExist(statErr) {
+		t.Fatal("refused write must leave no file behind")
+	}
+
+	// Record the notebook first; then the same edit lands.
+	def := "nb"
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{
+		Default: &def,
+		Upserts: map[string]coderoot.Notebook{"nb": {Root: "/notebooks/nb"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{"code": {Path: "/code", Scan: true, Notebook: "nb"}},
+	})
+	if err != nil || !changed {
+		t.Fatalf("write after recording notebook: changed=%v err=%v", changed, err)
+	}
+}
+
+func TestWriteCodeRootsSurgicalUpsertAndDelete(t *testing.T) {
+	rootsPath, nbPath := tmpPair(t)
+	def := "nb"
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{
+		Default: &def,
+		Upserts: map[string]coderoot.Notebook{"nb": {Root: "/notebooks/nb"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hand-authored file: comments and an unrelated table must survive edits
+	// byte-for-byte.
+	seed := `# my roots — hand comment
+[roots.keep]
+path = "/keep"
+notebook = "nb"
+
+[roots.gone]
+path = "/gone"
+notebook = "nb"
+`
+	if err := os.WriteFile(rootsPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	depth := 3
+	changed, err := WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{
+			"code": {Path: "/code", Scan: true, Notebook: "nb", Exclude: []string{"vendor-fork"}, Depth: &depth, Description: "scan root"},
+		},
+		Deletes: []string{"gone"},
+	})
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+
+	content := mustRead(t, rootsPath)
+	if !strings.Contains(content, "# my roots — hand comment") {
+		t.Fatalf("hand comment must survive:\n%s", content)
+	}
+	if strings.Contains(content, "[roots.gone]") {
+		t.Fatalf("deleted table still present:\n%s", content)
+	}
+	rf, err := coderoot.ParseRoots(rootsPath, []byte(content))
+	if err != nil {
+		t.Fatalf("written file must reload: %v", err)
+	}
+	if _, ok := rf.Roots["keep"]; !ok {
+		t.Fatal("untouched table lost")
+	}
+	code := rf.Roots["code"]
+	if !code.Scan || code.Depth == nil || *code.Depth != 3 || len(code.Exclude) != 1 {
+		t.Fatalf("upserted root decoded wrong: %+v", code)
+	}
+
+	// Idempotence: the identical upsert is a no-op.
+	changed, err = WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{
+			"code": {Path: "/code", Scan: true, Notebook: "nb", Exclude: []string{"vendor-fork"}, Depth: &depth, Description: "scan root"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("identical upsert must report no change")
+	}
+}
+
+func TestWriteNotebooksRewritesDefaultInPlace(t *testing.T) {
+	_, nbPath := tmpPair(t)
+	seed := `# hand header
+default = "nb"
+
+[notebooks.nb]
+root = "/notebooks/nb"
+
+[notebooks.personal]
+root = "/notebooks/personal"
+`
+	if err := os.WriteFile(nbPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	def := "personal"
+	changed, err := WriteNotebooks(nbPath, NotebookEdits{Default: &def})
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	content := mustRead(t, nbPath)
+	if !strings.Contains(content, "# hand header") {
+		t.Fatalf("header must survive:\n%s", content)
+	}
+	if strings.Count(content, "default =") != 1 {
+		t.Fatalf("default key must be rewritten in place, not duplicated:\n%s", content)
+	}
+	nf, err := coderoot.ParseNotebooks(nbPath, []byte(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nf.Default != "personal" {
+		t.Fatalf("Default = %q", nf.Default)
+	}
+}
+
+func TestWriteNotebooksRefusesDanglingDefault(t *testing.T) {
+	_, nbPath := tmpPair(t)
+	def := "ghost"
+	_, err := WriteNotebooks(nbPath, NotebookEdits{
+		Default: &def,
+		Upserts: map[string]coderoot.Notebook{"nb": {Root: "/n"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "would not reload") {
+		t.Fatalf("expected reload refusal, got %v", err)
+	}
+	if _, statErr := os.Stat(nbPath); !os.IsNotExist(statErr) {
+		t.Fatal("refused write must leave no file behind")
+	}
+}
+
+func TestWriteNotebooksRefusesBreakingSiblingRoots(t *testing.T) {
+	rootsPath, nbPath := tmpPair(t)
+	def := "nb"
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{
+		Default: &def,
+		Upserts: map[string]coderoot.Notebook{"nb": {Root: "/n"}, "extra": {Root: "/e"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{"code": {Path: "/code", Notebook: "extra"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deleting the notebook a recorded root routes to must be refused: the
+	// full recorded set is re-parsed before anything is persisted.
+	before := mustRead(t, nbPath)
+	_, err := WriteNotebooks(nbPath, NotebookEdits{Deletes: []string{"extra"}})
+	if err == nil || !strings.Contains(err.Error(), "would not reload") {
+		t.Fatalf("expected cross-file refusal, got %v", err)
+	}
+	if got := mustRead(t, nbPath); got != before {
+		t.Fatal("refused write must leave the file untouched")
+	}
+}

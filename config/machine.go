@@ -9,6 +9,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/grovetools/core/pkg/coderoot"
 	"github.com/grovetools/core/pkg/paths"
 )
 
@@ -137,10 +138,13 @@ const LegacyMachinesDirName = "machines"
 // `*.toml` fragment glob in LoadFromWithLogger and LoadLayered. Without the
 // machine.toml entry, a `[machine]` table would land in Config.Extensions and
 // leak into the whole cascade — the pathology the typed loader exists to
-// contain.
+// contain. roots.toml and notebooks.toml (core/pkg/coderoot) are excluded for
+// the same reason: they are recorded routing tables with their own typed
+// loader, not cascade fragments.
 func isExcludedGlobalFragment(baseName string) bool {
 	switch baseName {
-	case "grove.toml", "grove.yml", "grove.override.toml", "sync.toml", MachineConfigFileName:
+	case "grove.toml", "grove.yml", "grove.override.toml", "sync.toml", MachineConfigFileName,
+		coderoot.RootsFileName, coderoot.NotebooksFileName:
 		return true
 	}
 	return false
