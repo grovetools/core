@@ -270,6 +270,24 @@ func TestWriteMachineNameInsertsIntoTheRightTable(t *testing.T) {
 	}
 }
 
+func TestWriteMachineNameRefusesInvalidCandidateWithoutChangingFile(t *testing.T) {
+	dir := sandboxConfig(t)
+	path := filepath.Join(dir, "machine.toml")
+	original := "[machine]\nname = \"old\"\n\n[broken\n"
+	writeFile(t, path, original)
+
+	changed, err := WriteMachineName(path, "new")
+	if err == nil || !strings.Contains(err.Error(), "result would not reload") {
+		t.Fatalf("changed=%t err=%v, want pre-persist reload refusal", changed, err)
+	}
+	if changed {
+		t.Fatal("a refused atomic write must report no change")
+	}
+	if got := readFile(t, path); got != original {
+		t.Fatalf("invalid candidate was persisted:\n%s", got)
+	}
+}
+
 func TestMachineConfigValidateRejectsBadNames(t *testing.T) {
 	for _, name := range []string{" padded", "trailing ", "two\nlines"} {
 		cfg := MachineConfig{Machine: MachineSettings{Name: name}}

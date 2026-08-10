@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -41,17 +41,12 @@ func WriteMachineName(path, name string) (bool, error) {
 		return false, nil
 	}
 
-	if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
-		return false, fmt.Errorf("failed to create config directory for %s: %w", path, mkErr)
+	verify := func(candidate string) error {
+		_, err := ParseMachineConfigContent(path, candidate)
+		return err
 	}
-	if wErr := os.WriteFile(path, []byte(updated), 0o644); wErr != nil {
-		return false, fmt.Errorf("failed to write machine config %s: %w", path, wErr)
-	}
-
-	// Re-parse what we just persisted: a surgical edit that produced invalid
-	// TOML must fail loudly here rather than at the next load.
-	if _, pErr := LoadMachineConfigFrom(path); pErr != nil {
-		return true, fmt.Errorf("machine config %s is invalid after writing name: %w", path, pErr)
+	if err := atomicWriteVerified(path, updated, verify); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -102,27 +97,22 @@ func WriteMachineSubscriptions(path string, subs MachineSubscriptions) (bool, er
 		updated = strings.Join(subs.Header, "\n") + "\n"
 	}
 	for _, name := range sortedKeys(subs.Ecosystems) {
-		updated = setTOMLTable(updated, "machine.ecosystems."+name, renderMachineEcosystem(name, subs.Ecosystems[name]))
+		updated = setTOMLTableParts(updated, []string{"machine", "ecosystems", name}, renderMachineEcosystem(name, subs.Ecosystems[name]))
 	}
 	for _, name := range sortedKeys(subs.Roots) {
-		updated = setTOMLTable(updated, "machine.roots."+name, renderMachineRoot(name, subs.Roots[name]))
+		updated = setTOMLTableParts(updated, []string{"machine", "roots", name}, renderMachineRoot(name, subs.Roots[name]))
 	}
 
 	if err == nil && updated == string(existing) {
 		return false, nil
 	}
 
-	if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
-		return false, fmt.Errorf("failed to create config directory for %s: %w", path, mkErr)
+	verify := func(candidate string) error {
+		_, err := ParseMachineConfigContent(path, candidate)
+		return err
 	}
-	if wErr := os.WriteFile(path, []byte(updated), 0o644); wErr != nil {
-		return false, fmt.Errorf("failed to write machine config %s: %w", path, wErr)
-	}
-
-	// Re-parse what was persisted: a surgical edit that produced invalid TOML
-	// must fail loudly here rather than at the next load.
-	if _, pErr := LoadMachineConfigFrom(path); pErr != nil {
-		return true, fmt.Errorf("machine config %s is invalid after writing subscriptions: %w", path, pErr)
+	if err := atomicWriteVerified(path, updated, verify); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -179,14 +169,21 @@ func renderMachineRoot(name string, root MachineRoot) string {
 // same surgical discipline setTOMLEcosystemCard uses, generalized to one
 // table.
 func setTOMLTable(content, key, block string) string {
+	return setTOMLTableParts(content, strings.Split(key, "."), block)
+}
+
+// setTOMLTableParts is the segment-aware form used when a table name may
+// itself contain dots. Comparing parsed segments keeps [roots."work.notes"]
+// distinct from [roots.work.notes].
+func setTOMLTableParts(content string, key []string, block string) string {
 	lines := strings.Split(content, "\n")
 	start, end := -1, len(lines)
 	for i, line := range lines {
-		k, ok := tomlTableKey(line)
+		parts, ok := tomlTableKeyParts(line)
 		if !ok {
 			continue
 		}
-		if k == key {
+		if slices.Equal(parts, key) {
 			if start < 0 {
 				start = i
 			}

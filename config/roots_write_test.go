@@ -155,6 +155,62 @@ notebook = "nb"
 	}
 }
 
+func TestRecordedWritersHandleQuotedNamesContainingDots(t *testing.T) {
+	rootsPath, nbPath := tmpPair(t)
+	def := "main"
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{
+		Default: &def,
+		Upserts: map[string]coderoot.Notebook{
+			"main":       {Root: "/notebooks/main"},
+			"work.notes": {Root: "/notebooks/old"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{"work.notes": {Path: "/code/old", Notebook: "main"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Upsert must replace the quoted table rather than append a duplicate.
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{
+		Upserts: map[string]coderoot.Notebook{"work.notes": {Root: "/notebooks/new"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteCodeRoots(rootsPath, CodeRootEdits{
+		Upserts: map[string]coderoot.Root{"work.notes": {Path: "/code/new", Notebook: "main"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(mustRead(t, nbPath), `[notebooks."work.notes"]`); got != 1 {
+		t.Fatalf("quoted notebook table count = %d, want 1:\n%s", got, mustRead(t, nbPath))
+	}
+	if got := strings.Count(mustRead(t, rootsPath), `[roots."work.notes"]`); got != 1 {
+		t.Fatalf("quoted root table count = %d, want 1:\n%s", got, mustRead(t, rootsPath))
+	}
+	nf, err := coderoot.ParseNotebooks(nbPath, []byte(mustRead(t, nbPath)))
+	if err != nil || nf.Notebooks["work.notes"].Root != "/notebooks/new" {
+		t.Fatalf("quoted notebook upsert decoded incorrectly: nf=%+v err=%v", nf, err)
+	}
+	rf, err := coderoot.ParseRoots(rootsPath, []byte(mustRead(t, rootsPath)))
+	if err != nil || rf.Roots["work.notes"].Path != "/code/new" {
+		t.Fatalf("quoted root upsert decoded incorrectly: rf=%+v err=%v", rf, err)
+	}
+
+	// Delete must identify the same logical quoted segment.
+	if _, err := WriteCodeRoots(rootsPath, CodeRootEdits{Deletes: []string{"work.notes"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{Deletes: []string{"work.notes"}}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(mustRead(t, rootsPath), "work.notes") || strings.Contains(mustRead(t, nbPath), "work.notes") {
+		t.Fatalf("quoted tables survived delete:\nroots:\n%s\nnotebooks:\n%s", mustRead(t, rootsPath), mustRead(t, nbPath))
+	}
+}
+
 func TestWriteNotebooksRewritesDefaultInPlace(t *testing.T) {
 	_, nbPath := tmpPair(t)
 	seed := `# hand header

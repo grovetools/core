@@ -106,6 +106,16 @@ func TestParseRootsRejections(t *testing.T) {
 			content: "[roots.a]\npath = \"/x\"\nrepos = [\"m\"]\nexclude = [\"n\"]\n",
 			want:    "cannot set both repos and exclude",
 		},
+		{
+			name:    "unknown root field",
+			content: "[roots.a]\npath = \"/x\"\nnotebok = \"nb\"\n",
+			want:    "strict mode",
+		},
+		{
+			name:    "unknown top-level table",
+			content: "[roots.a]\npath = \"/x\"\n[stray]\nvalue = true\n",
+			want:    "strict mode",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,6 +148,16 @@ func TestParseNotebooksRejections(t *testing.T) {
 			content: "[notebooks.nb]\nroot = \"/x\"\n[notebooks.nb]\nroot = \"/y\"\n",
 			want:    "already exists",
 		},
+		{
+			name:    "unknown notebook field",
+			content: "[notebooks.nb]\nroot = \"/x\"\nrot = \"/typo\"\n",
+			want:    "strict mode",
+		},
+		{
+			name:    "unknown top-level table",
+			content: "[notebooks.nb]\nroot = \"/x\"\n[stray]\nvalue = true\n",
+			want:    "strict mode",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,6 +166,16 @@ func TestParseNotebooksRejections(t *testing.T) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestParseNotebooksAllowsEmptyReservedSyncTable(t *testing.T) {
+	nf, err := ParseNotebooks("notebooks.toml", []byte("[notebooks.nb]\nroot = \"/x\"\n[notebooks.nb.sync]\n"))
+	if err != nil {
+		t.Fatalf("empty reserved sync table must remain accepted: %v", err)
+	}
+	if _, ok := nf.Notebooks["nb"]; !ok {
+		t.Fatal("notebook containing an empty reserved sync table was lost")
 	}
 }
 

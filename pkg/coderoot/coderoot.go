@@ -16,6 +16,7 @@
 package coderoot
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -259,7 +260,9 @@ func LoadFrom(rootsPath, notebooksPath string) (Table, error) {
 // Duplicate tables/keys are rejected by the TOML parser itself.
 func ParseRoots(path string, data []byte) (RootsFile, error) {
 	var rf RootsFile
-	if err := toml.Unmarshal(data, &rf); err != nil {
+	dec := toml.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&rf); err != nil {
 		return RootsFile{}, fmt.Errorf("%s: %w", displayName(path, RootsFileName), err)
 	}
 	if rf.Roots == nil {
@@ -284,7 +287,9 @@ func ParseRoots(path string, data []byte) (RootsFile, error) {
 // messages only.
 func ParseNotebooks(path string, data []byte) (NotebooksFile, error) {
 	var nf NotebooksFile
-	if err := toml.Unmarshal(data, &nf); err != nil {
+	dec := toml.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&nf); err != nil {
 		return NotebooksFile{}, fmt.Errorf("%s: %w", displayName(path, NotebooksFileName), err)
 	}
 	if nf.Notebooks == nil {

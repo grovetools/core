@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +27,28 @@ func TestMachineEcosystemMemberFiltersRoundTrip(t *testing.T) {
 	body := readFile(t, path)
 	if !strings.Contains(body, `repos = ["core", "nav"]`) {
 		t.Fatalf("repos were not rendered deterministically:\n%s", body)
+	}
+}
+
+func TestWriteMachineSubscriptionsRefusesInvalidCandidateWithoutChangingFile(t *testing.T) {
+	dir := sandboxConfig(t)
+	path := filepath.Join(dir, "machine.toml")
+	original := "[machine]\nname = \"host\"\n\n[broken\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := WriteMachineSubscriptions(path, MachineSubscriptions{
+		Ecosystems: map[string]MachineEcosystem{"new": {Path: "/code/new"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "result would not reload") {
+		t.Fatalf("changed=%t err=%v, want pre-persist reload refusal", changed, err)
+	}
+	if changed {
+		t.Fatal("a refused atomic write must report no change")
+	}
+	if got := readFile(t, path); got != original {
+		t.Fatalf("invalid candidate was persisted:\n%s", got)
 	}
 }
 

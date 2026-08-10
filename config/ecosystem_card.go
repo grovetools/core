@@ -243,34 +243,121 @@ func setTOMLEcosystemCard(content string, card EcosystemCard) string {
 // tomlTableKey extracts the dotted key of a TOML table header line
 // (`[a.b]` or `[[a.b]]`), reporting false for any other line.
 func tomlTableKey(line string) (string, bool) {
+	parts, ok := tomlTableKeyParts(line)
+	return strings.Join(parts, "."), ok
+}
+
+// tomlTableKeyParts parses a TOML table header into logical key segments.
+// Dots and comment markers inside quoted segments are data, not separators;
+// this distinction is required for surgical edits of names such as
+// [roots."work.notes"].
+func tomlTableKeyParts(line string) ([]string, bool) {
 	trimmed := strings.TrimSpace(line)
 	if !strings.HasPrefix(trimmed, "[") {
-		return "", false
+		return nil, false
 	}
-	// Drop a trailing comment; a `#` inside a quoted key would be misread,
-	// which no grove manifest has ever contained.
-	if idx := strings.Index(trimmed, "#"); idx >= 0 {
-		trimmed = strings.TrimSpace(trimmed[:idx])
-	}
-	trimmed = strings.TrimSuffix(trimmed, "]")
-	trimmed = strings.TrimPrefix(trimmed, "[")
-	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-		trimmed = strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]")
-	}
-	key := strings.TrimSpace(trimmed)
-	if key == "" {
-		return "", false
-	}
-	// Normalize quoted segments so `["ecosystem"]` matches `[ecosystem]`.
-	parts := strings.Split(key, ".")
-	for i, p := range parts {
-		p = strings.TrimSpace(p)
-		if unquoted, err := strconv.Unquote(p); err == nil {
-			p = unquoted
+
+	quote := byte(0)
+	escaped := false
+	comment := len(trimmed)
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if quote != 0 {
+			if quote == '"' && escaped {
+				escaped = false
+				continue
+			}
+			if quote == '"' && c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
 		}
-		parts[i] = p
+		if c == '"' || c == '\'' {
+			quote = c
+			continue
+		}
+		if c == '#' {
+			comment = i
+			break
+		}
 	}
-	return strings.Join(parts, "."), true
+	trimmed = strings.TrimSpace(trimmed[:comment])
+	array := strings.HasPrefix(trimmed, "[[")
+	if array {
+		if !strings.HasSuffix(trimmed, "]]") {
+			return nil, false
+		}
+		trimmed = strings.TrimSpace(trimmed[2 : len(trimmed)-2])
+	} else {
+		if !strings.HasSuffix(trimmed, "]") {
+			return nil, false
+		}
+		trimmed = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	}
+	if trimmed == "" {
+		return nil, false
+	}
+
+	var raw []string
+	start := 0
+	quote = 0
+	escaped = false
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if quote != 0 {
+			if quote == '"' && escaped {
+				escaped = false
+				continue
+			}
+			if quote == '"' && c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '"' || c == '\'' {
+			quote = c
+			continue
+		}
+		if c == '.' {
+			raw = append(raw, trimmed[start:i])
+			start = i + 1
+		}
+	}
+	if quote != 0 {
+		return nil, false
+	}
+	raw = append(raw, trimmed[start:])
+
+	parts := make([]string, len(raw))
+	for i, part := range raw {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, false
+		}
+		switch part[0] {
+		case '"':
+			unquoted, err := strconv.Unquote(part)
+			if err != nil {
+				return nil, false
+			}
+			part = unquoted
+		case '\'':
+			if len(part) < 2 || part[len(part)-1] != '\'' {
+				return nil, false
+			}
+			part = part[1 : len(part)-1]
+		}
+		parts[i] = part
+	}
+	return parts, true
 }
 
 // renderTOMLEcosystemCard renders the card deterministically: fixed field

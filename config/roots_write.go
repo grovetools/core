@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -66,10 +67,10 @@ func WriteCodeRoots(path string, edits CodeRootEdits) (bool, error) {
 		updated = strings.Join(edits.Header, "\n") + "\n"
 	}
 	for _, name := range sortedKeys(edits.Upserts) {
-		updated = setTOMLTable(updated, "roots."+name, renderCodeRoot(name, edits.Upserts[name]))
+		updated = setTOMLTableParts(updated, []string{"roots", name}, renderCodeRoot(name, edits.Upserts[name]))
 	}
 	for _, name := range edits.Deletes {
-		updated = deleteTOMLTable(updated, "roots."+name)
+		updated = deleteTOMLTableParts(updated, []string{"roots", name})
 	}
 
 	if err == nil && updated == string(existing) {
@@ -111,10 +112,10 @@ func WriteNotebooks(path string, edits NotebookEdits) (bool, error) {
 		updated = setTOMLTopLevelKey(updated, "default", strconv.Quote(*edits.Default))
 	}
 	for _, name := range sortedKeys(edits.Upserts) {
-		updated = setTOMLTable(updated, "notebooks."+name, renderNotebookDef(name, edits.Upserts[name]))
+		updated = setTOMLTableParts(updated, []string{"notebooks", name}, renderNotebookDef(name, edits.Upserts[name]))
 	}
 	for _, name := range edits.Deletes {
-		updated = deleteTOMLTable(updated, "notebooks."+name)
+		updated = deleteTOMLTableParts(updated, []string{"notebooks", name})
 	}
 
 	if err == nil && updated == string(existing) {
@@ -249,14 +250,18 @@ func renderNotebookDef(name string, nb coderoot.Notebook) string {
 // deleteTOMLTable removes the table named by key (header line through the
 // line before the next table header), leaving every other line untouched.
 func deleteTOMLTable(content, key string) string {
+	return deleteTOMLTableParts(content, strings.Split(key, "."))
+}
+
+func deleteTOMLTableParts(content string, key []string) string {
 	lines := strings.Split(content, "\n")
 	start, end := -1, len(lines)
 	for i, line := range lines {
-		k, ok := tomlTableKey(line)
+		parts, ok := tomlTableKeyParts(line)
 		if !ok {
 			continue
 		}
-		if k == key {
+		if slices.Equal(parts, key) {
 			if start < 0 {
 				start = i
 			}
