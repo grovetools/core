@@ -1484,6 +1484,15 @@
           "x-status-since": "v0.6.0",
           "x-status-target": "v1.0"
         },
+        "open_command": {
+          "description": "Argv used to open a path or URL outside the terminal (browser or desktop handler); the target is appended as the final argument. Empty uses the platform opener (open / xdg-open)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-layer": "global",
+          "x-priority": "69"
+        },
         "panels": {
           "$ref": "#/$defs/PanelConfig",
           "description": "User-defined ephemeral panel keybindings",

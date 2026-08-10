@@ -179,6 +179,13 @@ var execFields = []ExecField{
 		Path: "tui.panels.bindings.*", Risk: RiskImplicit, Consumer: "treemux",
 		Description: "process spawned on a keypress (command/args/args_command)",
 	},
+	// The desktop opener runs on a keypress, like a panel binding — the user
+	// pressed `o` on an artifact, not "run this repo's command" — so it is
+	// implicit risk: a cloned repo must not get to name what executes.
+	{
+		Path: "tui.open_command", Risk: RiskImplicit, Consumer: "grove TUIs",
+		Description: "argv run to open a path or URL outside the terminal (o on an artifact)",
+	},
 	{
 		Path: "notebooks.definitions.*.sync.token_command", Risk: RiskImplicit, Consumer: "core/sync",
 		Description: "shell command run to resolve the notebook sync token",

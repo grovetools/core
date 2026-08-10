@@ -369,6 +369,14 @@ type TUIConfig struct {
 	// keymap.WhichKeyDelay default (400ms). 0 shows the popup immediately. This
 	// is the SHOW clock, distinct from the sequence EXPIRE timeout.
 	WhichKeyDelayMs *int `yaml:"whichkey_delay_ms,omitempty" toml:"whichkey_delay_ms,omitempty" json:"whichkey_delay_ms,omitempty" jsonschema:"description=Delay in milliseconds before the which-key chord popup appears (0 = immediate),default=400" jsonschema_extras:"x-layer=global,x-priority=68"`
+
+	// OpenCommand is the argv a TUI hands a path or URL to when the user asks
+	// for it to be opened OUTSIDE the terminal — the flow status TUI's `o` on
+	// an .html artifact, say, which no in-terminal editor renders usefully.
+	// The target is appended as the final argument, so ["open", "-a",
+	// "Firefox"] runs `open -a Firefox <path>`. Empty falls back to the
+	// platform opener (`open` on macOS, `xdg-open` elsewhere).
+	OpenCommand []string `yaml:"open_command,omitempty" toml:"open_command,omitempty" json:"open_command,omitempty" jsonschema:"description=Argv used to open a path or URL outside the terminal (browser or desktop handler); the target is appended as the final argument. Empty uses the platform opener (open / xdg-open)" jsonschema_extras:"x-layer=global,x-priority=69"`
 }
 
 // DrawerViewsConfig configures named pages in the global drawer.
