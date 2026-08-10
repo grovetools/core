@@ -147,8 +147,8 @@ func TestLegacyTopologyRequiresMigration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.load()
-			if err == nil || !strings.Contains(err.Error(), tc.table) || !strings.Contains(err.Error(), "grove migrate") || !strings.Contains(err.Error(), "roots.toml is absent") {
-				t.Fatalf("error = %v", err)
+			if err == nil || !strings.Contains(err.Error(), tc.table) || !strings.Contains(err.Error(), "grove migrate") || strings.Contains(err.Error(), "roots.toml") {
+				t.Fatalf("hermetic byte-parse error = %v", err)
 			}
 		})
 	}
@@ -159,8 +159,8 @@ func TestLegacyTopologyRequiresMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := LoadFromTOMLBytes([]byte("[groves.old]\npath = '/code'\n"))
-	if err == nil || !strings.Contains(err.Error(), "forbidden mixed state") || !strings.Contains(err.Error(), "grove migrate") {
-		t.Fatalf("mixed-state error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "groves") || !strings.Contains(err.Error(), "grove migrate") || strings.Contains(err.Error(), "forbidden mixed state") || strings.Contains(err.Error(), "roots.toml") {
+		t.Fatalf("ambient roots leaked into byte-only parse error = %v", err)
 	}
 }
 

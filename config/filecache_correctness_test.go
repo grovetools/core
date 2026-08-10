@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -149,7 +148,7 @@ func TestLoadRereadsAfterEnvChangeWithDefaultForm(t *testing.T) {
 	}
 }
 
-func TestLoadInvalidatesWhenLegacyMachineConfigAppears(t *testing.T) {
+func TestLoadIgnoresAmbientMachineConfig(t *testing.T) {
 	ResetLoadCache()
 	t.Cleanup(ResetLoadCache)
 	groveHome := t.TempDir()
@@ -160,73 +159,38 @@ func TestLoadInvalidatesWhenLegacyMachineConfigAppears(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "grove.toml")
 	writeConfigAt(t, path, "name = \"cached\"\n", -2*time.Second)
-	if _, err := Load(path); err != nil {
-		t.Fatalf("first load: %v", err)
-	}
-
 	machinePath := filepath.Join(configDir, MachineConfigFileName)
 	writeConfigAt(t, machinePath, "[machine.ecosystems.old]\npath = \"/code\"\n", -1*time.Second)
-	_, err := Load(path)
-	if err == nil || !strings.Contains(err.Error(), machinePath) || !strings.Contains(err.Error(), "grove migrate") {
-		t.Fatalf("legacy machine appearance remained cached: %v", err)
+	if cfg, err := Load(path); err != nil || cfg.Name != "cached" {
+		t.Fatalf("explicit Load consulted ambient machine config: cfg=%+v err=%v", cfg, err)
 	}
 }
 
-func TestLoadTracksRecordedRoutingPair(t *testing.T) {
+func TestLoadWithTopologyUsesOnlyExplicitRoutingPair(t *testing.T) {
 	ResetLoadCache()
 	t.Cleanup(ResetLoadCache)
-	groveHome := t.TempDir()
-	t.Setenv("GROVE_HOME", groveHome)
-	configDir := filepath.Join(groveHome, "config", "grove")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	configDir := t.TempDir()
 	path := filepath.Join(t.TempDir(), "grove.toml")
 	writeConfigAt(t, path, "name = \"cached\"\n", -4*time.Second)
-	cfg, err := Load(path)
+	np, rp := filepath.Join(configDir, "notebooks.toml"), filepath.Join(configDir, "roots.toml")
+
+	cfg, err := LoadWithTopology(path, rp, np)
 	if err != nil || len(cfg.Groves) != 0 {
 		t.Fatalf("initial load = %+v, %v", cfg, err)
 	}
-
-	np, rp := filepath.Join(configDir, "notebooks.toml"), filepath.Join(configDir, "roots.toml")
 	writeConfigAt(t, np, "default = \"nb\"\n[notebooks.nb]\nroot = \"/n1\"\n", -3*time.Second)
 	writeConfigAt(t, rp, "[roots.code]\npath = \"/code\"\n", -3*time.Second)
-	cfg, err = Load(path)
+	cfg, err = LoadWithTopology(path, rp, np)
 	if err != nil || cfg.Groves["code"].NotebookRoot != "/n1" {
-		t.Fatalf("appearance not observed: %+v, %v", cfg, err)
+		t.Fatalf("explicit routing pair not compiled: %+v, %v", cfg, err)
 	}
 
-	// Stamps intentionally use mtime+size: a same-size rewrite at the exact
-	// same mtime remains cached until ResetLoadCache, matching self-file cache
-	// semantics.
-	stamp := stampFile(np)
+	// The parser cache may retain the explicit config, but topology is read on
+	// every explicit compilation and is never resolved from ambient paths.
 	writeConfigAt(t, np, "default = \"nb\"\n[notebooks.nb]\nroot = \"/n2\"\n", 0)
-	if err := os.Chtimes(np, stamp.modTime, stamp.modTime); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err = Load(path)
-	if err != nil || cfg.Groves["code"].NotebookRoot != "/n1" {
-		t.Fatalf("same-stamp dependency unexpectedly invalidated: %+v, %v", cfg, err)
-	}
-	ResetLoadCache()
-	cfg, err = Load(path)
+	cfg, err = LoadWithTopology(path, rp, np)
 	if err != nil || cfg.Groves["code"].NotebookRoot != "/n2" {
-		t.Fatalf("notebook modification not observed: %+v, %v", cfg, err)
-	}
-
-	if err := os.Remove(rp); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err = Load(path)
-	if err != nil || len(cfg.Groves) != 0 {
-		t.Fatalf("roots deletion not observed: %+v, %v", cfg, err)
-	}
-	if err := os.Remove(np); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err = Load(path)
-	if err != nil || cfg.Notebooks != nil {
-		t.Fatalf("notebooks deletion not observed = %+v, %v", cfg, err)
+		t.Fatalf("explicit notebook modification not observed: %+v, %v", cfg, err)
 	}
 }
 
@@ -244,13 +208,14 @@ func TestLoadRereadsAfterRootsEnvChange(t *testing.T) {
 	writeConfigAt(t, filepath.Join(configDir, "notebooks.toml"), "default = \"nb\"\n[notebooks.nb]\nroot = \"/notes\"\n", -2*time.Second)
 	writeConfigAt(t, filepath.Join(configDir, "roots.toml"), "[roots.code]\npath = \"${GROVE_TEST_RECORDED_CODE_ROOT}\"\n", -2*time.Second)
 
+	rp, np := filepath.Join(configDir, "roots.toml"), filepath.Join(configDir, "notebooks.toml")
 	t.Setenv("GROVE_TEST_RECORDED_CODE_ROOT", "/code-one")
-	cfg, err := Load(path)
+	cfg, err := LoadWithTopology(path, rp, np)
 	if err != nil || cfg.Groves["code"].Path != "/code-one" {
 		t.Fatalf("first load = %+v, %v", cfg, err)
 	}
 	t.Setenv("GROVE_TEST_RECORDED_CODE_ROOT", "/code-two")
-	cfg, err = Load(path)
+	cfg, err = LoadWithTopology(path, rp, np)
 	if err != nil || cfg.Groves["code"].Path != "/code-two" {
 		t.Fatalf("roots env change remained cached: %+v, %v", cfg, err)
 	}
@@ -270,13 +235,14 @@ func TestLoadRereadsAfterNotebooksEnvChange(t *testing.T) {
 	writeConfigAt(t, filepath.Join(configDir, "notebooks.toml"), "default = \"nb\"\n[notebooks.nb]\nroot = \"${GROVE_TEST_RECORDED_NOTEBOOK_ROOT}\"\n", -2*time.Second)
 	writeConfigAt(t, filepath.Join(configDir, "roots.toml"), "[roots.code]\npath = \"/code\"\n", -2*time.Second)
 
+	rp, np := filepath.Join(configDir, "roots.toml"), filepath.Join(configDir, "notebooks.toml")
 	t.Setenv("GROVE_TEST_RECORDED_NOTEBOOK_ROOT", "/notes-one")
-	cfg, err := Load(path)
+	cfg, err := LoadWithTopology(path, rp, np)
 	if err != nil || cfg.Groves["code"].NotebookRoot != "/notes-one" {
 		t.Fatalf("first load = %+v, %v", cfg, err)
 	}
 	t.Setenv("GROVE_TEST_RECORDED_NOTEBOOK_ROOT", "/notes-two")
-	cfg, err = Load(path)
+	cfg, err = LoadWithTopology(path, rp, np)
 	if err != nil || cfg.Groves["code"].NotebookRoot != "/notes-two" {
 		t.Fatalf("notebooks env change remained cached: %+v, %v", cfg, err)
 	}

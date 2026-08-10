@@ -49,7 +49,6 @@ func TestCanonicalLoadersRejectLegacyMachineTopology(t *testing.T) {
 		name string
 		load func(string) error
 	}{
-		{name: "Load", load: func(project string) error { _, err := Load(filepath.Join(project, "grove.toml")); return err }},
 		{name: "LoadFrom", load: func(project string) error { _, err := LoadFrom(project); return err }},
 		{name: "LoadLayered", load: func(project string) error { _, err := LoadLayered(project); return err }},
 	} {
@@ -98,7 +97,7 @@ func TestCanonicalMachineTopologyRejectsMixedState(t *testing.T) {
 	if err := os.WriteFile(projectPath, []byte("name = \"project\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load(projectPath)
+	_, err := LoadFrom(filepath.Dir(projectPath))
 	if err == nil || !strings.Contains(err.Error(), "forbidden mixed state") || !strings.Contains(err.Error(), machinePath) {
 		t.Fatalf("error = %v", err)
 	}

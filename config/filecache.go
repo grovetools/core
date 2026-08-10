@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/grovetools/core/pkg/coderoot"
 )
 
 // Load's per-file memoization.
@@ -24,15 +22,14 @@ import (
 // every input the result depends on is provably unchanged:
 //
 //   - the config file itself, by (mtime, size);
-//   - roots.toml and notebooks.toml, each by path and (mtime, size) — the
-//     runtime compiler folds both into every loaded config;
-//   - machine.toml by path and (mtime, size), because canonical loads reject
-//     removed machine topology even though display metadata is not projected;
-//     each canonical file's ABSENCE is equally load-bearing;
-//   - the environment variables the config file and all three canonical files
-//     reference through ${VAR}, by value.
+//   - the environment variables the explicit config file references through
+//     ${VAR}, by value.
 //
-// Freshness costs four stats and a handful of os.Getenv calls; a miss costs the
+// Load is a hermetic explicit-file parser. Ambient roots/notebooks and machine
+// metadata belong to LoadFrom/LoadLayered; callers that need an explicit
+// routing pair use LoadWithTopology.
+//
+// Freshness costs one stat and a handful of os.Getenv calls; a miss costs the
 // full read+parse+validate. Failures are never cached: an unreadable or
 // unparseable path takes exactly the code path it took before this cache
 // existed, so ENOENT/permission behaviour is bit-for-bit unchanged.
@@ -89,15 +86,9 @@ type fileCacheEntry struct {
 	valid bool
 	cfg   *Config
 
-	self          fileStamp
-	rootsPath     string
-	roots         fileStamp
-	notebooksPath string
-	notebooks     fileStamp
-	machinePath   string
-	machine       fileStamp
-	envNames      []string
-	envValues     []string
+	self      fileStamp
+	envNames  []string
+	envValues []string
 }
 
 // fresh reports whether the memoized config is still a correct answer for a
@@ -107,15 +98,6 @@ func (e *fileCacheEntry) fresh(self fileStamp) bool {
 		return false
 	}
 	if !e.self.equal(self) {
-		return false
-	}
-	if e.rootsPath != coderoot.RootsPath() || !e.roots.equal(stampFile(e.rootsPath)) {
-		return false
-	}
-	if e.notebooksPath != coderoot.NotebooksPath() || !e.notebooks.equal(stampFile(e.notebooksPath)) {
-		return false
-	}
-	if e.machinePath != MachineConfigPath() || !e.machine.equal(stampFile(e.machinePath)) {
 		return false
 	}
 	for i, name := range e.envNames {
@@ -129,25 +111,12 @@ func (e *fileCacheEntry) fresh(self fileStamp) bool {
 // store records a freshly parsed config and the inputs it was derived from.
 // Callers hold e.mu.
 func (e *fileCacheEntry) store(self fileStamp, cfg *Config, envNames []string) {
-	// compileCodeRoots expands recorded routing files into cfg during parsing,
-	// so their environment references are dependencies of this cache entry too.
-	// Trace the same canonical paths whose stamps fresh checks.
-	envNames = appendEnvRefs(envNames, coderoot.RootsPath(), coderoot.NotebooksPath(), MachineConfigPath())
 	envValues := make([]string, len(envNames))
 	for i, name := range envNames {
 		envValues[i] = os.Getenv(name)
 	}
 
-	rootsPath := coderoot.RootsPath()
-	notebooksPath := coderoot.NotebooksPath()
-	machinePath := MachineConfigPath()
 	e.self = self
-	e.rootsPath = rootsPath
-	e.roots = stampFile(rootsPath)
-	e.notebooksPath = notebooksPath
-	e.notebooks = stampFile(notebooksPath)
-	e.machinePath = machinePath
-	e.machine = stampFile(machinePath)
 	e.envNames = envNames
 	e.envValues = envValues
 	e.cfg = cfg
@@ -183,36 +152,6 @@ func envRefs(content string) []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-// appendEnvRefs adds references from the readable files to names, preserving
-// first-appearance order across all inputs and deduplicating names. A missing
-// file contributes nothing; its appearance is independently tracked by the
-// file stamp stored on the entry.
-func appendEnvRefs(names []string, paths ...string) []string {
-	seen := make(map[string]struct{}, len(names))
-	out := make([]string, 0, len(names))
-	for _, name := range names {
-		if _, duplicate := seen[name]; duplicate {
-			continue
-		}
-		seen[name] = struct{}{}
-		out = append(out, name)
-	}
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		for _, name := range envRefs(string(data)) {
-			if _, duplicate := seen[name]; duplicate {
-				continue
-			}
-			seen[name] = struct{}{}
-			out = append(out, name)
-		}
-	}
-	return out
 }
 
 // resetFileCache drops every memoized Load result. See ResetLoadCache.

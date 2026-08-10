@@ -155,7 +155,7 @@ var coreConfigKeys = map[string]bool{
 // rejectLegacyTopology prevents removed topology declarations from being
 // silently swallowed by permissive decoders. The frozen parser behind
 // `grove migrate` is the only remaining reader for these spellings.
-func rejectLegacyTopology(path string, data []byte, tomlDialect bool) error {
+func rejectLegacyTopology(path string, data []byte, tomlDialect, consultRecorded bool) error {
 	raw := make(map[string]interface{})
 	var err error
 	if tomlDialect {
@@ -170,10 +170,13 @@ func rejectLegacyTopology(path string, data []byte, tomlDialect bool) error {
 		if _, exists := raw[table]; !exists {
 			continue
 		}
-		if _, statErr := os.Stat(coderoot.RootsPath()); statErr == nil {
-			return fmt.Errorf("forbidden mixed state: %s contains legacy [%s] while %s exists; run 'grove migrate'", path, table, coderoot.RootsFileName)
+		if consultRecorded {
+			if _, statErr := os.Stat(coderoot.RootsPath()); statErr == nil {
+				return fmt.Errorf("forbidden mixed state: %s contains legacy [%s] while %s exists; run 'grove migrate'", path, table, coderoot.RootsFileName)
+			}
+			return fmt.Errorf("legacy config %s contains [%s] and %s is absent; run 'grove migrate'", path, table, coderoot.RootsFileName)
 		}
-		return fmt.Errorf("legacy config %s contains [%s] and %s is absent; run 'grove migrate'", path, table, coderoot.RootsFileName)
+		return fmt.Errorf("legacy config %s contains [%s]; run 'grove migrate'", path, table)
 	}
 	return nil
 }
@@ -182,13 +185,13 @@ func rejectLegacyTopology(path string, data []byte, tomlDialect bool) error {
 // For TOML files, it also captures extension fields into Extensions to emulate YAML inline behavior.
 func unmarshalConfig(path string, data []byte) (*Config, error) {
 	var cfg Config
-	if err := rejectLegacyTopology(path, data, strings.HasSuffix(path, ".toml")); err != nil {
+	if err := rejectLegacyTopology(path, data, strings.HasSuffix(path, ".toml"), true); err != nil {
 		return nil, err
 	}
 
 	if strings.HasSuffix(path, ".toml") {
 		if err := toml.Unmarshal(data, &cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		// Capture extension fields (non-core keys) into Extensions
 		var raw map[string]interface{}
@@ -209,7 +212,7 @@ func unmarshalConfig(path string, data []byte) (*Config, error) {
 		postProcessTOMLNotebookSync(&cfg, data)
 	} else {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 	}
 
@@ -294,7 +297,10 @@ func postProcessTOMLKeybindings(cfg *Config, data []byte) {
 	}
 }
 
-// Load reads and parses a Grove configuration file.
+// Load reads and parses one explicit Grove configuration file. It is hermetic:
+// ambient roots/notebooks and machine metadata are not consulted. Use
+// LoadWithTopology for an explicit routing pair, or LoadFrom/LoadLayered for
+// the canonical hierarchy.
 //
 // An unchanged file is parsed and schema-validated once per process, not once
 // per call: the result is memoized per absolute path and revalidated with a
@@ -339,9 +345,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg, err := parseConfigBytes(path, data)
-	if err == nil {
-		err = validateCanonicalMachineConfig(nil)
-	}
 	if err != nil {
 		// Parse failures are not cached. They are rare, loud (workspace
 		// classification surfaces them), and re-deriving one costs a parse of
@@ -360,14 +363,7 @@ func loadUncached(path string) (*Config, error) {
 	if err != nil {
 		return nil, readConfigError(path, err)
 	}
-	cfg, err := parseConfigBytes(path, data)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateCanonicalMachineConfig(nil); err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return parseConfigBytes(path, data)
 }
 
 // readConfigError maps a failed read of a config file to the error Load has
@@ -376,7 +372,7 @@ func readConfigError(path string, err error) error {
 	if os.IsNotExist(err) {
 		return errors.ConfigNotFound(path)
 	}
-	return errors.Wrap(err, errors.ErrCodeConfigInvalid, "failed to read config file").
+	return errors.Wrap(err, errors.ErrCodeConfigInvalid, fmt.Sprintf("failed to read config file %s", path)).
 		WithDetail("path", path)
 }
 
@@ -384,9 +380,20 @@ func readConfigError(path string, err error) error {
 // .toml, YAML for everything else.
 func parseConfigBytes(path string, data []byte) (*Config, error) {
 	if strings.HasSuffix(path, ".toml") {
-		return loadFromTOMLBytes(path, data)
+		return loadFromTOMLBytes(path, data, false)
 	}
-	return loadFromYAMLBytes(path, data)
+	return loadFromYAMLBytes(path, data, false)
+}
+
+// LoadWithTopology parses one explicit config file and compiles one explicit
+// recorded routing pair into it. Unlike hierarchical loaders, it never resolves
+// ambient roots/notebooks or machine metadata.
+func LoadWithTopology(path, rootsPath, notebooksPath string) (*Config, error) {
+	cfg, err := Load(path)
+	if err != nil {
+		return nil, err
+	}
+	return compileCodeRootsFromPaths(cfg, rootsPath, notebooksPath)
 }
 
 // LoadDefault finds and loads the configuration with hierarchical merging:
@@ -494,7 +501,7 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 				return nil, parseErr
 			}
 		} else if !os.IsNotExist(err) {
-			logger.WithError(err).Warn("Failed to read global configuration, continuing without it")
+			return nil, readConfigError(globalPath, err)
 		}
 
 		// Glob and merge additional modular TOML files from config directory
@@ -516,8 +523,7 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 
 				fragmentData, err := trace.readFile(file)
 				if err != nil {
-					logger.WithError(err).Warnf("Failed to read config fragment %s, skipping", baseName)
-					continue
+					return nil, readConfigError(file, err)
 				}
 
 				meta := extractConfigMeta(fragmentData, file)
@@ -531,7 +537,6 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 
 			// Second pass: merge in priority order
 			for _, frag := range fragments {
-				baseName := filepath.Base(frag.path)
 				logger.WithFields(logrus.Fields{
 					"path":     frag.path,
 					"priority": frag.priority,
@@ -539,8 +544,7 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 
 				fragmentData, err := os.ReadFile(frag.path)
 				if err != nil {
-					logger.WithError(err).Warnf("Failed to read config fragment %s, skipping", baseName)
-					continue
+					return nil, readConfigError(frag.path, err)
 				}
 
 				expanded := expandEnvVars(string(fragmentData))
@@ -558,6 +562,8 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 					finalConfig = mergeConfigs(finalConfig, fragmentConfig)
 				}
 			}
+		} else {
+			return nil, fmt.Errorf("failed to enumerate config fragments %s: %w", pattern, err)
 		}
 
 		// Also glob ~/.config/grove/plugins/*.toml for per-user plugin manifests
@@ -565,20 +571,17 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 		if pluginFiles, err := filepath.Glob(pluginPattern); err == nil {
 			trace.glob(pluginPattern, pluginFiles)
 			for _, file := range pluginFiles {
-				baseName := filepath.Base(file)
 				logger.WithField("path", file).Debug("Loading plugin config fragment")
 
 				fragmentData, err := trace.readFile(file)
 				if err != nil {
-					logger.WithError(err).Warnf("Failed to read plugin config %s, skipping", baseName)
-					continue
+					return nil, readConfigError(file, err)
 				}
 
 				expanded := expandEnvVars(string(fragmentData))
 				fragmentConfig, parseErr := unmarshalConfig(file, []byte(expanded))
 				if parseErr != nil {
-					logger.WithError(parseErr).Warnf("Failed to parse plugin config %s, skipping", baseName)
-					continue
+					return nil, parseErr
 				}
 
 				stripGroveMeta(fragmentConfig)
@@ -589,6 +592,8 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 					finalConfig = mergeConfigs(finalConfig, fragmentConfig)
 				}
 			}
+		} else {
+			return nil, fmt.Errorf("failed to enumerate plugin config fragments %s: %w", pluginPattern, err)
 		}
 	}
 
@@ -602,13 +607,15 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 				// An absent candidate must stay absent: creating it would
 				// change which override file wins.
 				trace.absent(overridePath)
+				if !os.IsNotExist(err) {
+					return nil, readConfigError(overridePath, err)
+				}
 				continue
 			}
 			logger.WithField("path", overridePath).Debug("Loading global override configuration")
 			overrideData, err := trace.readFile(overridePath)
 			if err != nil {
-				logger.WithError(err).Warn("Failed to read global override file, skipping")
-				continue
+				return nil, readConfigError(overridePath, err)
 			}
 			expanded := expandEnvVars(string(overrideData))
 			overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
@@ -694,7 +701,10 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 			// The traced walk records every candidate it consulted, so an
 			// ecosystem config appearing in a nearer directory — or the found
 			// one changing — invalidates by stamp alone.
-			ecosystemPath = findEcosystemConfigTraced(filepath.Dir(projectPath), trace)
+			ecosystemPath, err = findEcosystemConfigForLoad(filepath.Dir(projectPath), trace)
+			if err != nil {
+				return nil, err
+			}
 			if ecosystemPath != "" {
 				logger.WithField("path", ecosystemPath).Debug("Loading ecosystem configuration")
 				// Already stamped by the walk; a plain read avoids a duplicate dep.
@@ -715,7 +725,7 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 						return nil, ecoParseErr
 					}
 				} else {
-					logger.WithError(err).Warn("Failed to read ecosystem configuration, continuing without it")
+					return nil, readConfigError(ecosystemPath, err)
 				}
 			}
 		}
@@ -764,20 +774,20 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 		if notebookConfigPath != "" {
 			logger.WithField("path", notebookConfigPath).Debug("Loading project notebook configuration")
 			nbData, err := trace.readFile(notebookConfigPath)
-			if err == nil {
-				expandedNb := expandEnvVars(string(nbData))
-				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
-				if parseErr == nil {
-					stripGroveMeta(nbConfig)
-					gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
-					if finalConfig == nil {
-						finalConfig = nbConfig
-					} else {
-						finalConfig = mergeConfigs(finalConfig, nbConfig)
-					}
-				} else {
-					logger.WithError(parseErr).Warn("Failed to parse project notebook config, skipping")
-				}
+			if err != nil {
+				return nil, readConfigError(notebookConfigPath, err)
+			}
+			expandedNb := expandEnvVars(string(nbData))
+			nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			stripGroveMeta(nbConfig)
+			gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
+			if finalConfig == nil {
+				finalConfig = nbConfig
+			} else {
+				finalConfig = mergeConfigs(finalConfig, nbConfig)
 			}
 		}
 
@@ -803,14 +813,16 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 				// Every existing candidate is merged, so each absent one must
 				// stay absent.
 				trace.absent(overridePath)
+				if !os.IsNotExist(err) {
+					return nil, readConfigError(overridePath, err)
+				}
 				continue
 			}
 			logger.WithField("path", overridePath).Debug("Loading local override configuration")
 
 			overrideData, err := trace.readFile(overridePath)
 			if err != nil {
-				logger.WithError(err).Warn("Failed to read override file, skipping")
-				continue
+				return nil, readConfigError(overridePath, err)
 			}
 
 			// Expand environment variables
@@ -857,19 +869,17 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 		if notebookConfigPath != "" {
 			logger.WithField("path", notebookConfigPath).Debug("Loading project notebook configuration (no local project config)")
 			nbData, err := trace.readFile(notebookConfigPath)
-			if err == nil {
-				expandedNb := expandEnvVars(string(nbData))
-				nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
-				if parseErr == nil {
-					stripGroveMeta(nbConfig)
-					gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
-					finalConfig = mergeConfigs(finalConfig, nbConfig)
-				} else {
-					logger.WithError(parseErr).Warn("Failed to parse project notebook config, skipping")
-				}
-			} else {
-				logger.WithError(err).Warn("Failed to read project notebook config, skipping")
+			if err != nil {
+				return nil, readConfigError(notebookConfigPath, err)
 			}
+			expandedNb := expandEnvVars(string(nbData))
+			nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			stripGroveMeta(nbConfig)
+			gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
+			finalConfig = mergeConfigs(finalConfig, nbConfig)
 		}
 	}
 
@@ -927,14 +937,14 @@ func overlayLookup() string {
 
 // LoadFromBytes parses configuration from byte array
 func LoadFromBytes(data []byte) (*Config, error) {
-	return loadFromYAMLBytes("<YAML bytes>", data)
+	return loadFromYAMLBytes("<YAML bytes>", data, false)
 }
 
-func loadFromYAMLBytes(source string, data []byte) (*Config, error) {
+func loadFromYAMLBytes(source string, data []byte, consultRecorded bool) (*Config, error) {
 	// Expand environment variables
 	expanded := expandEnvVars(string(data))
 
-	if err := rejectLegacyTopology(source, []byte(expanded), false); err != nil {
+	if err := rejectLegacyTopology(source, []byte(expanded), false, consultRecorded); err != nil {
 		return nil, err
 	}
 	var config Config
@@ -949,29 +959,23 @@ func loadFromYAMLBytes(source string, data []byte) (*Config, error) {
 	// failure on otherwise-usable configs.
 	validateAndWarn(&config, logrus.StandardLogger(), "config bytes")
 
-	// Compile canonical recorded routing files here too: Load(path) funnels
-	// through the byte loaders.
-	out, err := compileCodeRoots(&config)
-	if err != nil {
-		return nil, err
-	}
+	// Byte-only parsing is deliberately hermetic. Canonical file and hierarchy
+	// loaders compile recorded topology explicitly after parsing.
+	config.SetDefaults()
 
-	// Set defaults
-	out.SetDefaults()
-
-	return out, nil
+	return &config, nil
 }
 
 // LoadFromTOMLBytes parses configuration from TOML byte array
 func LoadFromTOMLBytes(data []byte) (*Config, error) {
-	return loadFromTOMLBytes("<TOML bytes>", data)
+	return loadFromTOMLBytes("<TOML bytes>", data, false)
 }
 
-func loadFromTOMLBytes(source string, data []byte) (*Config, error) {
+func loadFromTOMLBytes(source string, data []byte, consultRecorded bool) (*Config, error) {
 	// Expand environment variables
 	expanded := expandEnvVars(string(data))
 
-	if err := rejectLegacyTopology(source, []byte(expanded), true); err != nil {
+	if err := rejectLegacyTopology(source, []byte(expanded), true, consultRecorded); err != nil {
 		return nil, err
 	}
 	var config Config
@@ -1000,16 +1004,11 @@ func loadFromTOMLBytes(source string, data []byte) (*Config, error) {
 	// Warn-only schema check. Never fatal — see the note in LoadFromBytes.
 	validateAndWarn(&config, logrus.StandardLogger(), "config TOML bytes")
 
-	// Compile canonical recorded routing files (see LoadFromBytes).
-	out, err := compileCodeRoots(&config)
-	if err != nil {
-		return nil, err
-	}
+	// Byte-only parsing is deliberately hermetic. Canonical file and hierarchy
+	// loaders compile recorded topology explicitly after parsing.
+	config.SetDefaults()
 
-	// Set defaults
-	out.SetDefaults()
-
-	return out, nil
+	return &config, nil
 }
 
 // FindConfigFile searches for grove configuration files with the following precedence:
@@ -1262,6 +1261,50 @@ func findEcosystemConfigTraced(startDir string, trace *loadFromTrace) string {
 	return ""
 }
 
+// findEcosystemConfigForLoad is the fail-loud variant used by canonical load
+// cascades. Discovery-only callers retain FindEcosystemConfig's best-effort
+// behavior, but a canonical load must not silently reinterpret an unreadable or
+// malformed candidate as "not an ecosystem layer".
+func findEcosystemConfigForLoad(startDir string, trace *loadFromTrace) (string, error) {
+	configNames := []string{
+		"grove.toml", "grove.yml", "grove.yaml",
+		".grove.toml", ".grove.yml", ".grove.yaml",
+	}
+
+	for dir := startDir; ; dir = filepath.Dir(dir) {
+		for _, name := range configNames {
+			path := filepath.Join(dir, name)
+			info, err := os.Stat(path)
+			if err != nil {
+				trace.absent(path)
+				if !os.IsNotExist(err) {
+					return "", readConfigError(path, err)
+				}
+				continue
+			}
+			if info.IsDir() {
+				trace.absent(path)
+				continue
+			}
+			data, err := trace.readFile(path)
+			if err != nil {
+				return "", readConfigError(path, err)
+			}
+			cfg, err := unmarshalConfig(path, []byte(expandEnvVars(string(data))))
+			if err != nil {
+				return "", err
+			}
+			if len(cfg.Workspaces) > 0 {
+				return path, nil
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", nil
+		}
+	}
+}
+
 // notebookContext holds the resolved notebook workspace information for a project.
 type notebookContext struct {
 	notebookRootDir string
@@ -1392,15 +1435,18 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	if globalPath != "" {
 		if _, err := os.Stat(globalPath); err == nil {
 			globalData, err := os.ReadFile(globalPath)
-			if err == nil {
-				expanded := expandEnvVars(string(globalData))
-				globalConfig, parseErr := unmarshalConfig(globalPath, []byte(expanded))
-				if parseErr != nil {
-					return nil, parseErr
-				}
-				layeredConfig.Global = globalConfig
-				layeredConfig.FilePaths[SourceGlobal] = globalPath
+			if err != nil {
+				return nil, readConfigError(globalPath, err)
 			}
+			expanded := expandEnvVars(string(globalData))
+			globalConfig, parseErr := unmarshalConfig(globalPath, []byte(expanded))
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			layeredConfig.Global = globalConfig
+			layeredConfig.FilePaths[SourceGlobal] = globalPath
+		} else if !os.IsNotExist(err) {
+			return nil, readConfigError(globalPath, err)
 		}
 
 		// 2.25. Load Global Fragment layers (modular *.toml files)
@@ -1421,7 +1467,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 
 				fragmentData, err := os.ReadFile(file)
 				if err != nil {
-					continue
+					return nil, readConfigError(file, err)
 				}
 
 				meta := extractConfigMeta(fragmentData, file)
@@ -1437,7 +1483,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			for _, frag := range fragments {
 				fragmentData, err := os.ReadFile(frag.path)
 				if err != nil {
-					continue
+					return nil, readConfigError(frag.path, err)
 				}
 
 				expanded := expandEnvVars(string(fragmentData))
@@ -1451,6 +1497,8 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 					Config: fragmentConfig,
 				})
 			}
+		} else {
+			return nil, fmt.Errorf("failed to enumerate config fragments %s: %w", pattern, err)
 		}
 
 		// 2.3. Load the plugin drop-in directory, ~/.config/grove/plugins/*.toml.
@@ -1476,7 +1524,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			for _, file := range pluginFiles {
 				fragmentData, err := os.ReadFile(file)
 				if err != nil {
-					continue
+					return nil, readConfigError(file, err)
 				}
 				expanded := expandEnvVars(string(fragmentData))
 				fragmentConfig, parseErr := unmarshalConfig(file, []byte(expanded))
@@ -1489,6 +1537,8 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 					Config: fragmentConfig,
 				})
 			}
+		} else {
+			return nil, fmt.Errorf("failed to enumerate plugin config fragments %s: %w", pluginPattern, err)
 		}
 	}
 
@@ -1499,16 +1549,19 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		for _, overridePath := range overrideFiles {
 			if _, err := os.Stat(overridePath); err == nil {
 				overrideData, err := os.ReadFile(overridePath)
-				if err == nil {
-					expanded := expandEnvVars(string(overrideData))
-					overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
-					if parseErr != nil {
-						return nil, parseErr
-					}
-					layeredConfig.GlobalOverride = &OverrideSource{Path: overridePath, Config: overrideConfig}
-					layeredConfig.FilePaths[SourceGlobalOverride] = overridePath
-					break // Only load the first one found
+				if err != nil {
+					return nil, readConfigError(overridePath, err)
 				}
+				expanded := expandEnvVars(string(overrideData))
+				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expanded))
+				if parseErr != nil {
+					return nil, parseErr
+				}
+				layeredConfig.GlobalOverride = &OverrideSource{Path: overridePath, Config: overrideConfig}
+				layeredConfig.FilePaths[SourceGlobalOverride] = overridePath
+				break // Only load the first one found
+			} else if !os.IsNotExist(err) {
+				return nil, readConfigError(overridePath, err)
 			}
 		}
 	}
@@ -1518,15 +1571,20 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		overlayPath = expandPath(overlayPath)
 		if _, err := os.Stat(overlayPath); err == nil {
 			overlayData, err := os.ReadFile(overlayPath)
-			if err == nil {
-				expanded := expandEnvVars(string(overlayData))
-				overlayConfig, parseErr := unmarshalConfig(overlayPath, []byte(expanded))
-				if parseErr != nil {
-					return nil, parseErr
-				}
-				layeredConfig.EnvOverlay = &OverrideSource{Path: overlayPath, Config: overlayConfig}
-				layeredConfig.FilePaths[SourceEnvOverlay] = overlayPath
+			if err != nil {
+				return nil, readConfigError(overlayPath, err)
 			}
+			expanded := expandEnvVars(string(overlayData))
+			overlayConfig, parseErr := unmarshalConfig(overlayPath, []byte(expanded))
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			layeredConfig.EnvOverlay = &OverrideSource{Path: overlayPath, Config: overlayConfig}
+			layeredConfig.FilePaths[SourceEnvOverlay] = overlayPath
+		} else if os.IsNotExist(err) {
+			return nil, errors.ConfigNotFound(overlayPath).WithDetail("reason", "GROVE_CONFIG_OVERLAY path does not exist")
+		} else {
+			return nil, readConfigError(overlayPath, err)
 		}
 	}
 
@@ -1572,19 +1630,23 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 
 		// 3.5. Load Ecosystem layer (optional, only if this is a workspace config)
 		if len(projectConfig.Workspaces) == 0 {
-			ecosystemPath := FindEcosystemConfig(filepath.Dir(projectPath))
+			ecosystemPath, findErr := findEcosystemConfigForLoad(filepath.Dir(projectPath), nil)
+			if findErr != nil {
+				return nil, findErr
+			}
 			if ecosystemPath != "" {
 				ecosystemData, err := os.ReadFile(ecosystemPath)
-				if err == nil {
-					expandedEco := expandEnvVars(string(ecosystemData))
-					ecosystemConfig, ecoParseErr := unmarshalConfig(ecosystemPath, []byte(expandedEco))
-					if ecoParseErr != nil {
-						return nil, ecoParseErr
-					}
-					gate.apply(ecosystemConfig, SourceEcosystem, ecosystemPath)
-					layeredConfig.Ecosystem = ecosystemConfig
-					layeredConfig.FilePaths[SourceEcosystem] = ecosystemPath
+				if err != nil {
+					return nil, readConfigError(ecosystemPath, err)
 				}
+				expandedEco := expandEnvVars(string(ecosystemData))
+				ecosystemConfig, ecoParseErr := unmarshalConfig(ecosystemPath, []byte(expandedEco))
+				if ecoParseErr != nil {
+					return nil, ecoParseErr
+				}
+				gate.apply(ecosystemConfig, SourceEcosystem, ecosystemPath)
+				layeredConfig.Ecosystem = ecosystemConfig
+				layeredConfig.FilePaths[SourceEcosystem] = ecosystemPath
 			}
 		}
 	}
@@ -1634,17 +1696,18 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	notebookConfigPath := findNotebookConfigPath(projectRoot, lookupConfig)
 	if notebookConfigPath != "" {
 		nbData, err := os.ReadFile(notebookConfigPath)
-		if err == nil {
-			expandedNb := expandEnvVars(string(nbData))
-			nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
-			if parseErr != nil {
-				return nil, parseErr
-			}
-			stripGroveMeta(nbConfig)
-			gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
-			layeredConfig.ProjectNotebook = nbConfig
-			layeredConfig.FilePaths[SourceProjectNotebook] = notebookConfigPath
+		if err != nil {
+			return nil, readConfigError(notebookConfigPath, err)
 		}
+		expandedNb := expandEnvVars(string(nbData))
+		nbConfig, parseErr := unmarshalConfig(notebookConfigPath, []byte(expandedNb))
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		stripGroveMeta(nbConfig)
+		gate.apply(nbConfig, SourceProjectNotebook, notebookConfigPath)
+		layeredConfig.ProjectNotebook = nbConfig
+		layeredConfig.FilePaths[SourceProjectNotebook] = notebookConfigPath
 	}
 
 	// 4. Load Override layers (optional)
@@ -1655,7 +1718,7 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 			if _, err := os.Stat(overridePath); err == nil {
 				overrideData, err := os.ReadFile(overridePath)
 				if err != nil {
-					continue // Skip unreadable override files
+					return nil, readConfigError(overridePath, err)
 				}
 				expandedOverride := expandEnvVars(string(overrideData))
 				overrideConfig, parseErr := unmarshalConfig(overridePath, []byte(expandedOverride))
@@ -1671,6 +1734,8 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 					Path:   overridePath,
 					Config: overrideConfig,
 				})
+			} else if !os.IsNotExist(err) {
+				return nil, readConfigError(overridePath, err)
 			}
 		}
 	}
