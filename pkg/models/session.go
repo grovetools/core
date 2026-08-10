@@ -15,11 +15,41 @@ const (
 	MuxNone    = "none"
 )
 
+// Session.Type values for the agent sessions Flow registers. The distinction is
+// load-bearing rather than cosmetic: an interactive agent has a terminal to
+// attach, a headless one has only a transcript to stream, and every surface
+// (treemux's drawer glyph, rail glyph, and click behaviour) branches on it.
+const (
+	SessionTypeInteractiveAgent = "interactive_agent"
+	SessionTypeHeadlessAgent    = "headless_agent"
+)
+
+// SessionTypeOrDefault resolves a registered session type, mapping the empty
+// value to "interactive_agent". Registrations predating SessionIntent.Type all
+// meant that, so the default keeps an older launcher's sessions readable rather
+// than leaving them typeless.
+func SessionTypeOrDefault(sessionType string) string {
+	if sessionType == "" {
+		return SessionTypeInteractiveAgent
+	}
+	return sessionType
+}
+
+// IsHeadlessSessionType reports whether a Session.Type names a headless agent —
+// one with no terminal, whose only view is its transcript stream.
+func IsHeadlessSessionType(sessionType string) bool {
+	switch sessionType {
+	case SessionTypeHeadlessAgent, "headless_job":
+		return true
+	}
+	return false
+}
+
 // Session represents a complete Claude session or a grove-flow job
 type Session struct {
 	// Core fields
 	ID               string     `json:"id" db:"id"`
-	Type             string     `json:"type" db:"type"` // "claude_session" or "oneshot_job"
+	Type             string     `json:"type" db:"type"` // SessionType* above, "claude_session", "oneshot_job", …
 	PID              int        `json:"pid" db:"pid"`
 	Repo             string     `json:"repo" db:"repo"`
 	Branch           string     `json:"branch" db:"branch"`

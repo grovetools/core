@@ -200,7 +200,7 @@ func (c *LocalClient) RegisterSessionIntent(ctx context.Context, intent SessionI
 		PID:              0, // Not yet known
 		WorkingDirectory: intent.WorkDir,
 		StartedAt:        time.Now(),
-		Type:             "interactive_agent",
+		Type:             models.SessionTypeOrDefault(intent.Type),
 		JobTitle:         intent.Title,
 		PlanName:         intent.PlanName,
 		JobFilePath:      intent.JobFilePath,

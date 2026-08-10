@@ -41,6 +41,15 @@ type SessionIntent struct {
 	// "none"). Populated by the provider at launch time so the daemon can
 	// dispatch input/interrupt routing without blind inference.
 	Mux string `json:"mux,omitempty"`
+
+	// Type is the session shape the launcher is registering:
+	// "interactive_agent" (a terminal to attach) or "headless_agent" (no
+	// terminal; the transcript stream is the only view). It lands on
+	// models.Session.Type, which every consumer treats as authoritative —
+	// treemux decides between attaching a PTY and streaming the transcript by
+	// reading it, so a headless job registered without it opens an empty
+	// shell. Empty means "interactive_agent" for pre-Type launchers.
+	Type string `json:"type,omitempty"`
 }
 
 // SessionConfirmation contains the data needed to confirm a session after agent startup.
