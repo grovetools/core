@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -173,19 +172,11 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 		}
 	}
 
-	// Rung 4 — the path lives inside a notebook's own storage tree. Prefer
-	// the additive recorded-routing bridge: compileCodeRoots resolves each
-	// grove's notebook and its literal NotebookRoot together. The legacy
-	// Definitions view remains as a fallback until the final cutover.
+	// Rung 4 — the path lives inside a recorded notebook storage tree.
+	// compileCodeRoots carries each literal routed NotebookRoot; raw legacy
+	// definition containment is deliberately not a routing source.
 	for _, c := range candidates {
 		if nb := matchCompiledNotebookRoot(c, cfg); nb != "" {
-			binding.Notebook = nb
-			binding.NotebookRoot = notebookRootForName(nb, cfg)
-			binding.Source = NotebookSourceNotebookRoot
-			binding.MatchedPath = c
-			return binding
-		}
-		if nb := matchNotebookRootDir(c, cfg); nb != "" {
 			binding.Notebook = nb
 			binding.NotebookRoot = notebookRootForName(nb, cfg)
 			binding.Source = NotebookSourceNotebookRoot
@@ -311,48 +302,6 @@ func matchCompiledNotebookRoot(path string, cfg *Config) string {
 		if len(root) > bestLen {
 			bestLen = len(root)
 			best = grove.Notebook
-		}
-	}
-	return best
-}
-
-// matchNotebookRootDir returns the notebook whose own root_dir contains path
-// (most specific wins), or "".
-//
-// This recognizes a command run from INSIDE a notebook's storage tree — that
-// tree is usually its own git repo, so no grove contains it and every other
-// rung would hand back the global default, resolving to a different (stale)
-// notebook than the one holding the content under the cursor.
-func matchNotebookRootDir(path string, cfg *Config) string {
-	if cfg == nil || cfg.Notebooks == nil || len(cfg.Notebooks.Definitions) == 0 || path == "" {
-		return ""
-	}
-
-	target := normalizeForMatch(path)
-	if target == "" {
-		return ""
-	}
-
-	best := ""
-	bestLen := 0
-	names := make([]string, 0, len(cfg.Notebooks.Definitions))
-	for name := range cfg.Notebooks.Definitions {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		nb := cfg.Notebooks.Definitions[name]
-		if nb == nil || nb.RootDir == "" {
-			continue
-		}
-		root := normalizeForMatch(expandPath(nb.RootDir))
-		if root == "" || !pathContains(root, target) {
-			continue
-		}
-		if len(root) > bestLen {
-			bestLen = len(root)
-			best = name
 		}
 	}
 	return best

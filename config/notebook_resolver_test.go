@@ -27,12 +27,12 @@ func TestResolveNotebook_Precedence(t *testing.T) {
 		assert.Equal(t, NotebookSourceGrove, got.Source)
 	})
 
-	t.Run("notebook root_dir containment when no grove matches", func(t *testing.T) {
+	t.Run("raw definition containment is not a binding", func(t *testing.T) {
 		got := ResolveNotebook(NotebookQuery{
 			Path: filepath.Join(f.notebooks["cardnb"], "workspaces", "x"),
 		}, f.config())
-		assert.Equal(t, "cardnb", got.Notebook)
-		assert.Equal(t, NotebookSourceNotebookRoot, got.Source)
+		assert.Equal(t, "nb", got.Notebook)
+		assert.Equal(t, NotebookSourceDefault, got.Source)
 	})
 
 	t.Run("default when nothing matches", func(t *testing.T) {

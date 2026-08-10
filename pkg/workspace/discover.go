@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/paths"
-	"github.com/grovetools/core/pkg/repo"
 	"github.com/grovetools/core/util/pathutil"
 )
 
@@ -331,21 +329,10 @@ func (s *DiscoveryService) DiscoverAll() (*DiscoveryResult, error) {
 	}
 
 	var wg sync.WaitGroup
-	resultsChan := make(chan groveResult, len(groves)+1) // +1 for cloned repos
+	resultsChan := make(chan groveResult, len(groves))
 
-	// Discover cloned repositories concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		cloned, err := s.discoverClonedProjects()
-		if err != nil {
-			s.logger.Warnf("Could not discover cloned repositories: %v", err)
-			return
-		}
-		if len(cloned) > 0 {
-			resultsChan <- groveResult{projects: cloned}
-		}
-	}()
+	// cx-managed clones are not a second implicit discovery universe. Operators
+	// who want them discovered record their directory as a code root.
 
 	for key, groveCfg := range groves {
 		if groveCfg.Enabled != nil && !*groveCfg.Enabled {
@@ -944,88 +931,4 @@ func workspacesListContains(workspaces []string, childName string) bool {
 		}
 	}
 	return false
-}
-
-// discoverClonedProjects finds all repositories cloned and managed by `cx repo`.
-// These are now treated as EcosystemSubProjects under the cx ecosystem.
-// Each bare repo is discovered along with its worktrees in the .grove-worktrees directory.
-func (s *DiscoveryService) discoverClonedProjects() ([]Project, error) {
-	manager, err := repo.NewManager()
-	if err != nil {
-		return nil, err
-	}
-
-	cloned, err := manager.List()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get the cx ecosystem path (uses XDG_DATA_HOME or ~/.local/share/grove/cx)
-	cxEcosystemPath, err := repo.GetCxEcosystemPath()
-	if err != nil {
-		return nil, err
-	}
-
-	var projects []Project
-	for _, r := range cloned {
-		// Extract a simpler name from the URL or shorthand
-		name := r.Shorthand
-		if name == "" {
-			name = r.URL
-			if parts := strings.Split(name, "/"); len(parts) > 1 {
-				name = parts[len(parts)-1]
-			}
-			name = strings.TrimSuffix(name, ".git")
-		} else {
-			// Use the repo name from shorthand (e.g., "owner/repo" -> "repo")
-			if parts := strings.Split(name, "/"); len(parts) > 1 {
-				name = parts[len(parts)-1]
-			}
-		}
-
-		// Get the default branch for the bare repo
-		defaultBranch := "main"                                                                  // fallback
-		cmd := exec.Command("git", "-C", r.BarePath, "symbolic-ref", "refs/remotes/origin/HEAD") //nolint:gosec // path from trusted workspace config
-		if output, err := cmd.Output(); err == nil {
-			ref := strings.TrimSpace(string(output))
-			if strings.HasPrefix(ref, "refs/remotes/origin/") {
-				defaultBranch = strings.TrimPrefix(ref, "refs/remotes/origin/")
-			}
-		}
-
-		// Bare repos are EcosystemSubProjects under the cx ecosystem
-		proj := Project{
-			Name:                name,
-			Path:                r.BarePath,
-			Type:                "Bare",
-			ParentEcosystemPath: cxEcosystemPath,
-			Workspaces:          []DiscoveredWorkspace{},
-			RepoURL:             r.URL,
-			RepoShorthand:       r.Shorthand,
-			Version:             defaultBranch,
-		}
-
-		// Discover worktrees for this bare repo in its worktree bases
-		for _, worktreesDir := range WorktreeBases(r.BarePath) {
-			entries, readErr := os.ReadDir(worktreesDir)
-			if readErr != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if entry.IsDir() {
-					wtPath := filepath.Join(worktreesDir, entry.Name())
-					proj.Workspaces = append(proj.Workspaces, DiscoveredWorkspace{
-						Name:              entry.Name(),
-						Path:              wtPath,
-						Type:              WorkspaceTypeWorktree,
-						ParentProjectPath: r.BarePath,
-					})
-				}
-			}
-		}
-
-		projects = append(projects, proj)
-	}
-
-	return projects, nil
 }

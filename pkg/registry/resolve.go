@@ -2,10 +2,7 @@ package registry
 
 import (
 	"fmt"
-	"maps"
-	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/grovetools/core/config"
@@ -31,41 +28,35 @@ func Subscription(syncCfg *config.SyncConfig) *config.SyncWorkspace {
 	return nil
 }
 
-// WorkspaceRoot resolves the on-disk root of a subscribed notebook workspace
-// from config alone, with no existence requirement.
-//
-// It mirrors SyncHandler.syntheticNodeFor + nodeWorkspaceRoot in the daemon,
-// which is what the writer uses (the daemon owns those and the contract names
-// them). This copy exists so the READ surfaces — `grove machines`, the treemux
-// panel — can find the registry without a running daemon, which is the whole
-// point of reading the replicated files directly. The two must agree; the
-// preference order below is the same one, in the same order, for that reason:
-//
-//  1. a notebook definition whose resolved root already exists on disk;
-//  2. the notebook referenced by a configured grove, groves visited in sorted
-//     order for determinism;
-//  3. no notebook name at all — the locator then falls back to
-//     notebooks.rules.default and the builtin default.
+// WorkspaceRoot resolves a subscribed workspace from recorded routing only.
+// An exact compiled code-root binding wins; otherwise the explicitly recorded
+// default notebook is used. Directory existence and map order never influence
+// the result.
 func WorkspaceRoot(cfg *config.Config, name string) string {
-	if name == "" {
+	notebook, ok := recordedNotebook(cfg, name)
+	if !ok {
 		return ""
 	}
-	if root := existingDefinitionRoot(cfg, name); root != "" {
-		return root
+	return rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: notebook})
+}
+
+// recordedNotebook is the literal rung 0 shared with the daemon. A compiled
+// root named for the workspace is an explicit per-root route. The only fallback
+// is notebooks.toml's recorded default pointer; it is configuration, not an
+// inferred first/sorted/existing choice.
+func recordedNotebook(cfg *config.Config, name string) (string, bool) {
+	if cfg == nil || name == "" {
+		return "", false
 	}
-	if cfg != nil && cfg.Notebooks != nil && cfg.Notebooks.Definitions != nil {
-		for _, groveName := range slices.Sorted(maps.Keys(cfg.Groves)) {
-			nb := cfg.Groves[groveName].Notebook
-			if nb == "" {
-				continue
-			}
-			if _, ok := cfg.Notebooks.Definitions[nb]; !ok {
-				continue
-			}
-			return rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: nb})
-		}
+	if grove, ok := cfg.Groves[name]; ok && grove.Notebook != "" && grove.NotebookRoot != "" {
+		return grove.Notebook, true
 	}
-	return rootForNode(cfg, &workspace.WorkspaceNode{Name: name})
+	if cfg.Notebooks == nil || cfg.Notebooks.Rules == nil || cfg.Notebooks.Rules.Default == "" {
+		return "", false
+	}
+	notebook := cfg.Notebooks.Rules.Default
+	definition, ok := cfg.Notebooks.Definitions[notebook]
+	return notebook, ok && definition != nil && definition.RootDir != ""
 }
 
 // rootForNode is the shared "node → workspace root" step: the notes content dir
@@ -78,26 +69,6 @@ func rootForNode(cfg *config.Config, node *workspace.WorkspaceNode) string {
 		return ""
 	}
 	return workspaceRootForDir(filepath.Dir(notesDir))
-}
-
-// existingDefinitionRoot is rung 1 on its own: the first DECLARED notebook, in
-// sorted order, whose resolved root for this workspace is already a directory.
-// Split out because PlannedRoot needs exactly this rung and must not be allowed
-// to fall through to the locator's builtin default.
-func existingDefinitionRoot(cfg *config.Config, name string) string {
-	if cfg == nil || cfg.Notebooks == nil || len(cfg.Notebooks.Definitions) == 0 {
-		return ""
-	}
-	for _, defName := range slices.Sorted(maps.Keys(cfg.Notebooks.Definitions)) {
-		root := rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: defName})
-		if root == "" {
-			continue
-		}
-		if fi, err := os.Stat(root); err == nil && fi.IsDir() {
-			return root
-		}
-	}
-	return ""
 }
 
 // workspaceRootForDir derives the workspace root a content dir belongs to.
@@ -116,52 +87,11 @@ func workspaceRootForDir(dir string) string {
 	return filepath.Dir(dir)
 }
 
-// PlannedRoot resolves where a workspace that does NOT exist yet should be
-// created, and is what `grove join` needs before it can make the registry
-// resolvable at all.
-//
-// WorkspaceRoot has a chicken-and-egg property that only bites the creating
-// caller: its first and strongest rung prefers a notebook whose resolved root
-// already exists on disk, and its last rung passes NO notebook name, which
-// sends the locator to its hardcoded `~/.grove/notebooks/nb` default. A verb
-// that used it to decide where to MkdirAll would therefore create the registry
-// under that default rather than under the notebook the machine configured —
-// on a machine with notebooks declared, in a directory nothing else reads.
-//
-// So this names a notebook explicitly:
-//
-//  1. a DECLARED notebook whose root for this workspace already exists — the
-//     same rung WorkspaceRoot leads with, so re-running converges;
-//  2. the configured default notebook (notebooks.rules.default) when it names a
-//     real definition;
-//  3. otherwise the first definition by sorted name — the same order rung 1
-//     will scan in once the directory exists, so the two agree from then on.
-//
-// It returns "" when the machine declares no notebooks at all. That is a
-// refusal, not a fallback: a caller must NOT quietly create a notebook tree in
-// the locator's home-anchored default, which nothing else on a configured
-// machine reads.
+// PlannedRoot is the recorded routed notebook root even before the workspace
+// exists. It intentionally has the same resolution as WorkspaceRoot: creation
+// must not choose a directory that later reads would resolve differently.
 func PlannedRoot(cfg *config.Config, name string) string {
-	if name == "" {
-		return ""
-	}
-	if root := existingDefinitionRoot(cfg, name); root != "" {
-		return root
-	}
-	if cfg == nil || cfg.Notebooks == nil || len(cfg.Notebooks.Definitions) == 0 {
-		return ""
-	}
-
-	notebook := ""
-	if cfg.Notebooks.Rules != nil && cfg.Notebooks.Rules.Default != "" {
-		if _, ok := cfg.Notebooks.Definitions[cfg.Notebooks.Rules.Default]; ok {
-			notebook = cfg.Notebooks.Rules.Default
-		}
-	}
-	if notebook == "" {
-		notebook = slices.Sorted(maps.Keys(cfg.Notebooks.Definitions))[0]
-	}
-	return rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: notebook})
+	return WorkspaceRoot(cfg, name)
 }
 
 // Locate is the one-call read-surface entry point: load the machine's config,

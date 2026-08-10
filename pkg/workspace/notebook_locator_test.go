@@ -65,10 +65,11 @@ func TestNotebookLocator_DefaultPaths(t *testing.T) {
 		Kind: KindStandaloneProject,
 	}
 
-	// Test Plans Path - should use default location
+	// Without a recorded centralized binding, a real project stays in explicit
+	// local mode rather than guessing ~/.grove/notebooks/nb.
 	plansDir, err := locator.GetPlansDir(node)
 	require.NoError(t, err)
-	assert.Contains(t, plansDir, filepath.Join(".grove", "notebooks", "nb", "workspaces", "my-project", "plans"))
+	assert.Equal(t, filepath.Join(node.Path, ".notebook", "plans"), plansDir)
 
 	// Test global notebook fallback
 	globalNode := &WorkspaceNode{

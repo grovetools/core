@@ -249,8 +249,8 @@ func notebookTaxonomyCases(f *notebookTaxonomyFixture) []notebookTaxonomyCase {
 				Name: "cardnb", Path: filepath.Join(f.notebooks["cardnb"], "workspaces", "x"),
 				Kind: KindNonGroveRepo,
 			},
-			want: "cardnb",
-			why:  "path lives inside a notebook's own root_dir",
+			want: "nb",
+			why:  "raw notebook-root containment is not a binding; recorded default wins",
 		},
 		{
 			id:   "repo-in-disabled-grove",

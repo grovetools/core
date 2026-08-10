@@ -62,10 +62,7 @@ func NewNotebookLocator(cfg *config.Config) *NotebookLocator {
 // It uses the node's NotebookName field to look up the correct notebook definition.
 func (l *NotebookLocator) getNotebookForNode(node *WorkspaceNode) *config.Notebook {
 	if l.config == nil || l.config.Notebooks == nil {
-		// Default to centralized notebook at ~/.grove/notebooks/nb when no config exists
-		return &config.Notebook{
-			RootDir: "~/.grove/notebooks/nb",
-		}
+		return nil
 	}
 
 	// Use the node's NotebookName to look up the notebook
@@ -82,10 +79,10 @@ func (l *NotebookLocator) getNotebookForNode(node *WorkspaceNode) *config.Notebo
 		}
 	}
 
-	// No notebook configuration found, default to centralized notebook at ~/.grove/notebooks/nb
-	return &config.Notebook{
-		RootDir: "~/.grove/notebooks/nb",
-	}
+	// No recorded binding. Callers either use an explicitly local notebook for
+	// a real project node or return an error/empty root for synthetic nodes;
+	// they must never invent a home-anchored centralized notebook.
+	return nil
 }
 
 // isCentralized returns true if the system is configured for centralized storage for a given node.

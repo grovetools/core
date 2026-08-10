@@ -150,6 +150,7 @@ func TestPlannedRootNeverUsesTheBuiltinDefault(t *testing.T) {
 	nbRoot := filepath.Join(t.TempDir(), "notebooks", "nb")
 	cfg := &config.Config{Notebooks: &config.NotebooksConfig{
 		Definitions: map[string]*config.Notebook{"nb": {RootDir: nbRoot}},
+		Rules:       &config.NotebookRules{Default: "nb"},
 	}}
 
 	root := PlannedRoot(cfg, "registry")
@@ -192,5 +193,41 @@ func TestPlannedRootPrefersTheConfiguredDefaultNotebook(t *testing.T) {
 func TestPlannedRootRefusesWithoutNotebooks(t *testing.T) {
 	if root := PlannedRoot(&config.Config{}, "registry"); root != "" {
 		t.Errorf("PlannedRoot invented %q with no notebooks declared", root)
+	}
+}
+
+func TestRecordedBindingWinsAcrossThreeSameNameRoots(t *testing.T) {
+	home := t.TempDir()
+	definitions := map[string]*config.Notebook{}
+	for _, name := range []string{"alpha", "recorded", "zulu"} {
+		root := filepath.Join(home, name)
+		definitions[name] = &config.Notebook{RootDir: root}
+		if err := os.MkdirAll(filepath.Join(root, "workspaces", "shared"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := &config.Config{
+		Groves: map[string]config.GroveSourceConfig{
+			"shared": {Path: filepath.Join(home, "code", "shared"), Notebook: "recorded", NotebookRoot: filepath.Join(home, "recorded")},
+		},
+		Notebooks: &config.NotebooksConfig{Definitions: definitions, Rules: &config.NotebookRules{Default: "alpha"}},
+	}
+	want := filepath.Join(home, "recorded", "workspaces", "shared")
+	for _, resolve := range []struct {
+		name string
+		fn   func(*config.Config, string) string
+	}{{"existing", WorkspaceRoot}, {"planned", PlannedRoot}} {
+		if got := resolve.fn(cfg, "shared"); got != want {
+			t.Errorf("%s root = %q, want recorded binding %q", resolve.name, got, want)
+		}
+	}
+}
+
+func TestWorkspaceRootRefusesMissingRecordedBinding(t *testing.T) {
+	cfg := &config.Config{Notebooks: &config.NotebooksConfig{
+		Definitions: map[string]*config.Notebook{"alpha": {RootDir: t.TempDir()}},
+	}}
+	if got := WorkspaceRoot(cfg, "shared"); got != "" {
+		t.Fatalf("WorkspaceRoot guessed %q without a root binding or recorded default", got)
 	}
 }
