@@ -50,7 +50,7 @@ func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 		r := table.Roots[name]
 		notebook := table.RootNotebook(name)
 		cfg.Groves[name] = GroveSourceConfig{
-			Path:         r.Path,
+			Path:         expandPath(r.Path),
 			Enabled:      r.Enabled,
 			Description:  r.Description,
 			Notebook:     notebook,
@@ -66,28 +66,18 @@ func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 	// empty recorded table replaces legacy global definitions just as a
 	// populated one does.
 	if table.NotebooksFilePath != "" {
-		legacyDefinitions := map[string]*Notebook(nil)
 		if cfg.Notebooks == nil {
 			cfg.Notebooks = &NotebooksConfig{}
 		} else {
 			notebooksCopy := *cfg.Notebooks
 			cfg.Notebooks = &notebooksCopy
-			legacyDefinitions = notebooksCopy.Definitions
-		}
-		if legacyDefinitions == nil {
-			legacyDefinitions = cfg.Notebooks.Definitions
 		}
 		cfg.Notebooks.Definitions = make(map[string]*Notebook, len(table.Notebooks))
 		for _, name := range table.SortedNotebookNames() {
-			// Preserve non-topology notebook behavior for a still-recorded name,
-			// but replace both the roster and RootDir with recorded authority.
-			nb := &Notebook{}
-			if legacy := legacyDefinitions[name]; legacy != nil {
-				copy := *legacy
-				nb = &copy
-			}
-			nb.RootDir = table.NotebookRoot(name)
-			cfg.Notebooks.Definitions[name] = nb
+			// A recorded definition replaces the same-name legacy definition;
+			// stale templates, note types, and sync integrations must not leak
+			// beneath notebooks.toml's intentionally smaller schema.
+			cfg.Notebooks.Definitions[name] = &Notebook{RootDir: table.NotebookRoot(name)}
 		}
 		if cfg.Notebooks.Rules == nil {
 			cfg.Notebooks.Rules = &NotebookRules{}

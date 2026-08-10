@@ -27,8 +27,8 @@ import (
 //   - ~/.config/grove/machine.toml, roots.toml, and notebooks.toml, each by
 //     path and (mtime, size) — the runtime compilers fold all three into every
 //     loaded config, and each file's ABSENCE is equally load-bearing;
-//   - the environment variables the config file's ${VAR} references expand
-//     from, by value.
+//   - the environment variables the config file, roots.toml, and
+//     notebooks.toml reference through ${VAR}, by value.
 //
 // Freshness costs four stats and a handful of os.Getenv calls; a miss costs the
 // full read+parse+validate. Failures are never cached: an unreadable or
@@ -130,6 +130,10 @@ func (e *fileCacheEntry) fresh(self fileStamp) bool {
 // store records a freshly parsed config and the inputs it was derived from.
 // Callers hold e.mu.
 func (e *fileCacheEntry) store(self fileStamp, cfg *Config, envNames []string) {
+	// compileCodeRoots expands recorded routing files into cfg during parsing,
+	// so their environment references are dependencies of this cache entry too.
+	// Trace the same canonical paths whose stamps fresh checks.
+	envNames = appendEnvRefs(envNames, coderoot.RootsPath(), coderoot.NotebooksPath())
 	envValues := make([]string, len(envNames))
 	for i, name := range envNames {
 		envValues[i] = os.Getenv(name)
@@ -180,6 +184,36 @@ func envRefs(content string) []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// appendEnvRefs adds references from the readable files to names, preserving
+// first-appearance order across all inputs and deduplicating names. A missing
+// file contributes nothing; its appearance is independently tracked by the
+// file stamp stored on the entry.
+func appendEnvRefs(names []string, paths ...string) []string {
+	seen := make(map[string]struct{}, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if _, duplicate := seen[name]; duplicate {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		for _, name := range envRefs(string(data)) {
+			if _, duplicate := seen[name]; duplicate {
+				continue
+			}
+			seen[name] = struct{}{}
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // resetFileCache drops every memoized Load result. See ResetLoadCache.

@@ -242,6 +242,58 @@ func TestLoadTracksRecordedRoutingPair(t *testing.T) {
 	}
 }
 
+func TestLoadRereadsAfterRootsEnvChange(t *testing.T) {
+	ResetLoadCache()
+	t.Cleanup(ResetLoadCache)
+	groveHome := t.TempDir()
+	t.Setenv("GROVE_HOME", groveHome)
+	configDir := filepath.Join(groveHome, "config", "grove")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "grove.toml")
+	writeConfigAt(t, path, "name = \"cached\"\n", -3*time.Second)
+	writeConfigAt(t, filepath.Join(configDir, "notebooks.toml"), "default = \"nb\"\n[notebooks.nb]\nroot = \"/notes\"\n", -2*time.Second)
+	writeConfigAt(t, filepath.Join(configDir, "roots.toml"), "[roots.code]\npath = \"${GROVE_TEST_RECORDED_CODE_ROOT}\"\n", -2*time.Second)
+
+	t.Setenv("GROVE_TEST_RECORDED_CODE_ROOT", "/code-one")
+	cfg, err := Load(path)
+	if err != nil || cfg.Groves["code"].Path != "/code-one" {
+		t.Fatalf("first load = %+v, %v", cfg, err)
+	}
+	t.Setenv("GROVE_TEST_RECORDED_CODE_ROOT", "/code-two")
+	cfg, err = Load(path)
+	if err != nil || cfg.Groves["code"].Path != "/code-two" {
+		t.Fatalf("roots env change remained cached: %+v, %v", cfg, err)
+	}
+}
+
+func TestLoadRereadsAfterNotebooksEnvChange(t *testing.T) {
+	ResetLoadCache()
+	t.Cleanup(ResetLoadCache)
+	groveHome := t.TempDir()
+	t.Setenv("GROVE_HOME", groveHome)
+	configDir := filepath.Join(groveHome, "config", "grove")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "grove.toml")
+	writeConfigAt(t, path, "name = \"cached\"\n", -3*time.Second)
+	writeConfigAt(t, filepath.Join(configDir, "notebooks.toml"), "default = \"nb\"\n[notebooks.nb]\nroot = \"${GROVE_TEST_RECORDED_NOTEBOOK_ROOT}\"\n", -2*time.Second)
+	writeConfigAt(t, filepath.Join(configDir, "roots.toml"), "[roots.code]\npath = \"/code\"\n", -2*time.Second)
+
+	t.Setenv("GROVE_TEST_RECORDED_NOTEBOOK_ROOT", "/notes-one")
+	cfg, err := Load(path)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/notes-one" {
+		t.Fatalf("first load = %+v, %v", cfg, err)
+	}
+	t.Setenv("GROVE_TEST_RECORDED_NOTEBOOK_ROOT", "/notes-two")
+	cfg, err = Load(path)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/notes-two" {
+		t.Fatalf("notebooks env change remained cached: %+v, %v", cfg, err)
+	}
+}
+
 func TestLoadMissingFileErrorIsUnchanged(t *testing.T) {
 	ResetLoadCache()
 	t.Cleanup(ResetLoadCache)

@@ -95,6 +95,12 @@ type NotebookBinding struct {
 	// in its own terms, exactly as both predecessors did.
 	Notebook string
 
+	// NotebookRoot is the resolved root carried by the compiled recorded view.
+	// It is additive during the cutover: legacy-only bindings may still obtain
+	// it from notebooks.definitions, while recorded grove/default bindings no
+	// longer require that compatibility projection.
+	NotebookRoot string
+
 	// Source is the rung that decided it.
 	Source NotebookSource
 
@@ -155,6 +161,7 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 	for _, c := range candidates {
 		if nb := machineNotebookOverride(c, q.Machine); nb != "" {
 			binding.Notebook = nb
+			binding.NotebookRoot = notebookRootForName(nb, cfg)
 			binding.Source = NotebookSourceMachine
 			binding.MatchedPath = c
 			return binding
@@ -167,6 +174,7 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 	for i, c := range candidates {
 		if nb, ecoRoot := cardNotebook(c, matches[i].root); nb != "" {
 			binding.Notebook = nb
+			binding.NotebookRoot = notebookRootForName(nb, cfg)
 			binding.Source = NotebookSourceCard
 			binding.MatchedPath = c
 			binding.EcosystemRoot = ecoRoot
@@ -180,16 +188,28 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 	for i, c := range candidates {
 		if matches[i].notebook != "" {
 			binding.Notebook = matches[i].notebook
+			binding.NotebookRoot = matches[i].notebookRoot
 			binding.Source = NotebookSourceGrove
 			binding.MatchedPath = c
 			return binding
 		}
 	}
 
-	// Rung 4 — the path lives inside a notebook's own storage tree.
+	// Rung 4 — the path lives inside a notebook's own storage tree. Prefer
+	// the additive recorded-routing bridge: compileCodeRoots resolves each
+	// grove's notebook and its literal NotebookRoot together. The legacy
+	// Definitions view remains as a fallback until the final cutover.
 	for _, c := range candidates {
+		if nb := matchCompiledNotebookRoot(c, cfg); nb != "" {
+			binding.Notebook = nb
+			binding.NotebookRoot = notebookRootForName(nb, cfg)
+			binding.Source = NotebookSourceNotebookRoot
+			binding.MatchedPath = c
+			return binding
+		}
 		if nb := matchNotebookRootDir(c, cfg); nb != "" {
 			binding.Notebook = nb
+			binding.NotebookRoot = notebookRootForName(nb, cfg)
 			binding.Source = NotebookSourceNotebookRoot
 			binding.MatchedPath = c
 			return binding
@@ -199,6 +219,7 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 	// Rung 5 — the configured default.
 	if cfg != nil && cfg.Notebooks != nil && cfg.Notebooks.Rules != nil && cfg.Notebooks.Rules.Default != "" {
 		binding.Notebook = cfg.Notebooks.Rules.Default
+		binding.NotebookRoot = notebookRootForName(binding.Notebook, cfg)
 		binding.Source = NotebookSourceDefault
 		binding.MatchedPath = candidates[0]
 	}
@@ -212,6 +233,7 @@ type groveMatch struct {
 	root         string
 	declaredRoot string
 	notebook     string
+	notebookRoot string
 }
 
 // matchGrove returns the most specific enabled grove containing path.
@@ -250,7 +272,13 @@ func matchGrove(path string, cfg *Config) groveMatch {
 		}
 		if len(root) > bestLen {
 			bestLen = len(root)
-			best = groveMatch{name: name, root: root, declaredRoot: declared, notebook: grove.Notebook}
+			best = groveMatch{
+				name:         name,
+				root:         root,
+				declaredRoot: declared,
+				notebook:     grove.Notebook,
+				notebookRoot: grove.NotebookRoot,
+			}
 		}
 	}
 	return best
@@ -296,6 +324,60 @@ func machineNotebookOverride(path string, machineCfg *MachineConfig) string {
 			continue
 		}
 		consider(root.Path, root.Notebook)
+	}
+	return best
+}
+
+// notebookRootForName resolves root metadata without requiring the projected
+// legacy notebook definitions. Recorded groves carry the authoritative pair;
+// Definitions remain only as an additive fallback until final cutover.
+func notebookRootForName(notebook string, cfg *Config) string {
+	if cfg == nil || notebook == "" {
+		return ""
+	}
+	for _, name := range sortedKeys(cfg.Groves) {
+		grove := cfg.Groves[name]
+		if grove.Notebook == notebook && grove.NotebookRoot != "" {
+			return grove.NotebookRoot
+		}
+	}
+	if cfg.Notebooks != nil {
+		if definition := cfg.Notebooks.Definitions[notebook]; definition != nil {
+			return expandPath(definition.RootDir)
+		}
+	}
+	return ""
+}
+
+// matchCompiledNotebookRoot consumes the resolved NotebookRoot carried by the
+// compiled recorded routing view. Multiple code roots may route to the same
+// notebook; deterministic iteration and longest-root selection make those
+// duplicates harmless. This path is additive until the legacy Definitions
+// fallback below is removed by the final cutover.
+func matchCompiledNotebookRoot(path string, cfg *Config) string {
+	if cfg == nil || len(cfg.Groves) == 0 || path == "" {
+		return ""
+	}
+	target := normalizeForMatch(path)
+	if target == "" {
+		return ""
+	}
+
+	best := ""
+	bestLen := 0
+	for _, name := range sortedKeys(cfg.Groves) {
+		grove := cfg.Groves[name]
+		if grove.Notebook == "" || grove.NotebookRoot == "" {
+			continue
+		}
+		root := normalizeForMatch(expandPath(grove.NotebookRoot))
+		if root == "" || !pathContains(root, target) {
+			continue
+		}
+		if len(root) > bestLen {
+			bestLen = len(root)
+			best = grove.Notebook
+		}
 	}
 	return best
 }

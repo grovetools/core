@@ -98,6 +98,29 @@ func TestResolveNotebook_Precedence(t *testing.T) {
 	})
 }
 
+func TestResolveNotebook_CompiledNotebookRootBridge(t *testing.T) {
+	recordedRoot := filepath.Join(t.TempDir(), "recorded-notes")
+	cfg := &Config{
+		Groves: map[string]GroveSourceConfig{
+			"code": {
+				Path:         filepath.Join(t.TempDir(), "code"),
+				Notebook:     "recorded",
+				NotebookRoot: recordedRoot,
+			},
+		},
+		// Keep a conflicting legacy definition to prove the additive bridge
+		// consumes GroveSourceConfig.NotebookRoot rather than relying on it.
+		Notebooks: &NotebooksConfig{Definitions: map[string]*Notebook{
+			"legacy": {RootDir: filepath.Join(t.TempDir(), "legacy-notes")},
+		}},
+	}
+
+	got := ResolveNotebook(NotebookQuery{Path: filepath.Join(recordedRoot, "notespaces", "project")}, cfg)
+	assert.Equal(t, "recorded", got.Notebook)
+	assert.Equal(t, recordedRoot, got.NotebookRoot)
+	assert.Equal(t, NotebookSourceNotebookRoot, got.Source)
+}
+
 // TestResolveNotebook_OwnerPaths pins the worktree behavior: the query path
 // binds nothing, so identity comes from the owner — and the owner's rung
 // ordering is the same ladder, not a special case.

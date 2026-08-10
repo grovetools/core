@@ -71,6 +71,34 @@ root = "~/other-notes"
 	}
 }
 
+func TestCompileCodeRootsRecordedNotebookClearsSameNameLegacyFields(t *testing.T) {
+	rp, np := writeRecordedPair(t, `[roots.code]
+path = "/code"
+`, `default = "nb"
+[notebooks.nb]
+root = "/recorded-notes"
+`)
+	legacyNotebook := &Notebook{
+		RootDir:           "/legacy-notes",
+		NotesPathTemplate: "stale-notes/{{.Workspace}}",
+		Types:             map[string]*NoteTypeConfig{"stale": {}},
+		Syncthing:         &SyncthingConfig{Devices: []string{"stale-device"}},
+		Obsidian:          &ObsidianConfig{VaultName: "stale-vault"},
+	}
+	cfg := &Config{Notebooks: &NotebooksConfig{Definitions: map[string]*Notebook{"nb": legacyNotebook}}}
+
+	got, err := compileCodeRootsFromPaths(cfg, rp, np)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (&Notebook{RootDir: "/recorded-notes"}); !reflect.DeepEqual(got.Notebooks.Definitions["nb"], want) {
+		t.Fatalf("recorded notebook retained stale legacy fields: got %+v, want %+v", got.Notebooks.Definitions["nb"], want)
+	}
+	if legacyNotebook.RootDir != "/legacy-notes" || legacyNotebook.NotesPathTemplate == "" {
+		t.Fatalf("compiler mutated legacy source definition: %+v", legacyNotebook)
+	}
+}
+
 func TestCompileCodeRootsRejectsDanglingNotebook(t *testing.T) {
 	rp, np := writeRecordedPair(t, `[roots.bad]
 path = "/code"
@@ -101,7 +129,7 @@ root = "/notes"
 		t.Fatal(err)
 	}
 	binding := ResolveNotebook(NotebookQuery{Path: "/code/nested/repo"}, cfg)
-	if binding.GroveName != "child" || binding.Notebook != "nb" {
+	if binding.GroveName != "child" || binding.Notebook != "nb" || binding.NotebookRoot != "/notes" {
 		t.Fatalf("binding = %+v", binding)
 	}
 	binding = ResolveNotebook(NotebookQuery{Path: "/code/nested/deeper/repo"}, cfg)
