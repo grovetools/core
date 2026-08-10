@@ -103,9 +103,9 @@ func (f *nbTaxonomyFixture) config() *Config {
 
 	return &Config{
 		Groves: map[string]GroveSourceConfig{
-			"code":   {Path: f.codeGrove, Notebook: "codenb", Enabled: &enabled},
+			"code":   {Path: f.codeGrove, Notebook: "codenb", NotebookRoot: f.notebooks["codenb"], Enabled: &enabled},
 			"silent": {Path: f.silentGrove, Enabled: &enabled},
-			"off":    {Path: f.offGrove, Notebook: "offnb", Enabled: &disabled},
+			"off":    {Path: f.offGrove, Notebook: "offnb", NotebookRoot: f.notebooks["offnb"], Enabled: &disabled},
 		},
 		Notebooks: &NotebooksConfig{
 			Definitions: defs,
@@ -142,14 +142,14 @@ func TestNotebookTaxonomy_ConfigSide(t *testing.T) {
 			why: "no grove match, so no workspace name",
 		},
 		{
-			id: "ecosystem-root-with-card", path: f.eco,
-			wantNotebook: "cardnb", wantWorkspac: "eco",
-			why: "ecosystem card outranks the grove entry",
+			id: "ecosystem-root-with-stale-card", path: f.eco,
+			wantNotebook: "codenb", wantWorkspac: "eco",
+			why: "compiled code-root binding bypasses the stale ecosystem card",
 		},
 		{
-			id: "ecosystem-sub-project-with-card", path: f.ecoSub,
-			wantNotebook: "cardnb", wantWorkspac: filepath.Join("eco", "sub"),
-			why: "card of the enclosing ecosystem",
+			id: "ecosystem-sub-project-with-stale-card", path: f.ecoSub,
+			wantNotebook: "codenb", wantWorkspac: filepath.Join("eco", "sub"),
+			why: "compiled code-root binding bypasses the enclosing ecosystem card",
 		},
 		{
 			id: "ecosystem-root-without-card", path: f.ecoNoCard,

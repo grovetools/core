@@ -129,9 +129,9 @@ func (f *notebookTaxonomyFixture) config() *config.Config {
 
 	return &config.Config{
 		Groves: map[string]config.GroveSourceConfig{
-			"code":   {Path: f.codeGrove, Notebook: "codenb", Enabled: &enabled},
+			"code":   {Path: f.codeGrove, Notebook: "codenb", NotebookRoot: f.notebooks["codenb"], Enabled: &enabled},
 			"silent": {Path: f.silentGrove, Enabled: &enabled},
-			"off":    {Path: f.offGrove, Notebook: "offnb", Enabled: &disabled},
+			"off":    {Path: f.offGrove, Notebook: "offnb", NotebookRoot: f.notebooks["offnb"], Enabled: &disabled},
 		},
 		Notebooks: &config.NotebooksConfig{
 			Definitions: defs,
@@ -177,8 +177,8 @@ func notebookTaxonomyCases(f *notebookTaxonomyFixture) []notebookTaxonomyCase {
 				Name: "eco", Path: f.eco, Kind: KindEcosystemRoot,
 				RootEcosystemPath: f.eco,
 			},
-			want: "cardnb",
-			why:  "ecosystem card outranks the grove entry",
+			want: "codenb",
+			why:  "compiled code-root binding bypasses the stale ecosystem card",
 		},
 		{
 			id: "ecosystem-sub-project-with-card",
@@ -186,8 +186,8 @@ func notebookTaxonomyCases(f *notebookTaxonomyFixture) []notebookTaxonomyCase {
 				Name: "sub", Path: f.ecoSub, Kind: KindEcosystemSubProject,
 				ParentEcosystemPath: f.eco, RootEcosystemPath: f.eco,
 			},
-			want: "cardnb",
-			why:  "card of the enclosing ecosystem",
+			want: "codenb",
+			why:  "compiled code-root binding bypasses the enclosing stale card",
 		},
 		{
 			id: "ecosystem-root-without-card",
@@ -213,8 +213,8 @@ func notebookTaxonomyCases(f *notebookTaxonomyFixture) []notebookTaxonomyCase {
 				Name: "plan", Path: f.ecoWorktree, Kind: KindEcosystemWorktree,
 				ParentProjectPath: f.eco, ParentEcosystemPath: f.eco, RootEcosystemPath: f.eco,
 			},
-			want: "cardnb",
-			why:  "worktree lives outside every grove; owner's card decides",
+			want: "codenb",
+			why:  "worktree inherits its owner's compiled code-root binding",
 		},
 		{
 			id: "ecosystem-worktree-xdg-anchored",
@@ -222,8 +222,8 @@ func notebookTaxonomyCases(f *notebookTaxonomyFixture) []notebookTaxonomyCase {
 				Name: "plan", Path: f.ecoWorktree, Kind: KindEcosystemWorktree,
 				ParentProjectPath: f.ecoSub, ParentEcosystemPath: f.eco, RootEcosystemPath: f.eco,
 			},
-			want: "cardnb",
-			why:  "anchored container: owner is a SUB-repo, its ecosystem still carries the card",
+			want: "codenb",
+			why:  "anchored container inherits the owner's compiled code-root binding",
 		},
 		{
 			id: "ecosystem-worktree-sub-project",
@@ -231,8 +231,8 @@ func notebookTaxonomyCases(f *notebookTaxonomyFixture) []notebookTaxonomyCase {
 				Name: "eco", Path: f.ecoWorktreeSub, Kind: KindEcosystemWorktreeSubProject,
 				ParentEcosystemPath: f.ecoWorktree, RootEcosystemPath: f.eco,
 			},
-			want: "cardnb",
-			why:  "root ecosystem's card",
+			want: "codenb",
+			why:  "root ecosystem's compiled code-root binding",
 		},
 		{
 			id: "standalone-project-worktree-xdg",
@@ -298,7 +298,7 @@ func TestNotebookTaxonomy_WorkspaceSideEdges(t *testing.T) {
 		assert.Equal(t, "nb", node.NotebookName)
 	})
 
-	t.Run("no groves configured still honors a card", func(t *testing.T) {
+	t.Run("no groves configured ignores a stale card", func(t *testing.T) {
 		cfg := &config.Config{
 			Notebooks: &config.NotebooksConfig{
 				Rules: &config.NotebookRules{Default: "nb"},
@@ -309,7 +309,7 @@ func TestNotebookTaxonomy_WorkspaceSideEdges(t *testing.T) {
 			RootEcosystemPath: f.eco,
 		}
 		applyNotebookBinding(node, cfg)
-		assert.Equal(t, "cardnb", node.NotebookName)
+		assert.Equal(t, "nb", node.NotebookName)
 	})
 
 	t.Run("nil config leaves the node untouched", func(t *testing.T) {

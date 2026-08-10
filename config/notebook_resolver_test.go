@@ -14,11 +14,11 @@ import (
 func TestResolveNotebook_Precedence(t *testing.T) {
 	f := buildNBTaxonomyFixture(t)
 
-	t.Run("card outranks the grove entry", func(t *testing.T) {
+	t.Run("compiled binding bypasses stale ecosystem card", func(t *testing.T) {
 		got := ResolveNotebook(NotebookQuery{Path: f.ecoSub}, f.config())
-		assert.Equal(t, "cardnb", got.Notebook)
-		assert.Equal(t, NotebookSourceCard, got.Source)
-		assert.Equal(t, f.eco, got.EcosystemRoot)
+		assert.Equal(t, "codenb", got.Notebook)
+		assert.Equal(t, f.notebooks["codenb"], got.NotebookRoot)
+		assert.Equal(t, NotebookSourceGrove, got.Source)
 	})
 
 	t.Run("grove entry when there is no card", func(t *testing.T) {
@@ -66,10 +66,10 @@ func TestResolveNotebook_CompiledNotebookRootBridge(t *testing.T) {
 				NotebookRoot: recordedRoot,
 			},
 		},
-		// Keep a conflicting legacy definition to prove the additive bridge
-		// consumes GroveSourceConfig.NotebookRoot rather than relying on it.
+		// Keep a conflicting same-name definition to prove literal root identity:
+		// re-resolving "recorded" by name would choose this decoy.
 		Notebooks: &NotebooksConfig{Definitions: map[string]*Notebook{
-			"legacy": {RootDir: filepath.Join(t.TempDir(), "legacy-notes")},
+			"recorded": {RootDir: filepath.Join(t.TempDir(), "same-name-decoy")},
 		}},
 	}
 
@@ -86,13 +86,13 @@ func TestResolveNotebook_OwnerPaths(t *testing.T) {
 	f := buildNBTaxonomyFixture(t)
 	cfg := f.config()
 
-	t.Run("out-of-grove worktree inherits the owner's card", func(t *testing.T) {
+	t.Run("out-of-grove worktree inherits the owner's compiled binding", func(t *testing.T) {
 		got := ResolveNotebook(NotebookQuery{
 			Path:       f.ecoWorktree,
 			OwnerPaths: []string{f.eco},
 		}, cfg)
-		assert.Equal(t, "cardnb", got.Notebook)
-		assert.Equal(t, NotebookSourceCard, got.Source)
+		assert.Equal(t, "codenb", got.Notebook)
+		assert.Equal(t, NotebookSourceGrove, got.Source)
 		assert.Equal(t, f.eco, got.MatchedPath)
 	})
 
@@ -105,14 +105,13 @@ func TestResolveNotebook_OwnerPaths(t *testing.T) {
 		assert.Equal(t, NotebookSourceGrove, got.Source)
 	})
 
-	t.Run("a card anywhere in the owner chain beats a grove entry earlier in it", func(t *testing.T) {
-		// The FIRST owner is under the "code" grove (rung 3 material); the
-		// SECOND carries a card (rung 2). Rungs outrank candidate order.
+	t.Run("candidate order selects among compiled bindings", func(t *testing.T) {
 		got := ResolveNotebook(NotebookQuery{
 			Path:       f.ecoWorktree,
 			OwnerPaths: []string{f.plainRepo, f.eco},
 		}, cfg)
-		assert.Equal(t, "cardnb", got.Notebook)
+		assert.Equal(t, "codenb", got.Notebook)
+		assert.Equal(t, f.plainRepo, got.MatchedPath)
 	})
 
 	t.Run("the query path's own grove is reported even when an owner decides", func(t *testing.T) {
@@ -120,7 +119,7 @@ func TestResolveNotebook_OwnerPaths(t *testing.T) {
 			Path:       f.ecoNoCardSub,
 			OwnerPaths: []string{f.eco},
 		}, cfg)
-		assert.Equal(t, "cardnb", got.Notebook, "the owner's card outranks the query path's grove")
+		assert.Equal(t, "codenb", got.Notebook, "the query path's compiled binding is literal rung 0")
 		assert.Equal(t, "code", got.GroveName)
 		assert.Equal(t, f.codeGrove, got.GroveRoot)
 	})
@@ -192,42 +191,13 @@ func TestResolveNotebook_NonExistentPaths(t *testing.T) {
 	})
 }
 
-// TestResolveNotebook_CardCacheInvalidation proves the memoized card lookup
-// notices a rewritten manifest — `grove ecosystem adopt` must take effect for a
-// running daemon, not at the next restart.
-func TestResolveNotebook_CardCacheInvalidation(t *testing.T) {
-	f := buildNBTaxonomyFixture(t)
-	cfg := f.config()
-
-	assert.Equal(t, "cardnb", ResolveNotebook(NotebookQuery{Path: f.eco}, cfg).Notebook)
-
-	manifest := filepath.Join(f.eco, "grove.toml")
-	require.NoError(t, os.WriteFile(manifest, []byte(`name = "eco"
-workspaces = ["*"]
-
-[ecosystem]
-id = "01J8CARDCARDCARDCARDCARDCA"
-
-[ecosystem.notebooks.silentnb]
-default = true
-`), 0o644))
-	// A rewrite inside the same filesystem timestamp tick is indistinguishable
-	// from no rewrite by stat alone; the explicit reset is what tests use.
-	ResetEcosystemCardCache()
-
-	assert.Equal(t, "silentnb", ResolveNotebook(NotebookQuery{Path: f.eco}, cfg).Notebook)
-}
-
-// TestResolveNotebook_UnparseableManifest documents the failure posture: one
-// broken grove.toml binds nothing rather than breaking resolution for every
-// path in the tree.
-func TestResolveNotebook_UnparseableManifest(t *testing.T) {
+// TestResolveNotebook_StaleCardIgnored proves repository-side routing no longer
+// participates after the recorded-routing cutover, whether valid or broken.
+func TestResolveNotebook_StaleCardIgnored(t *testing.T) {
 	f := buildNBTaxonomyFixture(t)
 	cfg := f.config()
 
 	require.NoError(t, os.WriteFile(filepath.Join(f.eco, "grove.toml"), []byte("this is not = = toml\n"), 0o644))
-	ResetEcosystemCardCache()
-
 	got := ResolveNotebook(NotebookQuery{Path: f.ecoSub}, cfg)
 	assert.Equal(t, "codenb", got.Notebook)
 	assert.Equal(t, NotebookSourceGrove, got.Source)

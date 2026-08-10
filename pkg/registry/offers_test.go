@@ -153,7 +153,10 @@ func TestPlannedRootNeverUsesTheBuiltinDefault(t *testing.T) {
 		Rules:       &config.NotebookRules{Default: "nb"},
 	}}
 
-	root := PlannedRoot(cfg, "registry")
+	root, err := ResolvePlannedRoot(cfg, "registry")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := filepath.Join(nbRoot, "workspaces", "registry")
 	if root != want {
 		t.Fatalf("PlannedRoot = %q, want %q", root, want)
@@ -165,8 +168,8 @@ func TestPlannedRootNeverUsesTheBuiltinDefault(t *testing.T) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := WorkspaceRoot(cfg, "registry"); got != want {
-		t.Errorf("WorkspaceRoot = %q, want %q — the creator and the reader disagree", got, want)
+	if got, err := ResolveWorkspaceRoot(cfg, "registry"); err != nil || got != want {
+		t.Errorf("WorkspaceRoot = %q, %v; want %q — the creator and the reader disagree", got, err, want)
 	}
 }
 
@@ -180,10 +183,10 @@ func TestPlannedRootPrefersTheConfiguredDefaultNotebook(t *testing.T) {
 		},
 		Rules: &config.NotebookRules{Default: "personal"},
 	}}
-	got := PlannedRoot(cfg, "registry")
+	got, err := ResolvePlannedRoot(cfg, "registry")
 	want := filepath.Join(home, "personal", "workspaces", "registry")
-	if got != want {
-		t.Errorf("PlannedRoot = %q, want the default notebook's root %q", got, want)
+	if err != nil || got != want {
+		t.Errorf("PlannedRoot = %q, %v; want the default notebook's root %q", got, err, want)
 	}
 }
 
@@ -191,8 +194,8 @@ func TestPlannedRootPrefersTheConfiguredDefaultNotebook(t *testing.T) {
 // legitimate to create one, and the caller must be told rather than handed a
 // home-anchored guess.
 func TestPlannedRootRefusesWithoutNotebooks(t *testing.T) {
-	if root := PlannedRoot(&config.Config{}, "registry"); root != "" {
-		t.Errorf("PlannedRoot invented %q with no notebooks declared", root)
+	if root, err := ResolvePlannedRoot(&config.Config{}, "registry"); err == nil || root != "" {
+		t.Errorf("PlannedRoot = %q, %v; want explicit missing-binding error", root, err)
 	}
 }
 
@@ -206,19 +209,23 @@ func TestRecordedBindingWinsAcrossThreeSameNameRoots(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	literalRoot := filepath.Join(home, "literal-recorded-root")
+	// The same notebook name deliberately points elsewhere in Definitions: a
+	// name re-lookup would choose the decoy and fail this identity assertion.
+	definitions["recorded"] = &config.Notebook{RootDir: filepath.Join(home, "definition-decoy")}
 	cfg := &config.Config{
 		Groves: map[string]config.GroveSourceConfig{
-			"shared": {Path: filepath.Join(home, "code", "shared"), Notebook: "recorded", NotebookRoot: filepath.Join(home, "recorded")},
+			"shared": {Path: filepath.Join(home, "code", "shared"), Notebook: "recorded", NotebookRoot: literalRoot},
 		},
 		Notebooks: &config.NotebooksConfig{Definitions: definitions, Rules: &config.NotebookRules{Default: "alpha"}},
 	}
-	want := filepath.Join(home, "recorded", "workspaces", "shared")
+	want := filepath.Join(literalRoot, "workspaces", "shared")
 	for _, resolve := range []struct {
 		name string
-		fn   func(*config.Config, string) string
-	}{{"existing", WorkspaceRoot}, {"planned", PlannedRoot}} {
-		if got := resolve.fn(cfg, "shared"); got != want {
-			t.Errorf("%s root = %q, want recorded binding %q", resolve.name, got, want)
+		fn   func(*config.Config, string) (string, error)
+	}{{"existing", ResolveWorkspaceRoot}, {"planned", ResolvePlannedRoot}} {
+		if got, err := resolve.fn(cfg, "shared"); err != nil || got != want {
+			t.Errorf("%s root = %q, %v; want literal recorded binding %q", resolve.name, got, err, want)
 		}
 	}
 }
@@ -227,7 +234,7 @@ func TestWorkspaceRootRefusesMissingRecordedBinding(t *testing.T) {
 	cfg := &config.Config{Notebooks: &config.NotebooksConfig{
 		Definitions: map[string]*config.Notebook{"alpha": {RootDir: t.TempDir()}},
 	}}
-	if got := WorkspaceRoot(cfg, "shared"); got != "" {
-		t.Fatalf("WorkspaceRoot guessed %q without a root binding or recorded default", got)
+	if got, err := ResolveWorkspaceRoot(cfg, "shared"); err == nil || got != "" {
+		t.Fatalf("WorkspaceRoot = %q, %v; want explicit missing-binding error", got, err)
 	}
 }

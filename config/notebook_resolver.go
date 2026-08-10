@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/grovetools/core/util/pathutil"
 )
@@ -31,15 +29,13 @@ import (
 // `workspace` and is handed in as NotebookQuery.OwnerPaths, so the dependency
 // arrow never has to reverse.
 //
-// PRECEDENCE (contract §1 Q3, §3 P4), applied rung by rung; within a rung every
-// candidate path is tried in order (query path first, then owner paths):
+// PRECEDENCE is deliberately short after the recorded-routing cutover:
 //
-//  1. machine.toml override — this machine's explicit say over an ecosystem.
-//  2. ecosystem card — the repo-side binding that travels with clones.
-//  3. grove entry `notebook` — the machine-side binding, legacy home of both.
-//  4. notebook `root_dir` containment — a path inside a notebook's own storage
-//     tree resolves to THAT notebook, whatever the groves say.
-//  5. `notebooks.rules.default`.
+//  0. a covering compiled code-root binding, consumed literally;
+//  1. containment in a compiled binding's recorded notebook root;
+//  2. the recorded default notebook.
+//
+// Ecosystem-card routing is stale input after migration and is never consulted.
 
 // NotebookSource names the rung that produced a binding. It exists so callers
 // (and tests, and `grove doctor`) can say WHY a path resolved the way it did
@@ -49,9 +45,7 @@ type NotebookSource string
 const (
 	// NotebookSourceNone means nothing bound a notebook, not even a default.
 	NotebookSourceNone NotebookSource = ""
-	// NotebookSourceCard is an ecosystem card's default notebook.
-	NotebookSourceCard NotebookSource = "ecosystem-card"
-	// NotebookSourceGrove is a grove entry's `notebook` key.
+	// NotebookSourceGrove is a compiled code-root entry's recorded binding.
 	NotebookSourceGrove NotebookSource = "grove"
 	// NotebookSourceNotebookRoot is containment in a notebook's own root_dir.
 	NotebookSourceNotebookRoot NotebookSource = "notebook-root"
@@ -109,10 +103,6 @@ type NotebookBinding struct {
 	// or deriving a workspace directory name from it would silently rename
 	// things.
 	groveRootMatch string
-
-	// EcosystemRoot is the directory whose card supplied the binding, set only
-	// for NotebookSourceCard.
-	EcosystemRoot string
 }
 
 // ResolveNotebook answers a repo→notebook query against a config.
@@ -145,23 +135,8 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 		binding.groveRootMatch = matches[0].root
 	}
 
-	// Rung 1 — ecosystem card. The walk is bounded by the containing grove so
-	// resolving a path never turns into a walk to the filesystem root when a
-	// grove already tells us where the ecosystem tree stops.
-	for i, c := range candidates {
-		if nb, ecoRoot := cardNotebook(c, matches[i].root); nb != "" {
-			binding.Notebook = nb
-			binding.NotebookRoot = notebookRootForName(nb, cfg)
-			binding.Source = NotebookSourceCard
-			binding.MatchedPath = c
-			binding.EcosystemRoot = ecoRoot
-			return binding
-		}
-	}
-
-	// Rung 3 — grove entry. A grove that matches but declares no notebook does
-	// NOT end the search: it falls through to the remaining rungs, which is how
-	// a worktree under a notebook-less grove still finds its notebook.
+	// Rung 0 — a compiled code-root binding is authoritative. No repository
+	// card, directory probe, or name lookup may override its literal root.
 	for i, c := range candidates {
 		if matches[i].notebook != "" {
 			binding.Notebook = matches[i].notebook
@@ -172,20 +147,20 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 		}
 	}
 
-	// Rung 4 — the path lives inside a recorded notebook storage tree.
+	// Rung 1 — the path lives inside a recorded notebook storage tree.
 	// compileCodeRoots carries each literal routed NotebookRoot; raw legacy
 	// definition containment is deliberately not a routing source.
 	for _, c := range candidates {
-		if nb := matchCompiledNotebookRoot(c, cfg); nb != "" {
+		if nb, root := matchCompiledNotebookRoot(c, cfg); nb != "" {
 			binding.Notebook = nb
-			binding.NotebookRoot = notebookRootForName(nb, cfg)
+			binding.NotebookRoot = root
 			binding.Source = NotebookSourceNotebookRoot
 			binding.MatchedPath = c
 			return binding
 		}
 	}
 
-	// Rung 5 — the configured default.
+	// Rung 2 — the configured default.
 	if cfg != nil && cfg.Notebooks != nil && cfg.Notebooks.Rules != nil && cfg.Notebooks.Rules.Default != "" {
 		binding.Notebook = cfg.Notebooks.Rules.Default
 		binding.NotebookRoot = notebookRootForName(binding.Notebook, cfg)
@@ -279,16 +254,16 @@ func notebookRootForName(notebook string, cfg *Config) string {
 // notebook; deterministic iteration and longest-root selection make those
 // duplicates harmless. This path is additive until the legacy Definitions
 // fallback below is removed by the final cutover.
-func matchCompiledNotebookRoot(path string, cfg *Config) string {
+func matchCompiledNotebookRoot(path string, cfg *Config) (string, string) {
 	if cfg == nil || len(cfg.Groves) == 0 || path == "" {
-		return ""
+		return "", ""
 	}
 	target := normalizeForMatch(path)
 	if target == "" {
-		return ""
+		return "", ""
 	}
 
-	best := ""
+	best, bestRoot := "", ""
 	bestLen := 0
 	for _, name := range sortedKeys(cfg.Groves) {
 		grove := cfg.Groves[name]
@@ -302,97 +277,10 @@ func matchCompiledNotebookRoot(path string, cfg *Config) string {
 		if len(root) > bestLen {
 			bestLen = len(root)
 			best = grove.Notebook
+			bestRoot = expandPath(grove.NotebookRoot)
 		}
 	}
-	return best
-}
-
-// cardNotebook walks upward from dir looking for an ecosystem manifest whose
-// card binds a default notebook, and returns (notebook, ecosystem root).
-//
-// The walk stops after examining stopAt — the grove containing dir — because an
-// ecosystem never lives above its own grove. With no grove match (a path
-// outside every grove, e.g. an XDG worktree) the walk runs to the filesystem
-// root; it is memoized per manifest, so the repeated walks a discovery pass
-// performs cost one stat per level after the first.
-func cardNotebook(dir, stopAt string) (string, string) {
-	if dir == "" {
-		return "", ""
-	}
-	current, err := filepath.Abs(dir)
-	if err != nil {
-		return "", ""
-	}
-
-	for {
-		if nb := probeEcosystemCard(current); nb != "" {
-			return nb, current
-		}
-		if stopAt != "" && normalizeForMatch(current) == stopAt {
-			return "", ""
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return "", ""
-		}
-		current = parent
-	}
-}
-
-// cardCacheEntry memoizes one manifest's parsed card binding. The stat metadata
-// is what makes the memo safe: a rewritten manifest (`grove ecosystem adopt`)
-// invalidates itself on the next lookup instead of surviving until the process
-// restarts, which matters for the daemon.
-type cardCacheEntry struct {
-	modTime  time.Time
-	size     int64
-	notebook string
-}
-
-var cardCache sync.Map // manifest path -> cardCacheEntry
-
-// probeEcosystemCard returns the default notebook bound by the card in dir's
-// own manifest, or "" when dir has no manifest or its manifest carries no
-// notebook binding. It never walks.
-func probeEcosystemCard(dir string) string {
-	manifest := FindEcosystemManifest(dir)
-	if manifest == "" {
-		return ""
-	}
-	info, err := os.Stat(manifest)
-	if err != nil {
-		return ""
-	}
-	if cached, ok := cardCache.Load(manifest); ok {
-		entry := cached.(cardCacheEntry)
-		if entry.size == info.Size() && entry.modTime.Equal(info.ModTime()) {
-			return entry.notebook
-		}
-	}
-
-	notebook := ""
-	// A manifest that fails to parse binds nothing. Failing loudly here would
-	// turn one broken grove.toml into a resolution error for every path in the
-	// tree; the config loader reports that error in its own voice.
-	if card, err := LoadEcosystemCard(manifest); err == nil {
-		notebook = card.DefaultNotebookName()
-	}
-	cardCache.Store(manifest, cardCacheEntry{
-		modTime:  info.ModTime(),
-		size:     info.Size(),
-		notebook: notebook,
-	})
-	return notebook
-}
-
-// ResetEcosystemCardCache drops the memoized card lookups. Tests that rewrite a
-// manifest within one filesystem-timestamp tick need it; production code does
-// not, because the stat check above catches real edits.
-func ResetEcosystemCardCache() {
-	cardCache.Range(func(key, _ any) bool {
-		cardCache.Delete(key)
-		return true
-	})
+	return best, bestRoot
 }
 
 // relativeWorkspaceName returns projectRoot's location inside its grove — the

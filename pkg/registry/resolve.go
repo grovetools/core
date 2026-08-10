@@ -3,10 +3,8 @@ package registry
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/grovetools/core/config"
-	"github.com/grovetools/core/pkg/workspace"
 )
 
 // Subscription returns the registry-role sync subscription, or nil when this
@@ -33,65 +31,59 @@ func Subscription(syncCfg *config.SyncConfig) *config.SyncWorkspace {
 // default notebook is used. Directory existence and map order never influence
 // the result.
 func WorkspaceRoot(cfg *config.Config, name string) string {
-	notebook, ok := recordedNotebook(cfg, name)
-	if !ok {
-		return ""
-	}
-	return rootForNode(cfg, &workspace.WorkspaceNode{Name: name, NotebookName: notebook})
+	root, _ := ResolveWorkspaceRoot(cfg, name)
+	return root
 }
 
-// recordedNotebook is the literal rung 0 shared with the daemon. A compiled
-// root named for the workspace is an explicit per-root route. The only fallback
-// is notebooks.toml's recorded default pointer; it is configuration, not an
-// inferred first/sorted/existing choice.
-func recordedNotebook(cfg *config.Config, name string) (string, bool) {
-	if cfg == nil || name == "" {
-		return "", false
+// ResolveWorkspaceRoot is the fail-loud form used by creation, daemon, and
+// doctor surfaces. WorkspaceRoot remains as a compatibility read helper while
+// downstream callers migrate to explicit errors.
+func ResolveWorkspaceRoot(cfg *config.Config, name string) (string, error) {
+	_, notebookRoot, err := recordedNotebookRoot(cfg, name)
+	if err != nil {
+		return "", err
 	}
-	if grove, ok := cfg.Groves[name]; ok && grove.Notebook != "" && grove.NotebookRoot != "" {
-		return grove.Notebook, true
+	return filepath.Join(notebookRoot, "workspaces", name), nil
+}
+
+// recordedNotebookRoot is the literal rung 0 shared with the daemon. A
+// compiled root named for the workspace contributes both the notebook name and
+// its already-resolved root. The root is never looked up again by name.
+func recordedNotebookRoot(cfg *config.Config, name string) (string, string, error) {
+	if cfg == nil || name == "" {
+		return "", "", fmt.Errorf("workspace %q has no recorded code-root/notebook binding", name)
+	}
+	if grove, ok := cfg.Groves[name]; ok {
+		if grove.Notebook != "" || grove.NotebookRoot != "" {
+			if grove.Notebook == "" || grove.NotebookRoot == "" {
+				return "", "", fmt.Errorf("workspace %q has an incomplete recorded code-root/notebook binding", name)
+			}
+			return grove.Notebook, grove.NotebookRoot, nil
+		}
 	}
 	if cfg.Notebooks == nil || cfg.Notebooks.Rules == nil || cfg.Notebooks.Rules.Default == "" {
-		return "", false
+		return "", "", fmt.Errorf("workspace %q has no recorded code-root/notebook binding or default notebook", name)
 	}
 	notebook := cfg.Notebooks.Rules.Default
-	definition, ok := cfg.Notebooks.Definitions[notebook]
-	return notebook, ok && definition != nil && definition.RootDir != ""
-}
-
-// rootForNode is the shared "node → workspace root" step: the notes content dir
-// the locator resolves, walked back to the workspace root. Returns "" when the
-// locator fails or resolves a non-absolute path (a local-mode notebook has no
-// project path to anchor to).
-func rootForNode(cfg *config.Config, node *workspace.WorkspaceNode) string {
-	notesDir, err := workspace.NewNotebookLocator(cfg).GetNotesDir(node, "inbox")
-	if err != nil || !filepath.IsAbs(notesDir) {
-		return ""
+	definition := cfg.Notebooks.Definitions[notebook]
+	if definition == nil || definition.RootDir == "" {
+		return "", "", fmt.Errorf("workspace %q routes to default notebook %q without a recorded root", name, notebook)
 	}
-	return workspaceRootForDir(filepath.Dir(notesDir))
-}
-
-// workspaceRootForDir derives the workspace root a content dir belongs to.
-// Centralized notebook layouts follow <root>/workspaces/<name>/...; without
-// that marker the content dir's parent is the best available root. Kept
-// byte-identical to the daemon watcher's private copy of the same rule.
-func workspaceRootForDir(dir string) string {
-	marker := string(filepath.Separator) + "workspaces" + string(filepath.Separator)
-	if idx := strings.LastIndex(dir, marker); idx >= 0 {
-		rest := dir[idx+len(marker):]
-		if slash := strings.IndexByte(rest, filepath.Separator); slash > 0 {
-			return dir[:idx+len(marker)+slash]
-		}
-		return dir
-	}
-	return filepath.Dir(dir)
+	return notebook, definition.RootDir, nil
 }
 
 // PlannedRoot is the recorded routed notebook root even before the workspace
 // exists. It intentionally has the same resolution as WorkspaceRoot: creation
 // must not choose a directory that later reads would resolve differently.
 func PlannedRoot(cfg *config.Config, name string) string {
-	return WorkspaceRoot(cfg, name)
+	root, _ := ResolvePlannedRoot(cfg, name)
+	return root
+}
+
+// ResolvePlannedRoot is PlannedRoot's explicit-error form. New write paths
+// must use it so an absent binding cannot become creation-by-omission.
+func ResolvePlannedRoot(cfg *config.Config, name string) (string, error) {
+	return ResolveWorkspaceRoot(cfg, name)
 }
 
 // Locate is the one-call read-surface entry point: load the machine's config,
@@ -113,9 +105,9 @@ func Locate() (name, root string, err error) {
 	if err != nil {
 		return sub.Name, "", fmt.Errorf("failed to load grove config: %w", err)
 	}
-	root = WorkspaceRoot(cfg, sub.Name)
-	if root == "" {
-		return sub.Name, "", fmt.Errorf("cannot resolve a local root for registry workspace %q", sub.Name)
+	root, err = ResolveWorkspaceRoot(cfg, sub.Name)
+	if err != nil {
+		return sub.Name, "", fmt.Errorf("cannot resolve a local root for registry workspace %q: %w", sub.Name, err)
 	}
 	return sub.Name, root, nil
 }
