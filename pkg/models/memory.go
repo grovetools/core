@@ -122,12 +122,12 @@ type WorkspaceAnalysis struct {
 
 // EcosystemAnalysis describes coverage gaps at the ecosystem level.
 type EcosystemAnalysis struct {
-	Name             string   `json:"name"`
-	Path             string   `json:"path"`
-	ConfiguredGroves int      `json:"configured_groves"`
-	IndexedGroves    int      `json:"indexed_groves"`
-	ZeroCoverage     []string `json:"zero_coverage_workspaces"`
-	LanguageGaps     []string `json:"language_gaps"`
+	Name            string   `json:"name"`
+	Path            string   `json:"path"`
+	ConfiguredRoots int      `json:"configured_roots"`
+	IndexedRoots    int      `json:"indexed_roots"`
+	ZeroCoverage    []string `json:"zero_coverage_workspaces"`
+	LanguageGaps    []string `json:"language_gaps"`
 }
 
 // CodeAnalysis describes code-indexer health.
