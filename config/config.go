@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/grovetools/core/errors"
+	"github.com/grovetools/core/pkg/coderoot"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/plugin"
 )
@@ -840,7 +841,16 @@ func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTr
 	machinePath := MachineConfigPath()
 	trace.lookup(machinePath, MachineConfigPath)
 	trace.stat(machinePath)
+	rootsPath, notebooksPath := coderoot.RootsPath(), coderoot.NotebooksPath()
+	trace.lookup(rootsPath, coderoot.RootsPath)
+	_, _ = trace.readFile(rootsPath) // compileCodeRoots reports any real read error
+	trace.lookup(notebooksPath, coderoot.NotebooksPath)
+	_, _ = trace.readFile(notebooksPath) // also records env expansion dependencies
 	finalConfig = compileMachineGroves(finalConfig, loadMachineConfigForCompile())
+	finalConfig, err = compileCodeRoots(finalConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set defaults
 	finalConfig.SetDefaults()
@@ -895,11 +905,14 @@ func LoadFromBytes(data []byte) (*Config, error) {
 	// failure on otherwise-usable configs.
 	validateAndWarn(&config, logrus.StandardLogger(), "config bytes")
 
-	// Compile machine.toml here too: Load(path) funnels through the bytes
-	// loaders, so a caller that reads one config file directly still sees the
-	// machine's subscriptions. Fill-absent-only, so anything the bytes declare
-	// wins.
+	// Compile canonical machine-local routing files here too: Load(path)
+	// funnels through the byte loaders. Recorded roots compile after the
+	// legacy bridge and therefore win on overlapping names.
 	out := compileMachineGroves(&config, loadMachineConfigForCompile())
+	out, err := compileCodeRoots(out)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set defaults
 	out.SetDefaults()
@@ -938,8 +951,12 @@ func LoadFromTOMLBytes(data []byte) (*Config, error) {
 	// Warn-only schema check. Never fatal — see the note in LoadFromBytes.
 	validateAndWarn(&config, logrus.StandardLogger(), "config TOML bytes")
 
-	// Compile machine.toml (see LoadFromBytes).
+	// Compile canonical machine-local routing files (see LoadFromBytes).
 	out := compileMachineGroves(&config, loadMachineConfigForCompile())
+	out, err := compileCodeRoots(out)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set defaults
 	out.SetDefaults()
@@ -1548,6 +1565,10 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 	// machine whose only grove declaration lives in machine.toml would
 	// otherwise resolve no notebook layer at all.
 	lookupConfig = compileMachineGroves(lookupConfig, loadMachineConfigForCompile())
+	lookupConfig, err = compileCodeRoots(lookupConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	projectRoot := startDir
 	if projectPath != "" {
@@ -1654,9 +1675,13 @@ func LoadLayered(startDir string) (*LayeredConfig, error) {
 		}
 	}
 
-	// Compile machine.toml last, so an explicit [groves.*] from any layer wins,
-	// and before SetDefaults so compiled entries pick up Enabled=true.
+	// Compile machine.toml's temporary bridge, then overlay the authoritative
+	// recorded routing tables before defaults are applied.
 	finalConfig = compileMachineGroves(finalConfig, loadMachineConfigForCompile())
+	finalConfig, err = compileCodeRoots(finalConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set defaults for the final merged config
 	finalConfig.SetDefaults()

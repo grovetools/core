@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 // BuildInput is everything the note writer observes about this machine.
@@ -22,10 +23,9 @@ type BuildInput struct {
 	OriginID string
 	// GrovedVersion is the daemon build writing the note.
 	GrovedVersion string
-	// Machine is the declared intent (machine.toml). Nil means "nothing
-	// declared", which renders as empty ecosystems/roots rather than an error:
-	// a machine with no subscriptions still has a presence.
-	Machine *config.MachineConfig
+	// CodeRoots is the recorded machine routing table. Specific roots become
+	// materializable ecosystem entries; scan roots remain inert roots.
+	CodeRoots coderoot.Table
 	// Subscriptions is this machine's sync subscription list.
 	Subscriptions []config.SyncWorkspace
 }
@@ -54,7 +54,7 @@ func Build(in BuildInput) *Note {
 	// shared note would have several writers, which the single-writer rule —
 	// the thing that makes registry conflicts impossible — forbids.
 	roots := map[string]string{}
-	for _, state := range config.ReconcileMachineEcosystems(in.Machine) {
+	for _, state := range config.ReconcileCodeRoots(in.CodeRoots) {
 		eco := NoteEcosystem{
 			Name:     state.Name,
 			Path:     state.Path,
@@ -75,26 +75,24 @@ func Build(in BuildInput) *Note {
 		}
 	}
 
-	// Bare roots: first-class, and deliberately never reconciled as
-	// "declared-missing" — nothing can materialize ~/code/chickens, so an
-	// absent one is reported (Exists) but is not an action item.
-	if in.Machine != nil {
-		for _, name := range sortedRootNames(in.Machine.Machine.Roots) {
-			r := in.Machine.Machine.Roots[name]
-			path := expandRootPath(r.Path)
-			exists := false
-			if info, err := os.Stat(path); err == nil && info.IsDir() {
-				exists = true
-				roots[name] = path
-			}
-			n.Roots = append(n.Roots, NoteRoot{
-				Name:     name,
-				Path:     path,
-				Notebook: r.Notebook,
-				Enabled:  r.Enabled == nil || *r.Enabled,
-				Exists:   exists,
-			})
+	// Scan roots are first-class and deliberately never reconciled as
+	// "declared-missing" — they are discovery locations, not materialization
+	// actions.
+	for _, name := range in.CodeRoots.SortedRootNames() {
+		r := in.CodeRoots.Roots[name]
+		if !r.Scan {
+			continue
 		}
+		path := expandRootPath(r.Path)
+		exists := false
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			exists = true
+			roots[name] = path
+		}
+		n.Roots = append(n.Roots, NoteRoot{
+			Name: name, Path: path, Notebook: in.CodeRoots.RootNotebook(name),
+			Enabled: r.Enabled == nil || *r.Enabled, Exists: exists,
+		})
 	}
 
 	// Subscriptions, minus everything secret. The sync config also holds a
@@ -146,15 +144,6 @@ func expandRootPath(path string) string {
 		return abs
 	}
 	return expanded
-}
-
-func sortedRootNames(m map[string]config.MachineRoot) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 func sortedNotebookNames(m map[string]config.EcosystemNotebook) []string {

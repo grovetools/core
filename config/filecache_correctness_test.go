@@ -184,6 +184,64 @@ func TestLoadRereadsAfterMachineConfigChange(t *testing.T) {
 	}
 }
 
+func TestLoadTracksRecordedRoutingPair(t *testing.T) {
+	ResetLoadCache()
+	t.Cleanup(ResetLoadCache)
+	groveHome := t.TempDir()
+	t.Setenv("GROVE_HOME", groveHome)
+	configDir := filepath.Join(groveHome, "config", "grove")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "grove.toml")
+	writeConfigAt(t, path, "name = \"cached\"\n", -4*time.Second)
+	cfg, err := Load(path)
+	if err != nil || len(cfg.Groves) != 0 {
+		t.Fatalf("initial load = %+v, %v", cfg, err)
+	}
+
+	np, rp := filepath.Join(configDir, "notebooks.toml"), filepath.Join(configDir, "roots.toml")
+	writeConfigAt(t, np, "default = \"nb\"\n[notebooks.nb]\nroot = \"/n1\"\n", -3*time.Second)
+	writeConfigAt(t, rp, "[roots.code]\npath = \"/code\"\n", -3*time.Second)
+	cfg, err = Load(path)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/n1" {
+		t.Fatalf("appearance not observed: %+v, %v", cfg, err)
+	}
+
+	// Stamps intentionally use mtime+size: a same-size rewrite at the exact
+	// same mtime remains cached until ResetLoadCache, matching self-file cache
+	// semantics.
+	stamp := stampFile(np)
+	writeConfigAt(t, np, "default = \"nb\"\n[notebooks.nb]\nroot = \"/n2\"\n", 0)
+	if err := os.Chtimes(np, stamp.modTime, stamp.modTime); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/n1" {
+		t.Fatalf("same-stamp dependency unexpectedly invalidated: %+v, %v", cfg, err)
+	}
+	ResetLoadCache()
+	cfg, err = Load(path)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/n2" {
+		t.Fatalf("notebook modification not observed: %+v, %v", cfg, err)
+	}
+
+	if err := os.Remove(rp); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil || len(cfg.Groves) != 0 {
+		t.Fatalf("roots deletion not observed: %+v, %v", cfg, err)
+	}
+	if err := os.Remove(np); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil || cfg.Notebooks != nil {
+		t.Fatalf("notebooks deletion not observed = %+v, %v", cfg, err)
+	}
+}
+
 func TestLoadMissingFileErrorIsUnchanged(t *testing.T) {
 	ResetLoadCache()
 	t.Cleanup(ResetLoadCache)

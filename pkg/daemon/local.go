@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/coderoot"
 	"github.com/grovetools/core/pkg/env"
 	"github.com/grovetools/core/pkg/machine"
 	"github.com/grovetools/core/pkg/models"
@@ -788,11 +788,11 @@ func LocalMachineStatus() (*models.MachineStatus, error) {
 	if id, err := machine.Load(); err == nil && id != nil {
 		out.ID = id.ID
 	}
-	machineCfg, err := config.LoadMachineConfig()
+	codeRoots, err := coderoot.Load()
 	if err != nil {
 		return out, err
 	}
-	for _, st := range config.ReconcileMachineEcosystems(machineCfg) {
+	for _, st := range config.ReconcileCodeRoots(codeRoots) {
 		out.Ecosystems = append(out.Ecosystems, models.MachineEcosystemState{
 			Name:     st.Name,
 			Path:     st.Path,
@@ -802,24 +802,18 @@ func LocalMachineStatus() (*models.MachineStatus, error) {
 			Enabled:  st.Enabled,
 		})
 	}
-	if machineCfg != nil {
-		names := make([]string, 0, len(machineCfg.Machine.Roots))
-		for name := range machineCfg.Machine.Roots {
-			names = append(names, name)
+	for _, name := range codeRoots.SortedRootNames() {
+		root := codeRoots.Roots[name]
+		if !root.Scan {
+			continue
 		}
-		sort.Strings(names)
-		for _, name := range names {
-			root := machineCfg.Machine.Roots[name]
-			path := expandLocalPath(root.Path)
-			info, statErr := os.Stat(path)
-			out.Roots = append(out.Roots, models.MachineRootState{
-				Name:     name,
-				Path:     path,
-				Notebook: root.Notebook,
-				Enabled:  root.Enabled == nil || *root.Enabled,
-				Exists:   statErr == nil && info.IsDir(),
-			})
-		}
+		path := expandLocalPath(root.Path)
+		info, statErr := os.Stat(path)
+		out.Roots = append(out.Roots, models.MachineRootState{
+			Name: name, Path: path, Notebook: codeRoots.RootNotebook(name),
+			Enabled: root.Enabled == nil || *root.Enabled,
+			Exists:  statErr == nil && info.IsDir(),
+		})
 	}
 	return out, nil
 }

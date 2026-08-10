@@ -31,6 +31,11 @@ type GroveSourceConfig struct {
 	IncludeRepos []string `yaml:"include_repos,omitempty" toml:"include_repos,omitempty" jsonschema:"description=List of directory names or relative paths to explicitly include as projects"`
 	ExcludeRepos []string `yaml:"exclude_repos,omitempty" toml:"exclude_repos,omitempty" jsonschema:"description=List of directory names or relative paths to explicitly exclude"`
 	Memory       *bool    `yaml:"memory,omitempty" toml:"memory,omitempty" jsonschema:"description=Whether to index this grove's notebook content into the memory store for semantic search (default: false)"`
+
+	// Scan and NotebookRoot are compiled runtime routing state. They are never
+	// accepted from grove.toml; roots.toml/notebooks.toml are authoritative.
+	Scan         bool   `yaml:"-" toml:"-" jsonschema:"-"`
+	NotebookRoot string `yaml:"-" toml:"-" jsonschema:"-"`
 }
 
 // ExplicitProject defines a specific project to include regardless of discovery.

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 func machineWithCard(id, name, eco, ecoPath string, card *NoteCard) Machine {
@@ -124,9 +125,7 @@ func TestEcosystemCardRoundTripsThroughTheNote(t *testing.T) {
 
 	note := Build(BuildInput{
 		MachineID: "01AAAAAAAAAAAAAAAAAAAAAAAA",
-		Machine: &config.MachineConfig{Machine: config.MachineSettings{
-			Ecosystems: map[string]config.MachineEcosystem{"a": {Path: ecoDir}},
-		}},
+		CodeRoots: coderoot.Table{Roots: map[string]coderoot.Root{"a": {Path: ecoDir}}},
 	})
 	if len(note.Ecosystems) != 1 || note.Ecosystems[0].Card == nil {
 		t.Fatalf("card did not reach the note: %+v", note.Ecosystems)

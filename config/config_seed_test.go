@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 func satelliteSeed() ConfigSeed {
@@ -255,5 +258,60 @@ func TestConfigSeedEmptyRendersNothing(t *testing.T) {
 	}
 	if len(files) != 0 {
 		t.Fatalf("empty seed rendered %v", files)
+	}
+}
+
+func TestConfigSeedRecordedFiveFilePath(t *testing.T) {
+	seed := satelliteSeed()
+	seed.LegacyGroves = false
+	seed.CodeRoots = map[string]coderoot.Root{
+		"grovetools": {Path: "/srv/grovetools", Notebook: "grovetools"},
+	}
+	seed.RecordedNotebooks = map[string]coderoot.Notebook{
+		"grovetools": {Root: "/srv/notebooks/grovetools"},
+	}
+	seed.RecordedDefaultNotebook = "grovetools"
+	files, err := seed.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 5 {
+		t.Fatalf("files = %v, want five", files)
+	}
+	want := []string{SeedFileGroveTOML, SeedFileMachineTOML, SeedFileNotebooksTOML, SeedFileRootsTOML, SeedFileSyncTOML}
+	for i := range want {
+		if files[i].Name != want[i] {
+			t.Fatalf("file[%d] = %s, want %s", i, files[i].Name, want[i])
+		}
+	}
+	if strings.Contains(files[0].Content, "[groves.") {
+		t.Fatalf("recorded seed emitted legacy mirror:\n%s", files[0].Content)
+	}
+}
+
+func TestConfigSeedRecordedPairValidationAndIdempotentApply(t *testing.T) {
+	seed := ConfigSeed{
+		CodeRoots:               map[string]coderoot.Root{"code": {Path: "/code"}},
+		RecordedNotebooks:       map[string]coderoot.Notebook{"nb": {Root: "/notes"}},
+		RecordedDefaultNotebook: "nb",
+	}
+	dir := t.TempDir()
+	first, err := ApplyConfigSeed(dir, "", seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ApplyConfigSeed(dir, "", seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("apply paths changed: %v != %v", first, second)
+	}
+	if _, err := coderoot.LoadFrom(filepath.Join(dir, SeedFileRootsTOML), filepath.Join(dir, SeedFileNotebooksTOML)); err != nil {
+		t.Fatalf("seeded pair does not load: %v", err)
+	}
+	seed.RecordedDefaultNotebook = "missing"
+	if _, err := seed.Files(); err == nil {
+		t.Fatal("invalid pair unexpectedly rendered")
 	}
 }

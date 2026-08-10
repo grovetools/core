@@ -208,6 +208,33 @@ func TestLoadFromRereadsAfterMachineConfigChange(t *testing.T) {
 	}
 }
 
+func TestLoadFromTracksRecordedRoutingPair(t *testing.T) {
+	projectDir, globalDir := setupLoadFromHierarchy(t)
+	cfg, err := LoadFrom(projectDir)
+	if err != nil || len(cfg.Groves) != 0 {
+		t.Fatalf("initial load = %+v, %v", cfg, err)
+	}
+	np, rp := filepath.Join(globalDir, "notebooks.toml"), filepath.Join(globalDir, "roots.toml")
+	writeConfigAt(t, np, "default = \"nb\"\n[notebooks.nb]\nroot = \"/notes-a\"\n", -2*time.Second)
+	writeConfigAt(t, rp, "[roots.code]\npath = \"/code\"\n", -2*time.Second)
+	cfg, err = LoadFrom(projectDir)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/notes-a" {
+		t.Fatalf("recorded appearance not observed: %+v, %v", cfg, err)
+	}
+	writeConfigAt(t, np, "default = \"nb\"\n[notebooks.nb]\nroot = \"/notes-bb\"\n", -1*time.Second)
+	cfg, err = LoadFrom(projectDir)
+	if err != nil || cfg.Groves["code"].NotebookRoot != "/notes-bb" {
+		t.Fatalf("recorded modification not observed: %+v, %v", cfg, err)
+	}
+	if err := os.Remove(rp); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = LoadFrom(projectDir)
+	if err != nil || len(cfg.Groves) != 0 {
+		t.Fatalf("recorded deletion not observed: %+v, %v", cfg, err)
+	}
+}
+
 func TestLoadFromRereadsAfterEnvChange(t *testing.T) {
 	projectDir, _ := setupLoadFromHierarchy(t)
 	writeConfigAt(t, filepath.Join(projectDir, "grove.toml"), "name = \"${GROVE_TEST_LOADFROM_NAME}\"\n", -2*time.Second)

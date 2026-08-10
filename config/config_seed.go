@@ -8,6 +8,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
+
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 // The shared config-seed writer.
@@ -31,18 +35,20 @@ import (
 //  3. Nothing validated the generated TOML before it landed on the target. A
 //     typo surfaced as a broken daemon on a remote host.
 //
-// ConfigSeed renders the same three files in Go, through the same validators
+// ConfigSeed renders the complete (up to five-file) seed in Go, through the same validators
 // the loaders use, and hands the caller either files to write locally
 // (ApplyConfigSeed) or a line-oriented bundle to ship to a remote host
 // (Bundle). Nothing here knows about SSH, satellites, or transports.
 
 // Seed file names. The set is closed on purpose: a seed may only produce
-// these three files, and both the Go writer and the remote unpacker validate
+// these five files, and both the Go writer and the remote unpacker validate
 // against the same list.
 const (
-	SeedFileGroveTOML   = "grove.toml"
-	SeedFileMachineTOML = "machine.toml"
-	SeedFileSyncTOML    = "sync.toml"
+	SeedFileGroveTOML     = "grove.toml"
+	SeedFileMachineTOML   = "machine.toml"
+	SeedFileRootsTOML     = coderoot.RootsFileName
+	SeedFileNotebooksTOML = coderoot.NotebooksFileName
+	SeedFileSyncTOML      = "sync.toml"
 )
 
 // BundleVersion is the first line of a rendered bundle. The remote unpacker
@@ -69,10 +75,15 @@ type ConfigSeed struct {
 	// Roots are [machine.roots.<name>] entries.
 	Roots map[string]MachineRoot
 
-	// Notebooks are [notebooks.definitions.<name>] root_dir values in
-	// grove.toml. Notebook roots are host topology, not portable intent,
-	// which is why they live in grove.toml rather than machine.toml.
+	// Notebooks are the temporary legacy [notebooks.definitions.<name>]
+	// values in grove.toml.
 	Notebooks map[string]string
+
+	// CodeRoots and RecordedNotebooks are the authoritative recorded routing
+	// pair. RecordedDefaultNotebook names the default definition.
+	CodeRoots               map[string]coderoot.Root
+	RecordedNotebooks       map[string]coderoot.Notebook
+	RecordedDefaultNotebook string
 	// DaemonSSH writes [daemon.ssh] enabled = true.
 	DaemonSSH bool
 	// LegacyGroves additionally compiles Ecosystems into `[groves.<name>]`
@@ -130,6 +141,19 @@ func (s ConfigSeed) Files() ([]SeedFile, error) {
 		return nil, err
 	} else if machine != "" {
 		files = append(files, SeedFile{Name: SeedFileMachineTOML, Content: machine, Mode: 0o644})
+	}
+
+	// Render and validate the recorded pair together. Notebooks precede roots
+	// so applying a seed never exposes roots whose bindings are unresolved.
+	notebooks, roots, err := s.renderRecordedPair()
+	if err != nil {
+		return nil, err
+	}
+	if notebooks != "" {
+		files = append(files, SeedFile{Name: SeedFileNotebooksTOML, Content: notebooks, Mode: 0o644})
+	}
+	if roots != "" {
+		files = append(files, SeedFile{Name: SeedFileRootsTOML, Content: roots, Mode: 0o644})
 	}
 
 	if sync, err := s.renderSyncTOML(); err != nil {
@@ -202,9 +226,9 @@ func (s ConfigSeed) renderGroveTOML() (string, error) {
 	}
 
 	content := b.String()
-	// Parse back through the real config decoder: a seed that would not load
-	// must fail here, not on the target host.
-	if _, err := LoadFromTOMLBytes([]byte(content)); err != nil {
+	// Parse back through the real file decoder without consulting this host's
+	// machine-local routing files: seed validation must be self-contained.
+	if _, err := unmarshalConfig(SeedFileGroveTOML, []byte(content)); err != nil {
 		return "", fmt.Errorf("config seed: generated %s does not load: %w", SeedFileGroveTOML, err)
 	}
 	return content, nil
@@ -246,6 +270,49 @@ func (s ConfigSeed) renderMachineTOML() (string, error) {
 	return content, nil
 }
 
+func (s ConfigSeed) renderRecordedPair() (notebooks, roots string, err error) {
+	if len(s.CodeRoots) == 0 && len(s.RecordedNotebooks) == 0 && s.RecordedDefaultNotebook == "" {
+		return "", "", nil
+	}
+
+	if len(s.RecordedNotebooks) > 0 || s.RecordedDefaultNotebook != "" {
+		body, marshalErr := toml.Marshal(coderoot.NotebooksFile{
+			Default: s.RecordedDefaultNotebook, Notebooks: s.RecordedNotebooks,
+		})
+		if marshalErr != nil {
+			return "", "", fmt.Errorf("config seed: render %s: %w", SeedFileNotebooksTOML, marshalErr)
+		}
+		notebooks = s.header("Recorded notebook roots and default routing.") + string(body)
+	}
+	if len(s.CodeRoots) > 0 {
+		body, marshalErr := toml.Marshal(coderoot.RootsFile{Roots: s.CodeRoots})
+		if marshalErr != nil {
+			return "", "", fmt.Errorf("config seed: render %s: %w", SeedFileRootsTOML, marshalErr)
+		}
+		roots = s.header("Recorded code roots and notebook bindings.") + string(body)
+	}
+
+	table := coderoot.Table{Roots: map[string]coderoot.Root{}, Notebooks: map[string]coderoot.Notebook{}}
+	if roots != "" {
+		rf, parseErr := coderoot.ParseRoots(SeedFileRootsTOML, []byte(roots))
+		if parseErr != nil {
+			return "", "", fmt.Errorf("config seed: %w", parseErr)
+		}
+		table.Roots, table.RootsFilePath = rf.Roots, SeedFileRootsTOML
+	}
+	if notebooks != "" {
+		nf, parseErr := coderoot.ParseNotebooks(SeedFileNotebooksTOML, []byte(notebooks))
+		if parseErr != nil {
+			return "", "", fmt.Errorf("config seed: %w", parseErr)
+		}
+		table.Notebooks, table.Default, table.NotebooksFilePath = nf.Notebooks, nf.Default, SeedFileNotebooksTOML
+	}
+	if validateErr := table.Validate(); validateErr != nil {
+		return "", "", fmt.Errorf("config seed: recorded routing pair: %w", validateErr)
+	}
+	return notebooks, roots, nil
+}
+
 func (s ConfigSeed) renderSyncTOML() (string, error) {
 	if s.Sync == nil {
 		return "", nil
@@ -282,11 +349,11 @@ func (s ConfigSeed) renderSyncTOML() (string, error) {
 // validateSeedFileName enforces the closed set of files a seed may produce.
 func validateSeedFileName(name string) error {
 	switch name {
-	case SeedFileGroveTOML, SeedFileMachineTOML, SeedFileSyncTOML:
+	case SeedFileGroveTOML, SeedFileMachineTOML, SeedFileNotebooksTOML, SeedFileRootsTOML, SeedFileSyncTOML:
 		return nil
 	}
-	return fmt.Errorf("config seed: %q is not a seedable config file (allowed: %s, %s, %s)",
-		name, SeedFileGroveTOML, SeedFileMachineTOML, SeedFileSyncTOML)
+	return fmt.Errorf("config seed: %q is not a seedable config file (allowed: %s, %s, %s, %s, %s)",
+		name, SeedFileGroveTOML, SeedFileMachineTOML, SeedFileNotebooksTOML, SeedFileRootsTOML, SeedFileSyncTOML)
 }
 
 // validateSeedDir enforces that a seeded directory is home-relative and cannot

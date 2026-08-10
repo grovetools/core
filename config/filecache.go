@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 // Load's per-file memoization.
@@ -22,13 +24,13 @@ import (
 // every input the result depends on is provably unchanged:
 //
 //   - the config file itself, by (mtime, size);
-//   - ~/.config/grove/machine.toml, by path and (mtime, size) — compileMachineGroves
-//     folds its subscriptions into every loaded config, and its ABSENCE is
-//     equally load-bearing, so a stamp records "no file here" as a state;
-//   - the environment variables the file's ${VAR} references expand from,
-//     by value.
+//   - ~/.config/grove/machine.toml, roots.toml, and notebooks.toml, each by
+//     path and (mtime, size) — the runtime compilers fold all three into every
+//     loaded config, and each file's ABSENCE is equally load-bearing;
+//   - the environment variables the config file's ${VAR} references expand
+//     from, by value.
 //
-// Freshness costs two stats and a handful of os.Getenv calls; a miss costs the
+// Freshness costs four stats and a handful of os.Getenv calls; a miss costs the
 // full read+parse+validate. Failures are never cached: an unreadable or
 // unparseable path takes exactly the code path it took before this cache
 // existed, so ENOENT/permission behaviour is bit-for-bit unchanged.
@@ -85,11 +87,15 @@ type fileCacheEntry struct {
 	valid bool
 	cfg   *Config
 
-	self        fileStamp
-	machinePath string
-	machine     fileStamp
-	envNames    []string
-	envValues   []string
+	self          fileStamp
+	machinePath   string
+	machine       fileStamp
+	rootsPath     string
+	roots         fileStamp
+	notebooksPath string
+	notebooks     fileStamp
+	envNames      []string
+	envValues     []string
 }
 
 // fresh reports whether the memoized config is still a correct answer for a
@@ -105,6 +111,12 @@ func (e *fileCacheEntry) fresh(self fileStamp) bool {
 		return false
 	}
 	if !e.machine.equal(stampFile(e.machinePath)) {
+		return false
+	}
+	if e.rootsPath != coderoot.RootsPath() || !e.roots.equal(stampFile(e.rootsPath)) {
+		return false
+	}
+	if e.notebooksPath != coderoot.NotebooksPath() || !e.notebooks.equal(stampFile(e.notebooksPath)) {
 		return false
 	}
 	for i, name := range e.envNames {
@@ -124,9 +136,15 @@ func (e *fileCacheEntry) store(self fileStamp, cfg *Config, envNames []string) {
 	}
 
 	machinePath := MachineConfigPath()
+	rootsPath := coderoot.RootsPath()
+	notebooksPath := coderoot.NotebooksPath()
 	e.self = self
 	e.machinePath = machinePath
 	e.machine = stampFile(machinePath)
+	e.rootsPath = rootsPath
+	e.roots = stampFile(rootsPath)
+	e.notebooksPath = notebooksPath
+	e.notebooks = stampFile(notebooksPath)
 	e.envNames = envNames
 	e.envValues = envValues
 	e.cfg = cfg

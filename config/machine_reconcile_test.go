@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 // Reconciliation is the diff between intent and disk: present, declared but
@@ -65,6 +67,31 @@ path = "`+filepath.Join(root, "also-gone")+`"
 	}
 	if states[1].Missing() {
 		t.Errorf("a present ecosystem must not report Missing()")
+	}
+}
+
+func TestReconcileCodeRootsSpecificOnly(t *testing.T) {
+	root := t.TempDir()
+	manifested := filepath.Join(root, "manifested")
+	if err := os.MkdirAll(manifested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(manifested, "grove.toml"), []byte("name = \"x\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	table := coderoot.Table{
+		Default:   "nb",
+		Notebooks: map[string]coderoot.Notebook{"nb": {Root: "/notes"}},
+		Roots: map[string]coderoot.Root{
+			"present": {Path: manifested},
+			"missing": {Path: filepath.Join(root, "missing")},
+			"scan":    {Path: root, Scan: true},
+		},
+	}
+	states := ReconcileCodeRoots(table)
+	if len(states) != 2 || states[0].Name != "missing" || states[0].State != MachineEcosystemDeclaredMissing ||
+		states[1].Name != "present" || states[1].State != MachineEcosystemPresent || states[1].Notebook != "nb" {
+		t.Fatalf("states = %+v", states)
 	}
 }
 
