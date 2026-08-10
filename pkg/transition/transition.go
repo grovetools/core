@@ -4,18 +4,20 @@
 // Grove P2-P5 transition verbs MUST construct Evidence and call FinishSuccess
 // (directly or through RenderHuman or RenderJSON) before reporting success. This
 // prevents an empty success from being presented as a completed transition.
-// Server-backed verbs MUST set ServerBacked and include the accepted response
-// returned by the server in ServerEcho; the request sent to the server is not
-// evidence of acceptance.
+// Server-backed verbs MUST create a ServerReceipt from the submitted request and
+// the distinct response returned by the server. The request sent to the server
+// is not evidence of acceptance.
 package transition
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -39,24 +41,87 @@ type ResolvedRoot struct {
 	Resolved string `json:"resolved"`
 }
 
-// ServerEcho is acceptance evidence returned by a server. Response must be a
-// non-empty server response value (an acknowledgement token, status, or
-// message), not a copy of the client's request.
-type ServerEcho struct {
-	Accepted  bool   `json:"accepted"`
-	Response  string `json:"response"`
-	RequestID string `json:"request_id,omitempty"`
+// ServerReceipt is opaque evidence derived from a server's accepted response.
+// It can only be created with NewServerReceipt, which binds it to the submitted
+// request and rejects a request passed back as its own response.
+type ServerReceipt struct {
+	response       string
+	requestID      string
+	requestDigest  [sha256.Size]byte
+	responseDigest [sha256.Size]byte
+	sealed         bool
+}
+
+// NewServerReceipt captures acceptance evidence from response data returned by
+// a server. request and response must both be non-empty and response must be
+// distinct from request. Callers must invoke this only after the server's
+// protocol has identified response as accepted; there is deliberately no
+// caller-settable Accepted flag.
+func NewServerReceipt(request, response, requestID string) (*ServerReceipt, error) {
+	if strings.TrimSpace(request) == "" {
+		return nil, errors.New("server request is required")
+	}
+	if strings.TrimSpace(response) == "" {
+		return nil, errors.New("accepted server response is required")
+	}
+
+	requestDigest := sha256.Sum256([]byte(request))
+	responseDigest := sha256.Sum256([]byte(response))
+	if requestDigest == responseDigest {
+		return nil, errors.New("server response must be distinct from the submitted request")
+	}
+
+	return &ServerReceipt{
+		response:       response,
+		requestID:      requestID,
+		requestDigest:  requestDigest,
+		responseDigest: responseDigest,
+		sealed:         true,
+	}, nil
+}
+
+// MarshalJSON exposes the accepted response while keeping the receipt's
+// construction seal and request binding private.
+func (r ServerReceipt) MarshalJSON() ([]byte, error) {
+	if err := r.validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Accepted  bool   `json:"accepted"`
+		Response  string `json:"response"`
+		RequestID string `json:"request_id,omitempty"`
+	}{
+		Accepted:  true,
+		Response:  r.response,
+		RequestID: r.requestID,
+	})
+}
+
+func (r ServerReceipt) validate() error {
+	if !r.sealed {
+		return errors.New("server receipt was not created from an accepted response")
+	}
+	if strings.TrimSpace(r.response) == "" {
+		return errors.New("accepted server response is required")
+	}
+	if sha256.Sum256([]byte(r.response)) != r.responseDigest {
+		return errors.New("server receipt response does not match its acceptance binding")
+	}
+	if r.requestDigest == r.responseDigest {
+		return errors.New("server response must be distinct from the submitted request")
+	}
+	return nil
 }
 
 // Evidence is the final, user-visible proof of a successful transition.
 // Action names the transition. Slice order supplied by callers is ignored by
-// renderers; counts and roots are rendered in canonical order.
+// renderers; counts and roots are rendered in canonical order. The presence of
+// ServerReceipt is the sole, unambiguous server-backed state.
 type Evidence struct {
 	Action        string         `json:"action"`
 	Counts        []Count        `json:"counts,omitempty"`
 	ResolvedRoots []ResolvedRoot `json:"resolved_roots,omitempty"`
-	ServerBacked  bool           `json:"server_backed,omitempty"`
-	ServerEcho    *ServerEcho    `json:"server_echo,omitempty"`
+	ServerReceipt *ServerReceipt `json:"server_receipt,omitempty"`
 	Reason        Reason         `json:"reason,omitempty"`
 }
 
@@ -101,21 +166,15 @@ func (e Evidence) Validate() error {
 		}
 	}
 
-	acceptedEcho := false
-	if e.ServerEcho != nil {
-		if !e.ServerEcho.Accepted {
-			return errors.New("server echo does not show acceptance")
+	acceptedResponse := false
+	if e.ServerReceipt != nil {
+		if err := e.ServerReceipt.validate(); err != nil {
+			return err
 		}
-		if strings.TrimSpace(e.ServerEcho.Response) == "" {
-			return errors.New("accepted server echo response is required")
-		}
-		acceptedEcho = true
-	}
-	if e.ServerBacked && !acceptedEcho {
-		return errors.New("server-backed transition requires an accepted server echo")
+		acceptedResponse = true
 	}
 
-	if !positive && len(e.ResolvedRoots) == 0 && !acceptedEcho && strings.TrimSpace(string(e.Reason)) == "" {
+	if !positive && len(e.ResolvedRoots) == 0 && !acceptedResponse && strings.TrimSpace(string(e.Reason)) == "" {
 		return errors.New("successful transition has zero evidence; a non-empty reason is required")
 	}
 	return nil
@@ -129,6 +188,8 @@ func (e Evidence) FinishSuccess() error {
 }
 
 // RenderHuman validates and writes a deterministic human-readable summary.
+// Every caller-controlled string is quoted, so control characters cannot forge
+// additional lines in the evidence grammar.
 func RenderHuman(w io.Writer, evidence Evidence) error {
 	e, err := normalized(evidence)
 	if err != nil {
@@ -136,31 +197,35 @@ func RenderHuman(w io.Writer, evidence Evidence) error {
 	}
 
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "transition: %s\n", e.Action)
+	fmt.Fprintf(&b, "transition: %s\n", humanString(e.Action))
 	if len(e.Counts) > 0 {
 		b.WriteString("counts:\n")
 		for _, count := range e.Counts {
-			fmt.Fprintf(&b, "  %s: %d\n", count.Name, count.Value)
+			fmt.Fprintf(&b, "  %s: %d\n", humanString(count.Name), count.Value)
 		}
 	}
 	if len(e.ResolvedRoots) > 0 {
 		b.WriteString("resolved roots:\n")
 		for _, root := range e.ResolvedRoots {
-			fmt.Fprintf(&b, "  %s: %s -> %s\n", root.Name, root.Declared, root.Resolved)
+			fmt.Fprintf(&b, "  %s: %s -> %s\n", humanString(root.Name), humanString(root.Declared), humanString(root.Resolved))
 		}
 	}
-	if e.ServerEcho != nil {
-		fmt.Fprintf(&b, "server accepted: %s", e.ServerEcho.Response)
-		if e.ServerEcho.RequestID != "" {
-			fmt.Fprintf(&b, " (request %s)", e.ServerEcho.RequestID)
+	if e.ServerReceipt != nil {
+		fmt.Fprintf(&b, "server accepted: %s", humanString(e.ServerReceipt.response))
+		if e.ServerReceipt.requestID != "" {
+			fmt.Fprintf(&b, " (request %s)", humanString(e.ServerReceipt.requestID))
 		}
 		b.WriteByte('\n')
 	}
 	if e.Reason != "" {
-		fmt.Fprintf(&b, "reason: %s\n", e.Reason)
+		fmt.Fprintf(&b, "reason: %s\n", humanString(string(e.Reason)))
 	}
 	_, err = w.Write(b.Bytes())
 	return err
+}
+
+func humanString(value string) string {
+	return strconv.QuoteToGraphic(value)
 }
 
 // RenderJSON validates and writes deterministic indented JSON followed by a
