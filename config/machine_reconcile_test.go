@@ -34,11 +34,72 @@ func TestReconcileCodeRootsSpecificOnly(t *testing.T) {
 }
 
 func TestMachineTopologyTablesRequireMigration(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, table := range []string{"ecosystems", "roots"} {
 		path := filepath.Join(t.TempDir(), "machine.toml")
 		_, err := ParseMachineConfigContent(path, "[machine."+table+".legacy]\npath = \"/code\"\n")
-		if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "[machine."+table+"]") || !strings.Contains(err.Error(), "grove migrate") {
+		if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "[machine."+table+"]") || !strings.Contains(err.Error(), "grove migrate") || !strings.Contains(err.Error(), "roots.toml is absent") {
 			t.Fatalf("table %s error = %v", table, err)
 		}
+	}
+}
+
+func TestCanonicalLoadersRejectLegacyMachineTopology(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		load func(string) error
+	}{
+		{name: "Load", load: func(project string) error { _, err := Load(filepath.Join(project, "grove.toml")); return err }},
+		{name: "LoadFrom", load: func(project string) error { _, err := LoadFrom(project); return err }},
+		{name: "LoadLayered", load: func(project string) error { _, err := LoadLayered(project); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ResetLoadCache()
+			t.Cleanup(ResetLoadCache)
+			configHome := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", configHome)
+			configDir := filepath.Join(configHome, "grove")
+			if err := os.MkdirAll(configDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			machinePath := filepath.Join(configDir, MachineConfigFileName)
+			if err := os.WriteFile(machinePath, []byte("[machine.ecosystems.old]\npath = \"/code\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			project := t.TempDir()
+			if err := os.WriteFile(filepath.Join(project, "grove.toml"), []byte("name = \"project\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := tc.load(project)
+			if err == nil || !strings.Contains(err.Error(), machinePath) || !strings.Contains(err.Error(), "roots.toml is absent") || !strings.Contains(err.Error(), "grove migrate") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestCanonicalMachineTopologyRejectsMixedState(t *testing.T) {
+	ResetLoadCache()
+	t.Cleanup(ResetLoadCache)
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	configDir := filepath.Join(configHome, "grove")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, coderoot.RootsFileName), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	machinePath := filepath.Join(configDir, MachineConfigFileName)
+	if err := os.WriteFile(machinePath, []byte("[machine.roots.old]\npath = \"/code\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	projectPath := filepath.Join(t.TempDir(), "grove.toml")
+	if err := os.WriteFile(projectPath, []byte("name = \"project\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(projectPath)
+	if err == nil || !strings.Contains(err.Error(), "forbidden mixed state") || !strings.Contains(err.Error(), machinePath) {
+		t.Fatalf("error = %v", err)
 	}
 }

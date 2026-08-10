@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -145,6 +146,29 @@ func TestLoadRereadsAfterEnvChangeWithDefaultForm(t *testing.T) {
 	}
 	if cfg.Name != "explicit" {
 		t.Errorf("Name = %q, want %q — ${VAR:-default} reference not tracked", cfg.Name, "explicit")
+	}
+}
+
+func TestLoadInvalidatesWhenLegacyMachineConfigAppears(t *testing.T) {
+	ResetLoadCache()
+	t.Cleanup(ResetLoadCache)
+	groveHome := t.TempDir()
+	t.Setenv("GROVE_HOME", groveHome)
+	configDir := filepath.Join(groveHome, "config", "grove")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "grove.toml")
+	writeConfigAt(t, path, "name = \"cached\"\n", -2*time.Second)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+
+	machinePath := filepath.Join(configDir, MachineConfigFileName)
+	writeConfigAt(t, machinePath, "[machine.ecosystems.old]\npath = \"/code\"\n", -1*time.Second)
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), machinePath) || !strings.Contains(err.Error(), "grove migrate") {
+		t.Fatalf("legacy machine appearance remained cached: %v", err)
 	}
 }
 

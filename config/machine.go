@@ -92,7 +92,10 @@ func ParseMachineConfigContent(path, content string) (*MachineConfig, error) {
 	if machine, ok := raw["machine"].(map[string]interface{}); ok {
 		for _, table := range []string{"ecosystems", "roots"} {
 			if _, exists := machine[table]; exists {
-				return nil, fmt.Errorf("legacy config %s contains [machine.%s]; run 'grove migrate'", path, table)
+				if _, statErr := os.Stat(coderoot.RootsPath()); statErr == nil {
+					return nil, fmt.Errorf("forbidden mixed state: %s contains legacy [machine.%s] while %s exists; run 'grove migrate'", path, table, coderoot.RootsFileName)
+				}
+				return nil, fmt.Errorf("legacy config %s contains [machine.%s] and %s is absent; run 'grove migrate'", path, table, coderoot.RootsFileName)
 			}
 		}
 	}
@@ -104,6 +107,34 @@ func ParseMachineConfigContent(path, content string) (*MachineConfig, error) {
 		return nil, fmt.Errorf("invalid machine config %s: %w", path, err)
 	}
 	return &cfg, nil
+}
+
+// validateCanonicalMachineConfig makes the canonical machine.toml part of a
+// normal config load without projecting its display-only fields into Config.
+// A nil trace is used by uncached loaders; hierarchical loads pass their trace
+// so both presence and absence participate in cache freshness.
+func validateCanonicalMachineConfig(trace *loadFromTrace) error {
+	path := MachineConfigPath()
+	if path == "" {
+		return nil
+	}
+	var (
+		data []byte
+		err  error
+	)
+	if trace != nil {
+		data, err = trace.readFile(path)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read machine config %s: %w", path, err)
+	}
+	_, err = ParseMachineConfigContent(path, string(data))
+	return err
 }
 
 func (m *MachineConfig) Validate() error {

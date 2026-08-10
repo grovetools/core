@@ -111,6 +111,29 @@ monitoring:
 	}
 }
 
+func TestLoadLegacyTopologyErrorNamesSourcePath(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	for _, tc := range []struct {
+		name    string
+		path    string
+		content string
+	}{
+		{name: "TOML", path: filepath.Join(t.TempDir(), "actual.toml"), content: "[groves.old]\npath = '/code'\n"},
+		{name: "YAML", path: filepath.Join(t.TempDir(), "actual.yml"), content: "search_paths:\n  old:\n    path: /code\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(tc.path, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(tc.path)
+			if err == nil || !strings.Contains(err.Error(), tc.path) || strings.Contains(err.Error(), "<TOML bytes>") || strings.Contains(err.Error(), "<YAML bytes>") {
+				t.Fatalf("error = %v, want actual source path %s", err, tc.path)
+			}
+		})
+	}
+}
+
 func TestLegacyTopologyRequiresMigration(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)

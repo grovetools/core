@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -181,6 +182,20 @@ func TestLoadFromRereadsAfterGlobalFragmentCreated(t *testing.T) {
 	}
 	if cfg.BuildCmd != "frag" {
 		t.Errorf("BuildCmd = %q, want %q — new global fragment not picked up", cfg.BuildCmd, "frag")
+	}
+}
+
+func TestLoadFromInvalidatesWhenLegacyMachineConfigAppears(t *testing.T) {
+	projectDir, globalDir := setupLoadFromHierarchy(t)
+	if _, err := LoadFrom(projectDir); err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+
+	machinePath := filepath.Join(globalDir, MachineConfigFileName)
+	writeConfigAt(t, machinePath, "[machine.roots.old]\npath = \"/code\"\n", -1*time.Second)
+	_, err := LoadFrom(projectDir)
+	if err == nil || !strings.Contains(err.Error(), machinePath) || !strings.Contains(err.Error(), "grove migrate") {
+		t.Fatalf("legacy machine appearance remained cached: %v", err)
 	}
 }
 

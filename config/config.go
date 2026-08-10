@@ -339,6 +339,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg, err := parseConfigBytes(path, data)
+	if err == nil {
+		err = validateCanonicalMachineConfig(nil)
+	}
 	if err != nil {
 		// Parse failures are not cached. They are rare, loud (workspace
 		// classification surfaces them), and re-deriving one costs a parse of
@@ -357,7 +360,14 @@ func loadUncached(path string) (*Config, error) {
 	if err != nil {
 		return nil, readConfigError(path, err)
 	}
-	return parseConfigBytes(path, data)
+	cfg, err := parseConfigBytes(path, data)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCanonicalMachineConfig(nil); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // readConfigError maps a failed read of a config file to the error Load has
@@ -374,9 +384,9 @@ func readConfigError(path string, err error) error {
 // .toml, YAML for everything else.
 func parseConfigBytes(path string, data []byte) (*Config, error) {
 	if strings.HasSuffix(path, ".toml") {
-		return LoadFromTOMLBytes(data)
+		return loadFromTOMLBytes(path, data)
 	}
-	return LoadFromBytes(data)
+	return loadFromYAMLBytes(path, data)
 }
 
 // LoadDefault finds and loads the configuration with hierarchical merging:
@@ -437,6 +447,12 @@ func LoadFromWithLogger(startDir string, logger *logrus.Logger) (*Config, error)
 // glob, discovery result, and env reference it consults into trace, which is
 // what lets LoadFromWithLogger serve the result until one of them changes.
 func loadFromHierarchy(startDir string, logger *logrus.Logger, trace *loadFromTrace) (*Config, error) {
+	// machine.toml is display metadata, not a merge layer, but canonical loads
+	// must reject its removed topology tables and cache its presence/absence.
+	if err := validateCanonicalMachineConfig(trace); err != nil {
+		return nil, err
+	}
+
 	// Find project config file first
 	projectPath, err := FindConfigFile(startDir)
 	if err != nil {
@@ -911,10 +927,14 @@ func overlayLookup() string {
 
 // LoadFromBytes parses configuration from byte array
 func LoadFromBytes(data []byte) (*Config, error) {
+	return loadFromYAMLBytes("<YAML bytes>", data)
+}
+
+func loadFromYAMLBytes(source string, data []byte) (*Config, error) {
 	// Expand environment variables
 	expanded := expandEnvVars(string(data))
 
-	if err := rejectLegacyTopology("<YAML bytes>", []byte(expanded), false); err != nil {
+	if err := rejectLegacyTopology(source, []byte(expanded), false); err != nil {
 		return nil, err
 	}
 	var config Config
@@ -944,10 +964,14 @@ func LoadFromBytes(data []byte) (*Config, error) {
 
 // LoadFromTOMLBytes parses configuration from TOML byte array
 func LoadFromTOMLBytes(data []byte) (*Config, error) {
+	return loadFromTOMLBytes("<TOML bytes>", data)
+}
+
+func loadFromTOMLBytes(source string, data []byte) (*Config, error) {
 	// Expand environment variables
 	expanded := expandEnvVars(string(data))
 
-	if err := rejectLegacyTopology("<TOML bytes>", []byte(expanded), true); err != nil {
+	if err := rejectLegacyTopology(source, []byte(expanded), true); err != nil {
 		return nil, err
 	}
 	var config Config
@@ -1344,6 +1368,10 @@ func resolveNotebookDirWithConfig(projectRoot string, cfg *Config) (string, stri
 // LoadLayered finds and loads all configuration layers (global, project, overrides)
 // without merging them, for analysis purposes. It also computes the final merged config.
 func LoadLayered(startDir string) (*LayeredConfig, error) {
+	if err := validateCanonicalMachineConfig(nil); err != nil {
+		return nil, err
+	}
+
 	logger := logrus.New()
 	logger.SetLevel(logrus.WarnLevel) // Suppress debug logs for this loader
 

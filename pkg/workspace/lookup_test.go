@@ -262,16 +262,11 @@ func TestAssignNotebookName_WorktreeInheritsOriginGrove(t *testing.T) {
 	})
 }
 
-// TestAssignNotebookName_InsideNotebookStorageTree verifies that a command run
-// from a cwd inside a notebook's OWN storage tree (e.g. the git repo that backs
-// ~/notebooks/grovetools) resolves to THAT notebook, not the global default.
-//
-// Regression: the notebook storage tree is its own git repo, so the upward
-// workspace walk classifies it as a NonGroveRepo whose path is under no grove;
-// assignNotebookName then fell back to the default notebook ("nb"), so nb/flow
-// resolved to a different (stale) notebook root than the one holding the
-// content. The fix matches the node path against configured notebook root_dirs.
-func TestAssignNotebookName_InsideNotebookStorageTree(t *testing.T) {
+// TestAssignNotebookName_RawNotebookRootIsNotRouting verifies the W1.4
+// recorded-only contract: a raw notebooks.definitions root_dir is storage
+// metadata, not a routing declaration. Without a compiled root binding, a
+// non-grove path under that directory uses the recorded default.
+func TestAssignNotebookName_RawNotebookRootIsNotRouting(t *testing.T) {
 	nbRoot := t.TempDir()         // backs notebook "nb" (the default)
 	grovetoolsRoot := t.TempDir() // backs notebook "grovetools"
 	groveDir := t.TempDir()       // configured grove source (~/code)
@@ -289,18 +284,18 @@ func TestAssignNotebookName_InsideNotebookStorageTree(t *testing.T) {
 		},
 	}
 
-	t.Run("NonGroveRepo at a notebook root adopts that notebook", func(t *testing.T) {
+	t.Run("NonGroveRepo at a raw notebook root uses default", func(t *testing.T) {
 		node := &WorkspaceNode{
 			Name: filepath.Base(grovetoolsRoot),
 			Path: grovetoolsRoot,
 			Kind: KindNonGroveRepo,
 		}
 		applyNotebookBinding(node, cfg)
-		assert.Equal(t, "grovetools", node.NotebookName,
-			"a path inside a notebook's storage tree should resolve to that notebook, not the default")
+		assert.Equal(t, "nb", node.NotebookName,
+			"raw root_dir containment must not create a notebook binding")
 	})
 
-	t.Run("path deep inside a notebook root adopts that notebook", func(t *testing.T) {
+	t.Run("path deep inside a raw notebook root uses default", func(t *testing.T) {
 		deep := filepath.Join(grovetoolsRoot, "workspaces", "grovetools")
 		require.NoError(t, os.MkdirAll(deep, 0o755))
 		node := &WorkspaceNode{
@@ -309,7 +304,7 @@ func TestAssignNotebookName_InsideNotebookStorageTree(t *testing.T) {
 			Kind: KindNonGroveRepo,
 		}
 		applyNotebookBinding(node, cfg)
-		assert.Equal(t, "grovetools", node.NotebookName)
+		assert.Equal(t, "nb", node.NotebookName)
 	})
 
 	t.Run("grove-spatial match still wins over root_dir fallback", func(t *testing.T) {

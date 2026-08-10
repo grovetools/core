@@ -25,10 +25,12 @@ import (
 //
 //   - the config file itself, by (mtime, size);
 //   - roots.toml and notebooks.toml, each by path and (mtime, size) — the
-//     runtime compiler folds both into every
-//     loaded config, and each file's ABSENCE is equally load-bearing;
-//   - the environment variables the config file, roots.toml, and
-//     notebooks.toml reference through ${VAR}, by value.
+//     runtime compiler folds both into every loaded config;
+//   - machine.toml by path and (mtime, size), because canonical loads reject
+//     removed machine topology even though display metadata is not projected;
+//     each canonical file's ABSENCE is equally load-bearing;
+//   - the environment variables the config file and all three canonical files
+//     reference through ${VAR}, by value.
 //
 // Freshness costs four stats and a handful of os.Getenv calls; a miss costs the
 // full read+parse+validate. Failures are never cached: an unreadable or
@@ -92,6 +94,8 @@ type fileCacheEntry struct {
 	roots         fileStamp
 	notebooksPath string
 	notebooks     fileStamp
+	machinePath   string
+	machine       fileStamp
 	envNames      []string
 	envValues     []string
 }
@@ -111,6 +115,9 @@ func (e *fileCacheEntry) fresh(self fileStamp) bool {
 	if e.notebooksPath != coderoot.NotebooksPath() || !e.notebooks.equal(stampFile(e.notebooksPath)) {
 		return false
 	}
+	if e.machinePath != MachineConfigPath() || !e.machine.equal(stampFile(e.machinePath)) {
+		return false
+	}
 	for i, name := range e.envNames {
 		if os.Getenv(name) != e.envValues[i] {
 			return false
@@ -125,7 +132,7 @@ func (e *fileCacheEntry) store(self fileStamp, cfg *Config, envNames []string) {
 	// compileCodeRoots expands recorded routing files into cfg during parsing,
 	// so their environment references are dependencies of this cache entry too.
 	// Trace the same canonical paths whose stamps fresh checks.
-	envNames = appendEnvRefs(envNames, coderoot.RootsPath(), coderoot.NotebooksPath())
+	envNames = appendEnvRefs(envNames, coderoot.RootsPath(), coderoot.NotebooksPath(), MachineConfigPath())
 	envValues := make([]string, len(envNames))
 	for i, name := range envNames {
 		envValues[i] = os.Getenv(name)
@@ -133,11 +140,14 @@ func (e *fileCacheEntry) store(self fileStamp, cfg *Config, envNames []string) {
 
 	rootsPath := coderoot.RootsPath()
 	notebooksPath := coderoot.NotebooksPath()
+	machinePath := MachineConfigPath()
 	e.self = self
 	e.rootsPath = rootsPath
 	e.roots = stampFile(rootsPath)
 	e.notebooksPath = notebooksPath
 	e.notebooks = stampFile(notebooksPath)
+	e.machinePath = machinePath
+	e.machine = stampFile(machinePath)
 	e.envNames = envNames
 	e.envValues = envValues
 	e.cfg = cfg
