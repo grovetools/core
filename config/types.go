@@ -1348,12 +1348,6 @@ type HooksConfig struct {
 	PostToolUse []PostToolUseHook `yaml:"post_tool_use,omitempty" toml:"post_tool_use,omitempty" jsonschema:"description=Reminder hooks that emit additional context after tool calls"`
 }
 
-// SyncthingConfig holds settings for automated Syncthing folder setup.
-type SyncthingConfig struct {
-	Devices     []string `yaml:"devices,omitempty" toml:"devices,omitempty" jsonschema:"description=Syncthing device IDs to share this notebook with" jsonschema_extras:"x-layer=global,x-priority=40,x-important=true"`
-	FolderTitle string   `yaml:"folder_title,omitempty" toml:"folder_title,omitempty" jsonschema:"description=Custom title for the Syncthing folder (defaults to grove-<notebook>)" jsonschema_extras:"x-layer=global,x-priority=41"`
-}
-
 // ObsidianConfig holds settings for automated Obsidian vault setup.
 type ObsidianConfig struct {
 	VaultName      string `yaml:"vault_name,omitempty" toml:"vault_name,omitempty" jsonschema:"description=Display name for the generated Obsidian vault" jsonschema_extras:"x-layer=global,x-priority=45"`
@@ -1377,9 +1371,8 @@ type Notebook struct {
 	// Sync is tagged toml:"-" because the key accepts two shapes (the typed
 	// SyncConfig table and the legacy provider list); TOML decoding happens
 	// in postProcessTOMLNotebookSync, YAML via SyncConfig.UnmarshalYAML.
-	Sync      *SyncConfig      `yaml:"sync,omitempty" toml:"-" jsonschema:"description=Synchronization configuration for this notebook"`
-	Syncthing *SyncthingConfig `yaml:"syncthing,omitempty" toml:"syncthing,omitempty" jsonschema:"description=Syncthing automated setup configuration"`
-	Obsidian  *ObsidianConfig  `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
+	Sync     *SyncConfig     `yaml:"sync,omitempty" toml:"-" jsonschema:"description=Synchronization configuration for this notebook"`
+	Obsidian *ObsidianConfig `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
 }
 
 // WorktreeConfig holds settings for git worktrees.
@@ -1429,18 +1422,6 @@ type EcosystemCard struct {
 	// renames — including from a synthetic worktree, which resolves to its
 	// owner and reads the owner's card.
 	ID string `yaml:"id,omitempty" toml:"id,omitempty" jsonschema:"description=Stable ULID identifying this ecosystem across machines and clones (minted once; never edited)" jsonschema_extras:"x-layer=ecosystem,x-priority=12,x-important=true"`
-	// Layout declares how a peer materializes this ecosystem: "superrepo" (the
-	// primary remote is a superrepo whose submodules are the member repos) or
-	// "flat" (the remotes list enumerates independent repos). Auto-detected at
-	// init/adopt from the presence of .gitmodules at the ecosystem root.
-	Layout string `yaml:"layout,omitempty" toml:"layout,omitempty" jsonschema:"description=How this ecosystem is materialized: superrepo (submodules under one root repo) or flat (independent repos),enum=superrepo,enum=flat" jsonschema_extras:"x-layer=ecosystem,x-priority=13,x-important=true"`
-	// Remotes are the git remotes a peer clones from. Git remotes are the only
-	// durable transport for repos; bundles never are.
-	Remotes []EcosystemRemote `yaml:"remotes,omitempty" toml:"remotes,omitempty" jsonschema:"description=Git remotes a peer clones this ecosystem from" jsonschema_extras:"x-layer=ecosystem,x-priority=14"`
-	// Notebooks is the ecosystem→notebook binding, keyed by notebook name.
-	// This is the default binding that travels with the clone; a machine may
-	// still override it locally.
-	Notebooks map[string]EcosystemNotebook `yaml:"notebooks,omitempty" toml:"notebooks,omitempty" jsonschema:"description=Notebooks bound to this ecosystem keyed by notebook name" jsonschema_extras:"x-layer=ecosystem,x-priority=15"`
 }
 
 // EcosystemRemote is one `[[ecosystem.remotes]]` entry.

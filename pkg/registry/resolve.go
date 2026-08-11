@@ -43,7 +43,7 @@ func ResolveWorkspaceRoot(cfg *config.Config, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(notebookRoot, "workspaces", name), nil
+	return filepath.Join(notebookRoot, "notespaces", name), nil
 }
 
 // recordedNotebookRoot is the literal rung 0 shared with the daemon. A

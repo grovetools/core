@@ -10,7 +10,7 @@ import (
 )
 
 // GetProjectFromNotebookPath finds the project associated with a notebook path.
-// Given a path inside a notebook (e.g., /notebooks/nb/workspaces/zooboo2/plans/...),
+// Given a path inside a notebook (e.g., /notebooks/nb/notespaces/zooboo2/plans/...),
 // it extracts the workspace name and finds the corresponding project.
 //
 // Returns:
@@ -221,7 +221,7 @@ func getNotebookTemplates(nb *config.Notebook) []string {
 }
 
 // extractWorkspaceFromTemplate tries to extract the workspace name from a path
-// by reverse-parsing against a template like "workspaces/{{ .Workspace.Name }}/plans".
+// by reverse-parsing against a template like "notespaces/{{ .Workspace.Name }}/plans".
 func extractWorkspaceFromTemplate(relPath, tmpl string) string {
 	// Convert template to regex pattern
 	pattern := tmpl
@@ -231,9 +231,9 @@ func extractWorkspaceFromTemplate(relPath, tmpl string) string {
 	pattern = strings.ReplaceAll(pattern, "{{.NoteType}}", "[^/]+")
 
 	// Create patterns for different matching scenarios:
-	// 1. Path is under template dir (workspaces/zooboo2/plans/myplan)
-	// 2. Path is exactly template dir (workspaces/zooboo2/plans)
-	// 3. Path is partial (workspaces/zooboo2) - just the workspace part
+	// 1. Path is under template dir (notespaces/zooboo2/plans/myplan)
+	// 2. Path is exactly template dir (notespaces/zooboo2/plans)
+	// 3. Path is partial (notespaces/zooboo2) - just the notespace part
 	patterns := []string{
 		"^" + pattern + "(/|$)", // Full template match with optional subdirs
 		"^" + pattern + "$",     // Exact template match
@@ -274,30 +274,12 @@ func extractWorkspaceNameFallback(absPath, notebookRoot string) string {
 	if err == nil && relPath != "." {
 		parts := strings.Split(relPath, string(filepath.Separator))
 
-		// Look for "workspaces/<name>" pattern
+		// Only the canonical notespace segment is authoritative. A first-path
+		// component fallback can silently route to the wrong same-name root.
 		for i, part := range parts {
-			if part == "workspaces" && i+1 < len(parts) {
+			if part == "notespaces" && i+1 < len(parts) {
 				return parts[i+1]
 			}
-		}
-
-		// Fallback: first non-empty directory component
-		for _, part := range parts {
-			if part != "" && part != "." {
-				return part
-			}
-		}
-	}
-
-	// If we're at the notebook root itself, extract from the root path
-	notebookParts := strings.Split(notebookRoot, string(filepath.Separator))
-	for i := len(notebookParts) - 1; i >= 0; i-- {
-		part := notebookParts[i]
-		if part != "" && part != "." {
-			if i > 0 && notebookParts[i-1] == "workspaces" {
-				return part
-			}
-			return part
 		}
 	}
 

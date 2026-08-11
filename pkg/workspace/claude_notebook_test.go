@@ -24,7 +24,7 @@ func centralizedConfig(rootDir string) *config.Config {
 	}
 }
 
-// notebookRootForNode should return the paired notebook ROOT (workspaces/<repo>),
+// notebookRootForNode should return the paired notebook ROOT (notespaces/<repo>),
 // i.e. the parent of the per-note-type dirs.
 func TestNotebookRootForNode_CentralizedRoot(t *testing.T) {
 	rootDir := t.TempDir()
@@ -38,8 +38,8 @@ func TestNotebookRootForNode_CentralizedRoot(t *testing.T) {
 	}
 
 	root := notebookRootForNode(locator, node)
-	want := filepath.Join(rootDir, "workspaces", "core")
-	assert.Equal(t, want, root, "root is the parent of workspaces/<repo>/inbox")
+	want := filepath.Join(rootDir, "notespaces", "core")
+	assert.Equal(t, want, root, "root is the parent of notespaces/<repo>/inbox")
 }
 
 // Two distinct repos resolve to distinct notebook roots.
@@ -50,8 +50,8 @@ func TestNotebookRootForNode_DistinctPerRepo(t *testing.T) {
 	core := &WorkspaceNode{Name: "core", Kind: KindEcosystemSubProject, NotebookName: "grovetools"}
 	nb := &WorkspaceNode{Name: "nb", Kind: KindEcosystemSubProject, NotebookName: "grovetools"}
 
-	assert.Equal(t, filepath.Join(rootDir, "workspaces", "core"), notebookRootForNode(locator, core))
-	assert.Equal(t, filepath.Join(rootDir, "workspaces", "nb"), notebookRootForNode(locator, nb))
+	assert.Equal(t, filepath.Join(rootDir, "notespaces", "core"), notebookRootForNode(locator, core))
+	assert.Equal(t, filepath.Join(rootDir, "notespaces", "nb"), notebookRootForNode(locator, nb))
 }
 
 // resolveRepoNode (and therefore resolveNotebookDirsForRepos) silently skips an

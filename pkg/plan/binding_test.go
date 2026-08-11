@@ -95,7 +95,7 @@ func mkdirAll(path string) error { return os.MkdirAll(path, 0o755) }
 // collapsing into unbound or binding mismatch.
 func TestResolvePlanBindingsMissingContainerBeatsConfigDrift(t *testing.T) {
 	root := t.TempDir()
-	planDir := filepath.Join(root, "workspaces", "alpha-repo", "plans", "missing-view")
+	planDir := filepath.Join(root, "notespaces", "alpha-repo", "plans", "missing-view")
 	gone := filepath.Join(root, "alpha-repo", ".grove-worktrees", "missing-view")
 	resolver := func(path string) (*ResolvedTarget, error) {
 		return &ResolvedTarget{ContainerPath: path, PlanDir: planDir}, nil
@@ -130,8 +130,8 @@ func TestResolvePlanBindingsMissingContainerBeatsConfigDrift(t *testing.T) {
 // all keep their distinct unbound state.
 func TestResolvePlanBindingsMissingContainerStaysQualified(t *testing.T) {
 	root := t.TempDir()
-	alphaPlan := filepath.Join(root, "workspaces", "alpha-repo", "plans", "view")
-	betaPlan := filepath.Join(root, "workspaces", "beta-repo", "plans", "view")
+	alphaPlan := filepath.Join(root, "notespaces", "alpha-repo", "plans", "view")
+	betaPlan := filepath.Join(root, "notespaces", "beta-repo", "plans", "view")
 	goneBeta := filepath.Join(root, "beta-repo", ".grove-worktrees", "view")
 	resolver := func(path string) (*ResolvedTarget, error) {
 		return &ResolvedTarget{ContainerPath: path, PlanDir: betaPlan}, nil
@@ -141,7 +141,7 @@ func TestResolvePlanBindingsMissingContainerStaysQualified(t *testing.T) {
 	got := resolvePlanBindings([]BindingRequest{
 		{PlanDir: alphaPlan, ConfiguredWorktree: "view"},
 		{PlanDir: betaPlan, ConfiguredWorktree: "view"},
-		{PlanDir: filepath.Join(root, "workspaces", "alpha-repo", "plans", "solo")},
+		{PlanDir: filepath.Join(root, "notespaces", "alpha-repo", "plans", "solo")},
 	}, entries, resolver)
 
 	if binding := got[NewPlanKey(alphaPlan).String()]; binding.Health != BindingMismatch {
@@ -150,7 +150,7 @@ func TestResolvePlanBindingsMissingContainerStaysQualified(t *testing.T) {
 	if binding := got[NewPlanKey(betaPlan).String()]; binding.Health != BindingMissing {
 		t.Fatalf("beta: %+v", binding)
 	}
-	if binding := got[NewPlanKey(filepath.Join(root, "workspaces", "alpha-repo", "plans", "solo")).String()]; binding.Health != BindingUnbound {
+	if binding := got[NewPlanKey(filepath.Join(root, "notespaces", "alpha-repo", "plans", "solo")).String()]; binding.Health != BindingUnbound {
 		t.Fatalf("solo: %+v", binding)
 	}
 }

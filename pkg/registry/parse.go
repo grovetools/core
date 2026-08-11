@@ -30,16 +30,11 @@ type noteFrontmatter struct {
 		Exclude  []string `yaml:"exclude"`
 		Card     *struct {
 			ID      string `yaml:"id"`
-			Layout  string `yaml:"layout"`
-			Remotes []struct {
-				Name string `yaml:"name"`
-				URL  string `yaml:"url"`
-			} `yaml:"remotes"`
-			Notebooks []struct {
-				Name     string `yaml:"name"`
-				Default  bool   `yaml:"default"`
-				Audience string `yaml:"audience"`
-			} `yaml:"notebooks"`
+			Name    string `yaml:"name"`
+			Members []struct {
+				Path   string `yaml:"path"`
+				Origin string `yaml:"origin"`
+			} `yaml:"members"`
 		} `yaml:"card"`
 	} `yaml:"ecosystems"`
 
@@ -121,14 +116,9 @@ func ParseNote(data []byte) (*Note, error) {
 			Exclude:  append([]string(nil), e.Exclude...),
 		}
 		if e.Card != nil {
-			card := &NoteCard{ID: e.Card.ID, Layout: e.Card.Layout}
-			for _, r := range e.Card.Remotes {
-				card.Remotes = append(card.Remotes, NoteRemote{Name: r.Name, URL: r.URL})
-			}
-			for _, nb := range e.Card.Notebooks {
-				card.Notebooks = append(card.Notebooks, NoteCardNotebook{
-					Name: nb.Name, Default: nb.Default, Audience: nb.Audience,
-				})
+			card := &NoteCard{ID: e.Card.ID, Name: e.Card.Name}
+			for _, member := range e.Card.Members {
+				card.Members = append(card.Members, NoteMemberOrigin{Path: member.Path, Origin: member.Origin})
 			}
 			eco.Card = card
 		}

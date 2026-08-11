@@ -36,6 +36,7 @@ type AliasResolver struct {
 	configPath      string // Optional: custom config path for testing
 	workDir         string // Current working directory for context-aware resolution
 	notebookLocator *workspace.NotebookLocator
+	config          *config.Config
 }
 
 // NewAliasResolver creates a new, uninitialized alias resolver.
@@ -76,6 +77,7 @@ func (r *AliasResolver) InitProvider() {
 
 		// Initialize NotebookLocator with config
 		cfg, _ := config.LoadDefault()
+		r.config = cfg
 		r.notebookLocator = workspace.NewNotebookLocator(cfg)
 	})
 }
@@ -89,6 +91,7 @@ func (r *AliasResolver) InitProviderFromNodes(nodes []*workspace.WorkspaceNode) 
 
 		// Initialize NotebookLocator with config (same as InitProvider)
 		cfg, _ := config.LoadDefault()
+		r.config = cfg
 		r.notebookLocator = workspace.NewNotebookLocator(cfg)
 	})
 }
@@ -225,41 +228,22 @@ func (r *AliasResolver) ResolveResourceAlias(alias string) (string, error) {
 		return "", err
 	}
 
-	// 2. Resolve the workspace name to a WorkspaceNode.
-	wsNode := r.Provider.FindByName(workspaceName)
-	if wsNode == nil {
-		// Attempt fuzzy matching for better error message.
-		var suggestions []string
-		for _, node := range r.Provider.All() {
-			if strings.Contains(node.Name, workspaceName) {
-				suggestions = append(suggestions, node.Name)
-			}
-		}
-		if len(suggestions) > 0 {
-			return "", fmt.Errorf("workspace not found: '%s'. Did you mean: %s?", workspaceName, strings.Join(suggestions, ", "))
-		}
-		return "", fmt.Errorf("workspace not found: '%s'", workspaceName)
-	}
-
-	// 3. Use NotebookLocator to get the directory based on the resource path
-	// The resource path format is like "plans/my-plan" or "inbox/note.md"
-	// We need to extract the first component to determine the resource type
-	parts := strings.SplitN(resourcePath, "/", 2)
-	groupName := parts[0] // e.g., "plans", "inbox", "chats"
-	remainingPath := ""
-	if len(parts) > 1 {
-		remainingPath = parts[1] // e.g., "my-plan", "note.md"
-	}
-
-	// Use GetGroupDir to resolve the base directory for the resource type
-	groupDir, err := r.notebookLocator.GetGroupDir(wsNode, groupName)
+	// 2. Resolve the notes-plane display name through stamped primary identity.
+	// Provider.FindByName is a code-plane lookup and must not route notes.
+	machine, err := config.LoadMachineConfig()
 	if err != nil {
-		return "", fmt.Errorf("could not resolve group directory for '%s' in workspace '%s': %w", groupName, workspaceName, err)
+		return "", fmt.Errorf("load notespace routing: %w", err)
+	}
+	resolution, err := workspace.ResolveNotespaceName(workspaceName, r.config, machine)
+	if err != nil {
+		return "", err
 	}
 
-	// 4. Join with the remaining path to get the final absolute path
-	if remainingPath != "" {
-		return filepath.Join(groupDir, remainingPath), nil
+	// 3. Resource groups are direct children of the resolved stamped root.
+	parts := strings.SplitN(resourcePath, "/", 2)
+	groupDir := filepath.Join(resolution.Root, parts[0])
+	if len(parts) > 1 {
+		return filepath.Join(groupDir, parts[1]), nil
 	}
 	return groupDir, nil
 }

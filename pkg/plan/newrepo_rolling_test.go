@@ -41,7 +41,7 @@ func TestNewRepoGetsARollingPlanInItsNotebook(t *testing.T) {
 	if !created {
 		t.Error("rolling plan reported as pre-existing in a brand-new repo")
 	}
-	want := filepath.Join(notebook, "workspaces", "widgets", "plans", RollingPlanName)
+	want := filepath.Join(notebook, "notespaces", "widgets", "plans", RollingPlanName)
 	if dir != want {
 		t.Fatalf("rolling plan at %q, want %q", dir, want)
 	}

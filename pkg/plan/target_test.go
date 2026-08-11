@@ -77,7 +77,7 @@ func newLegacyPlanFixture(t *testing.T, root, repoName, planName string) (owner,
 // notebookPlanDir is the default-notebook plans path GetPlansDir derives when
 // no notebook is configured (root_dir ~/.grove/notebooks/nb).
 func notebookPlanDir(home, workspaceName, planName string) string {
-	return filepath.Join(home, ".grove", "notebooks", "nb", "workspaces", workspaceName, "plans", planName)
+	return filepath.Join(home, ".grove", "notebooks", "nb", "notespaces", workspaceName, "plans", planName)
 }
 
 func canonicalTempDir(t *testing.T) string {

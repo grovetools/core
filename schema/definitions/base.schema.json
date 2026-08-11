@@ -396,69 +396,8 @@
           "x-important": true,
           "x-layer": "ecosystem",
           "x-priority": "12"
-        },
-        "layout": {
-          "description": "How this ecosystem is materialized: superrepo (submodules under one root repo) or flat (independent repos)",
-          "enum": [
-            "superrepo",
-            "flat"
-          ],
-          "type": "string",
-          "x-important": true,
-          "x-layer": "ecosystem",
-          "x-priority": "13"
-        },
-        "notebooks": {
-          "additionalProperties": {
-            "$ref": "#/$defs/EcosystemNotebook"
-          },
-          "description": "Notebooks bound to this ecosystem keyed by notebook name",
-          "type": "object",
-          "x-layer": "ecosystem",
-          "x-priority": "15"
-        },
-        "remotes": {
-          "description": "Git remotes a peer clones this ecosystem from",
-          "items": {
-            "$ref": "#/$defs/EcosystemRemote"
-          },
-          "type": "array",
-          "x-layer": "ecosystem",
-          "x-priority": "14"
         }
       },
-      "type": "object"
-    },
-    "EcosystemNotebook": {
-      "additionalProperties": false,
-      "properties": {
-        "audience": {
-          "description": "Audience label for this notebook (e.g. personal org)",
-          "type": "string"
-        },
-        "default": {
-          "description": "This is the ecosystem's default notebook",
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "EcosystemRemote": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "description": "Git remote name (e.g. origin)",
-          "type": "string"
-        },
-        "url": {
-          "description": "Git remote URL a peer clones from",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "url"
-      ],
       "type": "object"
     },
     "EnvironmentConfig": {
@@ -859,10 +798,6 @@
         "sync": {
           "$ref": "#/$defs/SyncConfig",
           "description": "Synchronization configuration for this notebook"
-        },
-        "syncthing": {
-          "$ref": "#/$defs/SyncthingConfig",
-          "description": "Syncthing automated setup configuration"
         },
         "templates_path_template": {
           "description": "Path template for templates directory",
@@ -1279,28 +1214,6 @@
     },
     "SyncConfig": {
       "description": "Sync configuration: typed object (server/token/workspaces) or legacy provider list"
-    },
-    "SyncthingConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "devices": {
-          "description": "Syncthing device IDs to share this notebook with",
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "x-important": true,
-          "x-layer": "global",
-          "x-priority": "40"
-        },
-        "folder_title": {
-          "description": "Custom title for the Syncthing folder (defaults to grove-\u003cnotebook\u003e)",
-          "type": "string",
-          "x-layer": "global",
-          "x-priority": "41"
-        }
-      },
-      "type": "object"
     },
     "TUIConfig": {
       "additionalProperties": false,

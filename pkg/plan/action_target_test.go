@@ -52,7 +52,7 @@ func TestResolvePlanActionTargetResolvesFromRegistryMembership(t *testing.T) {
 	if err := os.MkdirAll(repoCheckout, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	planDir := filepath.Join(root, "notebook", "workspaces", "alpha-repo", "plans", "alpha-view")
+	planDir := filepath.Join(root, "notebook", "notespaces", "alpha-repo", "plans", "alpha-view")
 	binding := PlanBinding{
 		Key: NewPlanKey(planDir), Health: BindingValid, RegistryID: "alpha-repo/alpha-view",
 		ContainerPath: container, WorkspaceRoot: container, Repos: []string{"alpha-repo"},

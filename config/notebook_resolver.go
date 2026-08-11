@@ -32,8 +32,11 @@ import (
 // PRECEDENCE is deliberately short after the recorded-routing cutover:
 //
 //  0. a covering compiled code-root binding, consumed literally;
-//  1. containment in a compiled binding's recorded notebook root;
-//  2. the recorded default notebook.
+//  1. the recorded default notebook.
+//
+// Notes-tree containment is not routing authority: several notebook roots may
+// contain the same display segment. Notespace identity is resolved separately
+// through workspace.ResolveNotespace and immutable stamps.
 //
 // Ecosystem-card routing is stale input after migration and is never consulted.
 
@@ -147,20 +150,7 @@ func ResolveNotebook(q NotebookQuery, cfg *Config) NotebookBinding {
 		}
 	}
 
-	// Rung 1 — the path lives inside a recorded notebook storage tree.
-	// compileCodeRoots carries each literal routed NotebookRoot; raw legacy
-	// definition containment is deliberately not a routing source.
-	for _, c := range candidates {
-		if nb, root := matchCompiledNotebookRoot(c, cfg); nb != "" {
-			binding.Notebook = nb
-			binding.NotebookRoot = root
-			binding.Source = NotebookSourceNotebookRoot
-			binding.MatchedPath = c
-			return binding
-		}
-	}
-
-	// Rung 2 — the configured default.
+	// Rung 1 — the configured default.
 	if cfg != nil && cfg.Notebooks != nil && cfg.Notebooks.Rules != nil && cfg.Notebooks.Rules.Default != "" {
 		binding.Notebook = cfg.Notebooks.Rules.Default
 		binding.NotebookRoot = notebookRootForName(binding.Notebook, cfg)

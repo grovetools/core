@@ -141,27 +141,18 @@ type NoteEcosystem struct {
 	Card *NoteCard
 }
 
-// NoteCard is the embedded copy of an ecosystem's identity card.
+// NoteCard is the publish-time registry mirror. Repo-side EcosystemCard now
+// carries only the durable id; clone origins are observed from member repos at
+// publication time rather than copied from stale manifest metadata.
 type NoteCard struct {
-	ID        string
-	Layout    string
-	Remotes   []NoteRemote
-	Notebooks []NoteCardNotebook
+	ID      string
+	Name    string
+	Members []NoteMemberOrigin
 }
 
-// NoteRemote is one git remote off the embedded card.
-type NoteRemote struct {
-	Name string
-	URL  string
-}
-
-// NoteCardNotebook is one notebook binding off the embedded card. The map in
-// config.EcosystemCard becomes a name-sorted slice here so the render is
-// stable.
-type NoteCardNotebook struct {
-	Name     string
-	Default  bool
-	Audience string
+type NoteMemberOrigin struct {
+	Path   string
+	Origin string
 }
 
 // NoteRoot is one declared bare scan root.
@@ -254,18 +245,11 @@ func (n *Note) Render() []byte {
 		b.WriteString(item + "card:\n")
 		card := item + "  "
 		writeScalar(&b, card, "id", e.Card.ID)
-		writeOptScalar(&b, card, "layout", e.Card.Layout)
-
-		writeSeqKey(&b, card, "remotes", len(e.Card.Remotes))
-		for _, r := range e.Card.Remotes {
-			writeDashScalar(&b, card, "name", r.Name)
-			writeScalar(&b, itemPrefix(card), "url", r.URL)
-		}
-		writeSeqKey(&b, card, "notebooks", len(e.Card.Notebooks))
-		for _, nb := range e.Card.Notebooks {
-			writeDashScalar(&b, card, "name", nb.Name)
-			writeBool(&b, itemPrefix(card), "default", nb.Default)
-			writeOptScalar(&b, itemPrefix(card), "audience", nb.Audience)
+		writeScalar(&b, card, "name", e.Card.Name)
+		writeSeqKey(&b, card, "members", len(e.Card.Members))
+		for _, member := range e.Card.Members {
+			writeDashScalar(&b, card, "path", member.Path)
+			writeScalar(&b, itemPrefix(card), "origin", member.Origin)
 		}
 	}
 
@@ -373,10 +357,8 @@ func (n *Note) normalized() *Note {
 		sort.Strings(c.Ecosystems[i].Exclude)
 		if card := c.Ecosystems[i].Card; card != nil {
 			cp := *card
-			cp.Remotes = append([]NoteRemote(nil), card.Remotes...)
-			sort.Slice(cp.Remotes, func(a, b int) bool { return cp.Remotes[a].Name < cp.Remotes[b].Name })
-			cp.Notebooks = append([]NoteCardNotebook(nil), card.Notebooks...)
-			sort.Slice(cp.Notebooks, func(a, b int) bool { return cp.Notebooks[a].Name < cp.Notebooks[b].Name })
+			cp.Members = append([]NoteMemberOrigin(nil), card.Members...)
+			sort.Slice(cp.Members, func(a, b int) bool { return cp.Members[a].Path < cp.Members[b].Path })
 			c.Ecosystems[i].Card = &cp
 		}
 	}

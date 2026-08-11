@@ -82,7 +82,6 @@ root = "/recorded-notes"
 		RootDir:           "/legacy-notes",
 		NotesPathTemplate: "stale-notes/{{.Workspace}}",
 		Types:             map[string]*NoteTypeConfig{"stale": {}},
-		Syncthing:         &SyncthingConfig{Devices: []string{"stale-device"}},
 		Obsidian:          &ObsidianConfig{VaultName: "stale-vault"},
 	}
 	cfg := &Config{Notebooks: &NotebooksConfig{Definitions: map[string]*Notebook{"nb": legacyNotebook}}}

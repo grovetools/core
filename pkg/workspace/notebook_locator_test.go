@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -118,6 +119,8 @@ func TestNotebookLocator_WorktreeHandling(t *testing.T) {
 }
 
 func TestNotebookLocator_WorktreeContainerChildren(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, NotespaceDirectory), 0o755))
 	// Member repos inside a worktree container resolve plans in the origin
 	// ecosystem's workspace — the same workspace the KindEcosystemWorktree
 	// container itself resolves to — because the container's plan is created
@@ -127,8 +130,7 @@ func TestNotebookLocator_WorktreeContainerChildren(t *testing.T) {
 		Notebooks: &config.NotebooksConfig{
 			Definitions: map[string]*config.Notebook{
 				"nb": {
-					RootDir:           "~/notebooks/nb",
-					PlansPathTemplate: "workspaces/{{ .Workspace.Name }}/plans",
+					RootDir: root,
 				},
 			},
 			Rules: &config.NotebookRules{
@@ -139,7 +141,7 @@ func TestNotebookLocator_WorktreeContainerChildren(t *testing.T) {
 
 	locator := NewNotebookLocator(cfg)
 	container := "/home/user/.local/share/grove/worktrees/my-eco-0bd46c64/misc-fixes"
-	ecoPlans := filepath.Join("notebooks", "nb", "workspaces", "my-eco", "plans")
+	ecoPlans := filepath.Join(root, "notespaces", "my-eco", "plans")
 
 	for _, tc := range []struct {
 		name string
@@ -188,5 +190,5 @@ func TestNotebookLocator_WorktreeContainerChildren(t *testing.T) {
 	}
 	plansDir, err := locator.GetPlansDir(standaloneChild)
 	require.NoError(t, err)
-	assert.Contains(t, plansDir, filepath.Join("notebooks", "nb", "workspaces", "myrepo", "plans"))
+	assert.Equal(t, filepath.Join(root, "notespaces", "myrepo", "plans"), plansDir)
 }

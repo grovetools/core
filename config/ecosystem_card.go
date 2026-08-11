@@ -36,56 +36,13 @@ func (c *EcosystemCard) Validate() error {
 	if strings.TrimSpace(c.ID) != c.ID {
 		return fmt.Errorf("ecosystem id %q has leading or trailing whitespace", c.ID)
 	}
-	switch c.Layout {
-	case "", LayoutSuperrepo, LayoutFlat:
-	default:
-		return fmt.Errorf("ecosystem layout %q must be %q or %q", c.Layout, LayoutSuperrepo, LayoutFlat)
-	}
-
-	seen := make(map[string]bool, len(c.Remotes))
-	for _, r := range c.Remotes {
-		if strings.TrimSpace(r.Name) == "" {
-			return fmt.Errorf("ecosystem remote has an empty name")
-		}
-		if strings.TrimSpace(r.URL) == "" {
-			return fmt.Errorf("ecosystem remote %q has an empty url", r.Name)
-		}
-		if seen[r.Name] {
-			return fmt.Errorf("ecosystem remote %q is declared twice", r.Name)
-		}
-		seen[r.Name] = true
-	}
-
-	defaults := 0
-	for name, nb := range c.Notebooks {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("ecosystem notebook has an empty name")
-		}
-		if nb.Default {
-			defaults++
-		}
-	}
-	if defaults > 1 {
-		return fmt.Errorf("ecosystem declares %d default notebooks; at most one may be default", defaults)
-	}
 	return nil
 }
 
 // DefaultNotebookName returns the name of the notebook marked default, or ""
 // when the card binds none. Ties cannot happen — Validate rejects them — but a
 // hand-edited card that slipped through resolves deterministically by name.
-func (c *EcosystemCard) DefaultNotebookName() string {
-	if c == nil {
-		return ""
-	}
-	best := ""
-	for name, nb := range c.Notebooks {
-		if nb.Default && (best == "" || name < best) {
-			best = name
-		}
-	}
-	return best
-}
+func (c *EcosystemCard) DefaultNotebookName() string { return "" }
 
 // FindEcosystemManifest returns the path of dir's grove manifest, or "" when
 // dir carries none. grove.toml wins over grove.yml when both exist, matching
@@ -369,24 +326,6 @@ func renderTOMLEcosystemCard(card EcosystemCard) string {
 	if card.ID != "" {
 		fmt.Fprintf(&b, "id = %s\n", strconv.Quote(card.ID))
 	}
-	if card.Layout != "" {
-		fmt.Fprintf(&b, "layout = %s\n", strconv.Quote(card.Layout))
-	}
-	for _, r := range card.Remotes {
-		b.WriteString("\n[[ecosystem.remotes]]\n")
-		fmt.Fprintf(&b, "name = %s\n", strconv.Quote(r.Name))
-		fmt.Fprintf(&b, "url = %s\n", strconv.Quote(r.URL))
-	}
-	for _, name := range sortedNotebookNames(card.Notebooks) {
-		nb := card.Notebooks[name]
-		fmt.Fprintf(&b, "\n[ecosystem.notebooks.%s]\n", tomlKey(name))
-		if nb.Default {
-			b.WriteString("default = true\n")
-		}
-		if nb.Audience != "" {
-			fmt.Fprintf(&b, "audience = %s\n", strconv.Quote(nb.Audience))
-		}
-	}
 	return b.String()
 }
 
@@ -463,35 +402,6 @@ func renderYAMLEcosystemCard(card EcosystemCard) string {
 	b.WriteString("ecosystem:\n")
 	if card.ID != "" {
 		fmt.Fprintf(&b, "  id: %s\n", strconv.Quote(card.ID))
-	}
-	if card.Layout != "" {
-		fmt.Fprintf(&b, "  layout: %s\n", strconv.Quote(card.Layout))
-	}
-	if len(card.Remotes) > 0 {
-		b.WriteString("  remotes:\n")
-		for _, r := range card.Remotes {
-			fmt.Fprintf(&b, "    - name: %s\n", strconv.Quote(r.Name))
-			fmt.Fprintf(&b, "      url: %s\n", strconv.Quote(r.URL))
-		}
-	}
-	if len(card.Notebooks) > 0 {
-		b.WriteString("  notebooks:\n")
-		for _, name := range sortedNotebookNames(card.Notebooks) {
-			nb := card.Notebooks[name]
-			if !nb.Default && nb.Audience == "" {
-				// An empty mapping still has to be spelled out, or the key
-				// would decode as null and drop the binding.
-				fmt.Fprintf(&b, "    %s: {}\n", strconv.Quote(name))
-				continue
-			}
-			fmt.Fprintf(&b, "    %s:\n", strconv.Quote(name))
-			if nb.Default {
-				b.WriteString("      default: true\n")
-			}
-			if nb.Audience != "" {
-				fmt.Fprintf(&b, "      audience: %s\n", strconv.Quote(nb.Audience))
-			}
-		}
 	}
 	return b.String()
 }

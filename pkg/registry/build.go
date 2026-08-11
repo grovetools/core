@@ -2,8 +2,8 @@ package registry
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/grovetools/core/config"
@@ -66,7 +66,7 @@ func Build(in BuildInput) *Note {
 		}
 		if state.Manifest != "" {
 			if card, err := config.LoadEcosystemCard(state.Manifest); err == nil && card != nil {
-				eco.Card = convertCard(card)
+				eco.Card = &NoteCard{ID: card.ID, Name: state.Name}
 			}
 		}
 		n.Ecosystems = append(n.Ecosystems, eco)
@@ -110,24 +110,30 @@ func Build(in BuildInput) *Note {
 	}
 
 	n.Repos = CollectRepoTips(roots)
+	// Clone metadata is observed at publication time. The committed card is
+	// identity-only, so stale layout/remotes can never become registry authority.
+	for i := range n.Ecosystems {
+		card := n.Ecosystems[i].Card
+		root := roots[n.Ecosystems[i].Name]
+		if card == nil || root == "" {
+			continue
+		}
+		for _, repo := range n.Repos {
+			if repo.Root != n.Ecosystems[i].Name {
+				continue
+			}
+			repoRoot := root
+			if repo.Path != "." {
+				repoRoot = filepath.Join(root, filepath.FromSlash(repo.Path))
+			}
+			if out, err := exec.Command("git", "-C", repoRoot, "remote", "get-url", "origin").Output(); err == nil {
+				if origin := strings.TrimSpace(string(out)); origin != "" {
+					card.Members = append(card.Members, NoteMemberOrigin{Path: repo.Path, Origin: origin})
+				}
+			}
+		}
+	}
 	return n
-}
-
-// convertCard flattens config.EcosystemCard's notebook MAP into a name-sorted
-// slice. Map iteration order is random in Go, and a note whose bytes changed
-// on every write would defeat the write suppression entirely.
-func convertCard(card *config.EcosystemCard) *NoteCard {
-	out := &NoteCard{ID: card.ID, Layout: card.Layout}
-	for _, r := range card.Remotes {
-		out.Remotes = append(out.Remotes, NoteRemote{Name: r.Name, URL: r.URL})
-	}
-	for _, name := range sortedNotebookNames(card.Notebooks) {
-		nb := card.Notebooks[name]
-		out.Notebooks = append(out.Notebooks, NoteCardNotebook{
-			Name: name, Default: nb.Default, Audience: nb.Audience,
-		})
-	}
-	return out
 }
 
 // expandRootPath resolves $VARs and a leading ~/ and makes the path absolute,
@@ -144,13 +150,4 @@ func expandRootPath(path string) string {
 		return abs
 	}
 	return expanded
-}
-
-func sortedNotebookNames(m map[string]config.EcosystemNotebook) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

@@ -27,14 +27,11 @@ func sampleNote() *Note {
 				Name: "grovetools", Path: "/Users/x/code/grovetools", Notebook: "grovetools",
 				State: StatePresent, Enabled: true, Repos: []string{"nav", "core"},
 				Card: &NoteCard{
-					ID:     "01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-					Layout: "superrepo",
-					Remotes: []NoteRemote{
-						{Name: "origin", URL: "https://github.com/grovetools/grovetools.git"},
-					},
-					Notebooks: []NoteCardNotebook{
-						{Name: "personal", Default: true},
-						{Name: "org", Audience: "org"},
+					ID:   "01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+					Name: "grovetools",
+					Members: []NoteMemberOrigin{
+						{Path: "core", Origin: "https://github.com/grovetools/core.git"},
+						{Path: ".", Origin: "https://github.com/grovetools/grovetools.git"},
 					},
 				},
 			},
@@ -78,14 +75,11 @@ func TestNoteRoundTrip(t *testing.T) {
 		t.Fatalf("ecosystems not sorted/complete: %+v", got.Ecosystems)
 	}
 	card := got.Ecosystems[0].Card
-	if card == nil || card.ID != "01J8ZZZZZZZZZZZZZZZZZZZZZZ" || card.Layout != "superrepo" {
+	if card == nil || card.ID != "01J8ZZZZZZZZZZZZZZZZZZZZZZ" || card.Name != "grovetools" {
 		t.Fatalf("embedded card lost: %+v", card)
 	}
-	if len(card.Remotes) != 1 || card.Remotes[0].URL != "https://github.com/grovetools/grovetools.git" {
-		t.Errorf("card remotes lost: %+v", card.Remotes)
-	}
-	if len(card.Notebooks) != 2 || card.Notebooks[0].Name != "org" || !card.Notebooks[1].Default {
-		t.Errorf("card notebooks lost/unsorted: %+v", card.Notebooks)
+	if len(card.Members) != 2 || card.Members[0].Path != "." || card.Members[1].Path != "core" {
+		t.Errorf("member origins lost/not sorted: %+v", card.Members)
 	}
 	if len(got.Ecosystems[0].Repos) != 2 || got.Ecosystems[0].Repos[0] != "core" || got.Ecosystems[0].Repos[1] != "nav" {
 		t.Errorf("partial repository intent lost/not sorted: %+v", got.Ecosystems[0].Repos)

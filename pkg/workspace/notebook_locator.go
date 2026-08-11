@@ -13,16 +13,16 @@ import (
 )
 
 const (
-	defaultNotesPathTemplate       = "workspaces/{{ .Workspace.Name }}/{{ .NoteType }}"
-	defaultPlansPathTemplate       = "workspaces/{{ .Workspace.Name }}/plans"
-	defaultChatsPathTemplate       = "workspaces/{{ .Workspace.Name }}/chats"
-	defaultTemplatesPathTemplate   = "workspaces/{{ .Workspace.Name }}/templates"
-	defaultRecipesPathTemplate     = "workspaces/{{ .Workspace.Name }}/recipes"
-	defaultInProgressPathTemplate  = "workspaces/{{ .Workspace.Name }}/in_progress"
-	defaultCompletedPathTemplate   = "workspaces/{{ .Workspace.Name }}/completed"
-	defaultPromptsPathTemplate     = "workspaces/{{ .Workspace.Name }}/docgen/prompts"
-	defaultDocgenDirPathTemplate   = "workspaces/{{ .Workspace.Name }}/docgen"
-	defaultContextPathTemplate     = "workspaces/{{ .Workspace.Name }}/context"
+	defaultNotesPathTemplate       = "notespaces/{{ .Workspace.Name }}/{{ .NoteType }}"
+	defaultPlansPathTemplate       = "notespaces/{{ .Workspace.Name }}/plans"
+	defaultChatsPathTemplate       = "notespaces/{{ .Workspace.Name }}/chats"
+	defaultTemplatesPathTemplate   = "notespaces/{{ .Workspace.Name }}/templates"
+	defaultRecipesPathTemplate     = "notespaces/{{ .Workspace.Name }}/recipes"
+	defaultInProgressPathTemplate  = "notespaces/{{ .Workspace.Name }}/in_progress"
+	defaultCompletedPathTemplate   = "notespaces/{{ .Workspace.Name }}/completed"
+	defaultPromptsPathTemplate     = "notespaces/{{ .Workspace.Name }}/docgen/prompts"
+	defaultDocgenDirPathTemplate   = "notespaces/{{ .Workspace.Name }}/docgen"
+	defaultContextPathTemplate     = "notespaces/{{ .Workspace.Name }}/context"
 	defaultGlobalNotesPathTemplate = "global/{{ .NoteType }}"
 	defaultGlobalPlansPathTemplate = "global/plans"
 	defaultGlobalChatsPathTemplate = "global/chats"
@@ -53,9 +53,75 @@ func NewNotebookLocator(cfg *config.Config) *NotebookLocator {
 		cfg = &config.Config{}
 	}
 
-	return &NotebookLocator{
-		config: cfg,
+	return &NotebookLocator{config: cfg}
+}
+
+const NotespaceDirectory = "notespaces"
+
+// ValidateNotespaceLayout prevents P2 binaries from silently treating an
+// un-migrated centralized notebook as empty. Local .notebook mode never calls
+// this function and is intentionally exempt.
+func ValidateNotespaceLayout(notebookRoot string) error {
+	newPath := filepath.Join(notebookRoot, NotespaceDirectory)
+	oldPath := filepath.Join(notebookRoot, "workspaces")
+	if _, err := os.Stat(newPath); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect notespace layout %s: %w", newPath, err)
 	}
+	if info, err := os.Stat(oldPath); err == nil && info.IsDir() {
+		return fmt.Errorf("legacy notebook layout at %s contains workspaces/ but no notespaces/; run 'grove migrate' (step 2)", notebookRoot)
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("inspect legacy notebook layout %s: %w", oldPath, err)
+	}
+	return nil
+}
+
+// ParseNotespaceRoot returns the display segment and physical notespace root
+// for a path under <notebookRoot>/notespaces/<name>. It never searches sibling
+// notebook roots or selects by basename. A local <repo>/.notebook path is
+// returned as local mode and bypasses the centralized-layout guard.
+func ParseNotespaceRoot(notebookRoot, path string) (name, root string, local bool, err error) {
+	cleanPath := filepath.Clean(path)
+	for p := cleanPath; ; p = filepath.Dir(p) {
+		if filepath.Base(p) == ".notebook" {
+			return filepath.Base(filepath.Dir(p)), p, true, nil
+		}
+		if next := filepath.Dir(p); next == p {
+			break
+		}
+	}
+	rootAbs, err := filepath.Abs(notebookRoot)
+	if err != nil {
+		return "", "", false, err
+	}
+	pathAbs, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return "", "", false, err
+	}
+	if err := ValidateNotespaceLayout(rootAbs); err != nil {
+		return "", "", false, err
+	}
+	rel, err := filepath.Rel(filepath.Join(rootAbs, NotespaceDirectory), pathAbs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "", false, fmt.Errorf("path %s is not inside %s/<name>", path, filepath.Join(rootAbs, NotespaceDirectory))
+	}
+	segment := strings.Split(rel, string(filepath.Separator))[0]
+	if segment == "" || segment == "." || segment == ".." {
+		return "", "", false, fmt.Errorf("path %s has no notespace segment", path)
+	}
+	return segment, filepath.Join(rootAbs, NotespaceDirectory, segment), false, nil
+}
+
+func expandCentralizedRoot(path string) (string, error) {
+	root, err := pathutil.Expand(path)
+	if err != nil {
+		return "", err
+	}
+	if err := ValidateNotespaceLayout(root); err != nil {
+		return "", err
+	}
+	return root, nil
 }
 
 // getNotebookForNode retrieves the notebook configuration for a given node.
@@ -117,7 +183,7 @@ func (l *NotebookLocator) GetPlansDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -167,7 +233,7 @@ func (l *NotebookLocator) GetChatsDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -223,7 +289,7 @@ func (l *NotebookLocator) GetNotesDir(node *WorkspaceNode, noteType string) (str
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -551,7 +617,7 @@ func (l *NotebookLocator) GetTemplatesDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -586,7 +652,7 @@ func (l *NotebookLocator) GetRecipesDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -617,7 +683,7 @@ func (l *NotebookLocator) GetInProgressDir(node *WorkspaceNode) (string, error) 
 		return filepath.Join(node.GetGroupingKey(), ".notebook", "in_progress"), nil
 	}
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -644,7 +710,7 @@ func (l *NotebookLocator) GetCompletedDir(node *WorkspaceNode) (string, error) {
 		return filepath.Join(node.GetGroupingKey(), ".notebook", "completed"), nil
 	}
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -698,7 +764,7 @@ func (l *NotebookLocator) GetDocgenDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
@@ -732,13 +798,13 @@ func (l *NotebookLocator) GetSkillsDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
 
 	// Use a default template similar to plans
-	tplStr := "workspaces/{{ .Workspace.Name }}/skills"
+	tplStr := "notespaces/{{ .Workspace.Name }}/skills"
 
 	contextNode := getContextNodeForPath(node)
 	data := struct {
@@ -767,12 +833,12 @@ func (l *NotebookLocator) GetPlaybooksDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}
 
-	tplStr := "workspaces/{{ .Workspace.Name }}/playbooks"
+	tplStr := "notespaces/{{ .Workspace.Name }}/playbooks"
 
 	contextNode := getContextNodeForPath(node)
 	data := struct {
@@ -814,7 +880,7 @@ func (l *NotebookLocator) GetContextDir(node *WorkspaceNode) (string, error) {
 
 	// Centralized Mode
 	notebook := l.getNotebookForNode(node)
-	rootDir, err := pathutil.Expand(notebook.RootDir)
+	rootDir, err := expandCentralizedRoot(notebook.RootDir)
 	if err != nil {
 		return "", fmt.Errorf("expanding notebook root_dir for '%s': %w", node.NotebookName, err)
 	}

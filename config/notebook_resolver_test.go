@@ -56,27 +56,15 @@ func TestResolveNotebook_Precedence(t *testing.T) {
 	})
 }
 
-func TestResolveNotebook_CompiledNotebookRootBridge(t *testing.T) {
+func TestResolveNotebook_NotesContainmentIsNotAuthority(t *testing.T) {
 	recordedRoot := filepath.Join(t.TempDir(), "recorded-notes")
-	cfg := &Config{
-		Groves: map[string]GroveSourceConfig{
-			"code": {
-				Path:         filepath.Join(t.TempDir(), "code"),
-				Notebook:     "recorded",
-				NotebookRoot: recordedRoot,
-			},
-		},
-		// Keep a conflicting same-name definition to prove literal root identity:
-		// re-resolving "recorded" by name would choose this decoy.
-		Notebooks: &NotebooksConfig{Definitions: map[string]*Notebook{
-			"recorded": {RootDir: filepath.Join(t.TempDir(), "same-name-decoy")},
-		}},
-	}
+	cfg := &Config{Groves: map[string]GroveSourceConfig{
+		"code": {Path: filepath.Join(t.TempDir(), "code"), Notebook: "recorded", NotebookRoot: recordedRoot},
+	}}
 
-	got := ResolveNotebook(NotebookQuery{Path: filepath.Join(recordedRoot, "notespaces", "project")}, cfg)
-	assert.Equal(t, "recorded", got.Notebook)
-	assert.Equal(t, recordedRoot, got.NotebookRoot)
-	assert.Equal(t, NotebookSourceNotebookRoot, got.Source)
+	got := ResolveNotebook(NotebookQuery{Path: filepath.Join(recordedRoot, "notespaces", "same-name")}, cfg)
+	assert.Empty(t, got.Notebook)
+	assert.Equal(t, NotebookSourceNone, got.Source)
 }
 
 // TestResolveNotebook_OwnerPaths pins the worktree behavior: the query path

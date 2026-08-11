@@ -341,23 +341,44 @@ func WorktreeOwner(worktreePath string) (string, bool) {
 	if !IsWorktreePath(worktreePath) {
 		return "", false
 	}
-	root := worktreePath
-	if r, ok := worktreeRootForPath(worktreePath); ok {
+	owner, err := BaseRepositoryOwner(worktreePath)
+	return owner, err == nil && owner != ""
+}
+
+// BaseRepositoryOwner is the single repository-owner ladder used by notespace
+// routing. The daemon's universe is the recorded code-root table plus
+// WorktreesDir: path shape is never enough for an XDG worktree. Resolution uses
+// git metadata first, then the worktree registry, then the creation marker; the
+// grandparent fallback is retained only for legacy .grove-worktrees paths.
+func BaseRepositoryOwner(path string) (string, error) {
+	clean := filepath.Clean(path)
+	root := clean
+	if r, ok := worktreeRootForPath(clean); ok {
 		root = r
 	}
 	if owner, ok := ownerFromGitdir(root); ok {
-		return owner, true
+		return filepath.Clean(owner), nil
 	}
 	if entry, err := worktreeregistry.Load(pathutil.WorktreeID(root)); err == nil && entry.Owner != "" {
-		return entry.Owner, true
+		return filepath.Clean(entry.Owner), nil
 	}
 	if owner, ok := ownerFromMarker(root); ok {
-		return owner, true
+		return filepath.Clean(owner), nil
 	}
-	if hasPathComponent(filepath.Clean(worktreePath), legacyWorktreeDirName) {
-		return filepath.Dir(filepath.Dir(worktreePath)), true
+	if hasPathComponent(clean, legacyWorktreeDirName) {
+		return filepath.Dir(filepath.Dir(root)), nil
 	}
-	return "", false
+	// Ordinary repository (or a path below it): nearest .git directory is the
+	// base repository itself. A .git file was already handled above.
+	for current := clean; ; current = filepath.Dir(current) {
+		if info, err := os.Stat(filepath.Join(current, ".git")); err == nil && info.IsDir() {
+			return current, nil
+		}
+		if parent := filepath.Dir(current); parent == current {
+			break
+		}
+	}
+	return "", fmt.Errorf("cannot resolve base repository owner for %s", path)
 }
 
 // ownerFromMarker reads the owner: key from the worktree's .grove/workspace
