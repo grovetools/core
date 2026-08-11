@@ -12,9 +12,8 @@ import (
 // creating the file when absent.
 //
 // The edit is surgical, not a re-render: an existing file keeps every other
-// byte — comments, key order, tables this minimal schema does not yet know
-// about (the subscriptions and bare roots the machine-config phase adds).
-// That matters because machine.toml is dotfiles-portable and hand-authored;
+// byte — comments, key order, and all notes-plane routing tables. That matters
+// because machine.toml is dotfiles-portable and hand-authored;
 // round-tripping it through a marshaller would silently eat the parts of the
 // user's intent this phase cannot model yet.
 //
@@ -23,6 +22,11 @@ func WriteMachineName(path, name string) (bool, error) {
 	if path == "" {
 		return false, fmt.Errorf("machine config path is not resolvable")
 	}
+	unlock, err := lockMachineFile(path)
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 	if name == "" {
 		return false, fmt.Errorf("machine name must not be empty")
 	}

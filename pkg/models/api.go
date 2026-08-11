@@ -192,9 +192,10 @@ type SessionPatchRequest struct {
 // before running (C12). Keys are plan-dir-relative paths; `[]byte` values
 // base64-encode natively over JSON.
 type PlanBundle struct {
-	Workspace string            `json:"workspace"`
-	PlanName  string            `json:"plan_name"`
-	Files     map[string][]byte `json:"files"`
+	NotespaceID   string            `json:"notespace_id"`
+	NotespaceName string            `json:"notespace_name"`
+	PlanName      string            `json:"plan_name"`
+	Files         map[string][]byte `json:"files"`
 }
 
 // JobSubmitRequest represents a request to submit a job to the daemon.

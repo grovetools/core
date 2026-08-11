@@ -54,9 +54,11 @@ func TestCapabilitiesHandshakeRoundTrip(t *testing.T) {
 func TestCanonicalCapabilitiesBindsEpochNonceAndOrderedOffer(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	req := CapabilitiesRequest{DeviceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", ServerEpoch: "epoch-1",
+	req := CapabilitiesRequest{
+		DeviceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", ServerEpoch: "epoch-1",
 		Timestamp: "2026-08-08T12:34:56.123456789Z", Nonce: base64.StdEncoding.EncodeToString(make([]byte, 32)),
-		ProtocolVersions: []int{ProtocolVersionDeviceSession, ProtocolVersionLegacy}}
+		ProtocolVersions: []int{ProtocolVersionDeviceSession, ProtocolVersionLegacy},
+	}
 	payload, err := CanonicalCapabilities(req)
 	require.NoError(t, err)
 	assert.Contains(t, string(payload), "protocol_versions=2,1\n")
@@ -154,10 +156,11 @@ func TestEnrollmentWireCompatibility(t *testing.T) {
 }
 
 func TestCapabilitiesSupportsVersion(t *testing.T) {
-	c := &Capabilities{ProtocolVersions: []int{1, 2}}
+	c := &Capabilities{ProtocolVersions: []int{1, 2, 3}}
 	assert.True(t, c.SupportsVersion(1))
 	assert.True(t, c.SupportsVersion(2))
-	assert.False(t, c.SupportsVersion(3))
+	assert.True(t, c.SupportsVersion(3))
+	assert.False(t, c.SupportsVersion(4))
 
 	empty := &Capabilities{}
 	assert.False(t, empty.SupportsVersion(1))
@@ -165,13 +168,15 @@ func TestCapabilitiesSupportsVersion(t *testing.T) {
 
 func TestPushRequestRoundTrip(t *testing.T) {
 	req := PushRequest{
-		Workspace: "grovetools",
-		OriginID:  "origin-abc",
-		DeviceID:  "laptop",
+		ProtocolVersion: ProtocolVersionNotespaceID,
+		NotespaceID:     "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		NotespaceName:   "grovetools",
+		OriginID:        "origin-abc",
+		DeviceID:        "laptop",
 		Events: []SyncEvent{
 			{
 				Type:            EventDocumentCreated,
-				Workspace:       "grovetools",
+				NotespaceID:     "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				Path:            "plans/sync/notes.md",
 				ContentHash:     "deadbeef",
 				Content:         []byte("# hello"),
@@ -181,7 +186,7 @@ func TestPushRequestRoundTrip(t *testing.T) {
 			},
 			{
 				Type:        EventDocumentMoved,
-				Workspace:   "grovetools",
+				NotespaceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				DocumentID:  "doc-uuid-1",
 				Path:        "completed/notes.md",
 				PrevPath:    "in_progress/notes.md",
@@ -204,7 +209,7 @@ func TestPushResponseRoundTrip(t *testing.T) {
 		Results: []PushResult{
 			{Status: PushStatusAccepted, DocumentID: "doc-uuid-1", Version: 4, Seq: 100},
 			{Status: PushStatusConflict, DocumentID: "doc-uuid-2"},
-			{Status: PushStatusRejected, Error: "path escapes workspace"},
+			{Status: PushStatusRejected, Error: "path escapes notespace"},
 		},
 		Cursor: 100,
 	}
@@ -219,11 +224,12 @@ func TestPushResponseRoundTrip(t *testing.T) {
 
 func TestPullRoundTrip(t *testing.T) {
 	req := PullRequest{
-		Workspace:     "grovetools",
-		Cursor:        42,
-		Limit:         500,
-		Wait:          "30s",
-		ExcludeOrigin: "origin-abc",
+		ProtocolVersion: ProtocolVersionNotespaceID,
+		NotespaceID:     "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Cursor:          42,
+		Limit:           500,
+		Wait:            "30s",
+		ExcludeOrigin:   "origin-abc",
 	}
 
 	data, err := json.Marshal(req)
@@ -238,7 +244,7 @@ func TestPullRoundTrip(t *testing.T) {
 			{
 				Seq:         43,
 				Type:        EventDocumentUpdated,
-				Workspace:   "grovetools",
+				NotespaceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				DocumentID:  "doc-uuid-1",
 				Path:        "plans/sync/notes.md",
 				ContentHash: "cafef00d",
@@ -268,8 +274,9 @@ func TestPullResponseSnapshotRequired(t *testing.T) {
 
 func TestSnapshotManifestRoundTrip(t *testing.T) {
 	m := SnapshotManifest{
-		Workspace: "grovetools",
-		Cursor:    99,
+		NotespaceID:   "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		NotespaceName: "grovetools",
+		Cursor:        99,
 		Documents: []DocumentSnapshot{
 			{ID: "doc-uuid-1", Path: "plans/sync/notes.md", Version: 5, Hash: "cafef00d", Size: 1234},
 		},
@@ -289,7 +296,7 @@ func TestWireFieldNames(t *testing.T) {
 	data, err := json.Marshal(SyncEvent{
 		Seq:         1,
 		Type:        EventDocumentMoved,
-		Workspace:   "ws",
+		NotespaceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		DocumentID:  "id",
 		Path:        "a/b.md",
 		PrevPath:    "a/a.md",
@@ -305,7 +312,7 @@ func TestWireFieldNames(t *testing.T) {
 	var raw map[string]interface{}
 	require.NoError(t, json.Unmarshal(data, &raw))
 	for _, key := range []string{
-		"seq", "type", "workspace", "document_id", "path", "prev_path",
+		"seq", "type", "notespace", "document_id", "path", "prev_path",
 		"content_hash", "base_version", "version", "size", "origin_id", "actor",
 	} {
 		assert.Contains(t, raw, key)
@@ -326,7 +333,7 @@ func TestPathNormalization(t *testing.T) {
 // unchanged wire shape — the backward-compatibility contract.
 func TestSyncEventMtimeWireFormat(t *testing.T) {
 	mtime := time.Date(2026, 7, 11, 9, 30, 0, 0, time.UTC)
-	ev := SyncEvent{Type: EventDocumentCreated, Workspace: "ws", Path: "a.md", Mtime: mtime}
+	ev := SyncEvent{Type: EventDocumentCreated, NotespaceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", Path: "a.md", Mtime: mtime}
 
 	data, err := json.Marshal(ev)
 	require.NoError(t, err)
@@ -337,7 +344,7 @@ func TestSyncEventMtimeWireFormat(t *testing.T) {
 	assert.True(t, decoded.Mtime.Equal(mtime))
 
 	// Zero mtime: omitted on events and snapshots alike.
-	data, err = json.Marshal(SyncEvent{Type: EventDocumentDeleted, Workspace: "ws", Path: "a.md"})
+	data, err = json.Marshal(SyncEvent{Type: EventDocumentDeleted, NotespaceID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", Path: "a.md"})
 	require.NoError(t, err)
 	assert.NotContains(t, string(data), `"mtime"`)
 

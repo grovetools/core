@@ -67,14 +67,15 @@ type MemoryStatusResponse struct {
 	SemanticSearchAvailable bool `json:"semantic_search_available"`
 }
 
-// DocumentPathInfo carries path/workspace/timestamp tuples used by daemon
+// DocumentPathInfo carries path/notespace/timestamp tuples used by daemon
 // handlers that combine DB results with filesystem checks.
 type DocumentPathInfo struct {
-	ID        string    `json:"id"`
-	Path      string    `json:"path"`
-	DocType   string    `json:"doc_type"`
-	Workspace string    `json:"workspace"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	Path          string    `json:"path"`
+	DocType       string    `json:"doc_type"`
+	NotespaceID   string    `json:"notespace_id"`
+	NotespaceName string    `json:"notespace_name,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // MemoryReindexRequest is the request body for POST /api/memory/reindex.
@@ -109,9 +110,11 @@ type GCAnalysisResponse struct {
 	PathsRemoved  []string `json:"paths_removed,omitempty"`
 }
 
-// WorkspaceAnalysis is a per-workspace breakdown of indexed documents.
+// WorkspaceAnalysis is retained as the Go type name while downstream APIs
+// cut over; its wire identity is notespace id plus display-only name.
 type WorkspaceAnalysis struct {
-	Workspace     string         `json:"workspace"`
+	NotespaceID   string         `json:"notespace_id"`
+	NotespaceName string         `json:"notespace_name,omitempty"`
 	TotalDocs     int            `json:"total_docs"`
 	CanonicalDocs int            `json:"canonical_docs"`
 	WorktreeDocs  int            `json:"worktree_docs"`
@@ -154,14 +157,16 @@ type ConceptAnalysis struct {
 
 // ConceptChunk is a concept document path with its chunk count.
 type ConceptChunk struct {
-	Workspace  string `json:"workspace"`
-	Path       string `json:"path"`
-	ChunkCount int    `json:"chunk_count"`
+	NotespaceID   string `json:"notespace_id"`
+	NotespaceName string `json:"notespace_name,omitempty"`
+	Path          string `json:"path"`
+	ChunkCount    int    `json:"chunk_count"`
 }
 
 // ConceptManifest is metadata parsed from a concept-manifest.yml file.
 type ConceptManifest struct {
-	Workspace       string   `json:"workspace"`
+	NotespaceID     string   `json:"notespace_id"`
+	NotespaceName   string   `json:"notespace_name,omitempty"`
 	Path            string   `json:"path"`
 	ID              string   `json:"id"`
 	Title           string   `json:"title"`
@@ -202,9 +207,10 @@ type ReusedChunk struct {
 	Snippet     string `json:"snippet"`
 }
 
-// NotebookAnalysis is per-workspace notebook lifecycle counts with aging and velocity metrics.
+// NotebookAnalysis is per-notespace notebook lifecycle counts with aging and velocity metrics.
 type NotebookAnalysis struct {
-	Workspace       string `json:"workspace"`
+	NotespaceID     string `json:"notespace_id"`
+	NotespaceName   string `json:"notespace_name,omitempty"`
 	InboxCount      int    `json:"inbox_count"`
 	InProgressCount int    `json:"in_progress_count"`
 	IssuesCount     int    `json:"issues_count"`
@@ -227,8 +233,9 @@ type ContextAnalysis struct {
 
 // ContextPresetStat summarizes a single cx context preset rules file.
 type ContextPresetStat struct {
-	Workspace    string `json:"workspace"`
-	Path         string `json:"path"`
-	FileCount    int    `json:"file_count"`
-	MissingFiles int    `json:"missing_files"`
+	NotespaceID   string `json:"notespace_id"`
+	NotespaceName string `json:"notespace_name,omitempty"`
+	Path          string `json:"path"`
+	FileCount     int    `json:"file_count"`
+	MissingFiles  int    `json:"missing_files"`
 }

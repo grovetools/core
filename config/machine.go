@@ -7,17 +7,33 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/grovetools/core/pkg/coderoot"
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/subject"
 )
 
 // MachineConfig is the typed schema for ~/.config/grove/machine.toml.
-// Topology is recorded in roots.toml and notebooks.toml; machine.toml retains
-// only display identity metadata.
+// Code topology remains in roots.toml/notebooks.toml. This file records
+// machine-local notes-plane routing facts; none may be inferred.
 type MachineConfig struct {
-	Machine MachineSettings `toml:"machine"`
+	Machine   MachineSettings   `toml:"machine"`
+	Sync      MachineSync       `toml:"sync,omitempty"`
+	Primaries map[string]string `toml:"primaries,omitempty"`
+	Subjects  map[string]string `toml:"subjects,omitempty"`
+}
+
+// MachineSync records relationships with sync infrastructure.
+type MachineSync struct {
+	Registry *SyncRegistry `toml:"registry,omitempty"`
+}
+
+// SyncRegistry is the machine-local registry notespace binding.
+type SyncRegistry struct {
+	Notebook    string `toml:"notebook"`
+	NotespaceID string `toml:"notespace_id"`
 }
 
 // MachineSettings is the [machine] table.
@@ -143,6 +159,40 @@ func (m *MachineConfig) Validate() error {
 	}
 	if strings.ContainsAny(m.Machine.Name, "\n\r\t") {
 		return fmt.Errorf("machine name %q contains control characters", m.Machine.Name)
+	}
+	if m.Sync.Registry != nil {
+		if err := validateMachineText("sync.registry notebook", m.Sync.Registry.Notebook); err != nil {
+			return err
+		}
+		if _, err := ulid.ParseStrict(m.Sync.Registry.NotespaceID); err != nil {
+			return fmt.Errorf("sync.registry notespace_id %q is not a ULID: %w", m.Sync.Registry.NotespaceID, err)
+		}
+	}
+	for value, id := range m.Primaries {
+		if err := subject.Validate(value); err != nil {
+			return fmt.Errorf("invalid [primaries] subject %q: %w", value, err)
+		}
+		if _, err := ulid.ParseStrict(id); err != nil {
+			return fmt.Errorf("[primaries] %q id %q is not a ULID: %w", value, id, err)
+		}
+	}
+	for path, value := range m.Subjects {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+			return fmt.Errorf("[subjects] path %q is not canonical absolute path", path)
+		}
+		if !strings.HasPrefix(value, subject.LocalPrefix) {
+			return fmt.Errorf("[subjects] %q must record a local: subject, got %q", path, value)
+		}
+		if err := subject.Validate(value); err != nil {
+			return fmt.Errorf("invalid [subjects] value for %q: %w", path, err)
+		}
+	}
+	return nil
+}
+
+func validateMachineText(field, value string) error {
+	if value == "" || strings.TrimSpace(value) != value || strings.ContainsAny(value, "\n\r\t") {
+		return fmt.Errorf("%s is empty or contains surrounding/control whitespace", field)
 	}
 	return nil
 }
