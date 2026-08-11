@@ -43,6 +43,9 @@ func EditMachineConfig(path string, opts MachineEditOptions, mutate func(*Machin
 		return "", false, err
 	}
 	defer unlock()
+	if err := reviewConfigWritePath(path); err != nil {
+		return "", false, err
+	}
 
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {

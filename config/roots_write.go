@@ -56,6 +56,9 @@ func WriteCodeRoots(path string, edits CodeRootEdits) (bool, error) {
 	if len(edits.Upserts) == 0 && len(edits.Deletes) == 0 {
 		return false, nil
 	}
+	if err := reviewConfigWritePath(path); err != nil {
+		return false, err
+	}
 
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -97,6 +100,9 @@ func WriteNotebooks(path string, edits NotebookEdits) (bool, error) {
 	}
 	if edits.Default == nil && len(edits.Upserts) == 0 && len(edits.Deletes) == 0 {
 		return false, nil
+	}
+	if err := reviewConfigWritePath(path); err != nil {
+		return false, err
 	}
 
 	existing, err := os.ReadFile(path)
@@ -177,37 +183,60 @@ func crossValidateRecorded(rootsPath string, candidateRoots map[string]coderoot.
 // atomicWriteVerified verifies candidate content, then writes it to a temp
 // file in the target's directory and renames it into place. Refusing to
 // persist a state that does not reload is the writer's whole contract.
+//
+// The rename lands on the reviewed target, not on the caller's logical path:
+// when the logical path is a dotfiles symlink, the link survives and its
+// resolved file is rewritten (see ResolveConfigWriteTarget). Staging inside the
+// resolved file's own directory also keeps the rename on one filesystem, which
+// a dotfiles checkout on a separate volume otherwise would not be.
 func atomicWriteVerified(path, content string, verify func(string) error) error {
+	// Reviewing the destination comes first: an unreviewable link is refused on
+	// its own terms, not behind a content complaint that would send the operator
+	// looking at the wrong problem.
+	target, viaSymlink, err := ResolveConfigWriteTarget(path)
+	if err != nil {
+		return err
+	}
+	label := writeTargetLabel(path, target, viaSymlink)
 	if verify != nil {
 		if err := verify(content); err != nil {
 			return fmt.Errorf("refusing to write %s: result would not reload: %w", path, err)
 		}
 	}
-	dir := filepath.Dir(path)
+	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create config directory for %s: %w", path, err)
+		return fmt.Errorf("failed to create config directory for %s: %w", label, err)
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(target)+".tmp-*")
 	if err != nil {
-		return fmt.Errorf("failed to stage write of %s: %w", path, err)
+		return fmt.Errorf("failed to stage write of %s: %w", label, err)
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.WriteString(content); err != nil {
 		tmp.Close()
 		os.Remove(tmpName)
-		return fmt.Errorf("failed to stage write of %s: %w", path, err)
+		return fmt.Errorf("failed to stage write of %s: %w", label, err)
 	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(tmpName)
-		return fmt.Errorf("failed to stage write of %s: %w", path, err)
+		return fmt.Errorf("failed to stage write of %s: %w", label, err)
 	}
-	if err := os.Chmod(tmpName, 0o644); err != nil {
-		os.Remove(tmpName)
-		return fmt.Errorf("failed to stage write of %s: %w", path, err)
+	// A file reached through a link belongs to the dotfiles checkout, which
+	// chose its own permissions; a file written in place keeps this writer's
+	// long-standing 0644.
+	mode := os.FileMode(0o644)
+	if viaSymlink {
+		if info, statErr := os.Stat(target); statErr == nil {
+			mode = info.Mode().Perm()
+		}
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := os.Chmod(tmpName, mode); err != nil {
 		os.Remove(tmpName)
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return fmt.Errorf("failed to stage write of %s: %w", label, err)
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("failed to write %s: %w", label, err)
 	}
 	return nil
 }

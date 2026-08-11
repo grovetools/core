@@ -34,6 +34,9 @@ func WriteMachineName(path, name string) (bool, error) {
 	if err := probe.Validate(); err != nil {
 		return false, err
 	}
+	if err := reviewConfigWritePath(path); err != nil {
+		return false, err
+	}
 
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
