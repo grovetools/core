@@ -490,6 +490,37 @@ func (c *RemoteClient) GetSyncConflicts(ctx context.Context, workspace string) (
 	return conflicts, nil
 }
 
+// AdoptNotespace sends the daemon an explicit post-adopt signal. The daemon
+// revalidates the checkout against recorded scan roots before any mutation.
+func (c *RemoteClient) AdoptNotespace(ctx context.Context, adoption models.NotespaceAdoption) (*models.NotespaceAdoptionResult, error) {
+	body, err := json.Marshal(adoption)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/notespaces/adopt", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create notespace adoption request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to signal notespace adoption: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		message, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("notespace adoption refused (status %d): %s", resp.StatusCode, strings.TrimSpace(string(message)))
+	}
+	var out models.NotespaceAdoptionResult
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("failed to decode notespace adoption result: %w", err)
+	}
+	return &out, nil
+}
+
 // SyncRepush voids synced state and kicks an immediate anti-entropy pass
 // (POST /api/sync/repush). An empty workspace selects all of them.
 //

@@ -520,6 +520,12 @@ type Client interface {
 	// LocalClient computes it rather than refusing.
 	GetMachineStatus(ctx context.Context) (*models.MachineStatus, error)
 
+	// AdoptNotespace delivers an explicit post-adopt checkout signal. The
+	// daemon alone validates that Root belongs to an enabled recorded scan
+	// root before minting a notespace stamp; absence of this signal never
+	// authorizes mutation.
+	AdoptNotespace(ctx context.Context, adoption models.NotespaceAdoption) (*models.NotespaceAdoptionResult, error)
+
 	// GetSyncStatus returns the sync engine's headline status
 	// (GET /api/sync/status): enabled flag, document/outbox counters and
 	// per-workspace cursor + hydration progress. Enabled=false (with a nil

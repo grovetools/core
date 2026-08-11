@@ -837,6 +837,10 @@ func expandLocalPath(path string) string {
 // GetSyncStatus requires the daemon: sync.db lives in the global daemon, so
 // there is nothing to report without it. ErrNotSupported lets callers hide
 // the sync surface.
+func (c *LocalClient) AdoptNotespace(ctx context.Context, adoption models.NotespaceAdoption) (*models.NotespaceAdoptionResult, error) {
+	return nil, ErrNotSupported
+}
+
 func (c *LocalClient) GetSyncStatus(ctx context.Context) (*models.SyncStatus, error) {
 	return nil, ErrNotSupported
 }
