@@ -17,11 +17,15 @@ import (
 // in-process writers cannot clobber each other. Save writes the WHOLE Entry
 // atomically (tmp-file + os.Rename, no torn reads), but a bare
 // Load → mutate → Save from two goroutines is last-write-wins on the whole
-// Entry. Update holds this lock for the full cycle. The daemon only Reconciles
-// (reads/merges) the registry — it does not Save — so in-process
-// serialization is sufficient and no on-disk lock (flock) is warranted, which
-// also avoids adding a file-locking dependency the ecosystem does not
-// currently use.
+// Entry. Update holds this lock for the full cycle.
+//
+// This mutex is process-local and does NOT make the registry safe across
+// processes: Reconcile Saves (anchor-heal and adopt), and the daemon is a
+// different process from every CLI and TUI writer. The destructive half of
+// that gap — adopt replacing a populated entry with a structural default — is
+// closed by SaveIfAbsent. Concurrent read-modify-write between processes is
+// still last-write-wins on the whole Entry; closing that needs flock and is an
+// open question.
 var registryMu sync.Mutex
 
 // registryDir returns the directory that holds per-worktree JSON files:
@@ -83,6 +87,63 @@ func Save(entry *Entry) error {
 		return fmt.Errorf("rename registry entry %s: %w", id, err)
 	}
 	return nil
+}
+
+// SaveIfAbsent persists entry only if no registry file exists yet, reporting
+// whether it created one. An existing entry is left untouched: losing the race
+// is a normal outcome, not an error.
+//
+// Save is an unconditional whole-Entry overwrite — the wrong primitive for a
+// caller that only means to CREATE. os.Link fails with EEXIST rather than
+// replacing, making the check and the write one atomic step that is safe
+// across processes without a lock. Content is staged in a temp file first so
+// readers never observe a partial entry, matching Save's guarantee.
+func SaveIfAbsent(entry *Entry) (bool, error) {
+	if entry.AbsPath == "" {
+		return false, fmt.Errorf("registry entry AbsPath must be non-empty")
+	}
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	id := pathutil.WorktreeID(entry.AbsPath)
+	dir := registryDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false, fmt.Errorf("create registry dir: %w", err)
+	}
+
+	entry.LastActive = time.Now().UTC()
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return false, fmt.Errorf("marshal registry entry %s: %w", id, err)
+	}
+
+	// A unique temp name: two processes adopting the same path concurrently
+	// must not collide on the staging file itself.
+	tmp, err := os.CreateTemp(dir, id+".*.tmp")
+	if err != nil {
+		return false, fmt.Errorf("create registry tmp %s: %w", id, err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return false, fmt.Errorf("write registry tmp %s: %w", id, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return false, fmt.Errorf("close registry tmp %s: %w", id, err)
+	}
+	if err := os.Chmod(tmpPath, 0o644); err != nil {
+		return false, fmt.Errorf("chmod registry tmp %s: %w", id, err)
+	}
+
+	if err := os.Link(tmpPath, entryPath(id)); err != nil {
+		if os.IsExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("link registry entry %s: %w", id, err)
+	}
+	return true, nil
 }
 
 // Update performs a serialized read-modify-write on the registry entry for id.

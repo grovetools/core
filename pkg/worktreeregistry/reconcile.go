@@ -108,9 +108,14 @@ func Reconcile(xdgBase string) error {
 			if !looksLikeWorktree(wtPath) {
 				continue
 			}
-			// Adopt with a minimal structural-default entry.
+			// Adopt with a minimal structural-default entry. Create-only:
+			// `registered` is a snapshot from before this loop, so absence
+			// from it is not evidence the entry is still absent. Prepare
+			// makes a container worktree-shaped seconds-to-minutes before it
+			// saves the full Entry, so a plan being provisioned during this
+			// pass lands squarely in that gap.
 			entry := &Entry{AbsPath: wtPath}
-			_ = Save(entry) // best-effort
+			_, _ = SaveIfAbsent(entry) // best-effort
 		}
 	}
 	return nil
