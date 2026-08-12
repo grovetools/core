@@ -368,14 +368,34 @@ func (t Table) Validate() error {
 	return nil
 }
 
-// expandPath expands ${VAR} references and a leading ~.
-func expandPath(path string) string {
+// ExpandPath resolves a DECLARED path — the spelling as written in roots.toml
+// or notebooks.toml — into a path this process can use: ${VAR} references and a
+// leading ~ expanded. It is the one expander for the recorded routing files, so
+// a consumer that needs a usable path has a single obvious call rather than a
+// hand-rolled copy.
+//
+// The declared spelling is preserved in the Root/Notebook structs and in the
+// files themselves; nothing here writes back. Expansion is idempotent, so a
+// path that is already absolute passes through untouched and calling it twice
+// is harmless.
+//
+// It is exported because forgetting it is a whole class of silent bug:
+// filepath.Abs("~/code/x") does not fail, it yields "<cwd>/~/code/x", and every
+// stat, EvalSymlinks and string comparison downstream then quietly answers
+// about a directory that does not exist.
+func ExpandPath(path string) string {
+	if path == "" {
+		return ""
+	}
 	path = os.ExpandEnv(path)
 	if expanded, err := pathutil.Expand(path); err == nil {
 		return expanded
 	}
 	return path
 }
+
+// expandPath is the package-internal spelling of ExpandPath.
+func expandPath(path string) string { return ExpandPath(path) }
 
 // displayName renders path for error messages, falling back to the canonical
 // basename when the caller had no real path.

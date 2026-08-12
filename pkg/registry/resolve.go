@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/coderoot"
 )
 
 // Subscription returns the registry-role sync subscription, or nil when this
@@ -69,7 +70,12 @@ func recordedNotebookRoot(cfg *config.Config, name string) (string, string, erro
 	if definition == nil || definition.RootDir == "" {
 		return "", "", fmt.Errorf("workspace %q routes to default notebook %q without a recorded root", name, notebook)
 	}
-	return notebook, definition.RootDir, nil
+	// The compiled Groves branch above returns an already-resolved root; this
+	// branch must match it. A recorded definition can still carry a declared
+	// spelling in the legacy shape, and ResolveWorkspaceRoot joins whatever it
+	// gets straight onto "notespaces/<name>" — a tilde survives that join
+	// intact and every stat below it then answers about nothing.
+	return notebook, coderoot.ExpandPath(definition.RootDir), nil
 }
 
 // PlannedRoot is the recorded routed notebook root even before the workspace

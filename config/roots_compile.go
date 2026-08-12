@@ -31,7 +31,7 @@ func compileCodeRootsFromPaths(cfg *Config, rootsPath, notebooksPath string) (*C
 
 func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 	if len(table.Roots) == 0 && table.NotebooksFilePath == "" {
-		return cfg
+		return resolveNotebookRoots(cfg)
 	}
 	if cfg == nil {
 		cfg = &Config{}
@@ -96,5 +96,67 @@ func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 		}
 		cfg.Notebooks.Rules.Default = table.Default
 	}
-	return cfg
+	return resolveNotebookRoots(cfg)
+}
+
+// resolveNotebookRoots guarantees the compiled view's notebook roots are
+// USABLE paths, never declared spellings.
+//
+// The recorded branch above already resolves every root through
+// Table.NotebookRoot. This closes the other branch: when notebooks.toml is
+// absent — a pre-migration machine, a sandbox, a satellite seeded without it —
+// Definitions still carries whatever the legacy layer merged in, and
+// notebooks.legacy-compat.toml writes that as root_dir = '~/notebooks/<name>'.
+// A consumer holding one of those gets no error from filepath.Join or
+// os.Stat, only a wrong answer about a directory that cannot exist.
+//
+// Consumers may still expand defensively — expansion is idempotent — but after
+// this they no longer have to remember to.
+func resolveNotebookRoots(cfg *Config) *Config {
+	if cfg == nil || cfg.Notebooks == nil {
+		return cfg
+	}
+	declared := func(path string) bool { return path != "" && coderoot.ExpandPath(path) != path }
+	needed := false
+	for _, definition := range cfg.Notebooks.Definitions {
+		if definition != nil && declared(definition.RootDir) {
+			needed = true
+			break
+		}
+	}
+	if rules := cfg.Notebooks.Rules; !needed && rules != nil && rules.Global != nil && declared(rules.Global.RootDir) {
+		needed = true
+	}
+	// Copy-on-write, for the same reason compileCodeRootTable does: cfg may be
+	// a source-attributed layer that LoadLayered still hands out separately.
+	if !needed {
+		return cfg
+	}
+
+	out := *cfg
+	notebooks := *cfg.Notebooks
+	out.Notebooks = &notebooks
+	if cfg.Notebooks.Definitions != nil {
+		definitions := make(map[string]*Notebook, len(cfg.Notebooks.Definitions))
+		for name, definition := range cfg.Notebooks.Definitions {
+			if definition == nil {
+				definitions[name] = nil
+				continue
+			}
+			resolved := *definition
+			resolved.RootDir = coderoot.ExpandPath(resolved.RootDir)
+			definitions[name] = &resolved
+		}
+		notebooks.Definitions = definitions
+	}
+	if cfg.Notebooks.Rules != nil {
+		rules := *cfg.Notebooks.Rules
+		if rules.Global != nil {
+			global := *rules.Global
+			global.RootDir = coderoot.ExpandPath(global.RootDir)
+			rules.Global = &global
+		}
+		notebooks.Rules = &rules
+	}
+	return &out
 }
