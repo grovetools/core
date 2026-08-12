@@ -2,10 +2,14 @@ package registry
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/coderoot"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/util/pathutil"
 )
 
 // Subscription returns the registry-role sync subscription, or nil when this
@@ -62,6 +66,17 @@ func recordedNotebookRoot(cfg *config.Config, name string) (string, string, erro
 			return grove.Notebook, grove.NotebookRoot, nil
 		}
 	}
+	// Identity rung, ahead of the default: a notes-plane notespace with no
+	// compiled binding is still locatable BY IDENTITY — its stamp id is the
+	// recorded primary for its subject. Dropping straight to
+	// notebooks.rules.default is what sent a notespace bound to a non-default
+	// notebook to <default>/notespaces/<name>. Mirrors the daemon's
+	// SyncHandler.recordedNotebookRoot, which the doc above calls the rung
+	// shared with this one; it stopped being shared when only that copy grew
+	// this rung.
+	if notebook, root, ok := stampedNotebookRoot(cfg, name); ok {
+		return notebook, root, nil
+	}
 	if cfg.Notebooks == nil || cfg.Notebooks.Rules == nil || cfg.Notebooks.Rules.Default == "" {
 		return "", "", fmt.Errorf("workspace %q has no recorded code-root/notebook binding or default notebook", name)
 	}
@@ -76,6 +91,52 @@ func recordedNotebookRoot(cfg *config.Config, name string) (string, string, erro
 	// gets straight onto "notespaces/<name>" — a tilde survives that join
 	// intact and every stat below it then answers about nothing.
 	return notebook, coderoot.ExpandPath(definition.RootDir), nil
+}
+
+// stampedNotebookRoot answers which recorded notebook holds the stamped
+// notespace a display name identifies, via the recorded-primary resolver
+// (stamp id + machine.toml [primaries]) rather than a name-to-directory guess.
+//
+// ok is false whenever that chain cannot answer EXACTLY — an unstamped tree,
+// or a name matching no single recorded primary — leaving the caller's default
+// rung to decide as before.
+func stampedNotebookRoot(cfg *config.Config, name string) (string, string, bool) {
+	if cfg == nil || cfg.Notebooks == nil || len(cfg.Notebooks.Definitions) == 0 {
+		return "", "", false
+	}
+	machineCfg, err := config.LoadMachineConfig()
+	if err != nil || machineCfg == nil {
+		return "", "", false
+	}
+	resolution, err := workspace.ResolveNotespaceName(name, cfg, machineCfg)
+	if err != nil || resolution.Root == "" {
+		return "", "", false
+	}
+	// The contract is a NOTEBOOK root that ResolveWorkspaceRoot re-joins with
+	// "notespaces/<name>", so only a resolution that round-trips through that
+	// join can be reported here.
+	if filepath.Base(resolution.Root) != name {
+		return "", "", false
+	}
+	notespacesDir := filepath.Dir(resolution.Root)
+	if filepath.Base(notespacesDir) != workspace.NotespaceDirectory {
+		return "", "", false
+	}
+	notebookRoot := filepath.Dir(notespacesDir)
+	// Both sides are normalized first: RootDir is a RECORDED value and
+	// resolution.Root a resolved one, and comparing those by raw string
+	// equality is the mistake this rung exists to correct one layer down.
+	for _, notebook := range slices.Sorted(maps.Keys(cfg.Notebooks.Definitions)) {
+		definition := cfg.Notebooks.Definitions[notebook]
+		if definition == nil || definition.RootDir == "" {
+			continue
+		}
+		declared := coderoot.ExpandPath(definition.RootDir)
+		if same, err := pathutil.ComparePaths(declared, notebookRoot); err == nil && same {
+			return notebook, notebookRoot, true
+		}
+	}
+	return "", "", false
 }
 
 // PlannedRoot is the recorded routed notebook root even before the workspace
