@@ -1,10 +1,8 @@
 package workspace
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -159,25 +157,8 @@ func subjectForRepository(root string, machine *config.MachineConfig) (string, e
 			return value, nil
 		}
 	}
-	cmd := exec.Command("git", "-C", root, "config", "--get-regexp", `^remote\..*\.url$`)
-	out, err := cmd.Output()
+	remotes, err := gitRemotesIn(root)
 	if err != nil {
-		return "", fmt.Errorf("read git remotes for %s: %w", root, err)
-	}
-	var remotes []subject.Remote
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		key, url, ok := strings.Cut(scanner.Text(), " ")
-		if !ok {
-			key, url, ok = strings.Cut(scanner.Text(), "\t")
-		}
-		parts := strings.Split(key, ".")
-		if !ok || len(parts) < 3 || strings.TrimSpace(url) == "" {
-			continue
-		}
-		remotes = append(remotes, subject.Remote{Name: parts[1], URL: strings.TrimSpace(url)})
-	}
-	if err := scanner.Err(); err != nil {
 		return "", err
 	}
 	value, selection, err := subject.FromRemotes(remotes)
