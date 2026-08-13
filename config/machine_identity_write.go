@@ -72,7 +72,7 @@ func EditMachineConfig(path string, opts MachineEditOptions, mutate func(*Machin
 		return currentRevision, false, err
 	}
 	if opts.KnownNotespaceIDs != nil {
-		if err := validatePrimaryBindings(cfg, opts.KnownNotespaceIDs); err != nil {
+		if err := ValidateMachineBindings(cfg, opts.KnownNotespaceIDs); err != nil {
 			return currentRevision, false, err
 		}
 	}
@@ -87,7 +87,7 @@ func EditMachineConfig(path string, opts MachineEditOptions, mutate func(*Machin
 			return err
 		}
 		if opts.KnownNotespaceIDs != nil {
-			return validatePrimaryBindings(parsed, opts.KnownNotespaceIDs)
+			return ValidateMachineBindings(parsed, opts.KnownNotespaceIDs)
 		}
 		return nil
 	}
@@ -97,7 +97,20 @@ func EditMachineConfig(path string, opts MachineEditOptions, mutate func(*Machin
 	return machineRevision([]byte(updated)), true, nil
 }
 
-func validatePrimaryBindings(cfg *MachineConfig, known map[string]struct{}) error {
+// ValidateMachineBindings is the whole-file binding rule EditMachineConfig
+// enforces: every [primaries] entry and the [sync.registry] binding must name
+// an id the supplied stamp index can reach.
+//
+// It is exported because the check is whole-file rather than per-key, so a
+// caller that is about to make an IRREVERSIBLE change before the edit (the D8
+// re-mint rewrites a stamp on disk, then repairs the binding that followed it)
+// has to be able to run the same rule as a preflight. Discovering an unrelated
+// broken binding only at the write leaves a torn transaction the writer cannot
+// undo.
+func ValidateMachineBindings(cfg *MachineConfig, known map[string]struct{}) error {
+	if cfg == nil {
+		return nil
+	}
 	for value, id := range cfg.Primaries {
 		if _, ok := known[id]; !ok {
 			return fmt.Errorf("[primaries] %q references notespace id %q absent from supplied stamp index", value, id)

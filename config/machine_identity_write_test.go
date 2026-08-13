@@ -125,3 +125,39 @@ func TestRerecordSubjectMovesPrimaryAtomically(t *testing.T) {
 		t.Fatalf("lock residue: %v", err)
 	}
 }
+
+// The binding rule is whole-file, not per-key: an unrelated [primaries] entry
+// naming an unreachable id fails the edit too. It is exported so a caller with
+// an irreversible step ahead of its write (the D8 re-mint rewrites a stamp on
+// disk, then repairs the binding that followed it) can run the same rule as a
+// preflight instead of tearing its transaction in half.
+func TestValidateMachineBindingsCoversEveryBindingNotJustTheTouchedOne(t *testing.T) {
+	known := map[string]struct{}{testNotespaceID: {}}
+	cfg := &MachineConfig{
+		Primaries: map[string]string{
+			"github.com/grovetools/core": testNotespaceID,
+			"github.com/grovetools/nb":   testOtherID,
+		},
+	}
+	err := ValidateMachineBindings(cfg, known)
+	if err == nil {
+		t.Fatal("an untouched primary naming an unreachable id validated")
+	}
+	if !strings.Contains(err.Error(), testOtherID) {
+		t.Fatalf("the failure does not name the offending id: %v", err)
+	}
+
+	delete(cfg.Primaries, "github.com/grovetools/nb")
+	cfg.Sync.Registry = &SyncRegistry{Notebook: "grovetools", NotespaceID: testOtherID}
+	if err := ValidateMachineBindings(cfg, known); err == nil || !strings.Contains(err.Error(), "[sync.registry]") {
+		t.Fatalf("the registry binding was not validated: %v", err)
+	}
+
+	cfg.Sync.Registry.NotespaceID = testNotespaceID
+	if err := ValidateMachineBindings(cfg, known); err != nil {
+		t.Fatalf("a fully reachable set of bindings was rejected: %v", err)
+	}
+	if err := ValidateMachineBindings(nil, known); err != nil {
+		t.Fatalf("a nil config is no bindings at all: %v", err)
+	}
+}
