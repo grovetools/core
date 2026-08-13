@@ -75,26 +75,24 @@ func ResolveNotespaceName(name string, cfg *config.Config, machine *config.Machi
 	return NotespaceResolution{Subject: matches[0].Stamp.Subject, NotespaceID: matches[0].Stamp.ID, Root: matches[0].Root}, nil
 }
 
+// resolvePrimary is the routing half of the resolution chain. The rule it
+// applies — recorded entry, live stamp, single root, matching subject — lives
+// in core/pkg/notespace as Index.PrimaryFor, so the resolver, the sibling verbs
+// and doctor all answer "which notespace is primary" the same way.
 func resolvePrimary(value string, cfg *config.Config, machine *config.MachineConfig) (NotespaceResolution, error) {
-	if machine == nil || machine.Primaries == nil || machine.Primaries[value] == "" {
-		return NotespaceResolution{}, fmt.Errorf("subject %q has no recorded primary notespace", value)
+	var primaries map[string]string
+	if machine != nil {
+		primaries = machine.Primaries
 	}
-	id := machine.Primaries[value]
 	idx, _, err := configuredNotespaceIndex(cfg)
 	if err != nil {
 		return NotespaceResolution{}, err
 	}
-	records, err := idx.ByID(id)
+	record, err := idx.PrimaryFor(value, primaries)
 	if err != nil {
 		return NotespaceResolution{}, err
 	}
-	if len(records) == 0 {
-		return NotespaceResolution{}, fmt.Errorf("primary notespace id %q for subject %q has no stamped root", id, value)
-	}
-	if records[0].Stamp.Subject != value {
-		return NotespaceResolution{}, fmt.Errorf("primary notespace id %q is stamped for subject %q, not %q", id, records[0].Stamp.Subject, value)
-	}
-	return NotespaceResolution{Subject: value, NotespaceID: id, Root: records[0].Root}, nil
+	return NotespaceResolution{Subject: value, NotespaceID: record.Stamp.ID, Root: record.Root}, nil
 }
 
 func configuredNotespaceIndex(cfg *config.Config) (*notespace.Index, []notespace.Record, error) {
