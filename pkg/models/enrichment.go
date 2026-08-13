@@ -298,6 +298,19 @@ type EnrichedWorkspace struct {
 	// machine registry notes. Nil means no projection has run (or an older
 	// daemon), which is unknown rather than equal.
 	MachineSync *MachineSync `json:"machine_sync,omitempty"`
+	// GitStatusPending is true while no git sweep has covered this workspace
+	// since the daemon started. The daemon's boot sweep is tier-ordered and
+	// paced (hot first, cold trickled over minutes), so a row can be visible
+	// long before its git data is: this flag is what stops a consumer — a rail,
+	// a fleet-wide "N dirty repos" aggregation — from reading absent or
+	// last-lifetime data as a confident answer. It is cleared by the first
+	// sweep or scan that touches the workspace and never set again.
+	//
+	// It says nothing about whether the data has since gone stale (a write the
+	// daemon has not yet reacted to); that is the separate staleness contract
+	// in the demand-driven freshness design. Absent from an older daemon
+	// decodes false, which reads as "not pending" — the pre-tiering behavior.
+	GitStatusPending bool `json:"git_status_pending,omitempty"`
 }
 
 // WorkspaceDelta carries only the fields that changed for a specific workspace.
@@ -328,4 +341,8 @@ type WorkspaceDelta struct {
 	// MachineSync follows the ReviewStats pointer convention: nil = unchanged;
 	// a non-nil value always replaces the complete projection.
 	MachineSync *MachineSync `json:"machine_sync,omitempty"`
+	// GitStatusPending follows the pointer convention: nil = unchanged. The
+	// tiered sweep sets it true for workspaces it has not yet reached this
+	// daemon lifetime and false on the delta that carries their first scan.
+	GitStatusPending *bool `json:"git_status_pending,omitempty"`
 }
