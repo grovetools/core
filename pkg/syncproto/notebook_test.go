@@ -1,6 +1,9 @@
 package syncproto
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const (
 	nbA  = "01ARZ3NDEKTSV4RRFFQ69G5FA0"
@@ -51,6 +54,15 @@ func TestNotebookShareValidate(t *testing.T) {
 			req:  NotebookShareRequest{RequestIdentity: v3(idem), NotebookID: nbA, Name: "nb", Members: []NotespaceID{nsA, nsA}},
 			want: ErrorRegistrationConflict,
 		},
+		{
+			name: "expected_version 0 is the claim that this notebook is not registered yet",
+			req:  NotebookShareRequest{RequestIdentity: v3(idem), NotebookID: nbA, Name: "nb", ExpectedVersion: 0},
+		},
+		{
+			name: "negative expected_version",
+			req:  NotebookShareRequest{RequestIdentity: v3(idem), NotebookID: nbA, Name: "nb", ExpectedVersion: -1},
+			want: ErrorStaleResolution,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,6 +105,26 @@ func TestNotebookUnshareAndReparentValidate(t *testing.T) {
 	badTarget.ToNotebookID = "personal"
 	if err := badTarget.Validate(); err == nil || err.Code != ErrorRegistrationConflict {
 		t.Fatalf("non-ULID destination = %v", err)
+	}
+
+	// The out-of-shared leg (W3.4): a move whose destination is no notebook.
+	// Without it membership would be write-only-into and a notespace moved out
+	// locally would stay in the server's roll forever.
+	detach := valid
+	detach.ToNotebookID = ""
+	if err := detach.Validate(); err != nil {
+		t.Fatalf("detach rejected: %v", err)
+	}
+	if !detach.Detaching() {
+		t.Fatal("a move with no destination is a detach")
+	}
+	if valid.Detaching() {
+		t.Fatal("a move into a notebook is not a detach")
+	}
+	nowhere := detach
+	nowhere.FromNotebookID = ""
+	if err := nowhere.Validate(); err == nil || err.Code != ErrorMembershipConflict {
+		t.Fatalf("detaching an already-unparented notespace moves nothing: %v", err)
 	}
 }
 
@@ -159,6 +191,69 @@ func TestBuildInventoryDelta(t *testing.T) {
 
 	if len(delta.UnparentedServerNotespaces) != 1 || delta.UnparentedServerNotespaces[0] != nsOrphan {
 		t.Fatalf("unparented server notespaces = %v", delta.UnparentedServerNotespaces)
+	}
+}
+
+// notebooks.toml is tri-state and so is the server; "recorded as unshared per
+// D9" and "never considered" must not arrive at the delta as the same input.
+func TestBuildInventoryDeltaCarriesTheLocalTriState(t *testing.T) {
+	const nbNever = "01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	local := []LocalNotebook{
+		{ID: nbA, Name: "shared", Shared: true, Recorded: true},
+		{ID: nbB, Name: "stopped", Recorded: true},
+		{ID: nbNever, Name: "never"},
+	}
+	byID := map[NotebookID]NotebookDelta{}
+	for _, d := range BuildInventoryDelta(local, InventoryResponse{}).Notebooks {
+		byID[d.ID] = d
+	}
+	if got := byID[nbA].LocalShareState; got != NotebookShareStateShared || !byID[nbA].LocalShared {
+		t.Fatalf("shared local state = %q", got)
+	}
+	if got := byID[nbB].LocalShareState; got != NotebookShareStateUnshared || byID[nbB].LocalShared {
+		t.Fatalf("recorded-as-unshared collapsed to %q", got)
+	}
+	if got := byID[nbNever].LocalShareState; got != "" {
+		t.Fatalf("a notebook that never recorded sync state = %q, want \"\"", got)
+	}
+}
+
+// D8 makes a duplicate stamp id an expected runtime state, and the join delta
+// is where an operator meets it first. A map keyed by id used to let the last
+// record win — losing, in the measured case, the shared one.
+func TestBuildInventoryDeltaSurfacesDuplicateLocalIDs(t *testing.T) {
+	local := []LocalNotebook{
+		{ID: nbA, Name: "work", Shared: true, Recorded: true, Notespaces: []NotespaceID{nsA}},
+		{ID: nbA, Name: "work-copy", Notespaces: []NotespaceID{nsB}},
+	}
+	delta := BuildInventoryDelta(local, InventoryResponse{})
+	if len(delta.Notebooks) != 1 {
+		t.Fatalf("notebooks = %+v", delta.Notebooks)
+	}
+	d := delta.Notebooks[0]
+	if !d.LocalDuplicate {
+		t.Fatalf("the duplicate was not marked: %+v", d)
+	}
+	if !d.LocalShared || d.LocalShareState != NotebookShareStateShared {
+		t.Fatalf("the shared record's state was dropped by the copy: %+v", d)
+	}
+	if len(d.LocalOnlyNotespaces) != 2 {
+		t.Fatalf("membership must be the union of both records, got %v", d.LocalOnlyNotespaces)
+	}
+	if len(delta.DuplicateLocalNotebooks) != 1 ||
+		len(delta.DuplicateLocalNotebooks[0].Names) != 2 ||
+		delta.DuplicateLocalNotebooks[0].Names[0] != "work" {
+		t.Fatalf("evidence must name every claimant: %+v", delta.DuplicateLocalNotebooks)
+	}
+
+	// Rendering the delta is fine; acting on it is not, and the refusal has one
+	// spelling every verb can share.
+	err := delta.Conflicts()
+	if err == nil || !strings.Contains(err.Error(), "work-copy") {
+		t.Fatalf("Conflicts() = %v, want a loud error naming the claimants", err)
+	}
+	if clean := BuildInventoryDelta(local[:1], InventoryResponse{}).Conflicts(); clean != nil {
+		t.Fatalf("a delta with no duplicates conflicts: %v", clean)
 	}
 }
 

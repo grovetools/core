@@ -135,6 +135,18 @@ func WriteNotebooks(path string, edits NotebookEdits) (bool, error) {
 		updated = setTOMLTableParts(updated, []string{"notebooks", name}, renderNotebookDef(name, edits.Upserts[name]))
 	}
 	for _, name := range sortedKeys(edits.SyncShare) {
+		// A file may spell the sync table inline (`sync = { share = true }`),
+		// which the loader accepts. The writer maintains the file in the form
+		// the operator wrote it: rewriting the inline key in place, rather than
+		// appending a [notebooks.<n>.sync] header beside it, which would be a
+		// duplicate-key refusal on the very verb (`notebook unshare`) that a
+		// recorded share state exists to make possible.
+		if rewritten, ok := setTOMLInlineChildTable(updated,
+			[]string{"notebooks", name}, "sync",
+			renderNotebookSyncInline(edits.SyncShare[name])); ok {
+			updated = rewritten
+			continue
+		}
 		updated = setTOMLChildTable(updated,
 			[]string{"notebooks", name},
 			[]string{"notebooks", name, "sync"},
@@ -310,6 +322,45 @@ func renderNotebookSync(name string, share bool) string {
 	return b.String()
 }
 
+// renderNotebookSyncInline is the same fact in the inline spelling, used only
+// to maintain a file that already records it that way.
+func renderNotebookSyncInline(share bool) string {
+	return fmt.Sprintf("{ share = %t }", share)
+}
+
+// setTOMLInlineChildTable rewrites an inline child table declared as a KEY of
+// its parent (`sync = { share = true }` inside [notebooks.<n>]), reporting
+// whether the document declares one.
+//
+// The two spellings are one shape to the loader and two shapes to a
+// line-oriented writer, so the writer has to know both: appending a
+// [notebooks.<n>.sync] header next to a surviving inline key produces a
+// duplicate key, which the re-parse rejects — a refusal that leaves the
+// operator unable to edit a file the loader blessed.
+func setTOMLInlineChildTable(content string, parent []string, key, encodedValue string) (string, bool) {
+	start, end, found := tomlTableBounds(content, parent)
+	if !found {
+		return content, false
+	}
+	lines := strings.Split(content, "\n")
+	for i := start + 1; i < end && i < len(lines); i++ {
+		if _, isHeader := tomlTableKeyParts(lines[i]); isHeader {
+			break
+		}
+		name, _, ok := strings.Cut(lines[i], "=")
+		if !ok {
+			continue
+		}
+		if strings.Trim(strings.TrimSpace(name), `"'`) != key {
+			continue
+		}
+		indent := lines[i][:len(lines[i])-len(strings.TrimLeft(lines[i], " \t"))]
+		lines[i] = indent + key + " = " + encodedValue
+		return strings.Join(lines, "\n"), true
+	}
+	return content, false
+}
+
 // setTOMLChildTable sets a child table, and — when the child is absent —
 // inserts it immediately after its parent's block instead of at end of file.
 // Plain appending would be valid TOML but would strand [notebooks.b.sync]
@@ -333,9 +384,30 @@ func setTOMLChildTable(content string, parent, child []string, block string) str
 	return strings.Join(out, "\n")
 }
 
+// trimTableTail backs end up over the lines between a table's last content
+// line and the next table header: blank lines, and the comment block attached
+// to that next header.
+//
+// A comment immediately above a header documents THAT header. Counting it as
+// the previous table's tail is how "# Personal notes live here; do not sync."
+// ends up sitting above an inserted [notebooks.work.sync] — and how a rewrite
+// of the table before it deletes an operator's comment outright, in a file the
+// design says operators read and hand-edit.
+func trimTableTail(lines []string, start, end int) int {
+	for end > start+1 {
+		trimmed := strings.TrimSpace(lines[end-1])
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			break
+		}
+		end--
+	}
+	return end
+}
+
 // tomlTableBounds locates the table named by key: start is its header line,
-// end is one past its last content line (trailing blank lines excluded, since
-// they separate it from what follows and belong to the document).
+// end is one past its last content line (trailing blank and comment lines
+// excluded, since they separate it from what follows and belong to the
+// document).
 func tomlTableBounds(content string, key []string) (int, int, bool) {
 	lines := strings.Split(content, "\n")
 	start, end := -1, len(lines)
@@ -358,10 +430,7 @@ func tomlTableBounds(content string, key []string) (int, int, bool) {
 	if start < 0 {
 		return 0, 0, false
 	}
-	for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
-		end--
-	}
-	return start, end, true
+	return start, trimTableTail(lines, start, end), true
 }
 
 // deleteTOMLTable removes the table named by key (header line through the
@@ -392,11 +461,9 @@ func deleteTOMLTableParts(content string, key []string) string {
 	if start < 0 {
 		return content
 	}
-	// Trailing blank lines between the removed table and the next belong to
-	// the document; keep exactly one separator by trimming the tail.
-	for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
-		end--
-	}
+	// Blank lines and the next header's comment block belong to the document,
+	// not to the table being removed.
+	end = trimTableTail(lines, start, end)
 	out := make([]string, 0, len(lines))
 	out = append(out, lines[:start]...)
 	out = append(out, lines[end:]...)

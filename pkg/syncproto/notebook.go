@@ -61,9 +61,18 @@ const (
 // stole members would make the one mechanism two.
 type NotebookShareRequest struct {
 	RequestIdentity
-	NotebookID NotebookID    `json:"notebook_id"`
-	Name       string        `json:"name"`
-	Members    []NotespaceID `json:"members,omitempty"`
+	NotebookID NotebookID `json:"notebook_id"`
+	Name       string     `json:"name"`
+	// ExpectedVersion is the notebook version this decision was made against:
+	// 0 means "I believe this notebook is not registered here yet". It is
+	// mandatory for the same reason unshare's is — share WRITES the notebook's
+	// name and share state, so a device working from a stale view would
+	// otherwise rename a notebook for everyone, or resurrect one another
+	// machine just unshared, and whoever spoke last would decide. A mismatch is
+	// ErrorStaleResolution carrying the server's current version, so the fix is
+	// one re-read away.
+	ExpectedVersion int64         `json:"expected_version"`
+	Members         []NotespaceID `json:"members,omitempty"`
 }
 
 func (r NotebookShareRequest) Validate() *ProtocolError {
@@ -72,6 +81,9 @@ func (r NotebookShareRequest) Validate() *ProtocolError {
 	}
 	if _, err := ulid.ParseStrict(r.NotebookID.String()); err != nil {
 		return &ProtocolError{Code: ErrorRegistrationConflict, Message: "notebook_id must be a ULID"}
+	}
+	if r.ExpectedVersion < 0 {
+		return &ProtocolError{Code: ErrorStaleResolution, Message: "expected_version must not be negative"}
 	}
 	if strings.TrimSpace(r.Name) == "" || strings.ContainsAny(r.Name, "\r\n\t") {
 		return &ProtocolError{Code: ErrorRegistrationConflict, Message: "notebook name is required"}
@@ -113,6 +125,12 @@ type NotebookShareResponse struct {
 // NotebookUnshareRequest stops sharing a notebook, forward-only (D9).
 // ExpectedVersion makes a stale operator decision fail rather than clobber a
 // newer one.
+//
+// The three verbs' ExpectedVersion floors differ because they count different
+// things, and each floor is exact: unshare requires > 0 (only a registered
+// notebook, whose version starts at 1, can be unshared); share allows 0,
+// meaning "not registered yet"; reparent allows 0, the legitimate membership
+// version of an unparented notespace.
 type NotebookUnshareRequest struct {
 	RequestIdentity
 	NotebookID      NotebookID `json:"notebook_id"`
@@ -138,6 +156,11 @@ func (r NotebookUnshareRequest) Validate() *ProtocolError {
 // sentence the server sent.
 const UnshareRetentionStatement = "unshare is forward-only: this server retains the notebook's notespaces and their full history, copies already pulled elsewhere are not retracted, and re-sharing this notebook id resumes the same history"
 
+// DetachRetentionStatement is the same promise for the out-of-shared leg of a
+// move (D9 applied per notespace): stopping is not deleting, and the sentence
+// the user reads is the sentence the server sent.
+const DetachRetentionStatement = "moving a notespace out of a shared notebook is forward-only: this server retains the notespace and its full history, copies already pulled elsewhere are not retracted, and moving it back into a shared notebook resumes the same history"
+
 type NotebookUnshareResponse struct {
 	NotebookID NotebookID `json:"notebook_id"`
 	ShareState string     `json:"share_state"`
@@ -150,10 +173,24 @@ type NotebookUnshareResponse struct {
 	Error              *ProtocolError `json:"error,omitempty"`
 }
 
-// NotespaceReparentRequest moves one notespace between notebooks atomically.
-// The notespace id — and therefore its event stream, documents, and every
-// client cursor keyed on it — is untouched; only membership moves. This is the
-// server half of `grove notespace move`.
+// NotespaceReparentRequest moves one notespace between notebooks atomically —
+// including out of every notebook, which is the wire verb for W3.4's
+// out-of-shared leg. The notespace id — and therefore its event stream,
+// documents, and every client cursor keyed on it — is untouched; only
+// membership moves. This is the server half of `grove notespace move`.
+//
+// Membership is not write-only-into. All three legs are one request shape:
+//
+//	unparented -> notebook   attach (adoption)
+//	notebook A -> notebook B re-parent, same id, cursors intact
+//	notebook A -> ""         detach: out of shared, forward-only per D9
+//
+// A detach is the move whose destination is "no notebook". It is not a
+// deletion and not a retraction: the server retains the notespace and its
+// history exactly as unshare does, and the response says so in the server's
+// own words. Without it a notespace moved out locally would stay in the
+// notebook's server-side roll forever, and the join delta would keep offering
+// to pull it back onto the machine that deliberately moved it out.
 type NotespaceReparentRequest struct {
 	RequestIdentity
 	NotespaceID NotespaceID `json:"notespace_id"`
@@ -161,10 +198,18 @@ type NotespaceReparentRequest struct {
 	// of; empty means "currently unparented". It is checked, not trusted: a
 	// client working from a stale view must fail rather than re-parent a
 	// notespace out of a notebook it did not know about.
-	FromNotebookID  NotebookID `json:"from_notebook_id,omitempty"`
-	ToNotebookID    NotebookID `json:"to_notebook_id"`
+	FromNotebookID NotebookID `json:"from_notebook_id,omitempty"`
+	// ToNotebookID is the destination. Empty means "no notebook": the
+	// notespace becomes unparented and therefore leaves every notebook's sync
+	// scope. Empty-to-empty is refused by the same rule that refuses a move
+	// whose ends are the same notebook.
+	ToNotebookID    NotebookID `json:"to_notebook_id,omitempty"`
 	ExpectedVersion int64      `json:"expected_version"`
 }
+
+// Detaching reports whether this move takes the notespace out of every
+// notebook rather than into one.
+func (r NotespaceReparentRequest) Detaching() bool { return r.ToNotebookID == "" }
 
 func (r NotespaceReparentRequest) Validate() *ProtocolError {
 	if err := r.RequestIdentity.Validate(); err != nil {
@@ -173,8 +218,10 @@ func (r NotespaceReparentRequest) Validate() *ProtocolError {
 	if _, err := ulid.ParseStrict(r.NotespaceID.String()); err != nil {
 		return &ProtocolError{Code: ErrorRegistrationConflict, Message: "notespace_id must be a ULID"}
 	}
-	if _, err := ulid.ParseStrict(r.ToNotebookID.String()); err != nil {
-		return &ProtocolError{Code: ErrorRegistrationConflict, Message: "to_notebook_id must be a ULID"}
+	if r.ToNotebookID != "" {
+		if _, err := ulid.ParseStrict(r.ToNotebookID.String()); err != nil {
+			return &ProtocolError{Code: ErrorRegistrationConflict, Message: "to_notebook_id must be a ULID when present"}
+		}
 	}
 	if r.FromNotebookID != "" {
 		if _, err := ulid.ParseStrict(r.FromNotebookID.String()); err != nil {
@@ -182,6 +229,8 @@ func (r NotespaceReparentRequest) Validate() *ProtocolError {
 		}
 	}
 	if r.FromNotebookID == r.ToNotebookID {
+		// Covers the empty-to-empty case too: detaching a notespace that the
+		// client already believes is unparented moves nothing.
 		return &ProtocolError{Code: ErrorMembershipConflict, Message: "from_notebook_id and to_notebook_id must differ"}
 	}
 	if r.ExpectedVersion < 0 {
@@ -193,12 +242,18 @@ func (r NotespaceReparentRequest) Validate() *ProtocolError {
 type NotespaceReparentResponse struct {
 	NotespaceID    NotespaceID `json:"notespace_id"`
 	FromNotebookID NotebookID  `json:"from_notebook_id,omitempty"`
-	ToNotebookID   NotebookID  `json:"to_notebook_id"`
+	ToNotebookID   NotebookID  `json:"to_notebook_id,omitempty"`
 	Version        int64       `json:"version"`
 	// Cursor is the notespace's event-log head after the move. A re-parent
 	// must not advance it; the caller asserting cursor-in == cursor-out is how
 	// "same id, cursors intact" stops being a claim and becomes a check.
-	Cursor           int64          `json:"cursor"`
-	HistoryPreserved bool           `json:"history_preserved"`
-	Error            *ProtocolError `json:"error,omitempty"`
+	Cursor           int64 `json:"cursor"`
+	HistoryPreserved bool  `json:"history_preserved"`
+	// Detached marks the out-of-shared leg: the notespace now belongs to no
+	// notebook. Retention then carries the server's own retention sentence,
+	// the same way unshare's does, because stopping and deleting must never
+	// read alike.
+	Detached  bool           `json:"detached,omitempty"`
+	Retention string         `json:"retention,omitempty"`
+	Error     *ProtocolError `json:"error,omitempty"`
 }

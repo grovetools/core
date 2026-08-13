@@ -109,11 +109,11 @@ func setTOMLTableParts(content string, key []string, block string) string {
 		return content + sep + "\n" + block
 	}
 
-	// Blank lines trailing the old table separate it from what follows; they
-	// belong to the document, not the table.
-	for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
-		end--
-	}
+	// Blank lines trailing the old table — and the comment block introducing
+	// the next one — separate it from what follows; they belong to the
+	// document, not the table. Rewriting a root must not delete the comment an
+	// operator wrote above the NEXT table.
+	end = trimTableTail(lines, start, end)
 
 	out := make([]string, 0, len(lines)+8)
 	out = append(out, lines[:start]...)

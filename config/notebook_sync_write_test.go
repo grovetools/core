@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -118,6 +119,91 @@ func TestWriteNotebooksDeleteRemovesSyncTableToo(t *testing.T) {
 	}
 	if strings.Contains(mustRead(t, nbPath), "personal") {
 		t.Fatalf("orphaned sync table left behind:\n%s", mustRead(t, nbPath))
+	}
+}
+
+// The loader accepts `sync = { share = true }`, so the writer has to be able to
+// maintain it. A writer that could only append [notebooks.<n>.sync] would make
+// `notebook unshare` permanently impossible on a file the loader blessed — the
+// re-parse would reject the duplicate key and refuse the write.
+func TestWriteNotebooksMaintainsInlineSyncTable(t *testing.T) {
+	rootsPath, nbPath := tmpPair(t)
+	seed := "default = \"nb\"\n\n[notebooks.nb]\nroot = \"/notebooks/nb\"\nsync = { share = true }\n"
+	if err := os.WriteFile(nbPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !loadNotebooks(t, rootsPath, nbPath).NotebookShared("nb") {
+		t.Fatalf("fixture must load as shared:\n%s", seed)
+	}
+
+	changed, err := WriteNotebooks(nbPath, NotebookEdits{SyncShare: map[string]bool{"nb": false}})
+	if err != nil || !changed {
+		t.Fatalf("unshare of an inline sync table: changed=%t err=%v", changed, err)
+	}
+	table := loadNotebooks(t, rootsPath, nbPath)
+	if table.NotebookShared("nb") {
+		t.Fatalf("unshare did not take:\n%s", mustRead(t, nbPath))
+	}
+	if !table.Notebooks["nb"].SyncRecorded() {
+		t.Fatalf("the recorded fact must survive as `share = false`:\n%s", mustRead(t, nbPath))
+	}
+	// The operator chose the inline spelling; maintaining the file is not an
+	// occasion to restyle it.
+	content := mustRead(t, nbPath)
+	if !strings.Contains(content, "sync = { share = false }") || strings.Contains(content, "[notebooks.nb.sync]") {
+		t.Fatalf("inline spelling was not maintained in place:\n%s", content)
+	}
+
+	// And back again: re-sharing rewrites the same key rather than growing a
+	// second declaration.
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{SyncShare: map[string]bool{"nb": true}}); err != nil {
+		t.Fatalf("re-share: %v", err)
+	}
+	if !loadNotebooks(t, rootsPath, nbPath).NotebookShared("nb") {
+		t.Fatalf("re-share did not take:\n%s", mustRead(t, nbPath))
+	}
+	if strings.Count(mustRead(t, nbPath), "sync") != 1 {
+		t.Fatalf("the sync fact is recorded more than once:\n%s", mustRead(t, nbPath))
+	}
+}
+
+// A comment block sitting above a table header documents THAT table. Neither
+// inserting a child table nor rewriting the table before it may move or delete
+// it — the worst case is a "# do not sync." comment landing immediately above
+// an inserted `share = true`.
+func TestWriteNotebooksKeepsCommentsWithTheirTable(t *testing.T) {
+	rootsPath, nbPath := tmpPair(t)
+	seed := "default = \"work\"\n\n[notebooks.work]\nroot = \"/n/work\"\n\n" +
+		"# Personal notes live here; do not sync.\n[notebooks.personal]\nroot = \"/n/personal\"\n"
+	if err := os.WriteFile(nbPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{SyncShare: map[string]bool{"work": true}}); err != nil {
+		t.Fatal(err)
+	}
+	content := mustRead(t, nbPath)
+	if strings.Index(content, "# Personal notes live here") > strings.Index(content, "[notebooks.personal]") {
+		t.Fatalf("the comment was separated from the table it documents:\n%s", content)
+	}
+	if strings.Index(content, "[notebooks.work.sync]") > strings.Index(content, "# Personal notes live here") {
+		t.Fatalf("the child table was inserted past its parent's neighbourhood:\n%s", content)
+	}
+
+	// An unrelated root rewrite goes through the same table editor; it must not
+	// consume the following table's comment either.
+	if _, err := WriteNotebooks(nbPath, NotebookEdits{
+		Upserts: map[string]coderoot.Notebook{"work": {Root: "/n/moved"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	content = mustRead(t, nbPath)
+	if !strings.Contains(content, "# Personal notes live here; do not sync.") {
+		t.Fatalf("a root rewrite deleted an operator's comment:\n%s", content)
+	}
+	table := loadNotebooks(t, rootsPath, nbPath)
+	if table.NotebookRoot("work") != "/n/moved" || !table.NotebookShared("work") {
+		t.Fatalf("rewrite lost state: root=%q shared=%t\n%s", table.NotebookRoot("work"), table.NotebookShared("work"), content)
 	}
 }
 
