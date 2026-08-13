@@ -77,6 +77,14 @@ func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 		// behavior that the recorded schema cannot express (templates, types,
 		// sync and Obsidian settings). Preserve those fields while overriding the
 		// root; definitions absent from the recorded file remain removed.
+		//
+		// Shared is projected the same way and for the same reason as RootDir:
+		// the recorded pair owns `[notebooks.<name>.sync] share`, and the
+		// daemon's containment rule ("a notespace is shared because its
+		// notebook is") needs that bit in the view it already reads rather
+		// than a second read of notebooks.toml from inside the daemon. It is
+		// assigned unconditionally — a legacy same-name definition can carry
+		// no share state, so there is nothing to preserve and nothing to leak.
 		legacyDefinitions := cfg.Notebooks.Definitions
 		cfg.Notebooks.Definitions = make(map[string]*Notebook, len(table.Notebooks))
 		for _, name := range table.SortedNotebookNames() {
@@ -86,6 +94,7 @@ func compileCodeRootTable(cfg *Config, table coderoot.Table) *Config {
 				notebook = &copy
 			}
 			notebook.RootDir = table.NotebookRoot(name)
+			notebook.Shared = table.Notebooks[name].Shared()
 			cfg.Notebooks.Definitions[name] = notebook
 		}
 		if cfg.Notebooks.Rules == nil {

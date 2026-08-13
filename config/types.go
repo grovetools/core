@@ -1373,6 +1373,18 @@ type Notebook struct {
 	// in postProcessTOMLNotebookSync, YAML via SyncConfig.UnmarshalYAML.
 	Sync     *SyncConfig     `yaml:"sync,omitempty" toml:"-" jsonschema:"description=Synchronization configuration for this notebook"`
 	Obsidian *ObsidianConfig `yaml:"obsidian,omitempty" toml:"obsidian,omitempty" jsonschema:"description=Obsidian vault automated setup configuration"`
+	// Shared is the COMPILED projection of `[notebooks.<name>.sync] share` in
+	// notebooks.toml — the recorded consent the P3 scope model runs on: a
+	// notespace is in sync scope because the notebook containing it is shared.
+	//
+	// It is not a settable key of this struct. The recorded pair
+	// (roots.toml/notebooks.toml) owns it, compileCodeRootTable writes it, and
+	// every serialization tag is "-" so no config layer can declare a second
+	// spelling of the same fact. Consumers that must tell "recorded unshared"
+	// from "never recorded" read coderoot.Notebook.SyncRecorded directly; this
+	// view answers only the question routing asks, which is whether the
+	// notebook is shared right now.
+	Shared bool `yaml:"-" toml:"-" json:"-" jsonschema:"-"`
 }
 
 // WorktreeConfig holds settings for git worktrees.
