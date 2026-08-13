@@ -432,3 +432,95 @@ func TestWithHostSocketEnvCrossesThePtyBoundary(t *testing.T) {
 		}
 	})
 }
+
+// TestDaemonHostStartingLifecycle pins the record that closes the fleet-restart
+// boot window: groved publishes it the moment it takes the pidfile, marked
+// Starting so clients wait rather than spawn, and clears the mark at bind.
+//
+// The distinction is load-bearing in both directions. Starting must be visible
+// to LookupHost (a client that cannot see it races the daemon and spawns a
+// straggler), and it must be CLEARED at bind (a record left starting forever
+// would make every client pay the grace window before giving up).
+func TestDaemonHostStartingLifecycle(t *testing.T) {
+	isolateHostEnv(t)
+
+	reg, err := RegisterDaemonHostStarting("", "groved")
+	if err != nil {
+		t.Fatalf("RegisterDaemonHostStarting: %v", err)
+	}
+
+	rec, ok := LookupHost("/some/worktree/scope")
+	if !ok {
+		t.Fatal("a starting daemon host is not visible; clients would spawn their own")
+	}
+	if !rec.Starting {
+		t.Fatal("record does not report Starting; clients would give up instead of waiting")
+	}
+	if !rec.Daemon {
+		t.Fatal("record is not a daemon host; a UI host would outrank a real treemux")
+	}
+	if want := scopedSocketFor(t, ""); rec.SocketPath != want {
+		t.Fatalf("socket = %q, want the global socket %q", rec.SocketPath, want)
+	}
+
+	if err := reg.MarkReady(); err != nil {
+		t.Fatalf("MarkReady: %v", err)
+	}
+	rec, ok = LookupHost("/some/worktree/scope")
+	if !ok {
+		t.Fatal("host vanished after MarkReady")
+	}
+	if rec.Starting {
+		t.Fatal("MarkReady did not clear Starting; every client would wait out the grace")
+	}
+
+	// Idempotent, and safe on the zero value: groved calls both on paths where
+	// registration may have failed.
+	if err := reg.MarkReady(); err != nil {
+		t.Fatalf("second MarkReady: %v", err)
+	}
+	var nilReg *HostRegistration
+	if err := nilReg.MarkReady(); err != nil {
+		t.Fatalf("MarkReady on a nil registration: %v", err)
+	}
+	nilReg.Unregister()
+
+	reg.Unregister()
+	if _, ok := LookupHost("/some/worktree/scope"); ok {
+		t.Fatal("an unregistered host still attracted traffic")
+	}
+}
+
+// TestLookupHostIgnoresPublishedEnv: LookupHost answers about the MACHINE, not
+// about how this process was launched. A scoped daemon deciding whether to
+// yield inherits the environment of whatever spawned it, so an env endpoint
+// there would be a statement about its parent, not about who is hosting now.
+func TestLookupHostIgnoresPublishedEnv(t *testing.T) {
+	isolateHostEnv(t)
+	t.Setenv(HostSocketEnv, "/tmp/gbw-env-host.sock")
+
+	if _, ok := LookupHost("/some/worktree/scope"); ok {
+		t.Fatal("LookupHost answered from the environment; only registrations count")
+	}
+	if sock, viaHost := ResolveSessionHostSocket("/some/worktree/scope"); !viaHost || sock != "/tmp/gbw-env-host.sock" {
+		t.Fatalf("ResolveSessionHostSocket = (%q, %v); the env endpoint must still win there", sock, viaHost)
+	}
+}
+
+// TestLegacyHostRecordIsNotStarting: a record written by a binary that predates
+// the field must read as ready. Waiting on a host that will never announce
+// itself would stall every client for the full grace window.
+func TestLegacyHostRecordIsNotStarting(t *testing.T) {
+	isolateHostEnv(t)
+	writeUIHostRegistrationFile(t, "legacy.json", uiHostRegistration{
+		PID: os.Getpid(), Scope: "", SocketPath: "/run/legacy.sock", StartedAt: time.Now().UTC(),
+	})
+
+	rec, ok := LookupHost("/some/worktree/scope")
+	if !ok {
+		t.Fatal("legacy record not found")
+	}
+	if rec.Starting {
+		t.Fatal("a record with no starting field read as starting")
+	}
+}

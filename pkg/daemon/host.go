@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -161,6 +162,16 @@ type uiHostRegistration struct {
 	// SocketPath is the groved socket the host streams sessions from.
 	SocketPath string    `json:"socket_path"`
 	StartedAt  time.Time `json:"started_at"`
+	// Starting marks a record published BEFORE its socket can answer — a
+	// daemon that has taken the pidfile and is still booting. It is what
+	// distinguishes "this host is coming, wait for it" from "this host is
+	// gone", which an undialable socket alone cannot say.
+	//
+	// Only a process that also clears the flag ever sets it, so a record from
+	// a binary that predates the field reads as ready — the conservative
+	// answer, since waiting on a host that will never announce itself would
+	// stall every client for the full grace period.
+	Starting bool `json:"starting,omitempty"`
 }
 
 // kind returns the record's kind with the pre-kind default applied.
@@ -187,7 +198,11 @@ func uiHostRegistrationPath(pid int) string {
 // groved jobrunner, which executes flow's providers in a process the host
 // never spawned.
 func RegisterUIHost(scope, program string) (unregister func(), err error) {
-	return registerHost(scope, program, hostKindUI)
+	reg, err := registerHost(scope, program, hostKindUI, false)
+	if err != nil {
+		return nil, err
+	}
+	return reg.Unregister, nil
 }
 
 // RegisterDaemonHost records the calling groved as the routing endpoint of last
@@ -202,10 +217,69 @@ func RegisterUIHost(scope, program string) (unregister func(), err error) {
 // auto-shutdown, and is where in-process jobs and sessions already live — so it
 // is the only safe answer to "there is no UI, now what?".
 func RegisterDaemonHost(scope, program string) (unregister func(), err error) {
-	return registerHost(scope, program, hostKindDaemon)
+	reg, err := registerHost(scope, program, hostKindDaemon, false)
+	if err != nil {
+		return nil, err
+	}
+	return reg.Unregister, nil
 }
 
-func registerHost(scope, program string, kind hostKind) (unregister func(), err error) {
+// RegisterDaemonHostStarting is RegisterDaemonHost published EARLY — before the
+// daemon's socket can answer — so the window between "groved is coming back" and
+// "groved is reachable" stops reading as "there is no host at all".
+//
+// That window is the whole fleet-restart bug: a client in a worktree that finds
+// no covering host legitimately auto-starts a scoped groved, and during a
+// restart every client in every active worktree finds none for as long as the
+// global daemon takes to boot. A record marked Starting lets those clients WAIT
+// for the daemon that is demonstrably on its way (see newAutoStart's grace)
+// instead of racing it.
+//
+// The caller MUST call MarkReady on the returned handle once its socket is
+// bound, and Unregister when it exits. Registering early is only safe because
+// the flag is honored as a reason to wait, never as a reason to dial: a
+// Starting record whose daemon never binds costs a bounded wait, not a
+// misrouted request.
+func RegisterDaemonHostStarting(scope, program string) (*HostRegistration, error) {
+	return registerHost(scope, program, hostKindDaemon, true)
+}
+
+// HostRegistration is a live host record, held by the process that wrote it.
+// Its zero value is inert: every method no-ops on a nil receiver, so callers
+// that failed to register (or never tried) need no nil checks.
+type HostRegistration struct {
+	mu   sync.Mutex
+	path string
+	reg  uiHostRegistration
+}
+
+// MarkReady clears the Starting flag, publishing that this host's socket now
+// answers. Idempotent; a no-op on a record that was never marked starting.
+func (h *HostRegistration) MarkReady() error {
+	if h == nil {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.reg.Starting {
+		return nil
+	}
+	h.reg.Starting = false
+	return writeUIHostRegistration(h.path, h.reg)
+}
+
+// Unregister removes the record. A crash instead leaves a stale file that
+// liveness checks skip and the next registration prunes.
+func (h *HostRegistration) Unregister() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	os.Remove(h.path)
+}
+
+func registerHost(scope, program string, kind hostKind, starting bool) (*HostRegistration, error) {
 	dir := uiHostsDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -219,21 +293,29 @@ func registerHost(scope, program string, kind hostKind) (unregister func(), err 
 		Scope:      scope,
 		SocketPath: paths.SocketPath(scope),
 		StartedAt:  time.Now().UTC(),
-	}
-	data, err := json.MarshalIndent(reg, "", "  ")
-	if err != nil {
-		return nil, err
+		Starting:   starting,
 	}
 	path := uiHostRegistrationPath(reg.PID)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := writeUIHostRegistration(path, reg); err != nil {
 		return nil, err
+	}
+	return &HostRegistration{path: path, reg: reg}, nil
+}
+
+func writeUIHostRegistration(path string, reg uiHostRegistration) error {
+	data, err := json.MarshalIndent(reg, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306: world-readable like the pidfile beside it
+		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
-		return nil, err
+		return err
 	}
-	return func() { os.Remove(path) }, nil
+	return nil
 }
 
 // pruneDeadUIHostRegistrations removes records whose host process is gone.
@@ -296,19 +378,52 @@ func uiHostScopeCovers(scope, dir string) bool {
 
 // lookupHostSocket returns the daemon socket of the registered live host whose
 // scope covers dir, or "" when no such host exists.
+// See LookupHost for the precedence among competing hosts.
+func lookupHostSocket(dir string) string {
+	rec, ok := LookupHost(dir)
+	if !ok {
+		return ""
+	}
+	return rec.SocketPath
+}
+
+// HostRecord is the live registered host covering a directory, as reported by
+// LookupHost.
+type HostRecord struct {
+	// SocketPath is the groved socket this host's traffic goes to.
+	SocketPath string
+	// PID of the host process, known live at lookup time.
+	PID int
+	// Program is the host's self-declared tag ("treemux", "groved").
+	Program string
+	// Starting is true while the host has published its record but cannot yet
+	// answer on SocketPath — a daemon mid-boot. Callers wait for it; they must
+	// not treat it as reachable.
+	Starting bool
+	// Daemon is true for a groved registered as the endpoint of last resort,
+	// false for a real interactive UI host.
+	Daemon bool
+}
+
+// LookupHost returns the live REGISTERED host covering dir. Unlike
+// ResolveSessionHostSocket it ignores the published env endpoint, so the answer
+// is a fact about the machine rather than about how this process was launched —
+// which is what a daemon deciding whether to yield needs, since it inherits the
+// environment of whatever spawned it.
 //
 // Precedence, in order:
+//
 //  1. Kind — a UI host always beats a daemon host. A daemon host renders
 //     nothing, so it must never displace a treemux that could actually show
 //     and attach the session.
 //  2. Scope specificity — a worktree-scoped treemux beats a global one for
 //     its own subtree.
 //  3. Start time — among equals, the most recently started host wins.
-func lookupHostSocket(dir string) string {
+func LookupHost(dir string) (HostRecord, bool) {
 	hostsDir := uiHostsDir()
 	entries, err := os.ReadDir(hostsDir)
 	if err != nil {
-		return ""
+		return HostRecord{}, false
 	}
 	var best *uiHostRegistration
 	for _, e := range entries {
@@ -325,9 +440,15 @@ func lookupHostSocket(dir string) string {
 		}
 	}
 	if best == nil {
-		return ""
+		return HostRecord{}, false
 	}
-	return best.SocketPath
+	return HostRecord{
+		SocketPath: best.SocketPath,
+		PID:        best.PID,
+		Program:    best.Program,
+		Starting:   best.Starting,
+		Daemon:     best.kind() == hostKindDaemon,
+	}, true
 }
 
 // betterHost reports whether candidate should displace incumbent as the host

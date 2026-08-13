@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -293,16 +294,8 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	// infra). The hostSock != socketPath guard prevents a self-loop when the
 	// resolved host socket is the scoped socket that just failed to dial.
 	if opts.hostRedirect && scope != "" {
-		if hostSock, viaHost := ResolveSessionHostSocket(resolvedDir); viaHost && hostSock != socketPath {
-			if client := tryConnect(hostSock); client != nil {
-				logging.NewUnifiedLogger("daemon.factory").
-					Debug("scoped daemon absent; using registered host daemon").
-					Field("scope", scope).
-					Field("host_socket", hostSock).
-					StructuredOnly().
-					Log(context.Background())
-				return client
-			}
+		if client := connectHostDaemon(resolvedDir, scope, socketPath); client != nil {
+			return client
 		}
 	}
 
@@ -334,6 +327,14 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 			StructuredOnly().
 			Log(context.Background())
 		return NewLocalClient()
+	}
+
+	// Someone is already starting the daemon for THIS socket: its pidfile names
+	// a live process that has not bound yet. Spawning now would just fork a
+	// duplicate that loses pidfile.Acquire and exits seconds later, so wait for
+	// the one that is coming instead of racing it.
+	if client := waitForStartingDaemon(pidPath, socketPath); client != nil {
+		return client
 	}
 
 	// Daemon not running, try to auto-start it for this scope. autoStartDaemon
@@ -374,6 +375,197 @@ func newAutoStart(resolvedDir string, opts autoStartOptions) Client {
 	// connect cushion that follows still didn't land us a RemoteClient).
 	// Fall back to LocalClient rather than blocking the caller indefinitely.
 	return NewLocalClient()
+}
+
+// ---------------------------------------------------------------------------
+// Boot-window grace
+// ---------------------------------------------------------------------------
+//
+// The host redirect above needs a REGISTERED host to exist. During a fleet
+// restart there is a window where none does yet: every daemon has been killed,
+// the global groved is booting, and until it finishes the hosts registry is
+// empty. A client in a worktree that asks for daemon data during those seconds
+// finds no host, correctly concludes "nothing is running", and spawns a scoped
+// groved that nothing will ever use — one per active worktree, born exactly
+// during the boot-sweep contention spike.
+//
+// The fix is to make "a daemon is on its way" observable and then wait for it.
+// Two artifacts say so, and the code below trusts either:
+//
+//   - a host record marked Starting (RegisterDaemonHostStarting), written by
+//     groved the moment it takes the pidfile — milliseconds into boot; and
+//   - the global daemon's pidfile naming a live process whose socket does not
+//     answer yet, which covers both the sliver before that record is written
+//     and a groved too old to write one.
+//
+// The wait is bounded and only ever REPLACES a spawn: at worst a client is a
+// few seconds later to the same LocalClient fallback it would have reached
+// anyway, and in exchange the fleet stops accumulating stragglers.
+
+// defaultHostBootGrace bounds how long a client will wait for a daemon that is
+// demonstrably starting. Long enough to cover a global groved's bind (~2.5s
+// under --ready-at=bind, and the pidfile is taken long before that), short
+// enough that a wedged daemon cannot stall a CLI for meaningfully longer than
+// the spawn path it replaces.
+const defaultHostBootGrace = 5 * time.Second
+
+// HostBootGraceEnv overrides defaultHostBootGrace. It exists for fixtures that
+// need the window compressed (or widened) without rebuilding, and takes any
+// time.ParseDuration value; "0" disables the wait entirely.
+const HostBootGraceEnv = "GROVE_HOST_BOOT_GRACE"
+
+// hostBootPollInterval is the cadence of re-checks while waiting out the boot
+// window. Matches readyPollInterval: the wait ends the instant the daemon
+// answers, so a dense poll is felt as a shorter wait, not as load.
+const hostBootPollInterval = 100 * time.Millisecond
+
+func hostBootGrace() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv(HostBootGraceEnv)); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d >= 0 {
+			return d
+		}
+	}
+	return defaultHostBootGrace
+}
+
+// connectHostDaemon returns the client of a live host daemon covering dir, or
+// nil when there is none to ride and the caller should spawn its own.
+//
+// It waits, bounded, while a host is demonstrably still booting. A host that is
+// registered and reachable returns immediately, and a host that is simply
+// absent returns nil immediately — the wait only happens when there is
+// something concrete to wait for.
+func connectHostDaemon(dir, scope, socketPath string) Client {
+	ulog := logging.NewUnifiedLogger("daemon.factory")
+
+	grace := hostBootGrace()
+	// A daemon never blocks on a booting sibling. Its own client (or a
+	// LocalClient) is the answer inDaemonSpawnSuppressed is about to give, and
+	// stalling in-process job code for seconds to reach the same place would be
+	// pure latency.
+	if _, isDaemon := inProcessDaemon(); isDaemon {
+		grace = 0
+	}
+	deadline := time.Now().Add(grace)
+
+	// booting is the socket of a daemon we have SEEN starting up. Once set, it
+	// is a redirect target in its own right: having watched that daemon come up
+	// inside our own grace window, riding it is the whole point of waiting.
+	// This is what makes the wait pay off when the registry cannot answer —
+	// the sliver before groved writes its record, or a groved too old to write
+	// one at all.
+	booting := ""
+
+	for {
+		if hostSock, viaHost := ResolveSessionHostSocket(dir); viaHost && hostSock != socketPath {
+			if client := tryConnect(hostSock); client != nil {
+				ulog.Debug("scoped daemon absent; using registered host daemon").
+					Field("scope", scope).
+					Field("host_socket", hostSock).
+					Field("waited_for_boot", booting != "").
+					StructuredOnly().
+					Log(context.Background())
+				return client
+			}
+		}
+		if booting != "" && booting != socketPath {
+			if client := tryConnect(booting); client != nil {
+				ulog.Debug("scoped daemon absent; using the daemon we watched finish booting").
+					Field("scope", scope).
+					Field("host_socket", booting).
+					StructuredOnly().
+					Log(context.Background())
+				return client
+			}
+		}
+		if booting == "" {
+			// Nothing is demonstrably on its way: spawn now, exactly as before.
+			if booting = bootingHostSocket(dir); booting == "" {
+				return nil
+			}
+			ulog.Debug("host daemon is booting; waiting instead of spawning a scoped daemon").
+				Field("scope", scope).
+				Field("host_socket", booting).
+				Field("grace", grace.String()).
+				StructuredOnly().
+				Log(context.Background())
+		}
+		if !time.Now().Before(deadline) {
+			ulog.Debug("host daemon did not finish booting within the grace window; spawning scoped daemon").
+				Field("scope", scope).
+				Field("host_socket", booting).
+				Field("grace", grace.String()).
+				StructuredOnly().
+				Log(context.Background())
+			return nil
+		}
+		time.Sleep(hostBootPollInterval)
+	}
+}
+
+// bootingHostSocket returns the socket of a daemon that is demonstrably in the
+// middle of starting up and would serve dir once it does, or "" when nothing
+// is.
+//
+// Two artifacts count, in order of directness:
+//
+//   - a host record marked Starting, published by groved the moment it wins
+//     pidfile.Acquire (RegisterDaemonHostStarting); and
+//   - the global daemon's pidfile naming a live process whose socket does not
+//     answer yet. The global daemon covers every scope, so this says the same
+//     thing in the vocabulary a groved has always spoken: it covers the sliver
+//     before the record is written, a registration that failed, and a binary
+//     old enough not to write one.
+//
+// A socket that already answers is not booting — whatever it is or is not
+// registered as, it is up, and the caller's registry lookup above is the right
+// judge of whether to use it.
+func bootingHostSocket(dir string) string {
+	if rec, ok := LookupHost(dir); ok && rec.Starting {
+		return rec.SocketPath
+	}
+	globalSock := paths.SocketPath("")
+	if livePidFromFile(paths.PidFilePath("")) > 0 && tryConnect(globalSock) == nil {
+		return globalSock
+	}
+	return ""
+}
+
+// waitForStartingDaemon waits out a daemon that already holds pidPath but has
+// not bound socketPath yet, returning its client once it answers. Returns nil
+// immediately when no live process holds the pidfile — the ordinary case, where
+// the caller goes on to spawn.
+func waitForStartingDaemon(pidPath, socketPath string) Client {
+	grace := hostBootGrace()
+	if grace <= 0 || pidPath == "" {
+		return nil
+	}
+	pid := livePidFromFile(pidPath)
+	if pid <= 0 || pid == os.Getpid() {
+		return nil
+	}
+	logging.NewUnifiedLogger("daemon.factory").
+		Debug("daemon for this socket is already starting; waiting instead of spawning a duplicate").
+		Field("socket", socketPath).
+		Field("pid", pid).
+		Field("grace", grace.String()).
+		StructuredOnly().
+		Log(context.Background())
+	return waitForDaemonReady(nil, nil, socketPath, grace)
+}
+
+// livePidFromFile returns the pid recorded in a daemon pidfile when that
+// process is still alive, and 0 otherwise (missing, malformed, or stale).
+func livePidFromFile(path string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 1 || !process.IsProcessAlive(pid) {
+		return 0
+	}
+	return pid
 }
 
 // readyHandshakeTimeout bounds how long newAutoStart will wait for a freshly
@@ -453,6 +645,15 @@ func waitForDaemonReady(readyPipe *os.File, exited <-chan struct{}, socketPath s
 func tryConnect(socketPath string) Client {
 	client, _ := tryConnectDiag(socketPath)
 	return client
+}
+
+// SocketReachable reports whether a daemon is accepting connections on
+// socketPath right now. It is the dial half of LookupHost, exported for callers
+// that must not act on a registration alone — above all a scoped daemon
+// deciding whether to yield to a host, which must never exit in favor of a
+// socket that answers nobody.
+func SocketReachable(socketPath string) bool {
+	return tryConnect(socketPath) != nil
 }
 
 // tryConnectDiag is tryConnect plus a diagnosis: when the socket file EXISTS
