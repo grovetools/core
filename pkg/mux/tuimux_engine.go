@@ -80,8 +80,15 @@ func (e *TuimuxEngine) StartServer(ctx context.Context, name string, opts ...Ses
 		return fmt.Errorf("create tuimux server: %w", err)
 	}
 
+	// Grove's bin dir is not on the user's PATH, so a bare "tuimux" would
+	// only work by accident. Resolve it the same way NewTuimuxEngine does.
+	binaryPath, err := resolveTuimuxBinary()
+	if err != nil {
+		return fmt.Errorf("start tuimux primary: %w", err)
+	}
+
 	args := []string{"new", "-s", name, "-d"}
-	cmd := exec.CommandContext(ctx, "tuimux", args...)
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	if cfg.WorkDir != "" {
 		cmd.Dir = cfg.WorkDir
 	}
