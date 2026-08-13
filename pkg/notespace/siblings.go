@@ -96,7 +96,7 @@ func (i *Index) PrimaryFor(value string, primaries map[string]string) (Record, e
 	return records[0], nil
 }
 
-// PrimaryProblemKind names the four ways a recorded primary can be wrong.
+// PrimaryProblemKind names the five ways a recorded primary can be wrong.
 type PrimaryProblemKind string
 
 const (
@@ -106,8 +106,19 @@ const (
 	// PrimaryDangling: an entry names an id no stamped root carries.
 	PrimaryDangling PrimaryProblemKind = "dangling"
 	// PrimaryDuplicate: one id is recorded as the primary of more than one
-	// subject, or resolves to more than one physical root (D8).
+	// subject. The binding table is wrong: a notespace is stamped for exactly
+	// one subject, so at most one of those entries can be true.
 	PrimaryDuplicate PrimaryProblemKind = "duplicate"
+	// PrimaryUnresolvable: the entry names an id the index cannot resolve to a
+	// single root, because two physical roots claim one identity (D8).
+	//
+	// It is kept apart from PrimaryDuplicate because it is a fact about the
+	// DISK rather than about the binding table, and the two carry different
+	// repairs. Every surface that reports it also reports the duplicated roots
+	// themselves, in the words and with the repair that condition owns — so a
+	// caller that has already named the physical duplicate drops this
+	// restatement of it rather than showing one fault twice.
+	PrimaryUnresolvable PrimaryProblemKind = "unresolvable"
 	// PrimaryMismatched: the named notespace is stamped for another subject.
 	PrimaryMismatched PrimaryProblemKind = "mismatched"
 )
@@ -187,7 +198,7 @@ func (i *Index) AuditPrimaries(primaries map[string]string) []PrimaryProblem {
 		records, err := i.ByID(id)
 		if err != nil {
 			problems = append(problems, PrimaryProblem{
-				Kind:        PrimaryDuplicate,
+				Kind:        PrimaryUnresolvable,
 				Subject:     value,
 				NotespaceID: id,
 				Detail:      err.Error(),

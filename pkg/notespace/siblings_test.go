@@ -163,3 +163,30 @@ func TestAuditPrimariesNamesEveryViolation(t *testing.T) {
 		t.Fatalf("mismatched = %v", mismatched)
 	}
 }
+
+// TestAuditPrimariesSeparatesTheDiskFaultFromTheTableFault keeps two distinct
+// conditions distinct. A binding table naming one id for several subjects is wrong
+// about the table — a notespace is stamped for exactly one subject, so at most
+// one of those entries can be true, and the repair is to rewrite the table. Two
+// physical roots claiming one identity is wrong about the DISK, and the repair
+// is to re-mint the losing root. Callers filter on the kind to avoid reporting
+// the disk fault twice, so collapsing them into one kind would take that
+// distinction away from every surface at once.
+func TestAuditPrimariesSeparatesTheDiskFaultFromTheTableFault(t *testing.T) {
+	core := "example.com/org/core"
+	idx, _ := stampedRoots(t,
+		NotespaceStamp{ID: siblingID1, Name: "original", Subject: core, Kind: "repo"},
+		NotespaceStamp{ID: siblingID1, Name: "copy", Subject: core, Kind: "repo"},
+	)
+
+	problems := idx.AuditPrimaries(map[string]string{core: siblingID1})
+	if len(problems) != 1 || problems[0].Kind != PrimaryUnresolvable {
+		t.Fatalf("problems = %v, want one unresolvable primary", problems)
+	}
+	if problems[0].NotespaceID != siblingID1 {
+		t.Fatalf("the problem does not carry the id a caller filters on: %+v", problems[0])
+	}
+	if !strings.Contains(problems[0].String(), "duplicate notespace id") {
+		t.Fatalf("problem text = %q", problems[0].String())
+	}
+}
