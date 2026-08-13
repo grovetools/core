@@ -43,6 +43,12 @@ type NotebookEdits struct {
 	Upserts map[string]coderoot.Notebook
 	Deletes []string
 	Header  []string
+	// SyncShare rewrites [notebooks.<name>.sync] share for the named
+	// notebooks. It is a separate field from Upserts on purpose: share state
+	// is edited by different verbs (`notebook share`/`unshare`) than the root
+	// binding, and an Upsert that did not mention sync must never be read as
+	// "unshare it". Recording false is meaningful — see coderoot.NotebookSync.
+	SyncShare map[string]bool
 }
 
 // WriteCodeRoots applies edits to roots.toml at path, creating the file when
@@ -98,7 +104,7 @@ func WriteNotebooks(path string, edits NotebookEdits) (bool, error) {
 	if path == "" {
 		return false, fmt.Errorf("notebooks.toml path is not resolvable")
 	}
-	if edits.Default == nil && len(edits.Upserts) == 0 && len(edits.Deletes) == 0 {
+	if edits.Default == nil && len(edits.Upserts) == 0 && len(edits.Deletes) == 0 && len(edits.SyncShare) == 0 {
 		return false, nil
 	}
 	if err := reviewConfigWritePath(path); err != nil {
@@ -117,10 +123,28 @@ func WriteNotebooks(path string, edits NotebookEdits) (bool, error) {
 	if edits.Default != nil {
 		updated = setTOMLTopLevelKey(updated, "default", strconv.Quote(*edits.Default))
 	}
+	// Upserts run before sync edits so a notebook created in the same call
+	// already has its parent table when its [.sync] child is appended.
+	//
+	// An upsert rewrites the lines from [notebooks.<n>] to the next table
+	// header, and [notebooks.<n>.sync] IS a table header — so a recorded share
+	// state survives an unrelated root rewrite untouched. That is the whole
+	// preservation contract; the test that pins it is TestWriteNotebooks
+	// PreservesRecordedSyncTable.
 	for _, name := range sortedKeys(edits.Upserts) {
 		updated = setTOMLTableParts(updated, []string{"notebooks", name}, renderNotebookDef(name, edits.Upserts[name]))
 	}
+	for _, name := range sortedKeys(edits.SyncShare) {
+		updated = setTOMLChildTable(updated,
+			[]string{"notebooks", name},
+			[]string{"notebooks", name, "sync"},
+			renderNotebookSync(name, edits.SyncShare[name]))
+	}
 	for _, name := range edits.Deletes {
+		// The child goes first: a [notebooks.<n>.sync] left behind by itself
+		// would reload as a notebook with no root, and the writer's contract
+		// is that what it persists reloads.
+		updated = deleteTOMLTableParts(updated, []string{"notebooks", name, "sync"})
 		updated = deleteTOMLTableParts(updated, []string{"notebooks", name})
 	}
 
@@ -269,11 +293,75 @@ func renderCodeRoot(name string, r coderoot.Root) string {
 	return b.String()
 }
 
+// renderNotebookDef renders [notebooks.<name>] alone. The sync child table is
+// deliberately not rendered here: it is edited through NotebookEdits.SyncShare
+// and preserved verbatim by every other write.
 func renderNotebookDef(name string, nb coderoot.Notebook) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[notebooks.%s]\n", tomlKey(name))
 	fmt.Fprintf(&b, "root = %s\n", strconv.Quote(nb.Root))
 	return b.String()
+}
+
+func renderNotebookSync(name string, share bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[notebooks.%s.sync]\n", tomlKey(name))
+	fmt.Fprintf(&b, "share = %t\n", share)
+	return b.String()
+}
+
+// setTOMLChildTable sets a child table, and — when the child is absent —
+// inserts it immediately after its parent's block instead of at end of file.
+// Plain appending would be valid TOML but would strand [notebooks.b.sync]
+// below [notebooks.z], and this is a file operators read and hand-edit.
+func setTOMLChildTable(content string, parent, child []string, block string) string {
+	if _, _, found := tomlTableBounds(content, child); found {
+		return setTOMLTableParts(content, child, block)
+	}
+	_, parentEnd, parentFound := tomlTableBounds(content, parent)
+	if !parentFound {
+		return setTOMLTableParts(content, child, block)
+	}
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines)+4)
+	out = append(out, lines[:parentEnd]...)
+	out = append(out, strings.Split(strings.TrimSuffix(block, "\n"), "\n")...)
+	if parentEnd < len(lines) {
+		out = append(out, "")
+	}
+	out = append(out, lines[parentEnd:]...)
+	return strings.Join(out, "\n")
+}
+
+// tomlTableBounds locates the table named by key: start is its header line,
+// end is one past its last content line (trailing blank lines excluded, since
+// they separate it from what follows and belong to the document).
+func tomlTableBounds(content string, key []string) (int, int, bool) {
+	lines := strings.Split(content, "\n")
+	start, end := -1, len(lines)
+	for i, line := range lines {
+		parts, ok := tomlTableKeyParts(line)
+		if !ok {
+			continue
+		}
+		if slices.Equal(parts, key) {
+			if start < 0 {
+				start = i
+			}
+			continue
+		}
+		if start >= 0 {
+			end = i
+			break
+		}
+	}
+	if start < 0 {
+		return 0, 0, false
+	}
+	for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	return start, end, true
 }
 
 // deleteTOMLTable removes the table named by key (header line through the

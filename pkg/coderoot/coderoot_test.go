@@ -139,9 +139,12 @@ func TestParseNotebooksRejections(t *testing.T) {
 			want:    "[notebooks.nb] has no root",
 		},
 		{
-			name:    "reserved sync table",
-			content: "[notebooks.nb]\nroot = \"/x\"\n[notebooks.nb.sync]\nshare = true\n",
-			want:    "[notebooks.nb.sync] is reserved",
+			// share is the sync table's one recorded key; everything else is
+			// still refused by name. Coverage of the accepted shapes lives in
+			// notebook_sync_test.go.
+			name:    "unknown sync key",
+			content: "[notebooks.nb]\nroot = \"/x\"\n[notebooks.nb.sync]\nshare = true\nserver = \"https://example\"\n",
+			want:    "[notebooks.nb.sync] accepts only share",
 		},
 		{
 			name:    "duplicate notebook table",
@@ -169,13 +172,13 @@ func TestParseNotebooksRejections(t *testing.T) {
 	}
 }
 
-func TestParseNotebooksAllowsEmptyReservedSyncTable(t *testing.T) {
+func TestParseNotebooksAllowsEmptySyncTable(t *testing.T) {
 	nf, err := ParseNotebooks("notebooks.toml", []byte("[notebooks.nb]\nroot = \"/x\"\n[notebooks.nb.sync]\n"))
 	if err != nil {
-		t.Fatalf("empty reserved sync table must remain accepted: %v", err)
+		t.Fatalf("empty sync table must remain accepted: %v", err)
 	}
 	if _, ok := nf.Notebooks["nb"]; !ok {
-		t.Fatal("notebook containing an empty reserved sync table was lost")
+		t.Fatal("notebook containing an empty sync table was lost")
 	}
 }
 

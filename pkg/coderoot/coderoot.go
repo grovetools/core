@@ -98,11 +98,43 @@ func (r Root) IncludesRepo(name string) bool {
 type Notebook struct {
 	// Root is the notebook's root directory.
 	Root string `toml:"root" jsonschema:"description=Absolute path to the notebook root directory"`
-	// Sync is reserved for P3 ([notebooks.<name>.sync]); any key inside it is
-	// rejected loudly today so nothing squats on the table before it means
-	// something.
-	Sync map[string]interface{} `toml:"sync,omitempty" jsonschema:"-"`
+	// Sync is [notebooks.<name>.sync] — the notebook-grained sync scope model.
+	// Absent means "never recorded"; present means the answer was written down.
+	Sync *NotebookSync `toml:"sync,omitempty" jsonschema:"-"`
 }
+
+// NotebookSync is one [notebooks.<name>.sync] table.
+//
+// The notebook is the ONLY sync knob: there is no per-notespace toggle and no
+// derived share state anywhere. A notespace is shared because the notebook
+// containing it is shared — containment is consent — so this table has exactly
+// one recorded key, and any other key is a hard error naming file and table.
+//
+// The table is tri-state on purpose, and the third state is not a nuance:
+// absent means "never recorded", `share = true` means shared, and an explicit
+// `share = false` means recorded-as-unshared. Unshare is forward-only (D9) —
+// the server retains history and copies pulled elsewhere are never retracted —
+// so "we deliberately stopped sharing this" is a fact the file has to be able
+// to state, not one a reader may infer from silence.
+type NotebookSync struct {
+	// Share records whether this notebook's notespaces are shared with the
+	// recorded sync server.
+	Share bool `toml:"share" jsonschema:"-"`
+}
+
+// notebookSyncKeys is the closed key set of [notebooks.<name>.sync]. Parsing
+// checks raw TOML against it so the error names the file and table rather than
+// surfacing the decoder's generic strict-mode complaint.
+var notebookSyncKeys = map[string]struct{}{"share": {}}
+
+// Shared reports whether this notebook is recorded as shared. A notebook with
+// no recorded sync table is not shared.
+func (n Notebook) Shared() bool { return n.Sync != nil && n.Sync.Share }
+
+// SyncRecorded reports whether [notebooks.<name>.sync] exists at all, which is
+// distinct from being shared: a notebook unshared per D9 records
+// `share = false` and must not read as "never considered".
+func (n Notebook) SyncRecorded() bool { return n.Sync != nil }
 
 // RootsFile is the typed shape of roots.toml.
 type RootsFile struct {
@@ -170,6 +202,27 @@ func (t Table) SortedRootNames() []string {
 // SortedNotebookNames returns the notebook names in deterministic order.
 func (t Table) SortedNotebookNames() []string {
 	return sortedKeys(t.Notebooks)
+}
+
+// NotebookShared reports whether the named notebook is recorded as shared.
+// An unknown name is not shared — the caller that needs the difference between
+// "not shared" and "not defined" asks Notebooks directly.
+func (t Table) NotebookShared(name string) bool {
+	nb, ok := t.Notebooks[name]
+	return ok && nb.Shared()
+}
+
+// SharedNotebookNames returns, in deterministic order, the notebooks recorded
+// as shared. This is the containment boundary: everything inside one of these
+// notebooks is in scope for sync, and nothing outside them is.
+func (t Table) SharedNotebookNames() []string {
+	out := []string{}
+	for _, name := range sortedKeys(t.Notebooks) {
+		if t.Notebooks[name].Shared() {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // DeepestRootFor returns the name of the most specific enabled root whose
@@ -286,6 +339,13 @@ func ParseRoots(path string, data []byte) (RootsFile, error) {
 // ParseNotebooks decodes notebooks.toml content. path is used in error
 // messages only.
 func ParseNotebooks(path string, data []byte) (NotebooksFile, error) {
+	// The sync table is checked against its closed key set first so a stray
+	// key is reported as "[notebooks.x.sync] accepts only share" rather than
+	// as the decoder's generic strict-mode message, which names neither the
+	// file nor the table an operator has to go fix.
+	if err := checkNotebookSyncKeys(path, data); err != nil {
+		return NotebooksFile{}, err
+	}
 	var nf NotebooksFile
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -303,16 +363,48 @@ func ParseNotebooks(path string, data []byte) (NotebooksFile, error) {
 		if strings.TrimSpace(nb.Root) == "" {
 			return NotebooksFile{}, fmt.Errorf("%s: [notebooks.%s] has no root", displayName(path, NotebooksFileName), name)
 		}
-		// [notebooks.<name>.sync] is reserved for the sync scope model (P3).
-		// Reject any key inside it loudly so nothing depends on a shape this
-		// phase has not defined.
-		if len(nb.Sync) > 0 {
-			keys := sortedKeys(nb.Sync)
-			return NotebooksFile{}, fmt.Errorf("%s: [notebooks.%s.sync] is reserved and accepts no keys yet (found %s)",
-				displayName(path, NotebooksFileName), name, strings.Join(keys, ", "))
-		}
 	}
 	return nf, nil
+}
+
+// checkNotebookSyncKeys validates every [notebooks.<name>.sync] table against
+// the closed key set, before the typed decode, so the diagnostic names the
+// file and the table.
+func checkNotebookSyncKeys(path string, data []byte) error {
+	var loose struct {
+		Notebooks map[string]map[string]any `toml:"notebooks"`
+	}
+	if err := toml.Unmarshal(data, &loose); err != nil {
+		// A syntax error is the typed decode's to report, with its position.
+		return nil
+	}
+	for _, name := range sortedKeys(loose.Notebooks) {
+		raw, ok := loose.Notebooks[name]["sync"]
+		if !ok {
+			continue
+		}
+		table, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s: [notebooks.%s.sync] must be a table", displayName(path, NotebooksFileName), name)
+		}
+		var unknown []string
+		for key := range table {
+			if _, known := notebookSyncKeys[key]; !known {
+				unknown = append(unknown, key)
+			}
+		}
+		if len(unknown) > 0 {
+			sort.Strings(unknown)
+			return fmt.Errorf("%s: [notebooks.%s.sync] accepts only share (found %s)",
+				displayName(path, NotebooksFileName), name, strings.Join(unknown, ", "))
+		}
+		if share, present := table["share"]; present {
+			if _, isBool := share.(bool); !isBool {
+				return fmt.Errorf("%s: [notebooks.%s.sync] share must be a boolean, got %T", displayName(path, NotebooksFileName), name, share)
+			}
+		}
+	}
+	return nil
 }
 
 // Validate cross-checks the pair: every notebook reference resolves, the

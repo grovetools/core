@@ -89,6 +89,7 @@ type Capabilities struct {
 	Notify           bool     `json:"notify,omitempty"`            // SSE notify-poke channel ("notespace advanced to seq N")
 	Search           bool     `json:"search,omitempty"`            // Server-side search (Phase 3)
 	DeviceEnrollment bool     `json:"device_enrollment,omitempty"` // Server accepts signed device enrollment requests
+	NotebookScope    bool     `json:"notebook_scope,omitempty"`    // Notebook-grained share/membership surfaces (share, unshare, reparent, inventory membership) are served
 	MaxInlineSize    int64    `json:"max_inline_size,omitempty"`   // Largest document stored inline, in bytes (default 256KB)
 	BlobChunkSize    int64    `json:"blob_chunk_size,omitempty"`   // Fixed chunk size for the blob tier, in bytes (default 4MB)
 	MaxBlobSize      int64    `json:"max_blob_size,omitempty"`     // Largest single blob the server accepts, in bytes (0 = unadvertised)
@@ -531,8 +532,18 @@ type InventoryRequest struct {
 }
 
 type InventoryNotebook struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   NotebookID `json:"id"`
+	Name string     `json:"name"`
+	// ShareState and Version make the inventory answerable on its own: a join
+	// delta must be able to tell a notebook that is shared from one this
+	// server retains after an unshare (D9), without a second round trip.
+	ShareState string `json:"share_state,omitempty"`
+	Version    int64  `json:"version,omitempty"`
+	// NotespaceIDs is the membership roll, ordered. It is the same fact as
+	// InventoryNotespace.NotebookID read from the other side, carried twice
+	// on purpose so neither a notebook-first nor a notespace-first client has
+	// to reconstruct it.
+	NotespaceIDs []NotespaceID `json:"notespace_ids,omitempty"`
 }
 
 type InventoryNotespace struct {
@@ -540,7 +551,7 @@ type InventoryNotespace struct {
 	Name       NotespaceName `json:"name"`
 	Subject    string        `json:"subject"`
 	Kind       string        `json:"kind"`
-	NotebookID string        `json:"notebook_id,omitempty"`
+	NotebookID NotebookID    `json:"notebook_id,omitempty"`
 	Aliases    []string      `json:"aliases,omitempty"`
 }
 
