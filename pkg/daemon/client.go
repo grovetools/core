@@ -528,26 +528,30 @@ type Client interface {
 
 	// GetSyncStatus returns the sync engine's headline status
 	// (GET /api/sync/status): enabled flag, document/outbox counters and
-	// per-workspace cursor + hydration progress. Enabled=false (with a nil
+	// per-notespace cursor + hydration progress. Enabled=false (with a nil
 	// error) means sync is not configured on the global daemon.
 	GetSyncStatus(ctx context.Context) (*models.SyncStatus, error)
 
 	// GetSyncOutbox returns the pending push queue in insertion order
-	// (GET /api/sync/outbox[?workspace=]). Empty workspace means all
-	// workspaces. Parked entries are included.
-	GetSyncOutbox(ctx context.Context, workspace string) ([]models.SyncOutboxEntry, error)
+	// (GET /api/sync/outbox[?notespace_id=]). Parked entries are included.
+	//
+	// The filter is the immutable notespace ID, never a display name — sync
+	// keys on the stamp id everywhere below this call, and a name reaches the
+	// daemon only as the label it reports back. Empty selects all notespaces;
+	// resolve a user-typed name through GetSyncStatus first.
+	GetSyncOutbox(ctx context.Context, notespaceID string) ([]models.SyncOutboxEntry, error)
 
 	// GetSyncConflicts returns the recorded conflict artifacts
-	// (GET /api/sync/conflicts[?workspace=]). Empty workspace means all
-	// workspaces.
-	GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error)
+	// (GET /api/sync/conflicts[?notespace_id=]). Same ID-not-name filter rule
+	// as GetSyncOutbox.
+	GetSyncConflicts(ctx context.Context, notespaceID string) ([]models.SyncConflict, error)
 
-	// SyncRepush voids synced state for a workspace ("" = all) and kicks an
+	// SyncRepush voids synced state for a notespace ("" = all) and kicks an
 	// immediate anti-entropy pass (POST /api/sync/repush). `grove sync adopt`
 	// uses it for the kick: a subscription written a second ago has nothing
 	// to void, and the pass is what turns it into a real scan without waiting
-	// for the hourly tick.
-	SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error)
+	// for the hourly tick. Same ID-not-name rule as GetSyncOutbox.
+	SyncRepush(ctx context.Context, notespaceID string) (*models.SyncRepushResult, error)
 
 	// --- Forge ---
 

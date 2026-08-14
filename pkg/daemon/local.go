@@ -846,19 +846,19 @@ func (c *LocalClient) GetSyncStatus(ctx context.Context) (*models.SyncStatus, er
 }
 
 // GetSyncOutbox requires the daemon (see GetSyncStatus).
-func (c *LocalClient) GetSyncOutbox(ctx context.Context, workspace string) ([]models.SyncOutboxEntry, error) {
+func (c *LocalClient) GetSyncOutbox(ctx context.Context, notespaceID string) ([]models.SyncOutboxEntry, error) {
 	return nil, ErrNotSupported
 }
 
 // GetSyncConflicts requires the daemon (see GetSyncStatus).
-func (c *LocalClient) GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error) {
+func (c *LocalClient) GetSyncConflicts(ctx context.Context, notespaceID string) ([]models.SyncConflict, error) {
 	return nil, ErrNotSupported
 }
 
 // SyncRepush requires the daemon: the anti-entropy pass it kicks is owned by
 // the running SyncHandler, and there is nothing local to kick (see
 // GetSyncStatus).
-func (c *LocalClient) SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error) {
+func (c *LocalClient) SyncRepush(ctx context.Context, notespaceID string) (*models.SyncRepushResult, error) {
 	return nil, ErrNotSupported
 }
 

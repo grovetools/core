@@ -403,6 +403,16 @@ type MachineRootState struct {
 	Exists bool `json:"exists"`
 }
 
+// ConfigDegradation is the stable machine-readable reason a daemon is serving
+// status only (daemon server ConfigDegradation). Recovery is deliberately
+// restart-only: a process that skipped constructing collectors, queues,
+// watchers and databases cannot safely grow them in place after a config edit.
+type ConfigDegradation struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Recovery string `json:"recovery"`
+}
+
 // SyncStatus mirrors the daemon's GET /api/sync/status payload
 // (daemon server syncStatusResponse). The route is served on the 0600 unix
 // socket only; scoped daemons proxy it to the global daemon, which owns
@@ -410,6 +420,15 @@ type MachineRootState struct {
 type SyncStatus struct {
 	Enabled bool   `json:"enabled"`
 	DBPath  string `json:"db_path,omitempty"`
+	// Degraded, ConfigError and MigrationRequired are the ways sync can be
+	// non-functional while everything below still reads as healthy: a daemon
+	// serving status only after a bad config, and a sync.db the running binary
+	// refuses to open. Enabled=false alone does not distinguish "not
+	// configured" from "configured and refused", so a surface that renders one
+	// without the others tells the user nothing is wrong.
+	Degraded          bool               `json:"degraded,omitempty"`
+	ConfigError       *ConfigDegradation `json:"config_error,omitempty"`
+	MigrationRequired string             `json:"migration_required,omitempty"`
 	// MachineName/MachineID are this host's identity: the config-held display
 	// name (machine.toml, hostname default) and the state-held ULID
 	// (core/pkg/machine). Present whether or not sync is enabled. Render them
@@ -440,24 +459,31 @@ type SyncStatus struct {
 	// OutboxParked splits out the parked subset.
 	OutboxPending int                   `json:"outbox_pending"`
 	OutboxParked  int                   `json:"outbox_parked"`
-	Workspaces    []SyncWorkspaceStatus `json:"workspaces,omitempty"`
+	Notespaces    []SyncNotespaceStatus `json:"notespaces,omitempty"`
 }
 
-// SyncWorkspaceStatus is one workspace's sync cursor/hydration state inside
-// SyncStatus (daemon server syncWorkspaceStatus).
-type SyncWorkspaceStatus struct {
-	Name         string                 `json:"name"`
-	Cursor       int64                  `json:"cursor"`
-	LastSyncedAt time.Time              `json:"last_synced_at,omitzero"`
-	Hydration    *SyncHydrationProgress `json:"hydration,omitempty"`
-	// Pull and Mode mirror this workspace's sync subscription
+// SyncNotespaceStatus is one notespace's sync cursor/hydration state inside
+// SyncStatus (daemon server syncNotespaceStatus).
+//
+// Identity is the immutable stamp id, with the display name reported beside
+// it: sync keys everything — DB rows, wire events, these very payloads — on
+// NotespaceID, and a display name is a mutable label that locates
+// configuration only. Match on the name when a user typed it; carry the id
+// into anything that goes back to the daemon.
+type SyncNotespaceStatus struct {
+	NotespaceID   string                 `json:"notespace_id"`
+	NotespaceName string                 `json:"notespace_name,omitempty"`
+	Cursor        int64                  `json:"cursor"`
+	LastSyncedAt  time.Time              `json:"last_synced_at,omitzero"`
+	Hydration     *SyncHydrationProgress `json:"hydration,omitempty"`
+	// Pull and Mode mirror this notespace's sync subscription
 	// (config.SyncWorkspace): Pull=false means push-only (pulled changes are
 	// never written to the local tree), Mode filters what is subscribed
 	// (full, plans-only, search-only). Both are zero when sync.db holds state
-	// for a workspace the config no longer subscribes to.
+	// for a notespace the config no longer subscribes to.
 	Pull bool   `json:"pull,omitempty"`
 	Mode string `json:"mode,omitempty"`
-	// Role is the relationship with the peer holding this workspace:
+	// Role is the relationship with the peer holding this notespace:
 	// satellite, peer, or registry. EMPTY means a legacy (role-less) entry,
 	// which is push-only — render it as a bare direction glyph rather than
 	// inventing a role it never declared.
@@ -465,23 +491,28 @@ type SyncWorkspaceStatus struct {
 }
 
 // SyncRepushResult is the daemon's POST /api/sync/repush payload: which
-// workspaces the reset covered and how many documents it voided.
+// notespaces the reset covered (by id) and how many documents it voided.
 //
 // The endpoint does two things and callers use it for either. `grove sync
 // adopt` wants only the second — the immediate anti-entropy pass that converts
 // a freshly written subscription into a real scan instead of waiting for the
-// hourly tick — and on a workspace sync has never tracked, DocumentsReset is
+// hourly tick — and on a notespace sync has never tracked, DocumentsReset is
 // legitimately 0.
 type SyncRepushResult struct {
-	Workspaces     []string `json:"workspaces"`
+	Notespaces     []string `json:"notespaces"`
 	DocumentsReset int      `json:"documents_reset"`
 }
 
-// SyncHydrationProgress is a snapshot of one workspace's tree-walk reconcile
+// SyncHydrationProgress is a snapshot of one notespace's tree-walk reconcile
 // (daemon sync HydrationProgress). The first pass on an empty sync.db is
 // hydration; later passes catch whatever the live watcher missed.
 type SyncHydrationProgress struct {
-	Workspace   string    `json:"workspace"`
+	Notespace string `json:"notespace"`
+	// Root is the tree the walk actually enumerated. A notespace resolved to
+	// the wrong root hydrates perfectly happily — plausible counts, no errors —
+	// so the counters below only mean something next to the path they counted.
+	// Empty on a daemon that predates the field.
+	Root        string    `json:"root"`
 	Running     bool      `json:"running"`
 	Scanned     int64     `json:"scanned"`
 	Enqueued    int64     `json:"enqueued"`
@@ -495,27 +526,29 @@ type SyncHydrationProgress struct {
 // (daemon server syncOutboxResponse): a change pending in the local push
 // queue. The payload body is deliberately omitted server-side.
 type SyncOutboxEntry struct {
-	ID          int64     `json:"id"`
-	DocumentID  string    `json:"document_id"`
-	Workspace   string    `json:"workspace"`
-	EventType   string    `json:"event_type"`
-	Path        string    `json:"path"`
-	PrevPath    string    `json:"prev_path,omitempty"`
-	ContentHash string    `json:"content_hash"`
-	CreatedAt   time.Time `json:"created_at"`
-	Parked      bool      `json:"parked,omitempty"`
-	Attempts    int       `json:"attempts,omitempty"`
-	NextRetryAt time.Time `json:"next_retry_at,omitzero"`
-	ParkReason  string    `json:"park_reason,omitempty"`
+	ID            int64     `json:"id"`
+	DocumentID    string    `json:"document_id"`
+	NotespaceID   string    `json:"notespace_id"`
+	NotespaceName string    `json:"notespace_name,omitempty"`
+	EventType     string    `json:"event_type"`
+	Path          string    `json:"path"`
+	PrevPath      string    `json:"prev_path,omitempty"`
+	ContentHash   string    `json:"content_hash"`
+	CreatedAt     time.Time `json:"created_at"`
+	Parked        bool      `json:"parked,omitempty"`
+	Attempts      int       `json:"attempts,omitempty"`
+	NextRetryAt   time.Time `json:"next_retry_at,omitzero"`
+	ParkReason    string    `json:"park_reason,omitempty"`
 }
 
 // SyncConflict is one entry of the daemon's GET /api/sync/conflicts payload
 // (daemon server syncConflictResponse): a conflict artifact on disk plus the
 // 3-way-merge base recovered from sync.db.
 type SyncConflict struct {
-	Workspace  string `json:"workspace"`
-	Path       string `json:"path"`        // original wire path of the conflicted document
-	DocumentID string `json:"document_id"` // parsed from the artifact filename
+	NotespaceID   string `json:"notespace_id"`
+	NotespaceName string `json:"notespace_name,omitempty"`
+	Path          string `json:"path"`        // original wire path of the conflicted document
+	DocumentID    string `json:"document_id"` // parsed from the artifact filename
 	// Kind is what went wrong: "merge" (overlapping edits, the historical and
 	// still-dominant case) or a named kind such as "registry_foreign_write"
 	// (someone else wrote this machine's single-writer registry note). It
@@ -524,7 +557,7 @@ type SyncConflict struct {
 	// other record of the broadcast. Empty on a daemon predating the field;
 	// render that as "merge", the behavior it had.
 	Kind            string `json:"kind,omitempty"`
-	Artifact        string `json:"artifact"` // artifact filename, workspace-relative (slash form)
+	Artifact        string `json:"artifact"` // artifact filename, notespace-relative (slash form)
 	ArtifactContent string `json:"artifact_content"`
 	BaseContent     string `json:"base_content,omitempty"` // 3-way base from sync_documents, when resolvable
 }

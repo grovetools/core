@@ -423,14 +423,18 @@ func (c *RemoteClient) GetSyncStatus(ctx context.Context) (*models.SyncStatus, e
 }
 
 // GetSyncOutbox fetches the pending push queue in insertion order (GET
-// /api/sync/outbox[?workspace=]). Empty workspace means all workspaces.
-// Parked entries are included. A daemon without sync configured answers 503,
+// /api/sync/outbox[?notespace_id=]). Empty selects all notespaces. Parked
+// entries are included. A daemon without sync configured answers 503,
 // surfaced as a plain error — callers should consult GetSyncStatus.Enabled
 // first.
-func (c *RemoteClient) GetSyncOutbox(ctx context.Context, workspace string) ([]models.SyncOutboxEntry, error) {
+//
+// The filter is the immutable stamp id. The daemon reads notespace_id and
+// nothing else: a display name sent here matches no row and silently returns
+// the unfiltered queue.
+func (c *RemoteClient) GetSyncOutbox(ctx context.Context, notespaceID string) ([]models.SyncOutboxEntry, error) {
 	u := baseURL + "/api/sync/outbox"
-	if workspace != "" {
-		u += "?workspace=" + url.QueryEscape(workspace)
+	if notespaceID != "" {
+		u += "?notespace_id=" + url.QueryEscape(notespaceID)
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
@@ -458,12 +462,12 @@ func (c *RemoteClient) GetSyncOutbox(ctx context.Context, workspace string) ([]m
 }
 
 // GetSyncConflicts fetches the recorded conflict artifacts (GET
-// /api/sync/conflicts[?workspace=]). Empty workspace means all workspaces.
-// Same 404/503 semantics as GetSyncOutbox.
-func (c *RemoteClient) GetSyncConflicts(ctx context.Context, workspace string) ([]models.SyncConflict, error) {
+// /api/sync/conflicts[?notespace_id=]). Empty selects all notespaces. Same
+// 404/503 semantics and same ID-not-name filter rule as GetSyncOutbox.
+func (c *RemoteClient) GetSyncConflicts(ctx context.Context, notespaceID string) ([]models.SyncConflict, error) {
 	u := baseURL + "/api/sync/conflicts"
-	if workspace != "" {
-		u += "?workspace=" + url.QueryEscape(workspace)
+	if notespaceID != "" {
+		u += "?notespace_id=" + url.QueryEscape(notespaceID)
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
@@ -522,14 +526,15 @@ func (c *RemoteClient) AdoptNotespace(ctx context.Context, adoption models.Notes
 }
 
 // SyncRepush voids synced state and kicks an immediate anti-entropy pass
-// (POST /api/sync/repush). An empty workspace selects all of them.
+// (POST /api/sync/repush). An empty notespace id selects all of them; a
+// non-empty one is the immutable stamp id, as everywhere else on this API.
 //
 // The endpoint's own body is optional, but it is sent explicitly here so the
 // selection is unambiguous on the wire. Same 404/503 semantics as
 // GetSyncOutbox: a daemon predating the endpoint answers 404, and one without
 // sync configured answers 503.
-func (c *RemoteClient) SyncRepush(ctx context.Context, workspace string) (*models.SyncRepushResult, error) {
-	body, err := json.Marshal(map[string]string{"workspace": workspace})
+func (c *RemoteClient) SyncRepush(ctx context.Context, notespaceID string) (*models.SyncRepushResult, error) {
+	body, err := json.Marshal(map[string]string{"notespace_id": notespaceID})
 	if err != nil {
 		return nil, err
 	}
