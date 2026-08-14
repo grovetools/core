@@ -44,11 +44,11 @@ func WorkspaceRoot(cfg *config.Config, name string) string {
 // doctor surfaces. WorkspaceRoot remains as a compatibility read helper while
 // downstream callers migrate to explicit errors.
 func ResolveWorkspaceRoot(cfg *config.Config, name string) (string, error) {
-	_, notebookRoot, err := recordedNotebookRoot(cfg, name)
+	binding, err := ResolvePlannedBinding(cfg, name)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(notebookRoot, "notespaces", name), nil
+	return binding.Root, nil
 }
 
 // recordedNotebookRoot is the literal rung 0 shared with the daemon. A
@@ -151,6 +151,33 @@ func PlannedRoot(cfg *config.Config, name string) string {
 // must use it so an absent binding cannot become creation-by-omission.
 func ResolvePlannedRoot(cfg *config.Config, name string) (string, error) {
 	return ResolveWorkspaceRoot(cfg, name)
+}
+
+// PlannedBinding is where routing places a workspace: the recorded notebook
+// that holds it, that notebook's resolved root, and the notespace root itself.
+type PlannedBinding struct {
+	Notebook     string
+	NotebookRoot string
+	Root         string
+}
+
+// ResolvePlannedBinding is ResolvePlannedRoot's naming form, for a caller that
+// must RECORD which notebook a workspace landed in.
+//
+// The notebook name comes from the same resolution that chose the root. A
+// caller that re-derives it from notebooks.rules.default instead records the
+// wrong name for every workspace the identity rung (or a compiled binding)
+// routed somewhere other than the default.
+func ResolvePlannedBinding(cfg *config.Config, name string) (PlannedBinding, error) {
+	notebook, notebookRoot, err := recordedNotebookRoot(cfg, name)
+	if err != nil {
+		return PlannedBinding{}, err
+	}
+	return PlannedBinding{
+		Notebook:     notebook,
+		NotebookRoot: notebookRoot,
+		Root:         filepath.Join(notebookRoot, workspace.NotespaceDirectory, name),
+	}, nil
 }
 
 // Locate is the one-call read-surface entry point: load the machine's config,
