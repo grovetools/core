@@ -668,8 +668,92 @@ func mergeConfigs(base, override *Config) *Config {
 		if override.TUI.VimControlHjklPaneNav {
 			result.TUI.VimControlHjklPaneNav = true
 		}
+		if override.TUI.SidebarExpanded {
+			result.TUI.SidebarExpanded = true
+		}
 		if override.TUI.Panels != nil {
 			result.TUI.Panels = override.TUI.Panels
+		}
+		// whichkey_delay_ms is a three-state *int (nil = use the keymap
+		// default, 0 = show immediately), so it merges on nil like the drawer's
+		// pointer bools rather than on the zero value that is itself a setting.
+		if override.TUI.WhichKeyDelayMs != nil {
+			result.TUI.WhichKeyDelayMs = override.TUI.WhichKeyDelayMs
+		}
+		// open_command is one argv, not a list of opinions to concatenate:
+		// the nearest layer that names an opener replaces the one below it.
+		if override.TUI.OpenCommand != nil {
+			result.TUI.OpenCommand = append([]string(nil), override.TUI.OpenCommand...)
+		}
+		// Shortcuts merge per BINDING, like [tui.plugins]: an ecosystem that
+		// binds one deep-link key must not erase the user's global bindings,
+		// and a same-key entry in the nearer layer rebinds just that key.
+		if len(override.TUI.Shortcuts) > 0 {
+			merged := make(map[string]string, len(result.TUI.Shortcuts)+len(override.TUI.Shortcuts))
+			for key, target := range result.TUI.Shortcuts {
+				merged[key] = target
+			}
+			for key, target := range override.TUI.Shortcuts {
+				merged[key] = target
+			}
+			result.TUI.Shortcuts = merged
+		}
+
+		// Merge [tui.job_detail] field-wise: a layer that rebinds one tab key
+		// must not silently reset the other two to their defaults.
+		if override.TUI.JobDetail != nil {
+			if result.TUI.JobDetail == nil {
+				result.TUI.JobDetail = &JobDetailConfig{}
+			} else {
+				copied := *result.TUI.JobDetail
+				result.TUI.JobDetail = &copied
+			}
+			if override.TUI.JobDetail.Editor != "" {
+				result.TUI.JobDetail.Editor = override.TUI.JobDetail.Editor
+			}
+			if override.TUI.JobDetail.Rules != "" {
+				result.TUI.JobDetail.Rules = override.TUI.JobDetail.Rules
+			}
+			if override.TUI.JobDetail.Logs != "" {
+				result.TUI.JobDetail.Logs = override.TUI.JobDetail.Logs
+			}
+		}
+
+		// Merge [tui.agent] field-wise, including its auto-approve block. The
+		// pattern LISTS replace per list, matching their documented semantics:
+		// approve_patterns replaces the built-in list, deny_patterns extends a
+		// built-in floor the host applies after this merge — neither is a place
+		// where interleaving two layers' entries would mean anything.
+		if override.TUI.Agent != nil {
+			if result.TUI.Agent == nil {
+				result.TUI.Agent = &AgentPaneConfig{}
+			} else {
+				copied := *result.TUI.Agent
+				result.TUI.Agent = &copied
+			}
+			if override.TUI.Agent.Term != "" {
+				result.TUI.Agent.Term = override.TUI.Agent.Term
+			}
+			if override.TUI.Agent.RepaintNudge != nil {
+				result.TUI.Agent.RepaintNudge = override.TUI.Agent.RepaintNudge
+			}
+			if override.TUI.Agent.AutoApprove != nil {
+				if result.TUI.Agent.AutoApprove == nil {
+					result.TUI.Agent.AutoApprove = &AgentAutoApproveConfig{}
+				} else {
+					copied := *result.TUI.Agent.AutoApprove
+					result.TUI.Agent.AutoApprove = &copied
+				}
+				if override.TUI.Agent.AutoApprove.Enabled != nil {
+					result.TUI.Agent.AutoApprove.Enabled = override.TUI.Agent.AutoApprove.Enabled
+				}
+				if override.TUI.Agent.AutoApprove.ApprovePatterns != nil {
+					result.TUI.Agent.AutoApprove.ApprovePatterns = append([]string(nil), override.TUI.Agent.AutoApprove.ApprovePatterns...)
+				}
+				if override.TUI.Agent.AutoApprove.DenyPatterns != nil {
+					result.TUI.Agent.AutoApprove.DenyPatterns = append([]string(nil), override.TUI.Agent.AutoApprove.DenyPatterns...)
+				}
+			}
 		}
 		if len(override.TUI.PluginOrder) > 0 {
 			result.TUI.PluginOrder = append([]string(nil), override.TUI.PluginOrder...)
@@ -897,6 +981,183 @@ func mergeConfigs(base, override *Config) *Config {
 		}
 	}
 
+	// Merge Daemon configuration.
+	//
+	// Field-wise, like [tui], and for the same reason: the daemon's knobs
+	// legitimately arrive from different layers — poll intervals from the
+	// user's global config, a repo's own hooks from its grove.toml — so each
+	// field merges on its own spelling of "no opinion" (empty string, zero,
+	// nil pointer) rather than the whole table replacing wholesale.
+	//
+	// Without this block the entire [daemon] table survived only in the BASE
+	// layer: mergeConfigs shallow-copies base and never looked at
+	// override.Daemon, so a project-layer [daemon] parsed fine, passed the
+	// exec-provenance gate, and was then dropped on the floor.
+	if override.Daemon != nil {
+		if result.Daemon == nil {
+			result.Daemon = &DaemonConfig{}
+		} else {
+			// result starts as a shallow copy of base; detach the daemon
+			// before applying overlays so mergeConfigs never writes through
+			// into the base layer.
+			copied := *result.Daemon
+			result.Daemon = &copied
+		}
+		d, o := result.Daemon, override.Daemon
+
+		if o.GitInterval != "" {
+			d.GitInterval = o.GitInterval
+		}
+		if o.SessionInterval != "" {
+			d.SessionInterval = o.SessionInterval
+		}
+		if o.WorkspaceInterval != "" {
+			d.WorkspaceInterval = o.WorkspaceInterval
+		}
+		if o.PlanInterval != "" {
+			d.PlanInterval = o.PlanInterval
+		}
+		if o.NoteInterval != "" {
+			d.NoteInterval = o.NoteInterval
+		}
+		if o.ConfigDebounceMs != 0 {
+			d.ConfigDebounceMs = o.ConfigDebounceMs
+		}
+		if o.SkillSyncDebounceMs != 0 {
+			d.SkillSyncDebounceMs = o.SkillSyncDebounceMs
+		}
+		// The daemon's booleans are three-state (*bool), so they merge on nil
+		// rather than on false — which is the whole point of the pointer. Each
+		// of these defaults to ON, so an or-merge would make `config_watch =
+		// false` a silent no-op in every layer but the base.
+		if o.ConfigWatch != nil {
+			d.ConfigWatch = o.ConfigWatch
+		}
+		if o.AutoSyncSkills != nil {
+			d.AutoSyncSkills = o.AutoSyncSkills
+		}
+		if o.AutoSyncClaudeSettings != nil {
+			d.AutoSyncClaudeSettings = o.AutoSyncClaudeSettings
+		}
+		if o.PairWithTreemux != nil {
+			d.PairWithTreemux = o.PairWithTreemux
+		}
+
+		// Hook LISTS replace per list, like every other slice here: a hook
+		// list is one layer's statement of what should run, and interleaving
+		// two layers' lists would run commands nobody wrote down together.
+		// Each list is independent, so a layer that only sets on_event keeps
+		// the on_skill_sync hooks under it.
+		//
+		// These are exec-bearing values; a repo-controlled layer only reaches
+		// this merge with hooks the user has trusted (see execgate.go).
+		if o.Hooks != nil {
+			if d.Hooks == nil {
+				d.Hooks = &DaemonHooks{}
+			} else {
+				copied := *d.Hooks
+				d.Hooks = &copied
+			}
+			if o.Hooks.OnSkillSync != nil {
+				d.Hooks.OnSkillSync = o.Hooks.OnSkillSync
+			}
+			if o.Hooks.OnEvent != nil {
+				d.Hooks.OnEvent = o.Hooks.OnEvent
+			}
+		}
+
+		if o.Jobs != nil {
+			if d.Jobs == nil {
+				d.Jobs = &DaemonJobsConfig{}
+			} else {
+				copied := *d.Jobs
+				d.Jobs = &copied
+			}
+			if o.Jobs.Enabled != nil {
+				d.Jobs.Enabled = o.Jobs.Enabled
+			}
+			if o.Jobs.MaxConcurrent != 0 {
+				d.Jobs.MaxConcurrent = o.Jobs.MaxConcurrent
+			}
+			if o.Jobs.DefaultTimeout != "" {
+				d.Jobs.DefaultTimeout = o.Jobs.DefaultTimeout
+			}
+			if o.Jobs.QueuePersistence != nil {
+				d.Jobs.QueuePersistence = o.Jobs.QueuePersistence
+			}
+			if o.Jobs.PersistDir != "" {
+				d.Jobs.PersistDir = o.Jobs.PersistDir
+			}
+		}
+
+		if o.Build != nil {
+			if d.Build == nil {
+				d.Build = &BuildConfig{}
+			} else {
+				copied := *d.Build
+				d.Build = &copied
+			}
+			if o.Build.MaxParallel != 0 {
+				d.Build.MaxParallel = o.Build.MaxParallel
+			}
+		}
+
+		if o.SSH != nil {
+			if d.SSH == nil {
+				d.SSH = &DaemonSSHConfig{}
+			} else {
+				copied := *d.SSH
+				d.SSH = &copied
+			}
+			if o.SSH.Enabled != nil {
+				d.SSH.Enabled = o.SSH.Enabled
+			}
+			if o.SSH.Port != 0 {
+				d.SSH.Port = o.SSH.Port
+			}
+			if o.SSH.HostKeyPath != "" {
+				d.SSH.HostKeyPath = o.SSH.HostKeyPath
+			}
+			if o.SSH.BindAddress != "" {
+				d.SSH.BindAddress = o.SSH.BindAddress
+			}
+		}
+
+		if o.JobReconcile != nil {
+			if d.JobReconcile == nil {
+				d.JobReconcile = &DaemonJobReconcileConfig{}
+			} else {
+				copied := *d.JobReconcile
+				d.JobReconcile = &copied
+			}
+			if o.JobReconcile.Enabled != nil {
+				d.JobReconcile.Enabled = o.JobReconcile.Enabled
+			}
+			if o.JobReconcile.QuietFor != "" {
+				d.JobReconcile.QuietFor = o.JobReconcile.QuietFor
+			}
+			if o.JobReconcile.MaxPerRun != 0 {
+				d.JobReconcile.MaxPerRun = o.JobReconcile.MaxPerRun
+			}
+		}
+	}
+
+	// Merge the per-verb command overrides entry by entry. Wholesale
+	// replacement would make a repo that overrides `check` also erase the
+	// user's global `fmt`; per-key is what "overrides per verb" means. Like
+	// [daemon] above, this table had no clause at all, so an override layer's
+	// entries never reached the merged config.
+	if override.Commands != nil {
+		merged := make(map[string]string, len(result.Commands)+len(override.Commands))
+		for verb, cmd := range result.Commands {
+			merged[verb] = cmd
+		}
+		for verb, cmd := range override.Commands {
+			merged[verb] = cmd
+		}
+		result.Commands = merged
+	}
+
 	// Merge Environment configuration (deep merge)
 	if override.Environment != nil {
 		if result.Environment == nil {
@@ -921,6 +1182,18 @@ func mergeConfigs(base, override *Config) *Config {
 			for k, v := range override.Environment.Commands {
 				result.Environment.Commands[k] = v
 			}
+		}
+		// The display and shared-infra keys are the same last-layer-wins
+		// shape as provider/command; without clauses they parsed and were
+		// then dropped from every layer but the base.
+		if override.Environment.DisplayEndpoints != nil {
+			result.Environment.DisplayEndpoints = override.Environment.DisplayEndpoints
+		}
+		if override.Environment.DisplayResources != nil {
+			result.Environment.DisplayResources = override.Environment.DisplayResources
+		}
+		if override.Environment.Shared != nil {
+			result.Environment.Shared = override.Environment.Shared
 		}
 	}
 
@@ -964,6 +1237,18 @@ func mergeConfigs(base, override *Config) *Config {
 					for k, v := range envOverride.Commands {
 						existing.Commands[k] = v
 					}
+				}
+				// Same three keys the unnamed [environment] block merges
+				// above; a named profile redefined in a nearer layer was
+				// keeping the lower layer's display and shared settings.
+				if envOverride.DisplayEndpoints != nil {
+					existing.DisplayEndpoints = envOverride.DisplayEndpoints
+				}
+				if envOverride.DisplayResources != nil {
+					existing.DisplayResources = envOverride.DisplayResources
+				}
+				if envOverride.Shared != nil {
+					existing.Shared = envOverride.Shared
 				}
 			}
 		}

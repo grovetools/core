@@ -1467,6 +1467,160 @@ scenarios = ["repo-plugin", "repo-panelkit"]
 	}
 }
 
+// [daemon] merges field-wise like [tui], and this is the test for the half of
+// that which is easy to get wrong: a nearer layer that sets ONE knob keeps
+// everything the layers below it said, and a three-state *bool set to false in
+// the nearer layer actually turns the feature off rather than reading as "no
+// opinion". Before the [daemon] arm existed the whole table survived only in
+// the base layer, so none of this was reachable at all.
+func TestMergeDaemonMergesFieldWiseWithoutMutatingBase(t *testing.T) {
+	watch := true
+	off := false
+	base := &Config{Daemon: &DaemonConfig{
+		GitInterval:      "10s",
+		SessionInterval:  "2s",
+		ConfigWatch:      &watch,
+		ConfigDebounceMs: 100,
+		Jobs:             &DaemonJobsConfig{MaxConcurrent: 4, DefaultTimeout: "30m"},
+		SSH:              &DaemonSSHConfig{Port: 2222},
+	}}
+	override := &Config{Daemon: &DaemonConfig{
+		GitInterval: "1s",
+		ConfigWatch: &off,
+		Jobs:        &DaemonJobsConfig{MaxConcurrent: 8},
+		Build:       &BuildConfig{MaxParallel: 2},
+	}}
+
+	merged := mergeConfigs(base, override)
+	d := merged.Daemon
+	if d == nil {
+		t.Fatal("the whole [daemon] table was dropped by the merge")
+	}
+	if d.GitInterval != "1s" {
+		t.Errorf("git_interval = %q, want the override layer's 1s", d.GitInterval)
+	}
+	if d.SessionInterval != "2s" {
+		t.Errorf("session_interval = %q, want the base layer's 2s", d.SessionInterval)
+	}
+	if d.ConfigWatch == nil || *d.ConfigWatch {
+		t.Error("config_watch = false in the nearer layer must turn watching OFF, not read as unset")
+	}
+	if d.ConfigDebounceMs != 100 {
+		t.Errorf("config_debounce_ms = %d, want the base layer's 100", d.ConfigDebounceMs)
+	}
+	if d.Jobs == nil || d.Jobs.MaxConcurrent != 8 {
+		t.Errorf("jobs.max_concurrent = %+v, want the override layer's 8", d.Jobs)
+	}
+	if d.Jobs == nil || d.Jobs.DefaultTimeout != "30m" {
+		t.Errorf("jobs.default_timeout = %+v, want the base layer's 30m", d.Jobs)
+	}
+	if d.SSH == nil || d.SSH.Port != 2222 {
+		t.Errorf("ssh.port = %+v, want the base layer's 2222", d.SSH)
+	}
+	if d.Build == nil || d.Build.MaxParallel != 2 {
+		t.Errorf("build.max_parallel = %+v, want the override layer's 2", d.Build)
+	}
+
+	// mergeConfigs runs over configs other callers still hold, so the base
+	// layer and its nested tables must come out untouched.
+	if base.Daemon.GitInterval != "10s" || base.Daemon.Jobs.MaxConcurrent != 4 {
+		t.Errorf("mergeConfigs mutated the base layer: %+v", base.Daemon)
+	}
+	if base.Daemon.ConfigWatch == nil || !*base.Daemon.ConfigWatch {
+		t.Error("mergeConfigs mutated the base layer's config_watch")
+	}
+	if base.Daemon.Build != nil {
+		t.Errorf("mergeConfigs added a [daemon.build] table to the base layer: %+v", base.Daemon.Build)
+	}
+}
+
+// The end-to-end version: a repo grove.toml's [daemon] block under an
+// ecosystem grove.toml and a global config, loaded the way groved loads it.
+// This is the symptom the ticket was filed for — a project-layer [daemon]
+// table that parsed and then vanished.
+func TestLoadFromKeepsRepoDaemonSettingsUnderAnEcosystem(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	fakeHome := filepath.Join(tmpDir, "home")
+	fakeConfigDir := filepath.Join(fakeHome, ".config", "grove")
+	if err := os.MkdirAll(fakeConfigDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", fakeHome)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	globalConfig := `version = "1.0"
+
+[daemon]
+git_interval = "10s"
+note_interval = "60s"
+`
+	if err := os.WriteFile(filepath.Join(fakeConfigDir, "grove.toml"), []byte(globalConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ecosystemDir := filepath.Join(tmpDir, "ecosystem")
+	repoDir := filepath.Join(ecosystemDir, "repo")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ecosystemDir, "grove.toml"),
+		[]byte("workspaces = [\"*\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Deliberately non-exec keys: exec-bearing [daemon] values from a
+	// repo-controlled layer are a separate story owned by the exec gate
+	// (execgate_test.go), and this test is about the table arriving at all.
+	repoConfig := `name = "repo"
+
+[daemon]
+git_interval = "1s"
+
+[daemon.jobs]
+max_concurrent = 8
+`
+	if err := os.WriteFile(filepath.Join(repoDir, "grove.toml"), []byte(repoConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ResetLoadCache()
+	cfg, err := LoadFrom(repoDir)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if cfg.Daemon == nil {
+		t.Fatal("the repo's [daemon] table never reached the merged config")
+	}
+	if got := cfg.Daemon.GitInterval; got != "1s" {
+		t.Errorf("daemon.git_interval = %q, want the repo layer's 1s", got)
+	}
+	if got := cfg.Daemon.NoteInterval; got != "60s" {
+		t.Errorf("daemon.note_interval = %q, want the global layer's 60s", got)
+	}
+	if cfg.Daemon.Jobs == nil || cfg.Daemon.Jobs.MaxConcurrent != 8 {
+		t.Errorf("daemon.jobs = %+v, want the repo layer's max_concurrent = 8", cfg.Daemon.Jobs)
+	}
+}
+
+// Per-verb command overrides merge per KEY: a repo overriding `check` must not
+// erase the user's global `fmt`. Like [daemon], this table had no clause at
+// all, so an override layer's entries never arrived.
+func TestMergeCommandsMergePerVerb(t *testing.T) {
+	base := &Config{Commands: map[string]string{"fmt": "make fmt", "check": "make check"}}
+	override := &Config{Commands: map[string]string{"check": "make check-fast"}}
+
+	merged := mergeConfigs(base, override)
+	if got := merged.Commands["check"]; got != "make check-fast" {
+		t.Errorf("commands.check = %q, want the override layer's", got)
+	}
+	if got := merged.Commands["fmt"]; got != "make fmt" {
+		t.Errorf("commands.fmt = %q, want the base layer's (an override of one verb must not erase the others)", got)
+	}
+	if base.Commands["check"] != "make check" {
+		t.Errorf("mergeConfigs mutated the base layer: %v", base.Commands)
+	}
+}
+
 // TestMergeTUIRailMergesFieldWiseWithoutMutatingBase: [tui.rail] merges one
 // key at a time — a layer that only pins the shortcut policy keeps the
 // max_shortcuts underneath it — and the base layer's block is never written

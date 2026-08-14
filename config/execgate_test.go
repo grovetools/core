@@ -537,13 +537,22 @@ func TestLoadFromHonorsWorkspaceExecConfigOnceTrusted(t *testing.T) {
 	if len(hooksCfg.OnStop) != 1 || hooksCfg.OnStop[0].Name != "pwn" {
 		t.Errorf("a trusted workspace's hooks.on_stop must be honored, got %+v", hooksCfg.OnStop)
 	}
-	// NOTE: tui.plugins and daemon.hooks are deliberately not asserted on the
-	// MERGED config. mergeConfigs has no TUI.Plugins or Daemon arm, so a
-	// project layer's values never reach the merged view in the first place
-	// (a pre-existing gap). The gate still covers those keys — see
+	// tui.plugins and daemon.hooks reach the MERGED config once trusted, which
+	// is the half of the gate's contract that only became observable here when
+	// mergeConfigs grew its TUI.Plugins and Daemon arms — before that a project
+	// layer's values were dropped by the merge whatever the gate decided, so
+	// these keys could only be asserted on the raw layer (see
 	// TestLoadLayeredQuarantinesTheRawProjectLayer and
-	// TestExecGateCoversTheDaemonSkillSyncHook, which assert on the raw layer
-	// where the values do live.
+	// TestExecGateCoversTheDaemonSkillSyncHook).
+	if trusted.TUI == nil || trusted.TUI.Plugins["btop"] == nil {
+		t.Errorf("a trusted workspace's tui.plugins must be honored, got %+v", trusted.TUI)
+	}
+	if trusted.TUI != nil && trusted.TUI.Plugins["mine"] == nil {
+		t.Error("the user's own panel must survive the workspace layer's")
+	}
+	if d := trusted.Daemon; d == nil || d.Hooks == nil || len(d.Hooks.OnSkillSync) != 1 {
+		t.Errorf("a trusted workspace's daemon.hooks.on_skill_sync must be honored, got %+v", d)
+	}
 	if trusted.ExecGate != nil && trusted.ExecGate.HasQuarantined() {
 		t.Errorf("nothing should be quarantined once trusted: %v", findingKeys(trusted.ExecGate.Quarantined()))
 	}
@@ -555,10 +564,11 @@ func TestLoadFromHonorsWorkspaceExecConfigOnceTrusted(t *testing.T) {
 // load time is what stops the hook from ever reaching the executor.
 //
 // The assertion is on the loaded PROJECT LAYER rather than the merged config
-// because mergeConfigs has no Daemon arm — a project layer's [daemon] block
-// does not reach the merged view at all today. Gating the layer is what
-// matters: it is the value groved would read when the daemon is started
-// inside the workspace, and the only place the value exists.
+// because the layer is what groved reads when the daemon is started inside the
+// workspace — gating it is what stops the hook regardless of what any later
+// merge does with the table. (The merged view carries [daemon] too now that
+// mergeConfigs has a Daemon arm; TestLoadFromHonorsWorkspaceExecConfigOnceTrusted
+// asserts that side.)
 func TestExecGateCoversTheDaemonSkillSyncHook(t *testing.T) {
 	workspace := execLoaderFixture(t)
 	workspaceConfig := filepath.Join(workspace, "grove.toml")
