@@ -399,6 +399,32 @@ const (
 // *workspace.WorkspaceNode. Only the identity fields cross the boundary; a
 // sidecar that needs more reads it from disk or from a future daemon
 // capability (out of scope for v1 — see the security note in the spec).
+//
+// It carries the CODE plane, and deliberately carries no notespace field.
+//
+// The question was asked and settled in the notespace migration's Wave 0
+// (audit gap G4): should this payload gain a notespace_id, so a panel is told
+// which notespace it is pointed at? No — because the host would then have to
+// run the routing chain itself (base repository -> subject -> this machine's
+// recorded [primaries] -> stamped root) to fill the field in, and that is a
+// SECOND implementation of a rule nb already owns. Two implementations drift,
+// and this pair would drift on a schedule: a Welcome is sent once when the
+// workspace changes, while `grove notespace primary` can move the pointer at
+// any moment after it, so a stamped-in id would go stale in the panel's hand
+// with nothing to invalidate it.
+//
+// One authoritative resolver instead. A panel hands nb the Path below — the
+// code path it already has — and nb answers with the resolved notespace root,
+// its immutable id, display name, subject and containing notebook:
+//
+//	nb context --json -W <Workspace.Path>
+//
+// That is the same route `nb list -W`, `nb new -W` and `nb update -W` take, so
+// what a panel reads, what it writes, and what the user's own terminal sees
+// cannot disagree. A panel wanting a SIBLING notespace — one no code path
+// leads to, which is exactly why no projection of a code node could ever name
+// it — addresses it by identity with `--in <notespace id>`, available on the
+// read, create and update halves of the contract.
 type Workspace struct {
 	Name                string `json:"name"`
 	Path                string `json:"path"`
