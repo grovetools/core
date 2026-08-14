@@ -15,6 +15,19 @@ import (
 	"github.com/grovetools/core/pkg/paths"
 )
 
+// These scenarios write log entries IN-PROCESS (logging.NewLogger) and then read
+// them back either from disk or through a `core logs` child process. Both halves
+// must agree on where StateDir() lands, so the in-process half points
+// XDG_STATE_HOME at ctx.StateDir() — the same sandboxed state dir
+// Context.SandboxEnv() exports to every child command.
+//
+// Pointing it anywhere else (these scenarios used <projectDir>/.xdg-state) only
+// moves the writer: SandboxEnv() is appended to the child's env last and os/exec
+// keeps the last value of a duplicated key, so the child always reads
+// ctx.StateDir() and finds an empty log tree. That mismatch — not any change in
+// `core logs` filtering — is what made the filter-show/hide/consistency
+// scenarios fail with "component-a should be visible but is not".
+
 // LoggingJSONFormatScenario tests that the logger outputs valid JSON when configured.
 func LoggingJSONFormatScenario() *harness.Scenario {
 	var projectDir string
@@ -55,7 +68,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -180,7 +193,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -333,7 +346,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -480,7 +493,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -664,7 +677,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -783,7 +796,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -886,7 +899,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},
@@ -989,7 +1002,7 @@ logging:
 						return fmt.Errorf("failed to chdir to %s: %w", projectDir, err)
 					}
 
-					os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+					os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 					logging.Reset()
 					return nil
 				},

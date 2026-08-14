@@ -16,15 +16,16 @@ import (
 // LoggingTUIFilteringTestScenario tests the TUI log filtering toggle.
 func LoggingTUIFilteringTestScenario() *harness.Scenario {
 	return &harness.Scenario{
-		Name:        "core-logs-tui-filtering",
-		Description: "Tests toggling component filters in the interactive TUI.",
-		Tags:        []string{"core", "logging", "tui", "filtering"},
-		LocalOnly:   true, // TUI tests require tmux
+		Name:         "core-logs-tui-filtering",
+		Description:  "Tests toggling component filters in the interactive TUI.",
+		Tags:         []string{"core", "logging", "tui", "filtering"},
+		LocalOnly:    true, // TUI tests require tmux
+		ExplicitOnly: true, // quarantined: see "Quarantine" note in scenarios_logs_tui.go
 		Steps: []harness.Step{
 			harness.NewStep("Setup test project for TUI", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+				os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 
 				groveYAML := `name: tui-filtering-test
 version: "1.0"

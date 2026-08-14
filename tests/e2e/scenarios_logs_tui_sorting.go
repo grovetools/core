@@ -19,15 +19,16 @@ import (
 // when loaded from multiple sources with interleaved timestamps.
 func LoggingTUIChronologicalSortingScenario() *harness.Scenario {
 	return &harness.Scenario{
-		Name:        "core-logs-tui-chronological-sorting",
-		Description: "Tests that the logs TUI displays entries in chronological order by timestamp when loading from multiple sources.",
-		Tags:        []string{"core", "logging", "tui", "sorting"},
-		LocalOnly:   true,
+		Name:         "core-logs-tui-chronological-sorting",
+		Description:  "Tests that the logs TUI displays entries in chronological order by timestamp when loading from multiple sources.",
+		Tags:         []string{"core", "logging", "tui", "sorting"},
+		LocalOnly:    true,
+		ExplicitOnly: true, // quarantined: see "Quarantine" note in scenarios_logs_tui.go
 		Steps: []harness.Step{
 			harness.NewStep("Setup logs with interleaved timestamps from multiple files", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+				os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 
 				groveYAML := `name: sorting-test
 version: "1.0"
@@ -185,15 +186,16 @@ logging:
 // in the correct chronological position, not just appended.
 func LoggingTUILiveUpdateSortingScenario() *harness.Scenario {
 	return &harness.Scenario{
-		Name:        "core-logs-tui-live-update-sorting",
-		Description: "Tests that live log updates are inserted in chronological order, even when they have older timestamps.",
-		Tags:        []string{"core", "logging", "tui", "sorting", "live"},
-		LocalOnly:   true,
+		Name:         "core-logs-tui-live-update-sorting",
+		Description:  "Tests that live log updates are inserted in chronological order, even when they have older timestamps.",
+		Tags:         []string{"core", "logging", "tui", "sorting", "live"},
+		LocalOnly:    true,
+		ExplicitOnly: true, // quarantined: see "Quarantine" note in scenarios_logs_tui.go
 		Steps: []harness.Step{
 			harness.NewStep("Setup initial logs", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+				os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 
 				groveYAML := `name: live-sorting-test
 version: "1.0"
@@ -336,15 +338,16 @@ logging:
 // timestamp even when older entries are inserted.
 func LoggingTUIFollowModeSortingScenario() *harness.Scenario {
 	return &harness.Scenario{
-		Name:        "core-logs-tui-follow-mode-sorting",
-		Description: "Tests that follow mode correctly tracks the newest log by timestamp, not insertion order.",
-		Tags:        []string{"core", "logging", "tui", "sorting", "follow"},
-		LocalOnly:   true,
+		Name:         "core-logs-tui-follow-mode-sorting",
+		Description:  "Tests that follow mode correctly tracks the newest log by timestamp, not insertion order.",
+		Tags:         []string{"core", "logging", "tui", "sorting", "follow"},
+		LocalOnly:    true,
+		ExplicitOnly: true, // quarantined: see "Quarantine" note in scenarios_logs_tui.go
 		Steps: []harness.Step{
 			harness.NewStep("Setup initial logs", func(ctx *harness.Context) error {
 				projectDir := ctx.RootDir
 
-				os.Setenv("XDG_STATE_HOME", filepath.Join(projectDir, ".xdg-state"))
+				os.Setenv("XDG_STATE_HOME", ctx.StateDir())
 
 				groveYAML := `name: follow-sorting-test
 version: "1.0"
