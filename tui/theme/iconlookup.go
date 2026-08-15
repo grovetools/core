@@ -86,6 +86,44 @@ func ResolveIconOr(ref, fallback string) string {
 	return fallback
 }
 
+// UnknownIconRef reports whether a reference is neither reading ResolveIconOr
+// accepts: not a registered name, and not short enough or non-ASCII enough to
+// be read as a literal glyph. It is the ONE case where falling back to the
+// generic mark means the author wrote something that means nothing — "papers"
+// against a registry that has no such icon, or a typo — as opposed to a literal
+// this build simply cannot draw.
+//
+// That distinction is the whole reason it is a separate function. ResolveIconOr
+// answers "what do I draw", and it answers "generic mark" for an unknown name
+// AND for an author's own Nerd Font glyph under ASCII icon mode; only the first
+// is worth telling anyone about, and a caller that tried to detect it by
+// comparing against the fallback would report the second every time a user
+// switched icon sets. Callers here are diagnostics — the plugin Warnings page,
+// a manifest linter — never the render path.
+//
+// It is mode-independent for the same reason: whether "rss" is a name this
+// build carries has nothing to do with whether the terminal can draw glyphs.
+func UnknownIconRef(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		// Naming no icon is not naming a wrong one. A surface that wants an
+		// icon declared is asking a different question than this one.
+		return false
+	}
+	if _, ok := Icon(ref); ok {
+		return false
+	}
+	for _, r := range ref {
+		if r > 0x7F {
+			return false
+		}
+	}
+	// Same two-cell cutoff ResolveIconOr spends on a short ASCII mark ("H",
+	// ">>"); iconlookup_test pins the two against each other so the pair cannot
+	// drift into a warning about a reference that renders fine.
+	return len(ref) > 2
+}
+
 // normalizeIconName reduces a name to lowercase alphanumerics, which is the
 // form the generated table is keyed on with hyphens re-inserted. Dropping the
 // separators entirely on both sides is what makes every spelling of a name

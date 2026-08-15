@@ -120,6 +120,55 @@ func TestResolveIconOr(t *testing.T) {
 	}
 }
 
+// UnknownIconRef is the diagnostic half of ResolveIconOr: it says whether a
+// reference means NOTHING, which is the only fallback worth telling an author
+// about. The pair is asserted together so a change to one cannot quietly start
+// warning about references that render perfectly well.
+func TestUnknownIconRef(t *testing.T) {
+	restoreSelection(t)
+	SetIcons("nerd")
+
+	const sentinel = "•" // the fallback, distinguishable from any real answer
+	cases := map[string]bool{
+		"git-branch":   false,
+		"GitBranch":    false,
+		"":            false, // fa-yc: a literal this registry does not carry
+		"H":            false,
+		">>":           false,
+		"":             false, // naming no icon is not naming a wrong one
+		"no-such-icon": true,
+		"papers":       true, // the manifest key this warning was written for
+	}
+	for ref, want := range cases {
+		if got := UnknownIconRef(ref); got != want {
+			t.Errorf("UnknownIconRef(%q) = %v, want %v", ref, got, want)
+		}
+		if ref == "" {
+			continue
+		}
+		// Agreement: every ref this reports as unknown is exactly one
+		// ResolveIconOr answers with the fallback, and vice versa.
+		if fellBack := ResolveIconOr(ref, sentinel) == sentinel; fellBack != want {
+			t.Errorf("ResolveIconOr(%q) fell back = %v, but UnknownIconRef says %v", ref, fellBack, want)
+		}
+	}
+}
+
+// The verdict is about the REGISTRY, not about what the terminal can draw: a
+// literal glyph in ASCII mode renders as the generic mark and is still not an
+// author error, so nothing here changes with the icon mode.
+func TestUnknownIconRefIsModeIndependent(t *testing.T) {
+	restoreSelection(t)
+	SetIcons("ascii")
+
+	if UnknownIconRef("") {
+		t.Error("ascii mode reported a literal glyph as an unknown reference")
+	}
+	if !UnknownIconRef("no-such-icon") {
+		t.Error("ascii mode stopped reporting an unknown name")
+	}
+}
+
 // In ASCII mode a literal glyph has no ASCII form to degrade to, so the
 // fallback wins; a registered name still follows the table's ASCII column.
 func TestResolveIconOrASCIIMode(t *testing.T) {

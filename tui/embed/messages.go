@@ -103,6 +103,12 @@ const (
 	SettingDomainSidebarExpanded   = "sidebar_expanded"   // [tui] sidebar_expanded
 	SettingDomainIcons             = "icons"              // [tui] icons (live apply lands with theme.SetIcons)
 	SettingDomainRail              = "rail"               // [tui.rail] shortcuts/max_shortcuts
+	// SettingDomainDrawerViews covers the page-set-wide [tui.drawer] keys —
+	// responsive, hide_inapplicable_pages, page_map_long_form. One domain for
+	// the three because they all land through the host's single drawer-config
+	// setter, which re-normalizes the page set as a unit; splitting them would
+	// be three names for the same call.
+	SettingDomainDrawerViews = "drawer_views" // [tui.drawer] responsive/hide_inapplicable_pages/page_map_long_form
 )
 
 // KeyCaptureMsg is emitted by an embedded TUI's key-capture widget (the
