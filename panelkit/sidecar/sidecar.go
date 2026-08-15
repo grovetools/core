@@ -119,6 +119,7 @@ var DefaultCapabilities = []string{
 	panelproto.CapIcons,
 	panelproto.CapSettings,
 	panelproto.CapCloseHooks,
+	panelproto.CapSplit,
 }
 
 // Event is something the host said. The concrete types below are the whole
@@ -178,6 +179,22 @@ type CloseEvent struct{}
 // follows; without it this is the last event.
 type DisconnectedEvent struct{ Err error }
 
+// ViewportKeyEvent is one key press from a viewport this panel opened and
+// claimed with SplitViewport.ForwardKeys. Key is bubbletea's own key string
+// ("j", "enter", "ctrl+d") — the same spelling the claim was made in.
+//
+// It arrives while the VIEWPORT holds focus, not this pane, which is the whole
+// point: the panel owns the cursor and the model behind the body, so it moves
+// the cursor and pushes a re-rendered body back.
+type ViewportKeyEvent struct{ Key string }
+
+// ViewportClosedEvent says the viewport this panel opened is gone — the user
+// closed the pane, or the host tore the split down. It is the authoritative
+// end of the split: a panel must stop pushing bodies and forget that it has
+// one open, or its next request will read as a retarget of a pane that is no
+// longer there.
+type ViewportClosedEvent struct{}
+
 // ErrorEvent is a protocol fault reported by the host. The host closes the
 // connection after sending one.
 type ErrorEvent struct{ Error panelproto.Error }
@@ -190,6 +207,8 @@ func (BlurEvent) event()              {}
 func (WorkspaceEvent) event()         {}
 func (WorkspacesUpdatedEvent) event() {}
 func (SettingsEvent) event()          {}
+func (ViewportKeyEvent) event()       {}
+func (ViewportClosedEvent) event()    {}
 func (CloseEvent) event()             {}
 func (DisconnectedEvent) event()      {}
 func (ErrorEvent) event()             {}
@@ -380,6 +399,15 @@ func (c *Client) decode(f panelproto.Frame) (Event, bool) {
 		return BlurEvent{}, true
 	case panelproto.TypeWorkspacesUpdated:
 		return WorkspacesUpdatedEvent{}, true
+	case panelproto.TypeViewportClosed:
+		return ViewportClosedEvent{}, true
+	case panelproto.TypeViewportKey:
+		var k panelproto.ViewportKey
+		if err := panelproto.DecodePayload(f, &k); err != nil {
+			c.warnf("viewport key frame: %v", err)
+			return nil, false
+		}
+		return ViewportKeyEvent{Key: k.Key}, true
 	case panelproto.TypeClose:
 		return CloseEvent{}, true
 	case panelproto.TypeTheme:
@@ -513,6 +541,35 @@ func (c *Client) Navigate(panelID, tabID string) error {
 // per-file rail pane. With no host it is a no-op, like every Client send.
 func (c *Client) OpenEditor(path string, dedicated bool) error {
 	return c.send(panelproto.TypeEditRequest, panelproto.EditRequest{Path: path, Dedicated: dedicated})
+}
+
+// SplitViewport asks the host to divide this pane and show a scrollable text
+// viewport beside it, carrying the body to put in it.
+//
+// Call it again to RETARGET an open viewport — title, key claim and body all
+// come from the newest request — rather than to open a second one. Use
+// UpdateSplitViewport for the ordinary case of pushing a new body into a
+// viewport whose title and key claim have not changed; the difference matters
+// because a retarget re-reads ForwardKeys and an update does not.
+//
+// With no host it is a no-op, like every Client send. A panel therefore cannot
+// tell from this call whether it got a pane, which is why CloseSplitViewport
+// is idempotent and why TypeViewportClosed exists.
+func (c *Client) SplitViewport(req panelproto.SplitViewport) error {
+	return c.send(panelproto.TypeSplitViewport, req)
+}
+
+// UpdateSplitViewport pushes a new body into the viewport this panel opened.
+func (c *Client) UpdateSplitViewport(update panelproto.SplitViewportUpdate) error {
+	return c.send(panelproto.TypeSplitViewportUpdate, update)
+}
+
+// CloseSplitViewport asks the host to tear this panel's viewport split down.
+// Harmless when there is no viewport open: the host has nothing to find and
+// does nothing, which is what lets a panel call it on the way out of a mode
+// without tracking whether it ever succeeded in opening one.
+func (c *Client) CloseSplitViewport() error {
+	return c.send(panelproto.TypeSplitViewportClose, nil)
 }
 
 // RequestClose asks the host to close this panel.

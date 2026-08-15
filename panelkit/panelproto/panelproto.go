@@ -109,6 +109,33 @@ const (
 	// So the panel pushes and the host caches. See PaneState for why the
 	// absent-state default is "available".
 	TypeState = "state"
+	// TypeSplitViewport asks the host to divide this panel's pane and show a
+	// scrollable text viewport in the new half. Payload: SplitViewport. Maps
+	// to embed.SplitViewportRequestMsg.
+	//
+	// It is the one app→host frame that asks for a SECOND SURFACE rather than
+	// for something to happen to an existing one, and the reason a sidecar
+	// needs it is that a pane is all a sidecar has: a panel that wants to show
+	// two things at once (a list and the thread under the cursor, a file tree
+	// and a file) can either split its own pane in software — reimplementing
+	// the host's BSP layout, its focus model and its dividers inside one PTY —
+	// or ask the host, which already has all three. In-process panels have
+	// asked since embed.SplitViewportRequestMsg existed; this is the same
+	// request over the wire.
+	//
+	// The viewport is a DISPLAY surface. Its body is a string the panel
+	// renders and re-pushes; the panel keeps the cursor and the model behind
+	// it (see SplitViewport.ForwardKeys), and the host keeps the scroll offset
+	// and the pane. Re-sending this frame retargets an open viewport in place
+	// — title, key claim and body all — rather than opening a second one.
+	TypeSplitViewport = "split_viewport"
+	// TypeSplitViewportUpdate pushes a new body into the viewport this panel
+	// already opened. Payload: SplitViewportUpdate. Maps to
+	// embed.UpdateViewportContentMsg / UpdateViewportTitleMsg.
+	TypeSplitViewportUpdate = "split_viewport_update"
+	// TypeSplitViewportClose asks the host to tear this panel's viewport split
+	// down. No payload. Maps to embed.SplitViewportCloseRequestMsg.
+	TypeSplitViewportClose = "split_viewport_close"
 	// TypeDigest publishes the panel's projection of itself into a slot far
 	// too small to run in. Payload: Digest.
 	//
@@ -170,6 +197,25 @@ const (
 	// from your own quit path instead. Delivered whatever capabilities were
 	// declared: welcome and close bracket every connection.
 	TypeClose = "close"
+	// TypeViewportKey delivers one key press from a viewport this panel opened
+	// with TypeSplitViewport and claimed with ForwardKeys. Payload:
+	// ViewportKey. Maps to embed.ViewportKeyMsg.
+	//
+	// Delivery is DIRECT, not focus-based: the whole point of a forwarded key
+	// is that the viewport holds focus while the panel that opened it does the
+	// driving. A panel answers by pushing a re-rendered body
+	// (TypeSplitViewportUpdate), which is the only way it can move a cursor
+	// living in its own model but displayed in someone else's pane.
+	TypeViewportKey = "viewport_key"
+	// TypeViewportClosed says the viewport this panel opened is gone — the
+	// user closed the pane, or the host tore the split down. No payload. Maps
+	// to embed.SplitViewportClosedMsg.
+	//
+	// A panel must treat it as the authoritative end of the split: the pane no
+	// longer exists, so a later update frame has nowhere to land, and the
+	// panel's own idea of "my viewport is open" has to end here or the next
+	// request will read as a retarget of something that is not there.
+	TypeViewportClosed = "viewport_closed"
 	// TypeError reports a protocol-level fault. Payload: Error. The host
 	// closes the connection after sending one.
 	TypeError = "error"
@@ -213,6 +259,13 @@ const (
 	CapTheme     = "theme"     // TypeTheme
 	CapIcons     = "icons"     // TypeIcons
 	CapSettings  = "settings"  // TypeConfig
+	// CapSplit subscribes to the viewport split's host→app half:
+	// TypeViewportKey and TypeViewportClosed. A panel that opens a viewport
+	// without declaring it can still push bodies into one, but will never hear
+	// a forwarded key or learn that its pane went away — which makes the
+	// capability worth declaring even for a read-only viewport, since the
+	// close notice is how a panel stops pushing into nothing.
+	CapSplit = "split"
 	// CapCloseHooks declares that the sidecar means to act on TypeClose rather
 	// than simply be killed. The host echoes it in
 	// Welcome.AcceptedCapabilities and sends TypeClose either way: declaring it
@@ -525,6 +578,91 @@ type Navigate struct {
 type EditRequest struct {
 	Path      string `json:"path"`
 	Dedicated bool   `json:"dedicated,omitempty"`
+}
+
+// Split orientations for SplitViewport.Orientation, in the USER's vocabulary:
+// a "vertical split" puts the two panes side by side, a "horizontal" one
+// stacks them. That is the sense every editor and multiplexer uses and the
+// sense embed.SplitOrientation already carries; it is deliberately not the
+// host layout type's own spelling, whose zero value IS side-by-side and would
+// therefore make "unspecified" and "vertical" indistinguishable on the wire.
+//
+// The empty string means "you decide": the host falls back to whatever it
+// remembers for this pane and then to its own default, which is what every
+// caller that does not care should send.
+const (
+	SplitOrientationDefault    = ""
+	SplitOrientationVertical   = "vertical"
+	SplitOrientationHorizontal = "horizontal"
+)
+
+// SplitViewport asks the host for a scrollable text pane beside this one.
+//
+// Sending it again while a viewport is open RETARGETS that viewport rather
+// than opening a second: title, key claim and body are all replaced from the
+// new frame. That is what lets a panel switch which of its own views owns the
+// split without a close/open pair the user would see flicker.
+type SplitViewport struct {
+	// Title is the viewport pane's heading.
+	Title string `json:"title,omitempty"`
+	// Content is the body, already rendered — ANSI included. The panel owns
+	// the wrapping: it knows what it is drawing, and the host's viewport does
+	// not re-wrap.
+	Content string `json:"content,omitempty"`
+	// Orientation is one of the SplitOrientation* constants above. Empty lets
+	// the host choose.
+	Orientation string `json:"orientation,omitempty"`
+	// Ratio is the fraction of the split the ORIGIN pane keeps, 0 for the
+	// host's default. A host that remembers a ratio the user dragged for this
+	// pane prefers that one — the request is a first-time default, not an
+	// override of a choice the user already made with a divider.
+	Ratio float64 `json:"ratio,omitempty"`
+	// Focus asks for the new pane to take focus. A viewport with ForwardKeys
+	// generally wants this: an unfocused pane is sent no keys to forward.
+	Focus bool `json:"focus,omitempty"`
+	// AutoScroll pins the viewport to the end of its body as content is
+	// appended — right for a log, wrong for anything with its own cursor.
+	AutoScroll bool `json:"auto_scroll,omitempty"`
+	// ForwardKeys names the keys the REQUESTER claims, in bubbletea's own
+	// key-string spelling ("j", "enter", "ctrl+d"). Those come back as
+	// TypeViewportKey instead of scrolling the viewport, and the panel answers
+	// by pushing a re-rendered body. Everything else keeps the viewport pane's
+	// own behavior.
+	//
+	// It is a SET rather than a flag so a panel can claim its cursor keys and
+	// still leave ctrl+d/ctrl+u/g/G to the pane, which is the only thing that
+	// can actually scroll it — claiming everything leaves a body taller than
+	// the split unreachable. The single element "*" claims every key, for the
+	// stretches where the panel needs raw input; re-request with a different
+	// set to change the claim mid-flight. `q` is never forwarded, so "q closes
+	// this pane" holds for every viewport.
+	//
+	// Empty leaves the pane entirely self-navigating, which is what plain
+	// scrollable output wants.
+	ForwardKeys []string `json:"forward_keys,omitempty"`
+}
+
+// SplitViewportUpdate pushes a new body into an open viewport.
+type SplitViewportUpdate struct {
+	Content string `json:"content,omitempty"`
+	// Append adds to the body instead of replacing it — for a log being
+	// streamed, never for a body with a cursor in it.
+	Append bool `json:"append,omitempty"`
+	// EnsureVisible is a 1-BASED line the host must keep on screen, scrolling
+	// by the minimum needed; 0 leaves the scroll offset alone. A ForwardKeys
+	// panel uses it to follow its own cursor, which it otherwise could not do:
+	// the scroll offset lives in the host's pane, not in the panel.
+	EnsureVisible int `json:"ensure_visible,omitempty"`
+	// Title, when non-empty, retitles the pane along with the push.
+	Title string `json:"title,omitempty"`
+}
+
+// ViewportKey is one forwarded key press, in bubbletea's key-string spelling —
+// the same vocabulary SplitViewport.ForwardKeys claims keys in, so a panel
+// compares what it asked for against what it got without a translation table
+// in between.
+type ViewportKey struct {
+	Key string `json:"key"`
 }
 
 // Done reports the sidecar's primary lifecycle completing. Result is any JSON

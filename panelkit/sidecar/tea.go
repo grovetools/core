@@ -66,6 +66,21 @@ type DisconnectedMsg struct{ Err error }
 // HostErrorMsg is a protocol fault reported by the host.
 type HostErrorMsg struct{ Error panelproto.Error }
 
+// ViewportKeyMsg is one key press from a viewport this panel opened and
+// claimed with Client.SplitViewport's ForwardKeys.
+//
+// Key is bubbletea's key string rather than a tea.KeyMsg, and deliberately so:
+// what crosses the wire is the SPELLING the claim was made in, and rebuilding
+// a synthetic tea.KeyMsg from it would produce a value that compares equal to
+// the real thing for simple runes and subtly not for anything else. A handler
+// switches on the string it asked for.
+type ViewportKeyMsg struct{ Key string }
+
+// ViewportClosedMsg says the viewport this panel opened is gone. Stop pushing
+// bodies into it; the next SplitViewport call opens a new one rather than
+// retargeting this.
+type ViewportClosedMsg struct{}
+
 // ToMsg converts a host event into the tea.Msg a model sees. Focus and blur
 // become the pager's own message types so an in-process page matches them
 // unchanged; a CloseEvent becomes tea.Quit's message, because the only useful
@@ -94,6 +109,10 @@ func ToMsg(ev Event) tea.Msg {
 		return DisconnectedMsg{Err: e.Err}
 	case ErrorEvent:
 		return HostErrorMsg{Error: e.Error}
+	case ViewportKeyEvent:
+		return ViewportKeyMsg{Key: e.Key}
+	case ViewportClosedEvent:
+		return ViewportClosedMsg{}
 	case CloseEvent:
 		return tea.QuitMsg{}
 	default:
