@@ -290,6 +290,48 @@ func TestWorktreeOwner_GitdirParse(t *testing.T) {
 	})
 }
 
+func TestBaseRepositoryOwner_NestedSubmoduleWins(t *testing.T) {
+	ecosystem := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ecosystem, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	submodule := filepath.Join(ecosystem, "daemon")
+	deep := filepath.Join(submodule, "pkg", "service")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitFile := "gitdir: " + filepath.Join("..", ".git", "modules", "daemon") + "\n"
+	if err := os.WriteFile(filepath.Join(submodule, ".git"), []byte(gitFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{submodule, deep} {
+		got, err := BaseRepositoryOwner(path)
+		if err != nil || got != submodule {
+			t.Errorf("BaseRepositoryOwner(%q) = %q, %v; want %q, nil", path, got, err, submodule)
+		}
+	}
+}
+
+func TestBaseRepositoryOwner_MalformedNestedGitFileFallsBackSafely(t *testing.T) {
+	ecosystem := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ecosystem, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(ecosystem, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, ".git"), []byte("not a gitdir pointer\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := BaseRepositoryOwner(nested)
+	if err != nil || got != ecosystem {
+		t.Fatalf("BaseRepositoryOwner() = %q, %v; want %q, nil", got, err, ecosystem)
+	}
+}
+
 // TestFindWorktreePath probes existing worktrees in both layouts, legacy
 // base first.
 func TestFindWorktreePath(t *testing.T) {

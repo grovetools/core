@@ -368,11 +368,28 @@ func BaseRepositoryOwner(path string) (string, error) {
 	if hasPathComponent(clean, legacyWorktreeDirName) {
 		return filepath.Dir(filepath.Dir(root)), nil
 	}
-	// Ordinary repository (or a path below it): nearest .git directory is the
-	// base repository itself. A .git file was already handled above.
+	// Ordinary repository (or a path below it): the nearest valid .git marker
+	// owns the path. Most repositories have a directory; a submodule has a
+	// `gitdir:` file pointing into its superproject's .git/modules tree. Treating
+	// only directories as repository roots walks straight past a submodule and
+	// incorrectly assigns it to the containing ecosystem/superproject.
+	//
+	// A worktree also has a gitdir file, but ownerFromGitdir recognizes its
+	// `/worktrees/` target and collapses it to the base repository. Any other
+	// syntactically-valid gitdir file is the current repository root (the
+	// ordinary submodule shape). Malformed files are ignored rather than
+	// turning an arbitrary directory into a repository boundary.
 	for current := clean; ; current = filepath.Dir(current) {
-		if info, err := os.Stat(filepath.Join(current, ".git")); err == nil && info.IsDir() {
-			return current, nil
+		if info, err := os.Stat(filepath.Join(current, ".git")); err == nil {
+			if info.IsDir() {
+				return current, nil
+			}
+			if _, ok := gitdirTarget(current); ok {
+				if owner, worktree := ownerFromGitdir(current); worktree {
+					return filepath.Clean(owner), nil
+				}
+				return current, nil
+			}
 		}
 		if parent := filepath.Dir(current); parent == current {
 			break
@@ -409,7 +426,28 @@ func ownerFromMarker(worktreeRoot string) (string, bool) {
 // pointer. Returns ok=false when .git is missing, a directory, or does not
 // look like a worktree pointer.
 func ownerFromGitdir(worktreeRoot string) (string, bool) {
-	content, err := os.ReadFile(filepath.Join(worktreeRoot, ".git"))
+	gitdir, ok := gitdirTarget(worktreeRoot)
+	if !ok {
+		return "", false
+	}
+	sep := string(filepath.Separator)
+	// Normal owners: <owner>/.git/worktrees/<name>
+	if i := strings.LastIndex(gitdir, sep+".git"+sep+"worktrees"+sep); i >= 0 {
+		return gitdir[:i], true
+	}
+	// Bare owners: <bare>/worktrees/<name>
+	if i := strings.LastIndex(gitdir, sep+"worktrees"+sep); i >= 0 {
+		return gitdir[:i], true
+	}
+	return "", false
+}
+
+// gitdirTarget parses the repository indirection stored in a .git FILE. Both
+// linked worktrees and submodules use this syntax; ownerFromGitdir interprets
+// only worktree targets, while BaseRepositoryOwner treats every other valid
+// target as an ordinary repository boundary at the file's directory.
+func gitdirTarget(root string) (string, bool) {
+	content, err := os.ReadFile(filepath.Join(root, ".git"))
 	if err != nil {
 		return "", false
 	}
@@ -421,25 +459,14 @@ func ownerFromGitdir(worktreeRoot string) (string, bool) {
 	if !strings.HasPrefix(line, prefix) {
 		return "", false
 	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	if gitdir == "" {
+	target := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if target == "" {
 		return "", false
 	}
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(worktreeRoot, gitdir)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, target)
 	}
-	gitdir = filepath.Clean(gitdir)
-
-	sep := string(filepath.Separator)
-	// Normal owners: <owner>/.git/worktrees/<name>
-	if i := strings.LastIndex(gitdir, sep+".git"+sep+"worktrees"+sep); i >= 0 {
-		return gitdir[:i], true
-	}
-	// Bare owners: <bare>/worktrees/<name>
-	if i := strings.LastIndex(gitdir, sep+"worktrees"+sep); i >= 0 {
-		return gitdir[:i], true
-	}
-	return "", false
+	return filepath.Clean(target), true
 }
 
 // WorktreeRootForPath extracts the worktree root (<base>/<name>) containing

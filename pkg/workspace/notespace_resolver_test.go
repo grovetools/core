@@ -65,6 +65,48 @@ func TestResolveNotespaceTripleSameNameRootsBySubject(t *testing.T) {
 	}
 }
 
+func TestResolveNotespaceNestedSubmoduleUsesRepositorySubject(t *testing.T) {
+	nb := t.TempDir()
+	ecosystem := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ecosystem, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	submodule := filepath.Join(ecosystem, "daemon")
+	deep := filepath.Join(submodule, "pkg", "service")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitFile := "gitdir: " + filepath.Join("..", ".git", "modules", "daemon") + "\n"
+	if err := os.WriteFile(filepath.Join(submodule, ".git"), []byte(gitFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	const (
+		ecosystemSubject = "example.com/org/ecosystem"
+		submoduleSubject = "example.com/org/daemon"
+	)
+	makeStampedRoot(t, nb, "ecosystem", resolverIDs[0], ecosystemSubject)
+	submoduleNotespace := makeStampedRoot(t, nb, "daemon", resolverIDs[1], submoduleSubject)
+	machine := &config.MachineConfig{
+		Subjects: map[string]string{
+			ecosystem: ecosystemSubject,
+			submodule: submoduleSubject,
+		},
+		Primaries: map[string]string{
+			ecosystemSubject: resolverIDs[0],
+			submoduleSubject: resolverIDs[1],
+		},
+	}
+
+	got, err := ResolveNotespace(deep, resolverConfig(nb), machine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Subject != submoduleSubject || got.NotespaceID != resolverIDs[1] || got.Root != submoduleNotespace {
+		t.Fatalf("resolution = %+v; want nested submodule primary", got)
+	}
+}
+
 func TestResolveNotespaceAbsentPrimary(t *testing.T) {
 	nb, repo := t.TempDir(), t.TempDir()
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
