@@ -305,7 +305,7 @@ func newID() string { return ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reade
 // BuildIndex loads exactly the supplied physical roots. It does not discover,
 // sort, or select roots; callers obtain this list from recorded config/layout.
 func BuildIndex(roots []string) (*Index, error) {
-	idx := &Index{byID: make(map[string][]Record), bySubject: make(map[string][]Record)}
+	records := make([]Record, 0, len(roots))
 	for _, root := range roots {
 		stamp, err := LoadNotespace(root)
 		if err != nil {
@@ -314,11 +314,21 @@ func BuildIndex(roots []string) (*Index, error) {
 		if stamp == nil {
 			continue
 		}
-		record := Record{Root: root, Stamp: *stamp}
-		idx.byID[stamp.ID] = append(idx.byID[stamp.ID], record)
-		idx.bySubject[stamp.Subject] = append(idx.bySubject[stamp.Subject], record)
+		records = append(records, Record{Root: root, Stamp: *stamp})
 	}
-	return idx, nil
+	return NewIndex(records), nil
+}
+
+// NewIndex indexes records a caller has already loaded. It exists so a caller
+// that needs BOTH the index and the records — the notespace resolvers do — pays
+// for one read of each stamp instead of two.
+func NewIndex(records []Record) *Index {
+	idx := &Index{byID: make(map[string][]Record, len(records)), bySubject: make(map[string][]Record, len(records))}
+	for _, record := range records {
+		idx.byID[record.Stamp.ID] = append(idx.byID[record.Stamp.ID], record)
+		idx.bySubject[record.Stamp.Subject] = append(idx.bySubject[record.Stamp.Subject], record)
+	}
+	return idx
 }
 
 func (i *Index) ByID(id string) ([]Record, error) {

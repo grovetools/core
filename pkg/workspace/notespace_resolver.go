@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -48,19 +47,7 @@ func ResolveNotespaceName(name string, cfg *config.Config, machine *config.Machi
 	if err != nil {
 		return NotespaceResolution{}, err
 	}
-	var matches []notespace.Record
-	for _, record := range records {
-		if record.Stamp.Name != name {
-			continue
-		}
-		primary := ""
-		if machine != nil {
-			primary = machine.Primaries[record.Stamp.Subject]
-		}
-		if primary == record.Stamp.ID {
-			matches = append(matches, record)
-		}
-	}
+	matches := primariesByName(records, machine)[name]
 	if len(matches) == 0 {
 		return NotespaceResolution{}, fmt.Errorf("notespace %q is not a recorded primary", name)
 	}
@@ -73,6 +60,60 @@ func ResolveNotespaceName(name string, cfg *config.Config, machine *config.Machi
 		return NotespaceResolution{}, err
 	}
 	return NotespaceResolution{Subject: matches[0].Stamp.Subject, NotespaceID: matches[0].Stamp.ID, Root: matches[0].Root}, nil
+}
+
+// NotespaceNameRoutes answers ResolveNotespaceName for every display name at
+// once: the map holds an entry exactly for the names that identify one recorded
+// primary, and omits — rather than reports — the names ResolveNotespaceName
+// would refuse (unstamped, not a recorded primary, ambiguous across roots, or
+// carrying a duplicated id).
+//
+// It exists for callers that resolve MANY names against one machine state, like
+// the daemon's watch-set pass over every discovered workspace. Calling
+// ResolveNotespaceName in a loop is the same work per name; this is one
+// validated read of the index and a map lookup per name afterwards.
+func NotespaceNameRoutes(cfg *config.Config, machine *config.MachineConfig) (map[string]NotespaceResolution, error) {
+	idx, records, err := configuredNotespaceIndex(cfg)
+	if err != nil {
+		return nil, err
+	}
+	byName := primariesByName(records, machine)
+	routes := make(map[string]NotespaceResolution, len(byName))
+	for name, matches := range byName {
+		if name == "" || len(matches) != 1 {
+			continue
+		}
+		// Same duplicate-id validation ResolveNotespaceName forces: two physical
+		// roots claiming one identity is not a routable answer.
+		if _, err := idx.ByID(matches[0].Stamp.ID); err != nil {
+			continue
+		}
+		routes[name] = NotespaceResolution{
+			Subject:     matches[0].Stamp.Subject,
+			NotespaceID: matches[0].Stamp.ID,
+			Root:        matches[0].Root,
+		}
+	}
+	return routes, nil
+}
+
+// primariesByName groups the records this machine records as primary for their
+// subject by display name, preserving the index's root order. A name with more
+// than one record is ambiguous; whether that is an error or an omission is the
+// caller's decision, so this returns the grouping rather than a choice.
+func primariesByName(records []notespace.Record, machine *config.MachineConfig) map[string][]notespace.Record {
+	var primaries map[string]string
+	if machine != nil {
+		primaries = machine.Primaries
+	}
+	byName := make(map[string][]notespace.Record, len(records))
+	for _, record := range records {
+		if primaries[record.Stamp.Subject] != record.Stamp.ID {
+			continue
+		}
+		byName[record.Stamp.Name] = append(byName[record.Stamp.Name], record)
+	}
+	return byName
 }
 
 // resolvePrimary is the routing half of the resolution chain. The rule it
@@ -95,6 +136,10 @@ func resolvePrimary(value string, cfg *config.Config, machine *config.MachineCon
 	return NotespaceResolution{Subject: value, NotespaceID: record.Stamp.ID, Root: record.Root}, nil
 }
 
+// configuredNotespaceIndex indexes every stamped notespace under the notebook
+// roots recorded config points at. The result is memoized per root set and
+// re-validated against the filesystem on every call — see
+// notespace_index_cache.go for what a hit costs and what invalidates one.
 func configuredNotespaceIndex(cfg *config.Config) (*notespace.Index, []notespace.Record, error) {
 	rootSet := map[string]bool{}
 	if cfg != nil {
@@ -111,40 +156,27 @@ func configuredNotespaceIndex(cfg *config.Config) (*notespace.Index, []notespace
 			}
 		}
 	}
-	roots := make([]string, 0, len(rootSet))
+	notebookRoots := make([]string, 0, len(rootSet))
 	for notebookRoot := range rootSet {
-		expanded, err := expandCentralizedRoot(notebookRoot)
-		if err != nil {
-			return nil, nil, err
-		}
-		entries, err := os.ReadDir(filepath.Join(expanded, NotespaceDirectory))
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("read notespaces in %s: %w", expanded, err)
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				roots = append(roots, filepath.Join(expanded, NotespaceDirectory, entry.Name()))
-			}
-		}
+		notebookRoots = append(notebookRoots, notebookRoot)
 	}
-	sort.Strings(roots)
-	idx, err := notespace.BuildIndex(roots)
+	sort.Strings(notebookRoots)
+
+	cached, _ := notespaceIndexCache.LoadOrStore(notespaceIndexKey(notebookRoots), &notespaceIndexEntry{})
+	entry := cached.(*notespaceIndexEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.fresh() {
+		return entry.idx, entry.records, nil
+	}
+	idx, records, inputs, err := buildNotespaceIndex(notebookRoots)
 	if err != nil {
+		// Failures are never cached, and a failed rebuild invalidates whatever
+		// the entry held: the disk has moved under it either way.
+		entry.valid, entry.idx, entry.records, entry.inputs = false, nil, nil, nil
 		return nil, nil, err
 	}
-	var records []notespace.Record
-	for _, root := range roots {
-		stamp, err := notespace.LoadNotespace(root)
-		if err != nil {
-			return nil, nil, err
-		}
-		if stamp != nil {
-			records = append(records, notespace.Record{Root: root, Stamp: *stamp})
-		}
-	}
+	entry.idx, entry.records, entry.inputs, entry.valid = idx, records, inputs, true
 	return idx, records, nil
 }
 
