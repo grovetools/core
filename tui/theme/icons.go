@@ -103,6 +103,7 @@ const (
 	nerdIconClockFast      = "󰅒" // md-clock_fast (U+F0152)
 	nerdIconLoading        = "󰝲" // md-loading (U+F0772)
 	nerdIconRss            = "󰑫" // md-rss (U+F046B)
+	nerdIconFeedMark       = "󰨺" // md-comment_eye (U+F0A3A)
 	nerdIconSchool         = "󰑴" // md-school (U+F0474)
 	nerdIconIssueClosed    = "" // oct-issue_closed (U+F41D)
 	nerdIconIssueOpened    = "" // oct-issue_opened (U+F41B)
@@ -277,6 +278,7 @@ const (
 	asciiIconClockFast      = "[Q]" // Quick note
 	asciiIconLoading        = "..." // Loading
 	asciiIconRss            = "[R]" // RSS/blog
+	asciiIconFeedMark       = "[o]" // Marked to watch as a feed
 	asciiIconSchool         = "[L]" // School/learn
 	asciiIconIssueClosed    = "[x]" // Issue closed
 	asciiIconIssueOpened    = "[!]" // Issue opened
@@ -447,6 +449,7 @@ var (
 	IconClockFast      string
 	IconLoading        string
 	IconRss            string
+	IconFeedMark       string
 	IconSchool         string
 	IconIssueClosed    string
 	IconIssueOpened    string
@@ -664,6 +667,7 @@ func applyIcons(useASCII bool) {
 		IconClockFast = asciiIconClockFast
 		IconLoading = asciiIconLoading
 		IconRss = asciiIconRss
+		IconFeedMark = asciiIconFeedMark
 		IconSchool = asciiIconSchool
 		IconIssueClosed = asciiIconIssueClosed
 		IconIssueOpened = asciiIconIssueOpened
@@ -823,6 +827,7 @@ func applyIcons(useASCII bool) {
 		IconClockFast = nerdIconClockFast
 		IconLoading = nerdIconLoading
 		IconRss = nerdIconRss
+		IconFeedMark = nerdIconFeedMark
 		IconSchool = nerdIconSchool
 		IconIssueClosed = nerdIconIssueClosed
 		IconIssueOpened = nerdIconIssueOpened
