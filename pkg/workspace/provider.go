@@ -250,6 +250,11 @@ func (p *Provider) FindSubProjectByName(name, ecosystemRoot string) *WorkspaceNo
 
 // FindByPath returns the WorkspaceNode for a given absolute path.
 // It performs a fast lookup using an internal map.
+//
+// A path that is not itself a workspace root resolves to the workspace that
+// CONTAINS it, longest match wins (a worktree beats the ecosystem it sits in).
+// That containment search walks the query's own ancestors instead of scanning
+// every pathMap entry: see findContainingNode.
 func (p *Provider) FindByPath(path string) *WorkspaceNode {
 	normalizedPath, err := pathutil.NormalizeForLookup(path)
 	if err != nil {
@@ -262,20 +267,41 @@ func (p *Provider) FindByPath(path string) *WorkspaceNode {
 		return node
 	}
 
-	// If no exact match, find the containing workspace using pre-normalized paths from pathMap.
-	// The pathMap keys are already normalized, so we avoid expensive re-normalization.
-	var bestMatch *WorkspaceNode
-	var bestMatchLen int
-	for normalizedNodePath, node := range p.pathMap {
-		// Check if the normalized node's path is a prefix of the normalized search path.
-		if strings.HasPrefix(normalizedPath, normalizedNodePath+string(filepath.Separator)) {
-			if bestMatch == nil || len(normalizedNodePath) > bestMatchLen {
-				bestMatch = node
-				bestMatchLen = len(normalizedNodePath)
-			}
+	return p.findContainingNode(normalizedPath)
+}
+
+// findContainingNode returns the deepest workspace containing an
+// already-normalized path, or nil when none does.
+//
+// It walks the query's ancestor prefixes from the leaf upward, doing one map
+// lookup per path component, rather than testing the query against every entry
+// in pathMap. Both spellings answer the same question, but the scan cost O(nodes)
+// per call AND allocated `key + "/"` for every entry it rejected — on a machine
+// with ~700 discovered workspaces that made this function 38% of treemux's CPU,
+// almost all of it runtime.concatstring2, because the drawer resolves an
+// agent-touched file (never a workspace root, so always the fallback) for every
+// visible row on every frame.
+//
+// The two are equivalent because pathMap keys are exactly NormalizeForLookup
+// outputs (NewProviderFromNodes drops anything that fails to normalize), and
+// that function returns cleaned paths — so any key k satisfying the old
+// `HasPrefix(query, k+separator)` test is byte-for-byte one of the ancestor
+// prefixes enumerated here, and walking up from the leaf finds the longest one
+// first. No fallback scan is needed; there is no aliased key spelling for it to
+// find. The i > 0 bound preserves one edge of the old behavior exactly: a key of
+// "/" never matched `HasPrefix(query, "//")`, and it is likewise never probed here.
+func (p *Provider) findContainingNode(normalizedPath string) *WorkspaceNode {
+	for i := len(normalizedPath) - 1; i > 0; i-- {
+		if normalizedPath[i] != filepath.Separator {
+			continue
+		}
+		// Slicing and map lookup are both alloc-free; the key is compared
+		// against the query's own bytes in place.
+		if node, exists := p.pathMap[normalizedPath[:i]]; exists {
+			return node
 		}
 	}
-	return bestMatch
+	return nil
 }
 
 // FindByWorktree finds a workspace node for a worktree within an ecosystem.
