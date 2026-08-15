@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/pkg/paths"
 	"github.com/grovetools/core/pkg/process"
@@ -43,6 +45,7 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 
 	var sessions []*models.Session
 	registry, _ := NewFileSystemRegistry()
+	ulog := logging.NewUnifiedLogger("core.sessions.recovery")
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -76,16 +79,16 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 			// An active metadata claim without a readable pid.lock has no live
 			// process claim to recover. Mark the exact record terminal so it is
 			// retention-eligible rather than silently skipping it forever.
+			from := metadata.Status
+			changed := false
 			if !isTerminalRecoveryStatus(metadata.Status) {
 				metadata.Status = "interrupted"
-				_ = writeMetadataFile(metadataFile, metadata)
+				changed = writeMetadataFile(metadataFile, metadata) == nil
 			}
-			continue
-		}
-
-		if !process.IsProcessAlive(pid) {
-			// Drop recovery state from every legacy alias directory for this
-			// attempt. metadata.json remains the durable job→transcript index.
+			// A malformed lock must not remain an immortal GC veto. Classification
+			// has retracted its active claim, so clear recovery state across this
+			// owned attempt's legacy aliases; a missing lock is an idempotent no-op.
+			removed := 0
 			if registry != nil {
 				jobID := metadata.JobID
 				if jobID == "" {
@@ -96,11 +99,53 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 					nativeID = dirName
 				}
 				if filterByScope {
-					_, _ = registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
+					removed, _ = registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
 				} else {
-					_, _ = registry.RemoveRecoveryFilesForJob(jobID, nativeID)
+					removed, _ = registry.RemoveRecoveryFilesForJob(jobID, nativeID)
 				}
 			}
+			observed := "pid.lock missing"
+			if pidReadErr == nil {
+				observed = "pid.lock unreadable"
+			}
+			ulog.Info("Classified unrecoverable session registry record").
+				Field("event", "session.registry_recovery").
+				Field("job_id", metadata.JobID).
+				Field("native_id", metadata.ClaudeSessionID).
+				Field("observed", observed+"; metadata status="+from).
+				Field("concluded", "no live recovery claim; terminal status=interrupted").
+				Field("changed", changed || removed > 0).
+				StructuredOnly().Log(context.Background())
+			continue
+		}
+
+		if !process.IsProcessAlive(pid) {
+			// Drop recovery state from every legacy alias directory for this
+			// attempt. metadata.json remains the durable job→transcript index.
+			removed := 0
+			if registry != nil {
+				jobID := metadata.JobID
+				if jobID == "" {
+					jobID = metadata.SessionID
+				}
+				nativeID := metadata.ClaudeSessionID
+				if nativeID == "" {
+					nativeID = dirName
+				}
+				if filterByScope {
+					removed, _ = registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
+				} else {
+					removed, _ = registry.RemoveRecoveryFilesForJob(jobID, nativeID)
+				}
+			}
+			ulog.Info("Classified dead session registry process").
+				Field("event", "session.registry_recovery").
+				Field("job_id", metadata.JobID).
+				Field("native_id", metadata.ClaudeSessionID).
+				Field("observed", fmt.Sprintf("pid.lock pid=%d is dead", pid)).
+				Field("concluded", "recovery claim must not resurrect").
+				Field("changed", removed > 0).
+				StructuredOnly().Log(context.Background())
 			continue
 		}
 

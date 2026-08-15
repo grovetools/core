@@ -1020,6 +1020,9 @@ func mergeConfigs(base, override *Config) *Config {
 		if o.NoteInterval != "" {
 			d.NoteInterval = o.NoteInterval
 		}
+		if o.SessionRetention != "" {
+			d.SessionRetention = o.SessionRetention
+		}
 		if o.ConfigDebounceMs != 0 {
 			d.ConfigDebounceMs = o.ConfigDebounceMs
 		}

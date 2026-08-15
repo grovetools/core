@@ -112,6 +112,9 @@ func TestRecoverSessionsClassifiesMissingAndUnreadablePIDLocks(t *testing.T) {
 	if len(recovered) != 0 {
 		t.Fatalf("recovered %d sessions, want none", len(recovered))
 	}
+	if _, err := os.Stat(filepath.Join(malformed, "pid.lock")); !os.IsNotExist(err) {
+		t.Fatalf("malformed pid.lock remains after classification: %v", err)
+	}
 	for dir, want := range map[string]string{missing: "interrupted", malformed: "interrupted", terminal: "completed"} {
 		data, err := os.ReadFile(filepath.Join(dir, "metadata.json"))
 		if err != nil {
