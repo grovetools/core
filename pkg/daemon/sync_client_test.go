@@ -39,6 +39,9 @@ func serveSyncUnix(t *testing.T, sockPath string, lastWorkspace *string) {
 				"pull": true,
 				"mode": "full",
 				"role": "peer",
+				"contested": true,
+				"reason": "adoption pending: divergent local notes",
+				"withheld": ["push", "pull"],
 				"hydration": {
 					"notespace": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 					"root": "/Users/x/notebooks/nb/notespaces/notes",
@@ -156,6 +159,10 @@ func TestGetSyncStatusDecodesWirePayload(t *testing.T) {
 	// (an absent "pull" key) plus a filtered mode on the second.
 	if !w.Pull || w.Mode != "full" || w.Role != "peer" {
 		t.Fatalf("direction fields mis-decoded: %+v", w)
+	}
+	if !w.Contested || w.Reason != "adoption pending: divergent local notes" ||
+		len(w.Withheld) != 2 || w.Withheld[0] != "push" || w.Withheld[1] != "pull" {
+		t.Fatalf("contested fields mis-decoded: %+v", w)
 	}
 	// The second entry is LEGACY — no role key at all — and must decode as an
 	// empty role rather than borrowing the first entry's.

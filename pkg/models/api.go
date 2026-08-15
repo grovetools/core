@@ -488,6 +488,13 @@ type SyncNotespaceStatus struct {
 	// which is push-only — render it as a bare direction glyph rather than
 	// inventing a role it never declared.
 	Role string `json:"role,omitempty"`
+	// Contested is the watcher adoption gate's live verdict. While true, the
+	// daemon withholds every direction named in Withheld; Reason is the same
+	// one-line evidence summary exposed by `grove sync contested`.
+	// All fields omit their zero values for compatibility with older daemons.
+	Contested bool     `json:"contested,omitempty"`
+	Reason    string   `json:"reason,omitempty"`
+	Withheld  []string `json:"withheld,omitempty"`
 }
 
 // SyncRepushResult is the daemon's POST /api/sync/repush payload: which
