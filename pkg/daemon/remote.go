@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -492,6 +493,47 @@ func (c *RemoteClient) GetSyncConflicts(ctx context.Context, notespaceID string)
 		return nil, fmt.Errorf("failed to decode sync conflicts: %w", err)
 	}
 	return conflicts, nil
+}
+
+// GetSyncActivity fetches recent transfer outcomes newest-first (GET
+// /api/sync/activity[?notespace_id=&limit=]). Empty notespace ID means all
+// notespaces; limit <= 0 sends no limit. Same 404/503 semantics as
+// GetSyncOutbox.
+func (c *RemoteClient) GetSyncActivity(ctx context.Context, notespaceID string, limit int) ([]models.SyncActivityEntry, error) {
+	u := baseURL + "/api/sync/activity"
+	q := url.Values{}
+	if notespaceID != "" {
+		q.Set("notespace_id", notespaceID)
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if len(q) > 0 {
+		u += "?" + q.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sync activity from daemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errEndpointNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon returned status %d", resp.StatusCode)
+	}
+
+	var entries []models.SyncActivityEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to decode sync activity: %w", err)
+	}
+	return entries, nil
 }
 
 // AdoptNotespace sends the daemon an explicit post-adopt signal. The daemon

@@ -546,6 +546,15 @@ type Client interface {
 	// as GetSyncOutbox.
 	GetSyncConflicts(ctx context.Context, notespaceID string) ([]models.SyncConflict, error)
 
+	// GetSyncActivity returns recent transfer outcomes newest-first from the
+	// daemon's capped activity feed
+	// (GET /api/sync/activity[?notespace_id=&limit=]). Empty notespace ID means
+	// all notespaces; limit <= 0 means everything the feed holds. A daemon
+	// predating the route (404) yields errEndpointNotFound so callers can
+	// soft-fail and hide the history surface. Same ID-not-name filter rule as
+	// GetSyncOutbox.
+	GetSyncActivity(ctx context.Context, notespaceID string, limit int) ([]models.SyncActivityEntry, error)
+
 	// SyncRepush voids synced state for a notespace ("" = all) and kicks an
 	// immediate anti-entropy pass (POST /api/sync/repush). `grove sync adopt`
 	// uses it for the kick: a subscription written a second ago has nothing

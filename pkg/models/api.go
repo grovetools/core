@@ -562,6 +562,34 @@ type SyncConflict struct {
 	BaseContent     string `json:"base_content,omitempty"` // 3-way base from sync_documents, when resolvable
 }
 
+// SyncActivityEntry is one entry of the daemon's GET /api/sync/activity
+// payload (daemon server syncActivityResponse): a terminal transfer outcome
+// from the capped machine-local activity feed — an outgoing change the server
+// answered, or an incoming event applied (or refused) locally. Distinct from
+// the daemon's /api/sync/history route, which is a per-document version
+// history proxied to the sync server; this is the "what moved recently, in
+// which direction" feed behind the Notebook Sync history page.
+type SyncActivityEntry struct {
+	ID            int64  `json:"id"`
+	NotespaceID   string `json:"notespace_id"`
+	NotespaceName string `json:"notespace_name,omitempty"`
+	// Direction is "outgoing" (pushed to the server) or "incoming" (pulled
+	// and applied locally).
+	Direction  string `json:"direction"`
+	EventType  string `json:"event_type"`
+	Path       string `json:"path"`
+	PrevPath   string `json:"prev_path,omitempty"`
+	DocumentID string `json:"document_id,omitempty"`
+	// Result is the outcome vocabulary: the healthy pair is "synced"
+	// (outgoing accepted) / "applied" (incoming applied); "conflict",
+	// "diverged", "rejected", "requeued" and "error" are the issues the feed
+	// exists to surface, with Detail carrying the specifics.
+	Result     string    `json:"result"`
+	Detail     string    `json:"detail,omitempty"`
+	Version    int64     `json:"version,omitempty"`
+	OccurredAt time.Time `json:"occurred_at"`
+}
+
 // Helper method to parse time strings from API requests
 func ParseTimeString(timeStr string) (time.Time, error) {
 	// Try common time formats

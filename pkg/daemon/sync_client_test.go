@@ -88,6 +88,30 @@ func serveSyncUnix(t *testing.T, sockPath string, lastWorkspace *string) {
 			"base_content": "base"
 		}]`))
 	})
+	mux.HandleFunc("/api/sync/activity", func(w http.ResponseWriter, r *http.Request) {
+		*lastWorkspace = r.URL.Query().Get("notespace_id") + "|" + r.URL.Query().Get("limit")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{
+			"id": 12,
+			"notespace_id": "ns-1",
+			"notespace_name": "notes",
+			"direction": "incoming",
+			"event_type": "document_updated",
+			"path": "inbox/todo.md",
+			"document_id": "doc-1",
+			"result": "applied",
+			"version": 9,
+			"occurred_at": "2026-07-12T10:30:00Z"
+		}, {
+			"id": 11,
+			"notespace_id": "ns-1",
+			"direction": "outgoing",
+			"event_type": "document_created",
+			"path": "plans/x.md",
+			"result": "rejected",
+			"detail": "malformed push"
+		}]`))
+	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ul)
 	t.Cleanup(func() { srv.Close(); ul.Close() })
@@ -217,6 +241,51 @@ func TestGetSyncConflictsDecodes(t *testing.T) {
 	}
 }
 
+// TestGetSyncActivityDecodesAndFilters proves GetSyncActivity decodes the
+// daemon's syncActivityResponse shape (both directions, issue rows included)
+// and forwards the notespace_id + limit query params.
+func TestGetSyncActivityDecodesAndFilters(t *testing.T) {
+	sockPath := shortTempSocket(t)
+	var ws string
+	serveSyncUnix(t, sockPath, &ws)
+
+	client, err := NewRemoteClient(sockPath)
+	if err != nil {
+		t.Fatalf("NewRemoteClient: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	entries, err := client.GetSyncActivity(ctx, "ns-1", 50)
+	if err != nil {
+		t.Fatalf("GetSyncActivity: %v", err)
+	}
+	if ws != "ns-1|50" {
+		t.Fatalf("query params not forwarded: got %q", ws)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("want 2 entries, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.ID != 12 || e.NotespaceID != "ns-1" || e.NotespaceName != "notes" ||
+		e.Direction != "incoming" || e.EventType != "document_updated" ||
+		e.Path != "inbox/todo.md" || e.Result != "applied" || e.Version != 9 ||
+		e.OccurredAt.IsZero() {
+		t.Fatalf("activity fields mis-decoded: %+v", e)
+	}
+	if entries[1].Result != "rejected" || entries[1].Detail != "malformed push" {
+		t.Fatalf("issue row mis-decoded: %+v", entries[1])
+	}
+
+	// Empty workspace + no limit must emit no query params at all.
+	if _, err := client.GetSyncActivity(ctx, "", 0); err != nil {
+		t.Fatalf("GetSyncActivity(all): %v", err)
+	}
+	if ws != "|" {
+		t.Fatalf("expected no query params, got %q", ws)
+	}
+}
+
 // TestSyncEndpoints404 proves a stale daemon (no /api/sync routes) surfaces
 // errEndpointNotFound rather than a decode error, mirroring satellites.
 func TestSyncEndpoints404(t *testing.T) {
@@ -244,5 +313,8 @@ func TestSyncEndpoints404(t *testing.T) {
 	}
 	if _, err := client.GetSyncConflicts(ctx, ""); !errors.Is(err, errEndpointNotFound) {
 		t.Fatalf("GetSyncConflicts 404: want errEndpointNotFound, got %v", err)
+	}
+	if _, err := client.GetSyncActivity(ctx, "", 0); !errors.Is(err, errEndpointNotFound) {
+		t.Fatalf("GetSyncActivity 404: want errEndpointNotFound, got %v", err)
 	}
 }
