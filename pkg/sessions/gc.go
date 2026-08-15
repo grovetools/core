@@ -1,11 +1,14 @@
 package sessions
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/grovetools/core/pkg/paths"
+	"github.com/grovetools/core/pkg/process"
 )
 
 // DefaultSessionRetention is how long a reaped session's metadata.json is kept
@@ -15,15 +18,30 @@ import (
 // read it well after the process exits.
 const DefaultSessionRetention = 30 * 24 * time.Hour
 
-// PurgeStaleSessions deletes registry records that are both not live and older
-// than the retention window, and returns how many directories it removed.
-//
-// This is the ONLY caller of Purge in normal operation. Liveness sweeps call
-// RemoveRecoveryFiles instead: "this PID is not alive" is a statement about a
-// process, and must never be promoted into "this session never happened".
-// A directory is eligible only when it has no pid.lock (nothing claims it is
-// live) and nothing in it has been modified within the retention window.
+// RecoveryCorroborator is the daemon-owned half of dead-pid.lock cleanup. It
+// returns true only when the daemon roster says the matching session is absent
+// or terminal. GC supplies both the legacy directory key and decoded aliases
+// so callers can match either registry shape.
+type RecoveryCorroborator func(sessionDir string, metadata SessionMetadata) bool
+
+// PurgeStaleSessions keeps the historical compatibility behavior: any
+// pid.lock, including one containing a dead PID, vetoes collection. Daemon
+// callers that can corroborate registry state against their roster should use
+// PurgeStaleSessionsWithCorroboration.
 func PurgeStaleSessions(retention time.Duration) (int, error) {
+	return purgeStaleSessions(retention, nil)
+}
+
+// PurgeStaleSessionsWithCorroboration removes a dead pid.lock only when the
+// daemon roster independently says the corresponding row is absent or
+// terminal, then applies the normal metadata retention policy. A live PID is
+// always retained, and an unreadable lock is left for startup recovery to
+// classify; GC never judges either case from filesystem evidence alone.
+func PurgeStaleSessionsWithCorroboration(retention time.Duration, corroborate RecoveryCorroborator) (int, error) {
+	return purgeStaleSessions(retention, corroborate)
+}
+
+func purgeStaleSessions(retention time.Duration, corroborate RecoveryCorroborator) (int, error) {
 	if retention <= 0 {
 		retention = DefaultSessionRetention
 	}
@@ -49,18 +67,41 @@ func PurgeStaleSessions(retention time.Duration) (int, error) {
 			continue
 		}
 		sessionDir := filepath.Join(baseDir, entry.Name())
+		oldEnough := !newestModTime(sessionDir).After(cutoff)
 
-		// A pid.lock means some writer still considers this session live.
-		// Never purge it here, however stale the PID looks — that judgement
-		// belongs to the liveness sweep, which only removes the lock.
-		if _, err := os.Stat(filepath.Join(sessionDir, "pid.lock")); err == nil {
+		pidPath := filepath.Join(sessionDir, "pid.lock")
+		pidContent, lockErr := os.ReadFile(pidPath)
+		switch {
+		case lockErr == nil:
+			var pid int
+			if _, err := fmt.Sscanf(string(pidContent), "%d", &pid); err != nil {
+				continue // Startup recovery owns unreadable-lock classification.
+			}
+			if process.IsProcessAlive(pid) || corroborate == nil {
+				continue
+			}
+			metadataContent, err := os.ReadFile(filepath.Join(sessionDir, "metadata.json"))
+			if err != nil {
+				continue
+			}
+			var metadata SessionMetadata
+			if err := json.Unmarshal(metadataContent, &metadata); err != nil || !corroborate(entry.Name(), metadata) {
+				continue
+			}
+			if err := registry.RemoveRecoveryFiles(entry.Name()); err != nil {
+				continue
+			}
+		case os.IsNotExist(lockErr):
+			// Already reaped; normal retention applies.
+		default:
 			continue
 		}
 
-		if newestModTime(sessionDir).After(cutoff) {
+		// Compute age before removing pid.lock: unlinking it refreshes the
+		// directory mtime but should not restart metadata retention.
+		if !oldEnough {
 			continue
 		}
-
 		if err := registry.Purge(entry.Name()); err == nil {
 			purged++
 		}

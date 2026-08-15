@@ -207,6 +207,7 @@ func (c *LocalClient) RegisterSessionIntent(ctx context.Context, intent SessionI
 		Mux:              intent.Mux,
 		TmuxTarget:       intent.TmuxTarget,
 		Channels:         intent.Channels,
+		Scope:            ResolveClientScope(),
 	}
 
 	return registry.Register(metadata)

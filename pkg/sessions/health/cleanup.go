@@ -126,14 +126,11 @@ func (c *Cleaner) Clean(ctx context.Context, p *Probe) (Outcome, error) {
 			}
 		}
 		if reg, err := c.registry(); err == nil {
-			dir := p.Evidence.RegistryDir
-			if dir == "" {
-				dir = s.ClaudeSessionID
+			nativeID := s.ClaudeSessionID
+			if p.Evidence.RegistryDir != "" {
+				nativeID = p.Evidence.RegistryDir
 			}
-			if dir == "" {
-				dir = s.ID
-			}
-			if err := reg.RemoveRecoveryFiles(dir); err == nil {
+			if removed, err := reg.RemoveRecoveryFilesForJobInScope(s.ID, nativeID, p.Evidence.MetaScope); err == nil && removed > 0 {
 				out.RemovedRecovery = true
 			}
 		}

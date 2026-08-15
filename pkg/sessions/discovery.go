@@ -54,60 +54,53 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 		pidFile := filepath.Join(sessionDir, "pid.lock")
 		metadataFile := filepath.Join(sessionDir, "metadata.json")
 
-		// Read PID
-		pidContent, err := os.ReadFile(pidFile)
-		if err != nil {
-			continue
-		}
-
-		var pid int
-		if _, err := fmt.Sscanf(string(pidContent), "%d", &pid); err != nil {
-			continue
-		}
-
-		// Check if process is alive
-		isAlive := process.IsProcessAlive(pid)
-
-		if !isAlive {
-			// Clean up dead session recovery files. When filtering by scope, a
-			// daemon must only reap records it owns: read the metadata to learn
-			// the owning scope and leave records belonging to other scopes (or
-			// whose ownership can't be determined) untouched.
-			if filterByScope {
-				metadataContent, merr := os.ReadFile(metadataFile)
-				if merr != nil {
-					continue
-				}
-				var deadMeta SessionMetadata
-				if err := json.Unmarshal(metadataContent, &deadMeta); err != nil {
-					continue
-				}
-				if deadMeta.Scope != scope {
-					continue
-				}
-			}
-			// Drop only the recovery state. metadata.json is the job→transcript
-			// index and must outlive both the process and a wrong liveness
-			// reading; age-based cleanup is PurgeStaleSessions' job.
-			if registry != nil {
-				_ = registry.RemoveRecoveryFiles(dirName)
-			}
-			continue
-		}
-
-		// Read metadata
+		// Read metadata before pid.lock so missing and malformed recovery claims
+		// can still be classified, and so a scoped daemon never mutates a record
+		// it does not own.
 		metadataContent, err := os.ReadFile(metadataFile)
 		if err != nil {
 			continue
 		}
-
 		var metadata SessionMetadata
 		if err := json.Unmarshal(metadataContent, &metadata); err != nil {
 			continue
 		}
-
-		// Scope filter: a scoped daemon only seeds sessions it owns.
 		if filterByScope && metadata.Scope != scope {
+			continue
+		}
+
+		pidContent, pidReadErr := os.ReadFile(pidFile)
+		var pid int
+		_, pidParseErr := fmt.Sscanf(string(pidContent), "%d", &pid)
+		if pidReadErr != nil || pidParseErr != nil {
+			// An active metadata claim without a readable pid.lock has no live
+			// process claim to recover. Mark the exact record terminal so it is
+			// retention-eligible rather than silently skipping it forever.
+			if !isTerminalRecoveryStatus(metadata.Status) {
+				metadata.Status = "interrupted"
+				_ = writeMetadataFile(metadataFile, metadata)
+			}
+			continue
+		}
+
+		if !process.IsProcessAlive(pid) {
+			// Drop recovery state from every legacy alias directory for this
+			// attempt. metadata.json remains the durable job→transcript index.
+			if registry != nil {
+				jobID := metadata.JobID
+				if jobID == "" {
+					jobID = metadata.SessionID
+				}
+				nativeID := metadata.ClaudeSessionID
+				if nativeID == "" {
+					nativeID = dirName
+				}
+				if filterByScope {
+					_, _ = registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
+				} else {
+					_, _ = registry.RemoveRecoveryFilesForJob(jobID, nativeID)
+				}
+			}
 			continue
 		}
 
@@ -154,6 +147,23 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 	}
 
 	return sessions, nil
+}
+
+func isTerminalRecoveryStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "error", "interrupted", "stopped", "abandoned", "orphaned", "cancelled", "canceled":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeMetadataFile(path string, metadata SessionMetadata) error {
+	updated, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, updated, 0o644) //nolint:gosec // session metadata is not sensitive
 }
 
 // ResolveClaudeSessionDirs returns every directory under ~/.claude/projects/*/

@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -184,6 +185,82 @@ func (r *FileSystemRegistry) RemovePIDLock(sessionID string) error {
 // dropping it is sufficient to stop the record from resurrecting as running.
 func (r *FileSystemRegistry) RemoveRecoveryFiles(sessionID string) error {
 	return r.RemovePIDLock(sessionID)
+}
+
+// RemoveRecoveryFilesForJob clears crash-recovery state from every registry
+// directory belonging to the same Flow job/native-session aliases. Legacy
+// daemonless launches can leave both a job-ID intent directory and a
+// native-ID confirmation directory; clearing only one lets the other record
+// resurrect the same attempt after restart.
+//
+// The returned count is the number of matching directories whose recovery
+// state is now absent. Metadata is always retained for transcript/history
+// lookups. Directory-name matching is retained for legacy or damaged records
+// whose metadata cannot be decoded.
+func (r *FileSystemRegistry) RemoveRecoveryFilesForJob(jobID, nativeID string) (int, error) {
+	return r.removeRecoveryFilesForJob(jobID, nativeID, nil)
+}
+
+// RemoveRecoveryFilesForJobInScope is the scoped-daemon variant. Alias keys
+// such as short Flow job IDs can repeat in different ecosystem worktrees, so a
+// scoped cleanup must not mutate a matching record owned by another daemon.
+func (r *FileSystemRegistry) RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope string) (int, error) {
+	return r.removeRecoveryFilesForJob(jobID, nativeID, &scope)
+}
+
+func (r *FileSystemRegistry) removeRecoveryFilesForJob(jobID, nativeID string, scope *string) (int, error) {
+	keys := make(map[string]struct{}, 2)
+	if jobID != "" {
+		keys[jobID] = struct{}{}
+	}
+	if nativeID != "" {
+		keys[nativeID] = struct{}{}
+	}
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	entries, err := os.ReadDir(r.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to read sessions directory: %w", err)
+	}
+
+	removed := 0
+	var errs []error
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		_, matches := keys[entry.Name()]
+		metadataPath := filepath.Join(r.baseDir, entry.Name(), "metadata.json")
+		metadataDecoded := false
+		var metadata SessionMetadata
+		if content, readErr := os.ReadFile(metadataPath); readErr == nil && json.Unmarshal(content, &metadata) == nil {
+			metadataDecoded = true
+			for _, alias := range []string{metadata.SessionID, metadata.JobID, metadata.ClaudeSessionID} {
+				if _, ok := keys[alias]; ok && alias != "" {
+					matches = true
+					break
+				}
+			}
+		}
+		if scope != nil && (!metadataDecoded || metadata.Scope != *scope) {
+			continue
+		}
+		if !matches {
+			continue
+		}
+		if err := r.RemoveRecoveryFiles(entry.Name()); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", entry.Name(), err))
+			continue
+		}
+		removed++
+	}
+	return removed, errors.Join(errs...)
 }
 
 // Purge deletes a session's entire registry directory, metadata.json included.
