@@ -11,11 +11,10 @@ import (
 	"github.com/grovetools/core/pkg/notespace"
 )
 
-// rewriteStampInPlace overwrites a stamp with same-length bytes and restores the
-// file's original (mtime, size), so the only way a caller can observe the new
-// content is by reading the file again. It is the deterministic probe for "was
-// this served from cache".
-func rewriteStampInPlace(t *testing.T, root, content string) {
+// replaceStampSameStat atomically replaces a stamp with same-length bytes and
+// restores its original mtime. Size and mtime therefore cannot distinguish the
+// versions; only the filesystem entry's stable identity can.
+func replaceStampSameStat(t *testing.T, root, content string) {
 	t.Helper()
 	path := notespace.NotespaceStampPath(root)
 	before, err := os.Stat(path)
@@ -25,15 +24,62 @@ func rewriteStampInPlace(t *testing.T, root, content string) {
 	if int64(len(content)) != before.Size() {
 		t.Fatalf("probe content is %d bytes, stamp is %d", len(content), before.Size())
 	}
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".cache-identity-probe-*")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+	tmpPath := tmp.Name()
+	t.Cleanup(func() { _ = os.Remove(tmpPath) })
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
 		t.Fatal(err)
+	}
+	if err := tmp.Chmod(before.Mode()); err != nil {
+		_ = tmp.Close()
+		t.Fatal(err)
+	}
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(tmpPath, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("replacement did not preserve stat tuple: before=(%d, %s), after=(%d, %s)",
+			before.Size(), before.ModTime(), after.Size(), after.ModTime())
+	}
+	if os.SameFile(before, after) {
+		t.Fatal("atomic replacement unexpectedly retained file identity")
 	}
 }
 
 func TestNotespaceIndexCacheServesUnchangedInputs(t *testing.T) {
+	ResetNotespaceIndexCache()
+	nb := t.TempDir()
+	makeStampedRoot(t, nb, "friendly", resolverIDs[0], "example.com/org/repo")
+	cfg := resolverConfig(nb)
+
+	first, _, err := configuredNotespaceIndex(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := configuredNotespaceIndex(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != first {
+		t.Fatal("unchanged inputs rebuilt the memoized index")
+	}
+}
+
+func TestNotespaceIndexCacheInvalidatesOnAtomicSameStatReplacement(t *testing.T) {
 	ResetNotespaceIndexCache()
 	nb := t.TempDir()
 	root := makeStampedRoot(t, nb, "friendly", resolverIDs[0], "example.com/org/repo")
@@ -43,24 +89,22 @@ func TestNotespaceIndexCacheServesUnchangedInputs(t *testing.T) {
 	if _, err := ResolveNotespaceName("friendly", cfg, machine); err != nil {
 		t.Fatal(err)
 	}
-
-	// Same stat identity, different bytes: a resolver that re-read the stamp
-	// would fail to parse it.
 	stamp, err := os.ReadFile(notespace.NotespaceStampPath(root))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rewriteStampInPlace(t, root, strings.Repeat("!", len(stamp)))
-
-	got, err := ResolveNotespaceName("friendly", cfg, machine)
-	if err != nil || got.Root != root {
-		t.Fatalf("cached resolution = %+v, %v; want the memoized answer", got, err)
+	replaced := strings.Replace(string(stamp), "name = 'friendly'", "name = 'replaced'", 1)
+	if replaced == string(stamp) {
+		t.Fatalf("stamp fixture lacks expected name: %s", stamp)
 	}
+	replaceStampSameStat(t, root, replaced)
 
-	// ...and the corruption is genuinely on disk: a cold cache sees it.
-	ResetNotespaceIndexCache()
 	if _, err := ResolveNotespaceName("friendly", cfg, machine); err == nil {
-		t.Fatal("cold cache resolved a corrupted stamp; the probe never wrote")
+		t.Fatal("atomically replaced stamp still resolved under its old display name")
+	}
+	got, err := ResolveNotespaceName("replaced", cfg, machine)
+	if err != nil || got.Root != root {
+		t.Fatalf("replacement resolution = %+v, %v; want %s", got, err, root)
 	}
 }
 

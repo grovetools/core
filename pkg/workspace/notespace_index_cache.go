@@ -27,11 +27,12 @@ import (
 // So the index is memoized per root set, and a cached entry is served only
 // while every input the result depends on is provably unchanged:
 //
-//   - each recorded notebook's notespaces/ directory, by (mtime, size) — which
-//     is what changes when a notespace directory is created, removed or
-//     renamed;
-//   - each notespace's .notespace.toml, by (mtime, size) and by existence —
-//     which is what changes when a stamp is minted, re-minted or edited;
+//   - each recorded notebook's notespaces/ directory, by file identity,
+//     (mtime, size), and existence — which changes when a notespace directory
+//     is created, removed, or renamed;
+//   - each notespace's .notespace.toml, by file identity, (mtime, size), and
+//     existence — which changes when a stamp is minted, atomically replaced,
+//     re-minted, or edited;
 //   - the legacy workspaces/ directory of any notebook that has no notespaces/
 //     directory, because that is the input ValidateNotespaceLayout turns into a
 //     migration error.
@@ -51,14 +52,19 @@ import (
 // place). A caller that needs to mutate either must clone it first.
 
 // pathStamp is the cheap identity of a filesystem entry version: what a stat
-// returns, plus whether the entry is there at all. Directories are stamped the
-// same way as files — a directory's mtime moves when its entry list changes,
-// which is exactly the input that can add or remove a notespace.
+// returns, plus whether the entry is there at all. info is retained so
+// os.SameFile can compare the platform's stable file identity (for example,
+// device+inode on Unix). That identity is essential for atomic replacements:
+// a new same-size file can deliberately carry the old mtime, but it is not the
+// same file. Directories are stamped the same way as files — their mtime moves
+// when the entry list changes, while identity detects replacement of the
+// directory itself.
 type pathStamp struct {
 	exists  bool
 	isDir   bool
 	modTime time.Time
 	size    int64
+	info    os.FileInfo
 }
 
 // equal compares stamps. time.Time must be compared with Equal rather than ==
@@ -70,7 +76,8 @@ func (s pathStamp) equal(other pathStamp) bool {
 	if !s.exists {
 		return true
 	}
-	return s.isDir == other.isDir && s.size == other.size && s.modTime.Equal(other.modTime)
+	return s.isDir == other.isDir && s.size == other.size && s.modTime.Equal(other.modTime) &&
+		os.SameFile(s.info, other.info)
 }
 
 // statPath stats path. Anything that cannot be statted collapses to the zero
@@ -85,7 +92,7 @@ func statPath(path string) pathStamp {
 	if err != nil {
 		return pathStamp{}
 	}
-	return pathStamp{exists: true, isDir: info.IsDir(), modTime: info.ModTime(), size: info.Size()}
+	return pathStamp{exists: true, isDir: info.IsDir(), modTime: info.ModTime(), size: info.Size(), info: info}
 }
 
 // stampedInput is one filesystem input the cached index was derived from.
@@ -135,9 +142,9 @@ func notespaceIndexKey(roots []string) string {
 	return strings.Join(roots, "\x00")
 }
 
-// ResetNotespaceIndexCache drops every memoized notespace index. Tests that
-// rewrite a stamp in place within one filesystem timestamp tick — the one edit
-// (mtime, size) cannot see — call this to force a rebuild.
+// ResetNotespaceIndexCache drops every memoized notespace index. It is exposed
+// for tests and for callers that replace inputs through mechanisms outside the
+// cache's filesystem identity contract.
 func ResetNotespaceIndexCache() {
 	notespaceIndexCache.Range(func(key, _ any) bool {
 		notespaceIndexCache.Delete(key)
