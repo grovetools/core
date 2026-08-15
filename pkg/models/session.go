@@ -48,18 +48,23 @@ func IsHeadlessSessionType(sessionType string) bool {
 // Session represents a complete Claude session or a grove-flow job
 type Session struct {
 	// Core fields
-	ID               string     `json:"id" db:"id"`
-	Type             string     `json:"type" db:"type"` // SessionType* above, "claude_session", "oneshot_job", …
-	PID              int        `json:"pid" db:"pid"`
-	Repo             string     `json:"repo" db:"repo"`
-	Branch           string     `json:"branch" db:"branch"`
-	TmuxKey          string     `json:"tmux_key" db:"tmux_key"`
-	WorkingDirectory string     `json:"working_directory" db:"working_directory"`
-	User             string     `json:"user" db:"user"`
-	Status           string     `json:"status" db:"status"` // running|stopped|completed|failed|idle|error
-	StartedAt        time.Time  `json:"started_at" db:"started_at"`
-	EndedAt          *time.Time `json:"ended_at,omitempty" db:"ended_at"`
-	LastActivity     time.Time  `json:"last_activity" db:"last_activity"`
+	ID               string `json:"id" db:"id"`
+	Type             string `json:"type" db:"type"` // SessionType* above, "claude_session", "oneshot_job", …
+	PID              int    `json:"pid" db:"pid"`
+	Repo             string `json:"repo" db:"repo"`
+	Branch           string `json:"branch" db:"branch"`
+	TmuxKey          string `json:"tmux_key" db:"tmux_key"`
+	WorkingDirectory string `json:"working_directory" db:"working_directory"`
+	User             string `json:"user" db:"user"`
+	Status           string `json:"status" db:"status"` // running|stopped|completed|failed|idle|error
+	// Verified is the daemon's derived health verdict for active rows. Empty
+	// identifies legacy rows; consumers treat that value as alive unless they
+	// deliberately run a compatibility probe. It is not persisted and is never
+	// an activity signal.
+	Verified     string     `json:"verified,omitempty" db:"-"` // alive|unverified|stale
+	StartedAt    time.Time  `json:"started_at" db:"started_at"`
+	EndedAt      *time.Time `json:"ended_at,omitempty" db:"ended_at"`
+	LastActivity time.Time  `json:"last_activity" db:"last_activity"`
 
 	// Grove Flow Job specific fields
 	PlanName      string `json:"plan_name,omitempty" db:"plan_name"`
