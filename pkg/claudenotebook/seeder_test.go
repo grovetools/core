@@ -241,6 +241,8 @@ func TestSeedNotebookDirs_BothKeysWritten(t *testing.T) {
 	root := readSettings(t, wt)
 	assert.Contains(t, additionalDirs(t, root), nb, "permissions.additionalDirectories written")
 	assert.Contains(t, allowWriteDirs(t, root), nb, "sandbox.filesystem.allowWrite written")
+	assert.Contains(t, allowRules(t, root), "Read(//Users/dev/notebooks/grovetools/workspaces/core/**)", "explicit no-prompt Read rule written")
+	assert.Contains(t, allowRules(t, root), "Edit(//Users/dev/notebooks/grovetools/workspaces/core/**)", "explicit no-prompt Edit rule written")
 }
 
 // (g) No settings.local.json.tmp left behind after a normal seed (explicit).

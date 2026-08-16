@@ -191,18 +191,19 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 		mergeStringArray(root, []string{"permissions", "additionalDirectories"}, notebookDirs)
 		mergeStringArray(root, []string{"sandbox", "filesystem", "allowWrite"}, notebookDirs)
 
-		// Auto-derive Edit() allow rules: additionalDirectories grants no-prompt
-		// READ, but in default permission mode the Edit/Write tool still prompts
-		// on out-of-tree writes. An Edit(//<abs>/**) rule in permissions.allow is
-		// the scoped write-permission complement, so it rides this same
-		// notebook-dir gate (and emits even when cfg is nil). One rule per
-		// notebook dir plus a narrow rule for just this worktree.
+		// Auto-derive explicit Read()/Edit() allow rules. Claude's
+		// additionalDirectories widens the filesystem boundary, but current Claude
+		// Code releases can still ask for tool permission before Read reaches an
+		// out-of-tree briefing. The explicit Read(//<abs>/**) rule makes dispatch
+		// genuinely no-prompt; Edit is its scoped write complement. Both ride the
+		// same notebook-dir gate (and emit even when cfg is nil). One pair per
+		// notebook dir, plus a narrow Edit rule for just this worktree.
 		//
 		// Note: in local (single-repo) mode a notebook dir can resolve in-tree;
 		// an in-tree Edit() rule is harmless and dedup-safe via mergeStringArray.
-		editRules := make([]string, 0, len(notebookDirs)+1)
+		permissionRules := make([]string, 0, 2*len(notebookDirs)+1)
 		for _, d := range notebookDirs {
-			editRules = append(editRules, editRuleForAbsDir(d))
+			permissionRules = append(permissionRules, readRuleForAbsDir(d), editRuleForAbsDir(d))
 		}
 		// Canonicalize the worktree path (resolve symlinks + macOS case) so the
 		// Edit rule matches the cwd Claude actually compares against. The notebook
@@ -213,8 +214,8 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 		if canon, err := pathutil.CanonicalPath(worktreePath); err == nil {
 			wtForEdit = canon
 		}
-		editRules = append(editRules, editRuleForAbsDir(wtForEdit))
-		mergeStringArray(root, []string{"permissions", "allow"}, editRules)
+		permissionRules = append(permissionRules, editRuleForAbsDir(wtForEdit))
+		mergeStringArray(root, []string{"permissions", "allow"}, permissionRules)
 	}
 
 	// Auto-add the canonicalized worktree root to the sandbox writable boundary.
@@ -456,6 +457,12 @@ func SeedSettingsChanged(worktreePath string, repos []string, cfg *ClaudeConfig,
 	}
 	Debugf("SeedSettings WROTE %s (repos=%v hasConfig=%v hasDirs=%v)", settingsPath, repos, hasConfig, hasDirs)
 	return true, nil
+}
+
+// readRuleForAbsDir returns the Claude Code permission rule that grants
+// no-prompt Read access to everything under the given absolute directory.
+func readRuleForAbsDir(absDir string) string {
+	return "Read(//" + strings.TrimPrefix(filepath.ToSlash(absDir), "/") + "/**)"
 }
 
 // editRuleForAbsDir returns the Claude Code permission rule that grants
