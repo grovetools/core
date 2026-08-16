@@ -107,7 +107,7 @@ func (c *Cleaner) Clean(ctx context.Context, p *Probe) (Outcome, error) {
 
 	if c.Client != nil && c.Client.IsRunning() {
 		kctx, cancel := context.WithTimeout(ctx, killTimeout)
-		err := c.Client.KillSession(kctx, s.ID)
+		err := c.Client.KillSession(kctx, s.ID, s.AttemptID)
 		cancel()
 		out.DaemonKilled = err == nil
 	}

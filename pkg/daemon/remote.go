@@ -1106,8 +1106,12 @@ func (c *RemoteClient) EndSession(ctx context.Context, jobID, attemptID, outcome
 // the filesystem registry entry. A 404 response from an older daemon that
 // does not implement the kill endpoint is surfaced as a sentinel error so
 // callers can fall back to the in-process syscall path.
-func (c *RemoteClient) KillSession(ctx context.Context, sessionID string) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE", baseURL+"/api/sessions/"+sessionID, nil)
+func (c *RemoteClient) KillSession(ctx context.Context, sessionID, attemptID string) error {
+	endpoint := baseURL + "/api/sessions/" + sessionID
+	if attemptID != "" {
+		endpoint += "?attempt_id=" + url.QueryEscape(attemptID)
+	}
+	req, err := http.NewRequestWithContext(ctx, "DELETE", endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

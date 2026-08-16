@@ -225,7 +225,7 @@ type Client interface {
 	// LocalClient returns an error since killing requires the daemon — callers
 	// (e.g., the hooks browse TUI) may fall back to an in-process syscall path
 	// when the daemon is unreachable.
-	KillSession(ctx context.Context, sessionID string) error
+	KillSession(ctx context.Context, sessionID, attemptID string) error
 
 	// --- Channel & Autonomous Management ---
 

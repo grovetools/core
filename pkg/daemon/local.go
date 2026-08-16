@@ -321,7 +321,7 @@ func legacyRegistryKey(meta *sessions.SessionMetadata) string {
 // session requires the daemon so it can clean up its in-memory store and
 // background workers atomically. Callers may fall back to an in-process
 // syscall path when the daemon is unreachable.
-func (c *LocalClient) KillSession(ctx context.Context, sessionID string) error {
+func (c *LocalClient) KillSession(ctx context.Context, sessionID, attemptID string) error {
 	return errors.New("kill requires the grove daemon")
 }
 
