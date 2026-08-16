@@ -2,10 +2,13 @@ package logs
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func eventsFilterFixtures() (eventInfo, plainInfo, plainDebug, warnItem, errItem logItem) {
@@ -175,6 +178,28 @@ func TestConnectArmsSpinnerAndStreamTrafficStopsIt(t *testing.T) {
 				t.Fatal("connectToDaemon did not mark the model as connecting")
 			}
 
+			// connectToDaemon advances the stream generation; stamp synthetic
+			// traffic as belonging to that active connection.
+			switch typed := msg.(type) {
+			case batchLogMsg:
+				typed.generation = m.streamGeneration
+				msg = typed
+			case pumpStreamMsg:
+				typed.generation = m.streamGeneration
+				msg = typed
+			case batchStateMsg:
+				typed.generation = m.streamGeneration
+				msg = typed
+			case pumpStateMsg:
+				typed.generation = m.streamGeneration
+				msg = typed
+			case streamErrMsg:
+				typed.generation = m.streamGeneration
+				msg = typed
+			case stopSpinnerMsg:
+				typed.generation = m.streamGeneration
+				msg = typed
+			}
 			m.Update(msg)
 
 			if m.connecting {
@@ -184,5 +209,129 @@ func TestConnectArmsSpinnerAndStreamTrafficStopsIt(t *testing.T) {
 				t.Errorf("spinner still re-armed after %s", name)
 			}
 		})
+	}
+}
+
+func TestConsecutiveRepeatsCollapseAndExpand(t *testing.T) {
+	m := New(context.Background(), Config{})
+	defer m.Close()
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	base := time.Now().UTC()
+	for n := 0; n < 3; n++ {
+		m.handleNewLog(newLogMsg{
+			workspace: "ws", workspacePath: "/ws",
+			data: map[string]interface{}{
+				"level": "warn", "component": "watcher", "msg": "retry",
+				"error": "connection refused\nstack", "time": base.Add(time.Duration(n) * time.Second).Format(time.RFC3339),
+			},
+		})
+	}
+	if len(m.items) != 1 || m.items[0].repeatCount != 3 {
+		t.Fatalf("repeat groups = %#v, want one group with count 3", m.items)
+	}
+	if got := m.items[0].Title(); !strings.Contains(got, "×3") {
+		t.Fatalf("collapsed title %q does not render ×3", got)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if got := len(m.visible); got != 3 {
+		t.Fatalf("expanded visible rows = %d, want 3", got)
+	}
+
+	m.handleNewLog(newLogMsg{workspace: "ws", workspacePath: "/ws", data: map[string]interface{}{
+		"level": "warn", "component": "watcher", "msg": "retry", "error": "timeout", "time": base.Add(4 * time.Second).Format(time.RFC3339),
+	}})
+	if len(m.items) != 2 {
+		t.Fatalf("different error prefix collapsed unexpectedly: %d groups", len(m.items))
+	}
+}
+
+func TestWarnTitleAndSearchIncludeSanitizedError(t *testing.T) {
+	it := logItem{
+		level: "warn", message: "failed\x1b[2J", component: "sync",
+		rawData: map[string]interface{}{"error": "permission denied\nsecret stack"},
+	}
+	if got := it.Title(); !strings.Contains(got, "permission denied") || strings.Contains(got, "\x1b") {
+		t.Fatalf("warn title did not append and sanitize error: %q", got)
+	}
+	if got := it.FilterValue(); !strings.Contains(got, "failed") || !strings.Contains(got, "permission denied") {
+		t.Fatalf("FilterValue %q does not include message + error", got)
+	}
+}
+
+func TestLargeFieldFoldSanitizeWrapAndExpandedView(t *testing.T) {
+	payload := "\x1b[2J" + strings.Repeat("abcdefghij", 400) + "\x00"
+	it := logItem{rawData: map[string]interface{}{"payload": payload}}
+	folded := it.formatDetails(40, false)
+	if strings.Contains(folded, "\x1b") || strings.Contains(folded, "\x00") {
+		t.Fatalf("folded field retained terminal controls: %q", folded)
+	}
+	if !strings.Contains(folded, "folded:") || !strings.Contains(folded, "enter to expand") {
+		t.Fatalf("fold marker absent: %q", folded)
+	}
+	for _, line := range strings.Split(folded, "\n") {
+		if len([]rune(line)) > 40 {
+			t.Fatalf("detail line exceeds pane width: %d: %q", len([]rune(line)), line)
+		}
+	}
+	expanded := it.formatDetails(40, true)
+	if strings.Contains(expanded, "folded:") || len(expanded) <= len(folded) {
+		t.Fatalf("expanded field did not reveal folded content (folded=%d expanded=%d)", len(folded), len(expanded))
+	}
+}
+
+func TestEnterOpensScrollableExpandedFieldView(t *testing.T) {
+	m := New(context.Background(), Config{})
+	defer m.Close()
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
+	payload := strings.Repeat("expanded-value-", 300)
+	m.handleNewLog(newLogMsg{data: map[string]interface{}{
+		"level": "info", "component": "test", "msg": "large", "payload": payload,
+	}})
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.fieldView || m.focus != viewportPane {
+		t.Fatalf("enter did not open expanded field viewport: fieldView=%v focus=%v", m.fieldView, m.focus)
+	}
+	if got := m.viewport.View(); strings.Contains(got, "folded:") {
+		t.Fatalf("expanded viewport still shows folded marker: %q", got)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.fieldView || m.focus != listPane {
+		t.Fatalf("escape did not return from expanded fields: fieldView=%v focus=%v", m.fieldView, m.focus)
+	}
+}
+
+func TestDisconnectedAndReconnectStatusAreVisible(t *testing.T) {
+	m := New(context.Background(), Config{})
+	defer m.Close()
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	if got := m.frameView(); !strings.Contains(got, "Disconnected") {
+		t.Fatalf("disconnected status is not visible: %q", got)
+	}
+	m.reconnecting = true
+	m.reconnectBackoff = 2 * time.Second
+	if got := m.frameView(); !strings.Contains(got, "reconnecting in 2s") {
+		t.Fatalf("reconnecting status is not visible: %q", got)
+	}
+}
+
+func TestStreamReconnectBackoffAndStaleGeneration(t *testing.T) {
+	m := spinnerGateModel()
+	m.streamGeneration = 7
+	_, cmd := m.Update(streamErrMsg{err: context.Canceled, generation: 7})
+	if cmd == nil || !m.reconnecting || m.reconnectBackoff != initialReconnectBackoff {
+		t.Fatalf("first disconnect state = reconnecting:%v backoff:%s cmd:%v", m.reconnecting, m.reconnectBackoff, cmd != nil)
+	}
+	m.Update(streamErrMsg{err: context.Canceled, generation: 7})
+	if m.reconnectBackoff != 2*initialReconnectBackoff {
+		t.Fatalf("second backoff = %s, want %s", m.reconnectBackoff, 2*initialReconnectBackoff)
+	}
+	m.Update(streamErrMsg{err: context.Canceled, generation: 6})
+	if m.reconnectBackoff != 2*initialReconnectBackoff {
+		t.Fatalf("stale generation changed backoff to %s", m.reconnectBackoff)
+	}
+	m.markStreamConnected()
+	if m.reconnecting || m.reconnectBackoff != 0 || !m.streamConnected {
+		t.Fatalf("traffic did not reset reconnect state")
 	}
 }

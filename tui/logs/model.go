@@ -135,14 +135,18 @@ type logKeyMapT = logskeymap.LogKeyMap
 
 // logItem represents a single log entry.
 type logItem struct {
-	workspace     string
-	workspacePath string
-	level         string
-	message       string
-	component     string
-	timestamp     time.Time
-	rawData       map[string]interface{}
-	styleFn       func(string) lipgloss.Style
+	workspace      string
+	workspacePath  string
+	level          string
+	message        string
+	component      string
+	timestamp      time.Time
+	rawData        map[string]interface{}
+	styleFn        func(string) lipgloss.Style
+	repeatCount    int
+	groupID        uint64
+	repeatExpanded bool
+	repeats        []logItem
 }
 
 func (i logItem) Title() string {
@@ -151,17 +155,28 @@ func (i logItem) Title() string {
 	timeStyle := theme.DefaultTheme.Muted
 	componentStyle := theme.DefaultTheme.Muted.Bold(true)
 
+	message := sanitizeDisplayText(i.message)
+	if levelRank(i.level) >= 2 {
+		if errLine := firstErrorLine(i.rawData); errLine != "" && !strings.Contains(message, errLine) {
+			message += " — " + errLine
+		}
+	}
+	if i.repeatCount > 1 && !i.repeatExpanded {
+		message += fmt.Sprintf(" ×%d", i.repeatCount)
+	}
 	return fmt.Sprintf("%s %s %s %s %s",
-		wsStyle.Render(fmt.Sprintf("[%s]", i.workspace)),
+		wsStyle.Render(fmt.Sprintf("[%s]", sanitizeDisplayText(i.workspace))),
 		levelStyle.Render(fmt.Sprintf("[%s]", strings.ToUpper(i.level))),
 		timeStyle.Render(i.timestamp.Format("2006-01-02 15:04:05")),
-		componentStyle.Render(fmt.Sprintf("[%s]", i.component)),
-		i.message,
+		componentStyle.Render(fmt.Sprintf("[%s]", sanitizeDisplayText(i.component))),
+		message,
 	)
 }
 
 func (i logItem) Description() string { return "" }
-func (i logItem) FilterValue() string { return i.component }
+func (i logItem) FilterValue() string {
+	return strings.Join([]string{i.component, i.message, firstErrorLine(i.rawData)}, " ")
+}
 
 func (i logItem) workspaceStyle() lipgloss.Style {
 	if i.styleFn != nil {
@@ -170,8 +185,10 @@ func (i logItem) workspaceStyle() lipgloss.Style {
 	return lipgloss.NewStyle()
 }
 
-// FormatDetails returns the multi-line detail pane body for a log entry.
-func (i logItem) FormatDetails() string {
+// FormatDetails returns the folded multi-line detail pane body for a log entry.
+func (i logItem) FormatDetails() string { return i.formatDetails(0, false) }
+
+func (i logItem) formatDetails(width int, expanded bool) string {
 	var lines []string
 
 	headerStyle := theme.DefaultTheme.Header
@@ -183,15 +200,18 @@ func (i logItem) FormatDetails() string {
 	timeStyle := theme.DefaultTheme.Muted
 	componentStyle := theme.DefaultTheme.Muted.Bold(true)
 
-	lines = append(lines, fmt.Sprintf("Workspace:  %s", wsStyle.Render(i.workspace)))
+	lines = append(lines, fmt.Sprintf("Workspace:  %s", wsStyle.Render(sanitizeDisplayText(i.workspace))))
 	lines = append(lines, fmt.Sprintf("Level:      %s", levelStyle.Render(strings.ToUpper(i.level))))
-	lines = append(lines, fmt.Sprintf("Component:  %s", componentStyle.Render(i.component)))
+	lines = append(lines, fmt.Sprintf("Component:  %s", componentStyle.Render(sanitizeDisplayText(i.component))))
 	lines = append(lines, fmt.Sprintf("Time:       %s", timeStyle.Render(i.timestamp.Format("2006-01-02 15:04:05"))))
-	lines = append(lines, fmt.Sprintf("Message:    %s", i.message))
+	lines = append(lines, fmt.Sprintf("Message:    %s", sanitizeDisplayText(i.message)))
+	if i.repeatCount > 1 {
+		lines = append(lines, fmt.Sprintf("Repeated:   %d consecutive records", i.repeatCount))
+	}
 
 	if prettyAnsi, ok := i.rawData["pretty_ansi"].(string); ok && prettyAnsi != "" {
 		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Output:     %s", prettyAnsi))
+		lines = append(lines, fmt.Sprintf("Output:     %s", displayFieldValue(prettyAnsi, expanded)))
 	}
 
 	lines = append(lines, "")
@@ -203,10 +223,10 @@ func (i logItem) FormatDetails() string {
 
 	var fileInfo, funcInfo string
 	if file, ok := i.rawData["file"].(string); ok {
-		fileInfo = file
+		fileInfo = displayFieldValue(file, false)
 	}
 	if fn, ok := i.rawData["func"].(string); ok {
-		funcInfo = fn
+		funcInfo = displayFieldValue(fn, false)
 	}
 
 	var verbosityMap map[string]int
@@ -241,28 +261,7 @@ func (i logItem) FormatDetails() string {
 
 	for k, value := range i.rawData {
 		if !standardFields[k] && k != "file" && k != "func" {
-			var formattedValue string
-			switch v := value.(type) {
-			case map[string]interface{}, []interface{}:
-				jsonBytes, err := json.MarshalIndent(v, "", "  ")
-				if err == nil {
-					formattedValue = "\n" + string(jsonBytes)
-				} else {
-					formattedValue = fmt.Sprintf("%v", v)
-				}
-			case string:
-				formattedValue = v
-			case float64:
-				if v == float64(int64(v)) {
-					formattedValue = fmt.Sprintf("%.0f", v)
-				} else {
-					formattedValue = fmt.Sprintf("%.2f", v)
-				}
-			case bool:
-				formattedValue = fmt.Sprintf("%t", v)
-			default:
-				formattedValue = fmt.Sprintf("%v", v)
-			}
+			formattedValue := displayFieldValue(value, expanded)
 
 			verbosityLevel := 0
 			if verbosityMap != nil {
@@ -314,7 +313,11 @@ func (i logItem) FormatDetails() string {
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	result := strings.Join(lines, "\n")
+	if width > 0 {
+		result = wrapDisplay(result, width)
+	}
+	return result
 }
 
 func themeLevelStyle(level string) lipgloss.Style {
@@ -408,6 +411,7 @@ type Model struct {
 	statusMessage  string
 	jsonTree       jsontree.Model
 	jsonView       bool
+	fieldView      bool
 	// whichKey is the shared chord/which-key mixin: the gg + yy sequence
 	// engine, the t…/v… namespaces declared by LogKeyMap.Namespaces(), and the
 	// popup show-delay.
@@ -440,7 +444,12 @@ type Model struct {
 	// back, or spinnerMaxWait elapses for a stream that connects and then
 	// stays silent. It is the sole re-arm condition for the spinner tick,
 	// so an idle panel holds no timer at all.
-	connecting bool
+	connecting       bool
+	streamConnected  bool
+	reconnecting     bool
+	reconnectBackoff time.Duration
+	streamGeneration uint64
+	nextGroupID      uint64
 
 	// Workspace coloring
 	workspaceColorMap   map[string]lipgloss.Style
@@ -557,7 +566,11 @@ type newLogMsg struct {
 }
 type (
 	clearStatusMsg struct{}
-	streamErrMsg   struct{ err error }
+	streamErrMsg   struct {
+		err        error
+		generation uint64
+	}
+	streamReconnectMsg struct{ generation uint64 }
 )
 
 // parseLevelConfig converts a level string from Config.InitialLevel to the
@@ -611,6 +624,10 @@ func (m *Model) connectToDaemon() tea.Cmd {
 	m.streamCtxMu.Unlock()
 
 	m.connecting = true
+	m.reconnecting = false
+	m.streamConnected = false
+	m.streamGeneration++
+	generation := m.streamGeneration
 
 	opts := models.LogStreamOptions{
 		Scope:     m.activeScope.scopeToParam(),
@@ -623,7 +640,7 @@ func (m *Model) connectToDaemon() tea.Cmd {
 	client := m.cfg.DaemonClient
 	if client == nil {
 		return func() tea.Msg {
-			return streamErrMsg{err: fmt.Errorf("no daemon client configured")}
+			return streamErrMsg{err: fmt.Errorf("no daemon client configured"), generation: generation}
 		}
 	}
 
@@ -632,77 +649,108 @@ func (m *Model) connectToDaemon() tea.Cmd {
 		connect = func() tea.Msg {
 			ch, err := client.StreamState(sCtx)
 			if err != nil {
-				return streamErrMsg{err: err}
+				return streamErrMsg{err: err, generation: generation}
 			}
-			return m.pumpFirstStateUpdate(sCtx, ch)
+			return m.pumpFirstStateUpdate(sCtx, ch, generation)
 		}
 	} else {
 		connect = func() tea.Msg {
 			ch, err := client.StreamLogs(sCtx, opts)
 			if err != nil {
-				return streamErrMsg{err: err}
+				return streamErrMsg{err: err, generation: generation}
 			}
-			return m.pumpFirstLine(sCtx, ch)
+			return m.pumpFirstLine(sCtx, ch, generation)
 		}
 	}
 
-	return tea.Batch(connect, m.spinner.Tick, stopSpinnerAfter(spinnerMaxWait))
+	return tea.Batch(connect, m.spinner.Tick, stopSpinnerAfter(spinnerMaxWait, generation))
 }
 
 // spinnerMaxWait bounds how long the spinner may animate for a connect that
-// never produces a first message. Both first-pumps return nil when the
-// stream context is cancelled or the channel closes without a line, and a
-// stream that connects but stays silent (an error-only filter on a quiet
-// host) never returns at all — without this backstop any of those would
+// never produces a first message. A cancelled stream returns nil, while an
+// unexpected channel close enters the reconnect loop. A stream that connects
+// but stays silent (an error-only filter on a quiet host) never returns at all
+// — without this backstop any of those would
 // leave m.connecting set and re-arm the 10fps tick forever, which is the
 // whole cost this gate exists to remove.
 const spinnerMaxWait = 10 * time.Second
 
 // stopSpinnerMsg ends the spinner's animation window.
-type stopSpinnerMsg struct{}
+type stopSpinnerMsg struct{ generation uint64 }
 
 // stopSpinnerAfter schedules the spinnerMaxWait backstop. This is a
 // one-shot: it does not re-arm.
-func stopSpinnerAfter(d time.Duration) tea.Cmd {
+func stopSpinnerAfter(d time.Duration, generation uint64) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg {
-		return stopSpinnerMsg{}
+		return stopSpinnerMsg{generation: generation}
 	})
+}
+
+const (
+	initialReconnectBackoff = 500 * time.Millisecond
+	maxReconnectBackoff     = 30 * time.Second
+)
+
+func (m *Model) scheduleReconnect() tea.Cmd {
+	if m.reconnectBackoff == 0 {
+		m.reconnectBackoff = initialReconnectBackoff
+	} else {
+		m.reconnectBackoff *= 2
+		if m.reconnectBackoff > maxReconnectBackoff {
+			m.reconnectBackoff = maxReconnectBackoff
+		}
+	}
+	m.reconnecting = true
+	generation := m.streamGeneration
+	wait := m.reconnectBackoff
+	return tea.Tick(wait, func(time.Time) tea.Msg {
+		return streamReconnectMsg{generation: generation}
+	})
+}
+
+func (m *Model) markStreamConnected() {
+	m.connecting = false
+	m.streamConnected = true
+	m.reconnecting = false
+	m.reconnectBackoff = 0
 }
 
 // pumpFirstLine reads the first line from the stream channel. This is
 // separated from pumpStream so the initial connectToDaemon tea.Cmd
 // can block until the first message arrives (or the stream closes).
-func (m *Model) pumpFirstLine(sCtx context.Context, ch <-chan models.LogStreamLine) tea.Msg {
+func (m *Model) pumpFirstLine(sCtx context.Context, ch <-chan models.LogStreamLine, generation uint64) tea.Msg {
 	select {
 	case <-sCtx.Done():
 		return nil
 	case line, ok := <-ch:
 		if !ok {
-			return nil
+			return streamErrMsg{err: io.EOF, generation: generation}
 		}
 		msg := parseStreamLine(line)
 		if msg == nil {
-			return pumpStreamMsg{ctx: sCtx, ch: ch}
+			return pumpStreamMsg{ctx: sCtx, ch: ch, generation: generation}
 		}
-		return batchLogMsg{log: *msg, ctx: sCtx, ch: ch}
+		return batchLogMsg{log: *msg, ctx: sCtx, ch: ch, generation: generation}
 	}
 }
 
 // pumpStreamMsg is a tea.Msg that re-arms the stream pump for the next line.
 type pumpStreamMsg struct {
-	ctx context.Context
-	ch  <-chan models.LogStreamLine
+	ctx        context.Context
+	ch         <-chan models.LogStreamLine
+	generation uint64
 }
 
 // batchLogMsg delivers both a parsed log line and the continuation pump.
 type batchLogMsg struct {
-	log newLogMsg
-	ctx context.Context
-	ch  <-chan models.LogStreamLine
+	log        newLogMsg
+	ctx        context.Context
+	ch         <-chan models.LogStreamLine
+	generation uint64
 }
 
 // pumpStream returns a tea.Cmd that reads the next line from the channel.
-func pumpStream(sCtx context.Context, ch <-chan models.LogStreamLine) tea.Cmd {
+func pumpStream(sCtx context.Context, ch <-chan models.LogStreamLine, generation uint64) tea.Cmd {
 	return func() tea.Msg {
 		for {
 			select {
@@ -710,13 +758,13 @@ func pumpStream(sCtx context.Context, ch <-chan models.LogStreamLine) tea.Cmd {
 				return nil
 			case line, ok := <-ch:
 				if !ok {
-					return nil
+					return streamErrMsg{err: io.EOF, generation: generation}
 				}
 				msg := parseStreamLine(line)
 				if msg == nil {
 					continue
 				}
-				return batchLogMsg{log: *msg, ctx: sCtx, ch: ch}
+				return batchLogMsg{log: *msg, ctx: sCtx, ch: ch, generation: generation}
 			}
 		}
 	}
@@ -774,7 +822,19 @@ var levelLabels = [4]string{"DEBUG", "INFO", "WARN", "ERROR"}
 func (m *Model) rebuildVisible() {
 	m.visible = m.visible[:0]
 	for _, it := range m.items {
-		if m.matchesComponentFilter(it) && m.matchesEventsFilter(it) {
+		if !m.matchesComponentFilter(it) || !m.matchesEventsFilter(it) {
+			continue
+		}
+		if it.repeatExpanded && len(it.repeats) > 0 {
+			first := it
+			first.repeatCount = 1
+			first.repeatExpanded = true
+			m.visible = append(m.visible, first)
+			for _, repeated := range it.repeats {
+				repeated.repeatExpanded = true
+				m.visible = append(m.visible, repeated)
+			}
+		} else {
 			m.visible = append(m.visible, it)
 		}
 	}
@@ -1142,7 +1202,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.help.Toggle()
 				return m, nil
 
-			case key.Matches(msg, m.keys.SwitchFocus) || key.Matches(msg, m.keys.Expand):
+			case key.Matches(msg, m.keys.Expand) && msg.String() == "enter":
+				if m.compact {
+					return m, nil
+				}
+				if selected, ok := m.list.SelectedItem().(logItem); ok {
+					m.fieldView = true
+					m.focus = viewportPane
+					m.viewport.Height = m.height - 3
+					m.viewport.SetContent(selected.formatDetails(m.viewport.Width, true))
+					m.viewport.GotoTop()
+				}
+				return m, nil
+
+			case key.Matches(msg, m.keys.Expand) && msg.String() == " ":
+				if m.toggleSelectedRepeatGroup() {
+					return m, nil
+				}
+				if m.compact {
+					return m, nil
+				}
+				m.focus = viewportPane
+				m.viewport.Height = m.height - 3
+				return m, nil
+
+			case key.Matches(msg, m.keys.SwitchFocus):
 				if m.compact {
 					return m, nil
 				}
@@ -1150,6 +1234,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focus = viewportPane
 					m.viewport.Height = m.height - 3
 				} else {
+					m.fieldView = false
 					m.focus = listPane
 					listHeight := m.height / 2
 					m.viewport.Height = m.height - listHeight - 3
@@ -1427,44 +1512,65 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 			if li, ok := selectedItem.(logItem); ok {
-				m.viewport.SetContent(li.FormatDetails())
+				m.viewport.SetContent(li.formatDetails(m.viewport.Width, m.fieldView))
 			}
 		}
 
 		return m, nil
 
 	case batchLogMsg:
-		// Process the log line and re-arm the stream pump. Anything off
-		// the stream means the connect landed, so the spinner stops.
-		m.connecting = false
+		if msg.generation != m.streamGeneration {
+			return m, nil
+		}
+		m.markStreamConnected()
 		cmd := m.handleNewLog(msg.log)
-		return m, tea.Batch(cmd, pumpStream(msg.ctx, msg.ch))
+		return m, tea.Batch(cmd, pumpStream(msg.ctx, msg.ch, msg.generation))
 
 	case pumpStreamMsg:
-		// Non-JSON line was skipped; re-arm the pump.
-		m.connecting = false
-		return m, pumpStream(msg.ctx, msg.ch)
+		if msg.generation != m.streamGeneration {
+			return m, nil
+		}
+		m.markStreamConnected()
+		return m, pumpStream(msg.ctx, msg.ch, msg.generation)
 
 	case batchStateMsg:
-		m.connecting = false
+		if msg.generation != m.streamGeneration {
+			return m, nil
+		}
+		m.markStreamConnected()
 		cmd := m.handleNewLog(msg.log)
-		return m, tea.Batch(cmd, pumpStateStream(msg.ctx, msg.ch))
+		return m, tea.Batch(cmd, pumpStateStream(msg.ctx, msg.ch, msg.generation))
 
 	case pumpStateMsg:
-		m.connecting = false
-		return m, pumpStateStream(msg.ctx, msg.ch)
+		if msg.generation != m.streamGeneration {
+			return m, nil
+		}
+		m.markStreamConnected()
+		return m, pumpStateStream(msg.ctx, msg.ch, msg.generation)
 
 	case streamErrMsg:
+		if msg.generation != m.streamGeneration || m.ctx.Err() != nil {
+			return m, nil
+		}
 		m.connecting = false
-		m.statusMessage = fmt.Sprintf("Stream error: %v", msg.err)
-		return m, m.clearStatusMessageAfter(5 * time.Second)
+		m.streamConnected = false
+		return m, m.scheduleReconnect()
+
+	case streamReconnectMsg:
+		if msg.generation != m.streamGeneration || m.ctx.Err() != nil {
+			return m, nil
+		}
+		m.reconnecting = false
+		return m, m.connectToDaemon()
 
 	case clearStatusMsg:
 		m.statusMessage = ""
 		return m, nil
 
 	case stopSpinnerMsg:
-		m.connecting = false
+		if msg.generation == m.streamGeneration {
+			m.connecting = false
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -1495,7 +1601,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.list.Index() != prevIndex {
 		if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 			if li, ok := selectedItem.(logItem); ok {
-				m.viewport.SetContent(li.FormatDetails())
+				m.fieldView = false
+				m.viewport.SetContent(li.formatDetails(m.viewport.Width, false))
 				m.viewport.GotoTop()
 			}
 		}
@@ -1505,6 +1612,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleNewLog processes a single newLogMsg and returns any follow-up commands.
+const maxStoredRepeats = 1000
+
+func repeatKey(it logItem) string {
+	return strings.Join([]string{it.workspacePath, it.workspace, it.component, strings.ToLower(it.level), it.message, firstErrorLine(it.rawData)}, "\x00")
+}
+
+func (m *Model) toggleSelectedRepeatGroup() bool {
+	selected, ok := m.list.SelectedItem().(logItem)
+	if !ok || selected.groupID == 0 {
+		return false
+	}
+	for idx := range m.items {
+		if m.items[idx].groupID == selected.groupID && m.items[idx].repeatCount > 1 {
+			m.items[idx].repeatExpanded = !m.items[idx].repeatExpanded
+			m.rebuildVisible()
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 	level, _ := msg.data["level"].(string)
 	message, _ := msg.data["msg"].(string)
@@ -1533,6 +1661,7 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 		logTime = parsedTime
 	}
 
+	m.nextGroupID++
 	newItem := logItem{
 		workspace:     msg.workspace,
 		workspacePath: msg.workspacePath,
@@ -1542,13 +1671,26 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 		timestamp:     logTime,
 		rawData:       msg.data,
 		styleFn:       m.workspaceStyleFor,
+		repeatCount:   1,
+		groupID:       m.nextGroupID,
 	}
 
-	// Append to master slice in timestamp order.
+	// Append to master slice in timestamp order. Only adjacent, in-order
+	// arrivals collapse; an out-of-order replay must not merge across records.
 	i := sort.Search(len(m.items), func(j int) bool {
 		return m.items[j].timestamp.After(newItem.timestamp)
 	})
-	if i == len(m.items) {
+	collapsed := false
+	if i == len(m.items) && len(m.items) > 0 && repeatKey(m.items[len(m.items)-1]) == repeatKey(newItem) {
+		last := &m.items[len(m.items)-1]
+		newItem.groupID = last.groupID
+		last.repeatCount++
+		if len(last.repeats) < maxStoredRepeats {
+			last.repeats = append(last.repeats, newItem)
+		}
+		last.timestamp = newItem.timestamp
+		collapsed = true
+	} else if i == len(m.items) {
 		m.items = append(m.items, newItem)
 	} else {
 		m.items = append(m.items, logItem{})
@@ -1562,8 +1704,11 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 		m.rebuildVisible()
 	}
 
-	// Append to visible (daemon already filtered by scope/level).
-	if i == len(m.items)-1 {
+	// Append to visible (daemon already filtered by scope/level). A collapse
+	// updates the existing row's ×N marker, so rebuilding is required.
+	if collapsed {
+		m.rebuildVisible()
+	} else if i == len(m.items)-1 {
 		if m.matchesEventsFilter(newItem) {
 			m.visible = append(m.visible, newItem)
 			m.list.SetItems(m.visible)
@@ -1576,7 +1721,7 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 		m.list.Select(len(m.visible) - 1)
 		if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 			if li, ok := selectedItem.(logItem); ok {
-				m.viewport.SetContent(li.FormatDetails())
+				m.viewport.SetContent(li.formatDetails(m.viewport.Width, m.fieldView))
 				m.viewport.GotoTop()
 			}
 		}
@@ -1626,7 +1771,8 @@ func (m *Model) handleDetailPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.list.Select(currentIndex - 1)
 			if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 				if li, ok := selectedItem.(logItem); ok {
-					m.viewport.SetContent(li.FormatDetails())
+					m.fieldView = false
+					m.viewport.SetContent(li.formatDetails(m.viewport.Width, false))
 					m.viewport.GotoTop()
 				}
 			}
@@ -1641,7 +1787,8 @@ func (m *Model) handleDetailPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.list.Select(currentIndex + 1)
 			if selectedItem := m.list.SelectedItem(); selectedItem != nil {
 				if li, ok := selectedItem.(logItem); ok {
-					m.viewport.SetContent(li.FormatDetails())
+					m.fieldView = false
+					m.viewport.SetContent(li.formatDetails(m.viewport.Width, false))
 					m.viewport.GotoTop()
 				}
 			}
@@ -1650,6 +1797,7 @@ func (m *Model) handleDetailPaneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.Matches(msg, m.keys.Clear) || msg.String() == "esc" {
+		m.fieldView = false
 		m.focus = listPane
 		listHeight := m.height / 2
 		m.viewport.Height = m.height - listHeight - 3
@@ -1747,8 +1895,19 @@ func (m *Model) frameView() string {
 		eventsIndicator = " [Events]"
 	}
 
+	connectionIndicator := ""
+	if m.reconnecting {
+		connectionIndicator = fmt.Sprintf(" [Disconnected; reconnecting in %s]", m.reconnectBackoff)
+	} else if m.connecting {
+		connectionIndicator = " [Connecting…]"
+	} else if !m.streamConnected {
+		connectionIndicator = " [Disconnected]"
+	}
+
 	modeIndicator := ""
-	if m.jsonView {
+	if m.fieldView {
+		modeIndicator = " [EXPANDED FIELDS - scroll; esc to return]"
+	} else if m.jsonView {
 		modeIndicator = " [JSON VIEW - esc to exit]"
 	} else if m.focus == viewportPane {
 		modeIndicator = " [SCROLLING - tab to return]"
@@ -1758,8 +1917,8 @@ func (m *Model) frameView() string {
 		modeIndicator = fmt.Sprintf(" [%s]", m.statusMessage)
 	}
 
-	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s%s | ? for help | q to quit",
-		position, scopeIndicator, systemIndicator, levelIndicator, eventsIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, modeIndicator))
+	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s%s%s | ? for help | q to quit",
+		position, scopeIndicator, systemIndicator, levelIndicator, eventsIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, connectionIndicator, modeIndicator))
 
 	if m.compact || m.height < 15 {
 		var listView string

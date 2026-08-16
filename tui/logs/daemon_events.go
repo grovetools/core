@@ -13,36 +13,38 @@ import (
 
 // batchStateMsg delivers a parsed daemon state event and the continuation pump.
 type batchStateMsg struct {
-	log newLogMsg
-	ctx context.Context
-	ch  <-chan daemon.StateUpdate
+	log        newLogMsg
+	ctx        context.Context
+	ch         <-chan daemon.StateUpdate
+	generation uint64
 }
 
 // pumpStateMsg re-arms the state stream pump after a skipped event.
 type pumpStateMsg struct {
-	ctx context.Context
-	ch  <-chan daemon.StateUpdate
+	ctx        context.Context
+	ch         <-chan daemon.StateUpdate
+	generation uint64
 }
 
 // pumpFirstStateUpdate reads the first StateUpdate from the stream channel.
-func (m *Model) pumpFirstStateUpdate(sCtx context.Context, ch <-chan daemon.StateUpdate) tea.Msg {
+func (m *Model) pumpFirstStateUpdate(sCtx context.Context, ch <-chan daemon.StateUpdate, generation uint64) tea.Msg {
 	select {
 	case <-sCtx.Done():
 		return nil
 	case update, ok := <-ch:
 		if !ok {
-			return nil
+			return streamErrMsg{err: fmt.Errorf("daemon state stream closed"), generation: generation}
 		}
 		msg := parseStateUpdate(update)
 		if msg == nil {
-			return pumpStateMsg{ctx: sCtx, ch: ch}
+			return pumpStateMsg{ctx: sCtx, ch: ch, generation: generation}
 		}
-		return batchStateMsg{log: *msg, ctx: sCtx, ch: ch}
+		return batchStateMsg{log: *msg, ctx: sCtx, ch: ch, generation: generation}
 	}
 }
 
 // pumpStateStream returns a tea.Cmd that reads the next StateUpdate from the channel.
-func pumpStateStream(sCtx context.Context, ch <-chan daemon.StateUpdate) tea.Cmd {
+func pumpStateStream(sCtx context.Context, ch <-chan daemon.StateUpdate, generation uint64) tea.Cmd {
 	return func() tea.Msg {
 		for {
 			select {
@@ -50,13 +52,13 @@ func pumpStateStream(sCtx context.Context, ch <-chan daemon.StateUpdate) tea.Cmd
 				return nil
 			case update, ok := <-ch:
 				if !ok {
-					return nil
+					return streamErrMsg{err: fmt.Errorf("daemon state stream closed"), generation: generation}
 				}
 				msg := parseStateUpdate(update)
 				if msg == nil {
 					continue
 				}
-				return batchStateMsg{log: *msg, ctx: sCtx, ch: ch}
+				return batchStateMsg{log: *msg, ctx: sCtx, ch: ch, generation: generation}
 			}
 		}
 	}
