@@ -67,6 +67,9 @@ type Session struct {
 	LastActivity time.Time  `json:"last_activity" db:"last_activity"`
 
 	// Grove Flow Job specific fields
+	// AttemptID identifies one execution of a reusable Flow job ID. It is
+	// opaque, persisted by Flow, and must be carried through lifecycle joins.
+	AttemptID     string `json:"attempt_id,omitempty" db:"-"`
 	PlanName      string `json:"plan_name,omitempty" db:"plan_name"`
 	PlanDirectory string `json:"plan_directory,omitempty" db:"plan_directory"`
 	JobTitle      string `json:"job_title,omitempty" db:"job_title"`
@@ -129,6 +132,14 @@ type Session struct {
 	// (db:"-") — remote sessions live only in the in-memory Store and must never
 	// enter the local sessions registry / crash-recovery machinery.
 	Origin string `json:"origin,omitempty" db:"-"`
+
+	// Synthetic identifies a display-only row fabricated from job metadata,
+	// rather than an observed execution attempt. Provenance says which source
+	// produced the row (for example "flow_job_projection"). These fields are
+	// intentionally separate from Origin: Origin is satellite ownership and
+	// changes local safety semantics.
+	Synthetic  bool   `json:"synthetic,omitempty" db:"-"`
+	Provenance string `json:"provenance,omitempty" db:"-"`
 
 	// Test mode
 	IsTest    bool `json:"is_test" db:"is_test"`

@@ -85,25 +85,9 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 				metadata.Status = "interrupted"
 				changed = writeMetadataFile(metadataFile, metadata) == nil
 			}
-			// A malformed lock must not remain an immortal GC veto. Classification
-			// has retracted its active claim, so clear recovery state across this
-			// owned attempt's legacy aliases; a missing lock is an idempotent no-op.
-			removed := 0
-			if registry != nil {
-				jobID := metadata.JobID
-				if jobID == "" {
-					jobID = metadata.SessionID
-				}
-				nativeID := metadata.ClaudeSessionID
-				if nativeID == "" {
-					nativeID = dirName
-				}
-				if filterByScope {
-					removed, _ = registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
-				} else {
-					removed, _ = registry.RemoveRecoveryFilesForJob(jobID, nativeID)
-				}
-			}
+			// A malformed lock must not remain an immortal GC veto. New-format
+			// cleanup is exact-attempt; only legacy records sweep aliases.
+			removed := removeRecoveryClaim(registry, metadata, dirName, filterByScope, scope)
 			observed := "pid.lock missing"
 			if pidReadErr == nil {
 				observed = "pid.lock unreadable"
@@ -120,24 +104,9 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 		}
 
 		if !process.IsProcessAlive(pid) {
-			// Drop recovery state from every legacy alias directory for this
-			// attempt. metadata.json remains the durable job→transcript index.
-			removed := 0
-			if registry != nil {
-				jobID := metadata.JobID
-				if jobID == "" {
-					jobID = metadata.SessionID
-				}
-				nativeID := metadata.ClaudeSessionID
-				if nativeID == "" {
-					nativeID = dirName
-				}
-				if filterByScope {
-					removed, _ = registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
-				} else {
-					removed, _ = registry.RemoveRecoveryFilesForJob(jobID, nativeID)
-				}
-			}
+			// New-format cleanup is exact-attempt; only legacy records sweep
+			// aliases. metadata.json remains the durable job→transcript index.
+			removed := removeRecoveryClaim(registry, metadata, dirName, filterByScope, scope)
 			ulog.Info("Classified dead session registry process").
 				Field("event", "session.registry_recovery").
 				Field("job_id", metadata.JobID).
@@ -159,10 +128,19 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 		status := metadata.Status
 		if status == "" {
 			status = "running"
+			ulog.Info("Defaulted legacy session registry status").
+				Field("event", "session.registry_legacy_default").
+				Field("registry_dir", dirName).
+				Field("job_id", metadata.JobID).
+				Field("attempt_id", metadata.AttemptID).
+				Field("observed", "metadata status is empty").
+				Field("concluded", "legacy alive record defaults to running").
+				StructuredOnly().Log(context.Background())
 		}
 
 		session := &models.Session{
 			ID:               sessionID,
+			AttemptID:        metadata.AttemptID,
 			Type:             metadata.Type,
 			ClaudeSessionID:  claudeSessionID,
 			PID:              pid,
@@ -192,6 +170,38 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 	}
 
 	return sessions, nil
+}
+
+func removeRecoveryClaim(registry *FileSystemRegistry, metadata SessionMetadata, dirName string, scoped bool, scope string) int {
+	if registry == nil {
+		return 0
+	}
+	jobID := metadata.JobID
+	if jobID == "" {
+		jobID = metadata.SessionID
+	}
+	if metadata.AttemptID != "" {
+		var err error
+		if scoped {
+			err = registry.RemoveRecoveryFilesForAttemptInScope(jobID, metadata.AttemptID, scope)
+		} else {
+			err = registry.RemoveRecoveryFilesForAttempt(jobID, metadata.AttemptID)
+		}
+		if err == nil {
+			return 1
+		}
+		return 0
+	}
+	nativeID := metadata.ClaudeSessionID
+	if nativeID == "" {
+		nativeID = dirName
+	}
+	if scoped {
+		removed, _ := registry.RemoveRecoveryFilesForJobInScope(jobID, nativeID, scope)
+		return removed
+	}
+	removed, _ := registry.RemoveRecoveryFilesForJob(jobID, nativeID)
+	return removed
 }
 
 func isTerminalRecoveryStatus(status string) bool {

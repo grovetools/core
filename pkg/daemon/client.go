@@ -24,6 +24,7 @@ var ErrNotSupported = errors.New("operation not supported by this daemon client"
 // This enables race-free session tracking by pre-registering before the agent process exists.
 type SessionIntent struct {
 	JobID       string `json:"job_id"`
+	AttemptID   string `json:"attempt_id,omitempty"`
 	ParentJobID string `json:"parent_job_id,omitempty"` // Flow ownership lineage; not a dependency
 	Provider    string `json:"provider"`                // "claude", "codex", "opencode"
 	JobFilePath string `json:"job_file_path"`           // Path to the job markdown file
@@ -55,10 +56,11 @@ type SessionIntent struct {
 // SessionConfirmation contains the data needed to confirm a session after agent startup.
 // This links the pre-registered intent with the actual running process.
 type SessionConfirmation struct {
-	JobID          string `json:"job_id"`          // Matches the intent's JobID
-	NativeID       string `json:"native_id"`       // Agent's native session ID (e.g., Claude's UUID)
-	PID            int    `json:"pid"`             // Process ID of the running agent
-	TranscriptPath string `json:"transcript_path"` // Path to the agent's transcript file
+	JobID          string `json:"job_id"`               // Matches the intent's JobID
+	AttemptID      string `json:"attempt_id,omitempty"` // Matches the exact execution attempt
+	NativeID       string `json:"native_id"`            // Agent's native session ID (e.g., Claude's UUID)
+	PID            int    `json:"pid"`                  // Process ID of the running agent
+	TranscriptPath string `json:"transcript_path"`      // Path to the agent's transcript file
 }
 
 // RunningConfig holds the active configuration intervals being used by the daemon.
@@ -208,12 +210,12 @@ type Client interface {
 	// UpdateSessionStatus updates the status of an active session.
 	// Valid statuses: "running", "idle", "pending_user"
 	// For LocalClient, this updates the filesystem registry.
-	UpdateSessionStatus(ctx context.Context, jobID, status string) error
+	UpdateSessionStatus(ctx context.Context, jobID, attemptID, status string) error
 
 	// EndSession marks a session as complete or interrupted.
 	// Valid outcomes: "completed", "interrupted", "failed"
 	// For LocalClient, this updates the filesystem registry and may trigger cleanup.
-	EndSession(ctx context.Context, jobID, outcome string) error
+	EndSession(ctx context.Context, jobID, attemptID, outcome string) error
 
 	// KillSession terminates a tracked agent session by sending SIGTERM to its
 	// PID and removing the filesystem registry entry. The daemon owns the kill

@@ -238,6 +238,7 @@ type JobType string
 // JobInfo represents the current state of a job in the daemon.
 type JobInfo struct {
 	ID          string            `json:"id"`
+	AttemptID   string            `json:"attempt_id,omitempty"`
 	Title       string            `json:"title,omitempty"`
 	Type        JobType           `json:"type,omitempty"`
 	PlanDir     string            `json:"plan_dir"`

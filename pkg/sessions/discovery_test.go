@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/grovetools/core/pkg/paths"
 )
 
 // writeLiveSession registers a session for the current (alive) process under the
@@ -66,6 +68,36 @@ func TestRecoverSessionsForScope(t *testing.T) {
 	}
 	if len(all) != 3 {
 		t.Errorf("RecoverSessions returned %d sessions, want 3", len(all))
+	}
+}
+
+func TestRecoverSessionsKeepsCurrentAttemptWhenPriorAttemptIsDead(t *testing.T) {
+	t.Setenv("GROVE_HOME", t.TempDir())
+	reg, err := NewFileSystemRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, metadata := range []SessionMetadata{
+		{AttemptID: "attempt-old", SessionID: "reused-job", JobID: "reused-job", PID: 99999999, Status: "running"},
+		{AttemptID: "attempt-current", SessionID: "reused-job", JobID: "reused-job", PID: os.Getpid(), Status: "running"},
+	} {
+		if err := reg.Register(metadata); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := RecoverSessions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].AttemptID != "attempt-current" {
+		t.Fatalf("recovered = %+v, want only current attempt", got)
+	}
+	stateRoot := filepath.Join(paths.StateDir(), "hooks", "sessions")
+	if _, err := os.Stat(filepath.Join(stateRoot, "attempt-old", "pid.lock")); !os.IsNotExist(err) {
+		t.Fatalf("old pid.lock retained: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateRoot, "attempt-current", "pid.lock")); err != nil {
+		t.Fatalf("current pid.lock removed by prior cleanup: %v", err)
 	}
 }
 

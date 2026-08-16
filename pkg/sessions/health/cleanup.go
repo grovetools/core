@@ -98,6 +98,9 @@ func (c *Cleaner) Clean(ctx context.Context, p *Probe) (Outcome, error) {
 		return out, fmt.Errorf("nil probe")
 	}
 	s := p.Session
+	if s.Synthetic {
+		return out, fmt.Errorf("synthetic session (%q) — display-only rows cannot be cleaned", s.Provenance)
+	}
 	if s.Origin != "" {
 		return out, fmt.Errorf("federated session (origin %q) — clean up on the satellite", s.Origin)
 	}
@@ -126,17 +129,23 @@ func (c *Cleaner) Clean(ctx context.Context, p *Probe) (Outcome, error) {
 			}
 		}
 		if reg, err := c.registry(); err == nil {
-			nativeID := s.ClaudeSessionID
-			if p.Evidence.RegistryDir != "" {
-				nativeID = p.Evidence.RegistryDir
-			}
-			if removed, err := reg.RemoveRecoveryFilesForJobInScope(s.ID, nativeID, p.Evidence.MetaScope); err == nil && removed > 0 {
-				out.RemovedRecovery = true
+			if s.AttemptID != "" {
+				if err := reg.RemoveRecoveryFilesForAttemptInScope(s.ID, s.AttemptID, p.Evidence.MetaScope); err == nil {
+					out.RemovedRecovery = true
+				}
+			} else {
+				nativeID := s.ClaudeSessionID
+				if p.Evidence.RegistryDir != "" {
+					nativeID = p.Evidence.RegistryDir
+				}
+				if removed, err := reg.RemoveRecoveryFilesForJobInScope(s.ID, nativeID, p.Evidence.MetaScope); err == nil && removed > 0 {
+					out.RemovedRecovery = true
+				}
 			}
 		}
 		if c.Client != nil && c.Client.IsRunning() {
 			ectx, cancel := context.WithTimeout(ctx, endTimeout)
-			_ = c.Client.EndSession(ectx, s.ID, "interrupted")
+			_ = c.Client.EndSession(ectx, s.ID, s.AttemptID, "interrupted")
 			cancel()
 		}
 	}

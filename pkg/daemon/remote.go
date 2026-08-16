@@ -1052,8 +1052,8 @@ func (c *RemoteClient) ConfirmSession(ctx context.Context, confirmation SessionC
 }
 
 // UpdateSessionStatus updates the status of an active session.
-func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID, status string) error {
-	body, err := json.Marshal(map[string]string{"status": status})
+func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID, attemptID, status string) error {
+	body, err := json.Marshal(map[string]string{"attempt_id": attemptID, "status": status})
 	if err != nil {
 		return fmt.Errorf("failed to marshal status update: %w", err)
 	}
@@ -1077,8 +1077,8 @@ func (c *RemoteClient) UpdateSessionStatus(ctx context.Context, jobID, status st
 }
 
 // EndSession marks a session as complete or interrupted.
-func (c *RemoteClient) EndSession(ctx context.Context, jobID, outcome string) error {
-	body, err := json.Marshal(map[string]string{"outcome": outcome})
+func (c *RemoteClient) EndSession(ctx context.Context, jobID, attemptID, outcome string) error {
+	body, err := json.Marshal(map[string]string{"attempt_id": attemptID, "outcome": outcome})
 	if err != nil {
 		return fmt.Errorf("failed to marshal end session request: %w", err)
 	}

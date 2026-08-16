@@ -11,6 +11,10 @@ import (
 	"github.com/grovetools/core/pkg/process"
 )
 
+// ErrAttemptNotFound identifies an exact point-lookup miss. Callers may create
+// that attempt, but must not treat decode or identity mismatches as misses.
+var ErrAttemptNotFound = errors.New("session attempt not found")
+
 // Registry defines the interface for managing live session tracking.
 type Registry interface {
 	Register(metadata SessionMetadata) error
@@ -39,12 +43,20 @@ func NewFileSystemRegistryAt(stateDir string) (*FileSystemRegistry, error) {
 	return &FileSystemRegistry{baseDir: baseDir}, nil
 }
 
-// Register creates the tracking files for a live session.
+// Register creates or upgrades the tracking files for one attempt. New-format
+// records are keyed by AttemptID, so intent, confirmation, and hook enrichment
+// all replace the same metadata.json. Empty AttemptID retains the legacy
+// native-ID-first key rule for migration reads and flow-less sessions.
 func (r *FileSystemRegistry) Register(metadata SessionMetadata) error {
-	// The directory is named after the agent's native session ID (e.g., Claude's UUID, Codex's UUID).
-	sessionDirName := metadata.ClaudeSessionID
+	sessionDirName := metadata.AttemptID
 	if sessionDirName == "" {
-		sessionDirName = metadata.SessionID
+		sessionDirName = metadata.ClaudeSessionID
+		if sessionDirName == "" {
+			sessionDirName = metadata.SessionID
+		}
+	}
+	if !validRegistryKey(sessionDirName) {
+		return fmt.Errorf("invalid empty or non-local session key %q", sessionDirName)
 	}
 	sessionDir := filepath.Join(r.baseDir, sessionDirName)
 
@@ -71,6 +83,10 @@ func (r *FileSystemRegistry) Register(metadata SessionMetadata) error {
 	return nil
 }
 
+func validRegistryKey(key string) bool {
+	return key != "" && key != "." && key != ".." && !filepath.IsAbs(key) && filepath.Base(key) == key
+}
+
 // IsAlive checks if a session with the given ID is still running.
 func (r *FileSystemRegistry) IsAlive(sessionID string) (bool, error) {
 	sessionDir := filepath.Join(r.baseDir, sessionID)
@@ -94,8 +110,47 @@ func (r *FileSystemRegistry) IsAlive(sessionID string) (bool, error) {
 	return process.IsProcessAlive(pid), nil
 }
 
+// FindAttempt performs a point lookup for a new-format attempt. It never
+// falls back to broad aliases: a miss or metadata mismatch must not bind a
+// stale prior execution of the same reusable job ID.
+func (r *FileSystemRegistry) FindAttempt(attemptID string) (*SessionMetadata, error) {
+	if !validRegistryKey(attemptID) {
+		return nil, fmt.Errorf("invalid attempt ID %q", attemptID)
+	}
+	content, err := os.ReadFile(filepath.Join(r.baseDir, attemptID, "metadata.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %s", ErrAttemptNotFound, attemptID)
+		}
+		return nil, fmt.Errorf("failed to read attempt metadata: %w", err)
+	}
+	var metadata SessionMetadata
+	if err := json.Unmarshal(content, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to decode attempt metadata: %w", err)
+	}
+	if metadata.AttemptID != attemptID {
+		return nil, fmt.Errorf("attempt metadata mismatch: path %q contains %q", attemptID, metadata.AttemptID)
+	}
+	return &metadata, nil
+}
+
+// UpdateStatusForAttempt updates exactly (jobID, attemptID). A mismatch is an
+// error rather than a broad alias fallback, preventing late lifecycle events
+// from mutating a newer execution of a reused job ID.
+func (r *FileSystemRegistry) UpdateStatusForAttempt(jobID, attemptID, status string) error {
+	metadata, err := r.FindAttempt(attemptID)
+	if err != nil {
+		return err
+	}
+	if metadata.JobID != jobID && metadata.SessionID != jobID {
+		return fmt.Errorf("attempt %q belongs to job %q, not %q", attemptID, metadata.JobID, jobID)
+	}
+	return r.UpdateStatus(attemptID, status)
+}
+
 // UpdateStatus updates the status field in the session's metadata.json file.
 // This ensures crash recovery can restore the correct status (e.g., "idle").
+// The key is a directory key (AttemptID for new records, legacy key otherwise).
 func (r *FileSystemRegistry) UpdateStatus(sessionID, status string) error {
 	if sessionID == "" {
 		return nil
@@ -187,6 +242,35 @@ func (r *FileSystemRegistry) RemoveRecoveryFiles(sessionID string) error {
 	return r.RemovePIDLock(sessionID)
 }
 
+// RemoveRecoveryFilesForAttempt clears recovery state only when the exact
+// attempt record belongs to jobID. New-format cleanup must use this rather
+// than sweeping every attempt of a reusable job ID.
+func (r *FileSystemRegistry) RemoveRecoveryFilesForAttempt(jobID, attemptID string) error {
+	metadata, err := r.FindAttempt(attemptID)
+	if err != nil {
+		return err
+	}
+	if metadata.JobID != jobID && metadata.SessionID != jobID {
+		return fmt.Errorf("attempt %q belongs to job %q, not %q", attemptID, metadata.JobID, jobID)
+	}
+	return r.RemoveRecoveryFiles(attemptID)
+}
+
+// RemoveRecoveryFilesForAttemptInScope is the scoped-daemon variant.
+func (r *FileSystemRegistry) RemoveRecoveryFilesForAttemptInScope(jobID, attemptID, scope string) error {
+	metadata, err := r.FindAttempt(attemptID)
+	if err != nil {
+		return err
+	}
+	if metadata.Scope != scope {
+		return fmt.Errorf("attempt %q belongs to scope %q, not %q", attemptID, metadata.Scope, scope)
+	}
+	if metadata.JobID != jobID && metadata.SessionID != jobID {
+		return fmt.Errorf("attempt %q belongs to job %q, not %q", attemptID, metadata.JobID, jobID)
+	}
+	return r.RemoveRecoveryFiles(attemptID)
+}
+
 // RemoveRecoveryFilesForJob clears crash-recovery state from every registry
 // directory belonging to the same Flow job/native-session aliases. Legacy
 // daemonless launches can leave both a job-ID intent directory and a
@@ -241,7 +325,7 @@ func (r *FileSystemRegistry) removeRecoveryFilesForJob(jobID, nativeID string, s
 		var metadata SessionMetadata
 		if content, readErr := os.ReadFile(metadataPath); readErr == nil && json.Unmarshal(content, &metadata) == nil {
 			metadataDecoded = true
-			for _, alias := range []string{metadata.SessionID, metadata.JobID, metadata.ClaudeSessionID} {
+			for _, alias := range []string{metadata.AttemptID, metadata.SessionID, metadata.JobID, metadata.ClaudeSessionID} {
 				if _, ok := keys[alias]; ok && alias != "" {
 					matches = true
 					break
@@ -308,8 +392,10 @@ func (r *FileSystemRegistry) Find(jobID string) (*SessionMetadata, error) {
 			continue // Skip invalid metadata
 		}
 
-		// Match by session ID, job ID, Claude session ID, or directory name
-		if metadata.SessionID == jobID || metadata.JobID == jobID || metadata.ClaudeSessionID == jobID || entry.Name() == jobID {
+		// Match by attempt ID, session ID, job ID, native session ID, or
+		// directory name. This broad scan is retained only for legacy callers;
+		// new-format callers with AttemptID must use FindAttempt.
+		if metadata.AttemptID == jobID || metadata.SessionID == jobID || metadata.JobID == jobID || metadata.ClaudeSessionID == jobID || entry.Name() == jobID {
 			return &metadata, nil
 		}
 	}

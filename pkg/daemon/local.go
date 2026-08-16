@@ -194,11 +194,14 @@ func (c *LocalClient) RegisterSessionIntent(ctx context.Context, intent SessionI
 	}
 
 	metadata := sessions.SessionMetadata{
+		AttemptID:        intent.AttemptID,
 		SessionID:        intent.JobID,
+		JobID:            intent.JobID,
 		ParentJobID:      intent.ParentJobID,
 		Provider:         intent.Provider,
 		PID:              0, // Not yet known
 		WorkingDirectory: intent.WorkDir,
+		Status:           "pending",
 		StartedAt:        time.Now(),
 		Type:             models.SessionTypeOrDefault(intent.Type),
 		JobTitle:         intent.Title,
@@ -221,24 +224,42 @@ func (c *LocalClient) ConfirmSession(ctx context.Context, confirmation SessionCo
 		return err
 	}
 
-	// Find the existing intent by job ID
-	existing, err := registry.Find(confirmation.JobID)
+	// A new-format confirmation must point-look up its attempt and must never
+	// bind a broad alias match from a stale prior execution of the same job.
+	var existing *sessions.SessionMetadata
+	if confirmation.AttemptID != "" {
+		existing, err = registry.FindAttempt(confirmation.AttemptID)
+	} else {
+		existing, err = registry.Find(confirmation.JobID)
+	}
 	if err != nil {
-		// If not found, create a new entry
+		if confirmation.AttemptID != "" && !errors.Is(err, sessions.ErrAttemptNotFound) {
+			return err
+		}
+		// Hooks may be the first writer (for example a flow-less launch). Preserve
+		// the supplied attempt identity rather than generating a replacement.
 		metadata := sessions.SessionMetadata{
+			AttemptID:       confirmation.AttemptID,
 			SessionID:       confirmation.JobID,
+			JobID:           confirmation.JobID,
 			ClaudeSessionID: confirmation.NativeID,
 			PID:             confirmation.PID,
 			TranscriptPath:  confirmation.TranscriptPath,
+			Status:          "running",
+			Scope:           ResolveClientScope(),
 			StartedAt:       time.Now(),
 		}
 		return registry.Register(metadata)
 	}
+	if existing.JobID != "" && existing.JobID != confirmation.JobID {
+		return fmt.Errorf("attempt %q belongs to job %q, not %q", confirmation.AttemptID, existing.JobID, confirmation.JobID)
+	}
 
-	// Update the existing entry with confirmation data
+	// Update the existing attempt in place with confirmation data.
 	existing.ClaudeSessionID = confirmation.NativeID
 	existing.PID = confirmation.PID
 	existing.TranscriptPath = confirmation.TranscriptPath
+	existing.Status = "running"
 
 	return registry.Register(*existing)
 }
@@ -247,21 +268,18 @@ func (c *LocalClient) ConfirmSession(ctx context.Context, confirmation SessionCo
 // In local mode, this persists the status to the filesystem registry's
 // metadata.json so subsequent reads (RecoverSessions) return the right
 // value instead of defaulting to "running".
-func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID, status string) error {
+func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID, attemptID, status string) error {
 	registry, err := sessions.NewFileSystemRegistry()
 	if err != nil {
 		return err
 	}
-	// The session directory is keyed by the native (claude) session ID, not
-	// the job ID. Find the registry entry for this jobID and update its dir.
-	if meta, _ := registry.Find(jobID); meta != nil {
-		dirName := meta.ClaudeSessionID
-		if dirName == "" {
-			dirName = meta.SessionID
-		}
-		return registry.UpdateStatus(dirName, status)
+	if attemptID != "" {
+		return registry.UpdateStatusForAttempt(jobID, attemptID, status)
 	}
-	// Fall back to using jobID as directory name.
+	// Legacy callers have no attempt identity and retain broad alias lookup.
+	if meta, _ := registry.Find(jobID); meta != nil {
+		return registry.UpdateStatus(legacyRegistryKey(meta), status)
+	}
 	return registry.UpdateStatus(jobID, status)
 }
 
@@ -271,20 +289,32 @@ func (c *LocalClient) UpdateSessionStatus(ctx context.Context, jobID, status str
 // defaulting to "running" because the (parent) PID in pid.lock is alive.
 // The session directory and pid.lock are preserved for transcript
 // archival; cleanup is handled separately.
-func (c *LocalClient) EndSession(ctx context.Context, jobID, outcome string) error {
+func (c *LocalClient) EndSession(ctx context.Context, jobID, attemptID, outcome string) error {
 	registry, err := sessions.NewFileSystemRegistry()
 	if err != nil {
 		return err
 	}
-	dirName := jobID
-	if meta, _ := registry.Find(jobID); meta != nil {
-		if meta.ClaudeSessionID != "" {
-			dirName = meta.ClaudeSessionID
-		} else if meta.SessionID != "" {
-			dirName = meta.SessionID
-		}
+	if attemptID != "" {
+		return registry.UpdateStatusForAttempt(jobID, attemptID, outcome)
 	}
-	return registry.UpdateStatus(dirName, outcome)
+	key := jobID
+	if meta, _ := registry.Find(jobID); meta != nil {
+		key = legacyRegistryKey(meta)
+	}
+	return registry.UpdateStatus(key, outcome)
+}
+
+func legacyRegistryKey(meta *sessions.SessionMetadata) string {
+	if meta == nil {
+		return ""
+	}
+	if meta.AttemptID != "" {
+		return meta.AttemptID
+	}
+	if meta.ClaudeSessionID != "" {
+		return meta.ClaudeSessionID
+	}
+	return meta.SessionID
 }
 
 // KillSession returns an error in local mode — terminating a tracked agent

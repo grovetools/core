@@ -30,6 +30,18 @@ func TestClassifyGuards(t *testing.T) {
 		want State
 	}{
 		{
+			name: "synthetic projection is inactive even when provably dead",
+			s: func() *models.Session {
+				s := active(time.Hour)
+				s.Synthetic = true
+				s.Provenance = "flow_job_projection"
+				s.PID = 4242
+				return s
+			}(),
+			ev:   Evidence{PTY: PTYEvidence{Queried: true}},
+			want: Inactive,
+		},
+		{
 			name: "federated is hands-off even when provably dead",
 			s: func() *models.Session {
 				s := active(time.Hour)

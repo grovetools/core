@@ -4,6 +4,10 @@ import "time"
 
 // SessionMetadata is the data stored on disk to track a live session.
 type SessionMetadata struct {
+	// AttemptID is the persisted identity of one execution attempt. New-format
+	// records are stored under this value; SessionID and JobID remain aliases.
+	// Empty identifies a legacy record and preserves the old native/session key.
+	AttemptID        string    `json:"attempt_id,omitempty"`
 	SessionID        string    `json:"session_id"`
 	ClaudeSessionID  string    `json:"claude_session_id,omitempty"` // For Claude provider (or native agent ID)
 	Provider         string    `json:"provider"`                    // "claude" or "codex"

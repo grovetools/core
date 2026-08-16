@@ -10,6 +10,19 @@ import (
 	"github.com/grovetools/core/pkg/sessions"
 )
 
+func TestCleanerRejectsSyntheticSession(t *testing.T) {
+	cleaner := Cleaner{StateDir: t.TempDir()}
+	out, err := cleaner.Clean(context.Background(), &Probe{Session: &models.Session{
+		ID: "projected-job", Synthetic: true, Provenance: "flow_job_projection", PID: os.Getpid(),
+	}})
+	if err == nil {
+		t.Fatal("Clean accepted a synthetic row")
+	}
+	if out.DaemonKilled || out.SignalledPID != 0 || out.RemovedRecovery {
+		t.Fatalf("synthetic cleanup had side effects: %+v", out)
+	}
+}
+
 func TestCleanerLocalFallbackClearsAllRegistryAliases(t *testing.T) {
 	stateDir := t.TempDir()
 	registry, err := sessions.NewFileSystemRegistryAt(stateDir)

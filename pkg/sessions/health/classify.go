@@ -45,7 +45,7 @@ func IsInteractiveType(t string) bool {
 // pending_user is waiting on a human and is intentionally exempt; an
 // interactive agent with the same status is not immortal.
 func LeaseFor(s *models.Session, policy LeasePolicy) (time.Duration, bool) {
-	if s == nil || s.Origin != "" || !IsActiveSessionStatus(s.Status) {
+	if s == nil || s.Origin != "" || s.Synthetic || !IsActiveSessionStatus(s.Status) {
 		return 0, false
 	}
 	if IsTurnBasedType(s.Type) {
@@ -114,6 +114,14 @@ func QuietFor(s *models.Session, now time.Time) time.Duration {
 // recent LastActivity wins a grace period, an unreachable multiplexer
 // means UNKNOWN rather than STALE); only then the negative signals.
 func Classify(s *models.Session, ev Evidence, now time.Time) Verdict {
+	if s == nil {
+		return Verdict{Inactive, "nil session — nothing to clean"}
+	}
+	// Synthetic rows are display projections, not observed attempts. They have
+	// no process lifecycle and must never enter liveness or cleanup policy.
+	if s.Synthetic {
+		return Verdict{Inactive, fmt.Sprintf("synthetic session (%s) — display only", s.Provenance)}
+	}
 	// Federated sessions belong to a satellite daemon; never signal them.
 	if s.Origin != "" {
 		return Verdict{Federated, fmt.Sprintf("owned by satellite %q — clean up there", s.Origin)}
@@ -207,7 +215,7 @@ func isTmuxHosted(s *models.Session) bool {
 // session's verdict. Used to keep the tmux shell-out off the hot path:
 // it only runs for sessions that would otherwise land on UNKNOWN.
 func NeedsTmuxProbe(s *models.Session, ev Evidence) bool {
-	if s == nil || s.Origin != "" || !IsActiveSessionStatus(s.Status) {
+	if s == nil || s.Origin != "" || s.Synthetic || !IsActiveSessionStatus(s.Status) {
 		return false
 	}
 	if !isTmuxHosted(s) {
