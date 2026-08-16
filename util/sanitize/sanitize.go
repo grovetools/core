@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	coreslug "github.com/grovetools/core/pkg/slug"
 )
 
 var (
@@ -165,18 +167,9 @@ func ForEnvironmentKey(s string) string {
 }
 
 // ForFilename sanitizes a string for use in a filename (kebab-case).
+// Deprecated: use slug.Canonical directly for shared note/job identities.
 func ForFilename(s string) string {
-	s = strings.ToLower(s)
-	s = strings.ReplaceAll(s, " ", "-")
-	// Remove non-alphanumeric characters, except hyphens
-	s = regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(s, "")
-	// Collapse multiple hyphens
-	s = multiDashRegex.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	if len(s) > 50 { // Truncate long names
-		s = s[:50]
-	}
-	return s
+	return coreslug.Canonical(s)
 }
 
 // UTF8 takes a byte slice and returns a string with invalid UTF-8 sequences replaced.
