@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/grovetools/core/logging"
+	"github.com/grovetools/core/pkg/models"
 )
 
 func eventsFilterFixtures() (eventInfo, plainInfo, plainDebug, warnItem, errItem logItem) {
@@ -417,6 +418,44 @@ func TestDisconnectedAndReconnectStatusAreVisible(t *testing.T) {
 	m.reconnectBackoff = 2 * time.Second
 	if got := m.frameView(); !strings.Contains(got, "reconnecting in 2s") {
 		t.Fatalf("reconnecting status is not visible: %q", got)
+	}
+}
+
+func TestClosedStreamStaysVisiblyDisconnectedDuringFailedReconnect(t *testing.T) {
+	m := New(context.Background(), Config{})
+	defer m.Close()
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	m.streamConnected = true
+
+	closed := make(chan models.LogStreamLine)
+	close(closed)
+	closedMsg := pumpStream(m.ctx, closed, m.streamGeneration)()
+	if _, ok := closedMsg.(streamErrMsg); !ok {
+		t.Fatalf("closed stream produced %T, want streamErrMsg", closedMsg)
+	}
+	_, retryTimer := m.Update(closedMsg)
+	if retryTimer == nil || !strings.Contains(m.frameView(), "Disconnected; reconnecting in") {
+		t.Fatalf("closed stream did not visibly enter backoff: %q", m.frameView())
+	}
+
+	// Deliver the timer message directly rather than sleeping. A nil client
+	// makes this retry fail deterministically after connectToDaemon has put the
+	// model into the otherwise-quiet in-flight retry state.
+	generation := m.streamGeneration
+	_, failedConnect := m.Update(streamReconnectMsg{generation: generation})
+	if failedConnect == nil {
+		t.Fatal("reconnect attempt did not return a connect command")
+	}
+	if got := m.frameView(); !strings.Contains(got, "Disconnected") {
+		t.Fatalf("in-flight reconnect hid the outage: %q", got)
+	}
+	failedMsg := failedConnect()
+	if _, ok := failedMsg.(streamErrMsg); !ok {
+		t.Fatalf("failed reconnect produced %T, want streamErrMsg", failedMsg)
+	}
+	m.Update(failedMsg)
+	if got := m.frameView(); !strings.Contains(got, "Disconnected; reconnecting in") {
+		t.Fatalf("failed reconnect did not remain visibly disconnected: %q", got)
 	}
 }
 

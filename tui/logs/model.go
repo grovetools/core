@@ -626,7 +626,10 @@ func (m *Model) connectToDaemon() tea.Cmd {
 	m.streamCtxMu.Unlock()
 
 	m.connecting = true
-	m.reconnecting = false
+	// Keep reconnecting set across the retry attempt. Clearing it here makes
+	// a quiet failed connection look like an ordinary initial connect until
+	// pumpFirstLine returns (or the 10s spinner backstop fires), hiding the
+	// outage for most of every retry window.
 	m.streamConnected = false
 	m.streamGeneration++
 	generation := m.streamGeneration
@@ -1592,7 +1595,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.generation != m.streamGeneration || m.ctx.Err() != nil {
 			return m, nil
 		}
-		m.reconnecting = false
 		return m, m.connectToDaemon()
 
 	case clearStatusMsg:
@@ -1912,7 +1914,9 @@ func (m *Model) frameView() string {
 	}
 
 	connectionIndicator := ""
-	if m.reconnecting {
+	if m.reconnecting && m.connecting {
+		connectionIndicator = " [Disconnected] [Connecting…]"
+	} else if m.reconnecting {
 		connectionIndicator = fmt.Sprintf(" [Disconnected; reconnecting in %s]", m.reconnectBackoff)
 	} else if m.connecting {
 		connectionIndicator = " [Connecting…]"
