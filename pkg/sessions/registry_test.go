@@ -6,6 +6,60 @@ import (
 	"testing"
 )
 
+func TestPhase5FixturesProduceOneRegistryDirectoryPerAttempt(t *testing.T) {
+	cases := []struct {
+		name     string
+		attempts []string
+		terminal string
+	}{
+		{name: "a claude killed before hook", attempts: []string{"attempt-a"}},
+		{name: "b pi startup failure", attempts: []string{"attempt-b"}, terminal: "failed"},
+		{name: "c sigkill mid-turn", attempts: []string{"attempt-c"}, terminal: "interrupted"},
+		{name: "d daemon restart mid-session", attempts: []string{"attempt-d"}},
+		{name: "e retry reusing job id", attempts: []string{"attempt-e-old", "attempt-e-current"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg, err := NewFileSystemRegistryAt(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, attemptID := range tc.attempts {
+				md := SessionMetadata{AttemptID: attemptID, SessionID: "reused-job", JobID: "reused-job", Provider: "pi", Status: "pending", Scope: "/scope"}
+				if err := reg.Register(md); err != nil {
+					t.Fatal(err)
+				}
+				// Confirmation and hook enrichment upgrade this exact directory.
+				md.ClaudeSessionID = "native-" + attemptID
+				md.PID = 100 + i
+				md.Status = "running"
+				md.TranscriptPath = "/tmp/" + attemptID + ".jsonl"
+				if err := reg.Register(md); err != nil {
+					t.Fatal(err)
+				}
+				if tc.terminal != "" && i == len(tc.attempts)-1 {
+					if err := reg.UpdateStatusForAttempt("reused-job", attemptID, tc.terminal); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			entries, err := os.ReadDir(reg.baseDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != len(tc.attempts) {
+				t.Fatalf("registry dirs = %d, want one for each of %d attempts: %v", len(entries), len(tc.attempts), entries)
+			}
+			for _, attemptID := range tc.attempts {
+				md, err := reg.FindAttempt(attemptID)
+				if err != nil || md.AttemptID != attemptID || md.JobID != "reused-job" || md.Status == "" || md.Scope == "" {
+					t.Fatalf("attempt %s metadata = %+v, err=%v", attemptID, md, err)
+				}
+			}
+		})
+	}
+}
+
 func TestFileSystemRegistryAttemptUpgradeInPlace(t *testing.T) {
 	registry := &FileSystemRegistry{baseDir: t.TempDir()}
 	intent := SessionMetadata{
