@@ -41,6 +41,32 @@ func IsInteractiveType(t string) bool {
 	return false
 }
 
+// LeaseFor returns this row's lease duration. A turn-based chat parked in
+// pending_user is waiting on a human and is intentionally exempt; an
+// interactive agent with the same status is not immortal.
+func LeaseFor(s *models.Session, policy LeasePolicy) (time.Duration, bool) {
+	if s == nil || s.Origin != "" || !IsActiveSessionStatus(s.Status) {
+		return 0, false
+	}
+	if IsTurnBasedType(s.Type) {
+		if s.Status == "pending_user" {
+			return 0, false
+		}
+		return policy.TurnBased, policy.TurnBased > 0
+	}
+	if IsInteractiveType(s.Type) {
+		return policy.Interactive, policy.Interactive > 0
+	}
+	return policy.Headless, policy.Headless > 0
+}
+
+// LeaseExpired is pure over the supplied clock and policy for deterministic
+// collector tests.
+func LeaseExpired(s *models.Session, now time.Time, policy LeasePolicy) bool {
+	lease, expirable := LeaseFor(s, policy)
+	return expirable && now.Sub(LatestActivity(s)) > lease
+}
+
 // IsJobFileStatusActive reports frontmatter statuses that claim the job
 // is currently executing — the ones a cleanup reconciles away.
 func IsJobFileStatusActive(status string) bool {

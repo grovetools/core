@@ -1249,8 +1249,18 @@ type DaemonConfig struct {
 	SSH                    *DaemonSSHConfig  `yaml:"ssh,omitempty" toml:"ssh,omitempty" jsonschema:"description=Embedded SSH server configuration"`
 	PairWithTreemux        *bool             `yaml:"pair_with_treemux,omitempty" toml:"pair_with_treemux,omitempty" jsonschema:"description=Opt-in to kill daemon when the parent treemux exits"`
 
-	JobReconcile     *DaemonJobReconcileConfig `yaml:"job_reconcile,omitempty" toml:"job_reconcile,omitempty" jsonschema:"description=Reconciliation of job files left claiming an active status by processes that died"`
-	SessionRetention string                    `yaml:"session_retention,omitempty" toml:"session_retention,omitempty" jsonschema:"description=How long terminal session rows remain queryable in daemon memory (default: 336h / 14d)"`
+	JobReconcile     *DaemonJobReconcileConfig  `yaml:"job_reconcile,omitempty" toml:"job_reconcile,omitempty" jsonschema:"description=Reconciliation of job files left claiming an active status by processes that died"`
+	SessionRetention string                     `yaml:"session_retention,omitempty" toml:"session_retention,omitempty" jsonschema:"description=How long terminal session rows remain queryable in daemon memory (default: 336h / 14d)"`
+	SessionLeases    *DaemonSessionLeasesConfig `yaml:"session_leases,omitempty" toml:"session_leases,omitempty" jsonschema:"description=Conservative activity leases used to retract unsupported session verification"`
+}
+
+// DaemonSessionLeasesConfig overrides the conservative per-kind activity
+// leases. Durations use Go syntax (for example "2h" or "30m"). Expiry only
+// writes Verified=unverified; it never changes status or ends a session.
+type DaemonSessionLeasesConfig struct {
+	Interactive string `yaml:"interactive,omitempty" toml:"interactive,omitempty" jsonschema:"description=Lease for interactive and isolated agents (default: 2h)"`
+	Headless    string `yaml:"headless,omitempty" toml:"headless,omitempty" jsonschema:"description=Lease for headless and other agent sessions (default: 30m)"`
+	TurnBased   string `yaml:"turn_based,omitempty" toml:"turn_based,omitempty" jsonschema:"description=Lease for turn-based chats while not pending_user (default: 1h)"`
 }
 
 // DaemonJobReconcileConfig controls the JobCollector's sweep for job

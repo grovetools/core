@@ -643,6 +643,7 @@ type PTYSessionInfo struct {
 	Labels            map[string]string `json:"labels,omitempty"`
 	PID               int               `json:"pid"`
 	StartedAt         string            `json:"started_at"`
+	LastActivity      time.Time         `json:"last_activity,omitempty"`
 	AttachedClients   int               `json:"attached_clients"`
 	Origin            string            `json:"origin,omitempty"`
 	PanelID           string            `json:"panel_id,omitempty"`

@@ -1143,6 +1143,24 @@ func mergeConfigs(base, override *Config) *Config {
 				d.JobReconcile.MaxPerRun = o.JobReconcile.MaxPerRun
 			}
 		}
+
+		if o.SessionLeases != nil {
+			if d.SessionLeases == nil {
+				d.SessionLeases = &DaemonSessionLeasesConfig{}
+			} else {
+				copied := *d.SessionLeases
+				d.SessionLeases = &copied
+			}
+			if o.SessionLeases.Interactive != "" {
+				d.SessionLeases.Interactive = o.SessionLeases.Interactive
+			}
+			if o.SessionLeases.Headless != "" {
+				d.SessionLeases.Headless = o.SessionLeases.Headless
+			}
+			if o.SessionLeases.TurnBased != "" {
+				d.SessionLeases.TurnBased = o.SessionLeases.TurnBased
+			}
+		}
 	}
 
 	// Merge the per-verb command overrides entry by entry. Wholesale

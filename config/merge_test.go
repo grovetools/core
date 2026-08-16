@@ -1483,12 +1483,14 @@ func TestMergeDaemonMergesFieldWiseWithoutMutatingBase(t *testing.T) {
 		ConfigDebounceMs: 100,
 		Jobs:             &DaemonJobsConfig{MaxConcurrent: 4, DefaultTimeout: "30m"},
 		SSH:              &DaemonSSHConfig{Port: 2222},
+		SessionLeases:    &DaemonSessionLeasesConfig{Interactive: "2h", Headless: "30m", TurnBased: "1h"},
 	}}
 	override := &Config{Daemon: &DaemonConfig{
-		GitInterval: "1s",
-		ConfigWatch: &off,
-		Jobs:        &DaemonJobsConfig{MaxConcurrent: 8},
-		Build:       &BuildConfig{MaxParallel: 2},
+		GitInterval:   "1s",
+		ConfigWatch:   &off,
+		Jobs:          &DaemonJobsConfig{MaxConcurrent: 8},
+		Build:         &BuildConfig{MaxParallel: 2},
+		SessionLeases: &DaemonSessionLeasesConfig{Headless: "45m"},
 	}}
 
 	merged := mergeConfigs(base, override)
@@ -1519,6 +1521,9 @@ func TestMergeDaemonMergesFieldWiseWithoutMutatingBase(t *testing.T) {
 	}
 	if d.Build == nil || d.Build.MaxParallel != 2 {
 		t.Errorf("build.max_parallel = %+v, want the override layer's 2", d.Build)
+	}
+	if d.SessionLeases == nil || d.SessionLeases.Interactive != "2h" || d.SessionLeases.Headless != "45m" || d.SessionLeases.TurnBased != "1h" {
+		t.Errorf("session_leases = %+v, want field-wise overlay", d.SessionLeases)
 	}
 
 	// mergeConfigs runs over configs other callers still hold, so the base

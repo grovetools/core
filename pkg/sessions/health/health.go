@@ -57,7 +57,32 @@ const (
 	// Absence of evidence only becomes evidence of absence after the
 	// session has been quiet this long. Mirrors tuimux's orphan-PTY TTL.
 	NoEvidenceStaleAfter = 10 * time.Minute
+
+	// Session leases are deliberately conservative backstops, not process
+	// convictions. Positive classifier evidence can keep a quiet session alive;
+	// expiry only retracts verification. These defaults can be overridden under
+	// [daemon.session_leases].
+	DefaultInteractiveLease = 2 * time.Hour
+	DefaultHeadlessLease    = 30 * time.Minute
+	DefaultTurnBasedLease   = time.Hour
 )
+
+// LeasePolicy controls how long each active session kind may go without real
+// activity evidence. Other/non-interactive kinds use Headless.
+type LeasePolicy struct {
+	Interactive time.Duration
+	Headless    time.Duration
+	TurnBased   time.Duration
+}
+
+// DefaultLeasePolicy returns the conservative built-in lease durations.
+func DefaultLeasePolicy() LeasePolicy {
+	return LeasePolicy{
+		Interactive: DefaultInteractiveLease,
+		Headless:    DefaultHeadlessLease,
+		TurnBased:   DefaultTurnBasedLease,
+	}
+}
 
 // State is the folded verdict about one session.
 type State int
