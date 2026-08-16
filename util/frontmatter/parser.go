@@ -12,6 +12,7 @@ import (
 // DocMetadata represents common fields found in markdown frontmatter.
 type DocMetadata struct {
 	ID        string    `json:"id"`
+	AttemptID string    `json:"attempt_id,omitempty"`
 	Title     string    `json:"title"`
 	Status    string    `json:"status"`
 	Type      string    `json:"type"`
@@ -93,6 +94,8 @@ func Parse(r io.Reader) (DocMetadata, error) {
 		switch key {
 		case "id":
 			meta.ID = value
+		case "attempt_id":
+			meta.AttemptID = value
 		case "title":
 			meta.Title = value
 		case "status":

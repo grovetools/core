@@ -37,6 +37,16 @@ body
 
 // TestParse_PlanJobAbsent keeps the field zero rather than inventing a value
 // when a note is linked to a plan but has no promoted job.
+func TestParse_AttemptID(t *testing.T) {
+	meta, err := ParseString("---\nid: job-1\nattempt_id: 019d8f6e-57e1-7b3f-8bb7-f2bf95a61c91\nstatus: running\n---\n")
+	if err != nil {
+		t.Fatalf("ParseString: %v", err)
+	}
+	if meta.AttemptID != "019d8f6e-57e1-7b3f-8bb7-f2bf95a61c91" {
+		t.Fatalf("AttemptID = %q", meta.AttemptID)
+	}
+}
+
 func TestParse_PlanJobAbsent(t *testing.T) {
 	doc := `---
 title: Unpromoted
