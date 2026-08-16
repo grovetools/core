@@ -16,8 +16,12 @@ the `core::concept-unified-logging` concept.
   answers "what did the system do on my behalf?" — never "what is the system
   checking right now?". One transition = one line, at exactly one funnel point.
 - **warn** — degraded but self-healing. A warn that fires on a timer forever
-  is a bug in the emitter: repeated identical warns must be deduplicated,
-  rate-limited, or escalated to a single error by a circuit breaker.
+  is a bug in the emitter. Use `.Once(key)` for a warning that should appear
+  once per logger, or `.DedupBy(key, window)` for a rate-limited warning. The
+  latter adds `suppressed_count` to the first emission after the window when
+  repeats were dropped. Both helpers keep at most 1024 recently used keys per
+  `UnifiedLogger`; transition-aware emitters should still log recovery as a
+  separate event. Escalate persistent failures once via a circuit breaker.
 - **error** — failed and will not self-heal without user action. Always
   visible everywhere.
 

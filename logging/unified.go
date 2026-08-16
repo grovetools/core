@@ -1,10 +1,13 @@
 package logging
 
 import (
+	"container/list"
 	"context"
 	"fmt"
 	"regexp"
 	"runtime"
+	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -29,6 +32,21 @@ type UnifiedLogger struct {
 	// false — the default — structured entries omit the rendered
 	// pretty_ansi/pretty_text fields.
 	prettyFields bool
+
+	// dedup is shared by entries created from this logger. Access is serialized
+	// so checking and recording an emission is atomic across goroutines.
+	dedupMu  sync.Mutex
+	dedup    map[string]*list.Element
+	dedupLRU list.List
+	now      func() time.Time
+}
+
+const unifiedLoggerDedupCapacity = 1024
+
+type dedupRecord struct {
+	key             string
+	lastEmission    time.Time
+	suppressedCount uint64
 }
 
 // NewUnifiedLogger creates a new unified logger for a specific component.
@@ -46,6 +64,8 @@ func NewUnifiedLogger(component string) *UnifiedLogger {
 		structured:   structured,
 		prettyLevel:  ConsoleLevel(),
 		prettyFields: PrettyFieldsEnabled(),
+		dedup:        make(map[string]*list.Element),
+		now:          time.Now,
 	}
 }
 
@@ -143,6 +163,10 @@ type LogEntry struct {
 	structOnly bool
 	noIcon     bool
 	err        error
+	dedupKey   string
+	dedupFor   time.Duration
+	dedupOnce  bool
+	dedupSet   bool
 }
 
 // Field adds a structured field (chainable).
@@ -212,6 +236,34 @@ func (e *LogEntry) StructuredOnly() *LogEntry {
 	return e
 }
 
+// Once emits only the first entry for key while the key remains in this
+// logger's bounded deduplication state. The least-recently-used key may be
+// evicted after 1024 distinct keys, after which it may emit again.
+//
+// Suppression is decided by Log or Emit, not while building the entry, so
+// further fluent calls remain safe and an entry that is never logged consumes
+// no deduplication state. Calling Once or DedupBy again on the same LogEntry
+// replaces its previous deduplication setting.
+func (e *LogEntry) Once(key string) *LogEntry {
+	e.dedupKey = key
+	e.dedupFor = 0
+	e.dedupOnce = true
+	e.dedupSet = true
+	return e
+}
+
+// DedupBy emits at most once per window for key. Suppressed entries produce no
+// pretty or structured output. The first emission at or after the window
+// boundary includes suppressed_count when at least one entry was suppressed.
+// A non-positive window disables deduplication for the entry.
+func (e *LogEntry) DedupBy(key string, window time.Duration) *LogEntry {
+	e.dedupKey = key
+	e.dedupFor = window
+	e.dedupOnce = false
+	e.dedupSet = window > 0
+	return e
+}
+
 // Emit logs the message without job context.
 // Output routes to structured logging (workspace.log) and pretty output
 // via GetGlobalOutput(). Use this for CLI commands and utility code
@@ -261,6 +313,13 @@ func (e *LogEntry) Log(ctx context.Context) {
 		return
 	}
 
+	// Deduplicate only entries that would reach at least one sink. This check is
+	// before formatting, writer lookup, caller capture, and logrus hooks so a
+	// suppressed entry is completely silent.
+	if e.dedupSet && e.logger.suppress(e) {
+		return
+	}
+
 	// Render the pretty line only when something will consume it: the
 	// console, or the structured pretty fields when opted in via
 	// structured_pretty_fields / GROVE_LOG_PRETTY_FIELDS.
@@ -281,6 +340,54 @@ func (e *LogEntry) Log(ctx context.Context) {
 	if emitStructured {
 		e.logStructured(prettyOutput, emitPretty, includePrettyFields)
 	}
+}
+
+// suppress atomically decides whether e should emit and maintains the bounded
+// least-recently-used state. The list front is the most recently attempted key,
+// including suppressed attempts, so a currently noisy key is not evicted by a
+// stream of one-off keys.
+func (u *UnifiedLogger) suppress(e *LogEntry) bool {
+	u.dedupMu.Lock()
+	defer u.dedupMu.Unlock()
+
+	// Keep UnifiedLogger usable when constructed as a zero value in downstream
+	// tests or embedded code, even though NewUnifiedLogger is the normal path.
+	if u.dedup == nil {
+		u.dedup = make(map[string]*list.Element)
+	}
+	now := time.Now()
+	if u.now != nil {
+		now = u.now()
+	}
+
+	if elem, ok := u.dedup[e.dedupKey]; ok {
+		u.dedupLRU.MoveToFront(elem)
+		record := elem.Value.(*dedupRecord)
+		if e.dedupOnce || now.Sub(record.lastEmission) < e.dedupFor {
+			record.suppressedCount++
+			return true
+		}
+
+		if record.suppressedCount > 0 {
+			e.fields["suppressed_count"] = record.suppressedCount
+		}
+		record.lastEmission = now
+		record.suppressedCount = 0
+		return false
+	}
+
+	record := &dedupRecord{
+		key:          e.dedupKey,
+		lastEmission: now,
+	}
+	u.dedup[e.dedupKey] = u.dedupLRU.PushFront(record)
+	if len(u.dedup) > unifiedLoggerDedupCapacity {
+		oldest := u.dedupLRU.Back()
+		oldRecord := oldest.Value.(*dedupRecord)
+		delete(u.dedup, oldRecord.key)
+		u.dedupLRU.Remove(oldest)
+	}
+	return false
 }
 
 // prettyRenderObserver, when non-nil, is invoked each time

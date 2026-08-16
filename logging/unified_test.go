@@ -3,9 +3,13 @@ package logging
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -548,6 +552,148 @@ func TestConsoleOutputUnchangedByPrettyFieldGating(t *testing.T) {
 	}
 	if !strings.Contains(off, "disk almost full") {
 		t.Errorf("expected console output to contain the message, got %q", off)
+	}
+}
+
+func TestLogEntryOnceSuppressesAllOutputsAndKeepsFluentChainSafe(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-once", "true")
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+	renders := countPrettyRenders(t)
+
+	var buf bytes.Buffer
+	ctx := WithWriter(context.Background(), &buf)
+	// Builder calls alone must not consume the key; the terminal Log/Emit call
+	// owns the suppression decision.
+	_ = ulog.Warn("abandoned").Once("connection-warning").Field("attempt", 0)
+	ulog.Warn("first").Once("connection-warning").Field("attempt", 1).Log(ctx)
+	ulog.Warn("second").Once("connection-warning").Field("attempt", 2).Pretty("must not render").Log(ctx)
+
+	if len(hook.entries) != 1 {
+		t.Fatalf("expected one structured emission, got %d", len(hook.entries))
+	}
+	if got := hook.entries[0].Data["attempt"]; got != 1 {
+		t.Errorf("expected first fluent field to reach the sink, got %v", got)
+	}
+	if strings.Contains(buf.String(), "second") || strings.Contains(buf.String(), "must not render") {
+		t.Errorf("suppressed Once entry reached pretty output: %q", buf.String())
+	}
+	if *renders != 1 {
+		t.Errorf("expected only the emitted entry to render, got %d renders", *renders)
+	}
+}
+
+func TestLogEntryDedupByExpiresAndReportsSuppressedCount(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-dedup-window", "")
+	now := time.Unix(100, 0)
+	ulog.now = func() time.Time { return now }
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	const window = time.Minute
+	ulog.Info("first").DedupBy("refresh", window).StructuredOnly().Log(context.Background())
+	now = now.Add(10 * time.Second)
+	ulog.Info("suppressed-1").DedupBy("refresh", window).StructuredOnly().Log(context.Background())
+	now = now.Add(49 * time.Second)
+	ulog.Info("suppressed-2").DedupBy("refresh", window).StructuredOnly().Log(context.Background())
+	now = now.Add(time.Second) // exact boundary emits
+	ulog.Info("after-window").DedupBy("refresh", window).StructuredOnly().Log(context.Background())
+
+	if len(hook.entries) != 2 {
+		t.Fatalf("expected first and post-window emissions, got %d", len(hook.entries))
+	}
+	if got := hook.entries[1].Message; got != "after-window" {
+		t.Errorf("expected post-window message, got %q", got)
+	}
+	if got := hook.entries[1].Data["suppressed_count"]; got != uint64(2) {
+		t.Errorf("expected suppressed_count=2, got %#v", got)
+	}
+	if _, ok := hook.entries[0].Data["suppressed_count"]; ok {
+		t.Error("first emission must not carry suppressed_count")
+	}
+}
+
+func TestLogEntryDedupLRUEvictsLeastRecentlyUsedKey(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-dedup-eviction", "")
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	for i := 0; i < unifiedLoggerDedupCapacity; i++ {
+		ulog.Info("filler").Once(fmt.Sprintf("key-%d", i)).StructuredOnly().Log(context.Background())
+	}
+	// A suppressed attempt still makes key-0 recent. Adding one more key must
+	// therefore evict key-1, not key-0.
+	ulog.Info("touch-key-0").Once("key-0").StructuredOnly().Log(context.Background())
+	ulog.Info("overflow").Once("overflow").StructuredOnly().Log(context.Background())
+	ulog.Info("key-0-still-present").Once("key-0").StructuredOnly().Log(context.Background())
+	ulog.Info("key-1-evicted").Once("key-1").StructuredOnly().Log(context.Background())
+
+	if len(ulog.dedup) != unifiedLoggerDedupCapacity {
+		t.Fatalf("dedup state exceeded capacity: got %d", len(ulog.dedup))
+	}
+	if len(hook.entries) != unifiedLoggerDedupCapacity+2 {
+		t.Fatalf("expected only overflow and evicted key to re-emit; got %d entries", len(hook.entries))
+	}
+	if got := hook.entries[len(hook.entries)-1].Message; got != "key-1-evicted" {
+		t.Errorf("expected re-emission of least-recently-used key, got %q", got)
+	}
+}
+
+type atomicCountHook struct {
+	count atomic.Int64
+}
+
+func (h *atomicCountHook) Levels() []logrus.Level { return logrus.AllLevels }
+func (h *atomicCountHook) Fire(*logrus.Entry) error {
+	h.count.Add(1)
+	return nil
+}
+
+func TestLogEntryOnceConcurrentUseEmitsExactlyOnce(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-once-concurrent", "")
+	hook := &atomicCountHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	const goroutines = 128
+	var start sync.WaitGroup
+	start.Add(1)
+	var done sync.WaitGroup
+	done.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(i int) {
+			defer done.Done()
+			start.Wait()
+			ulog.Info("racing warning").Field("goroutine", i).Once("shared").StructuredOnly().Log(context.Background())
+		}(i)
+	}
+	start.Done()
+	done.Wait()
+
+	if got := hook.count.Load(); got != 1 {
+		t.Fatalf("expected exactly one concurrent emission, got %d", got)
+	}
+	ulog.dedupMu.Lock()
+	record := ulog.dedup["shared"].Value.(*dedupRecord)
+	suppressed := record.suppressedCount
+	ulog.dedupMu.Unlock()
+	if suppressed != goroutines-1 {
+		t.Errorf("expected %d suppressed attempts, got %d", goroutines-1, suppressed)
+	}
+}
+
+func TestLogEntryDedupByNonPositiveWindowDoesNotConsumeState(t *testing.T) {
+	ulog := newIsolatedUnifiedLogger(t, "test-dedup-disabled", "")
+	hook := &captureHook{}
+	ulog.structured.Logger.AddHook(hook)
+
+	ulog.Info("one").DedupBy("disabled", 0).StructuredOnly().Log(context.Background())
+	ulog.Info("two").DedupBy("disabled", -time.Second).StructuredOnly().Log(context.Background())
+
+	if len(hook.entries) != 2 {
+		t.Fatalf("expected both disabled-dedup entries, got %d", len(hook.entries))
+	}
+	if len(ulog.dedup) != 0 {
+		t.Errorf("disabled deduplication consumed state for %d keys", len(ulog.dedup))
 	}
 }
 
