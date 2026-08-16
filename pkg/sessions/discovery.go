@@ -92,29 +92,42 @@ func recoverSessions(filterByScope bool, scope string) ([]*models.Session, error
 			if pidReadErr == nil {
 				observed = "pid.lock unreadable"
 			}
-			ulog.Info("Classified unrecoverable session registry record").
-				Field("event", "session.registry_recovery").
-				Field("job_id", metadata.JobID).
-				Field("native_id", metadata.ClaudeSessionID).
-				Field("observed", observed+"; metadata status="+from).
-				Field("concluded", "no live recovery claim; terminal status=interrupted").
-				Field("changed", changed || removed > 0).
-				StructuredOnly().Log(context.Background())
+			if changed || removed > 0 {
+				ulog.Info("Classified unrecoverable session registry record").
+					Field("event", "session.registry_recovery").
+					Field("job_id", metadata.JobID).
+					Field("native_id", metadata.ClaudeSessionID).
+					Field("observed", observed+"; metadata status="+from).
+					Field("concluded", "no live recovery claim; terminal status=interrupted").
+					Field("changed", true).
+					StructuredOnly().Log(context.Background())
+			}
 			continue
 		}
 
 		if !process.IsProcessAlive(pid) {
+			// Persist the classification as well as clearing the recovery claim.
+			// Otherwise the next sweep sees the now-missing lock as a fresh
+			// transition and classifies the same dead process a second time.
+			from := metadata.Status
+			changed := false
+			if !isTerminalRecoveryStatus(metadata.Status) {
+				metadata.Status = "interrupted"
+				changed = writeMetadataFile(metadataFile, metadata) == nil
+			}
 			// New-format cleanup is exact-attempt; only legacy records sweep
 			// aliases. metadata.json remains the durable job→transcript index.
 			removed := removeRecoveryClaim(registry, metadata, dirName, filterByScope, scope)
-			ulog.Info("Classified dead session registry process").
-				Field("event", "session.registry_recovery").
-				Field("job_id", metadata.JobID).
-				Field("native_id", metadata.ClaudeSessionID).
-				Field("observed", fmt.Sprintf("pid.lock pid=%d is dead", pid)).
-				Field("concluded", "recovery claim must not resurrect").
-				Field("changed", removed > 0).
-				StructuredOnly().Log(context.Background())
+			if changed || removed > 0 {
+				ulog.Info("Classified dead session registry process").
+					Field("event", "session.registry_recovery").
+					Field("job_id", metadata.JobID).
+					Field("native_id", metadata.ClaudeSessionID).
+					Field("observed", fmt.Sprintf("pid.lock pid=%d is dead; metadata status=%s", pid, from)).
+					Field("concluded", "recovery claim must not resurrect; terminal status=interrupted").
+					Field("changed", true).
+					StructuredOnly().Log(context.Background())
+			}
 			continue
 		}
 
@@ -181,13 +194,14 @@ func removeRecoveryClaim(registry *FileSystemRegistry, metadata SessionMetadata,
 		jobID = metadata.SessionID
 	}
 	if metadata.AttemptID != "" {
+		var changed bool
 		var err error
 		if scoped {
-			err = registry.RemoveRecoveryFilesForAttemptInScope(jobID, metadata.AttemptID, scope)
+			changed, err = registry.removeRecoveryFilesForAttempt(jobID, metadata.AttemptID, &scope)
 		} else {
-			err = registry.RemoveRecoveryFilesForAttempt(jobID, metadata.AttemptID)
+			changed, err = registry.removeRecoveryFilesForAttempt(jobID, metadata.AttemptID, nil)
 		}
-		if err == nil {
+		if err == nil && changed {
 			return 1
 		}
 		return 0

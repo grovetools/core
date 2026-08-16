@@ -239,36 +239,54 @@ func (r *FileSystemRegistry) RemovePIDLock(sessionID string) error {
 // Once pid.lock is gone RecoverSessions skips the session as no longer live, so
 // dropping it is sufficient to stop the record from resurrecting as running.
 func (r *FileSystemRegistry) RemoveRecoveryFiles(sessionID string) error {
-	return r.RemovePIDLock(sessionID)
+	_, err := r.removeRecoveryFiles(sessionID)
+	return err
+}
+
+func (r *FileSystemRegistry) removeRecoveryFiles(sessionID string) (bool, error) {
+	if sessionID == "" {
+		return false, nil
+	}
+	pidFile := filepath.Join(r.baseDir, sessionID, "pid.lock")
+	if err := os.Remove(pidFile); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to remove pid.lock: %w", err)
+	}
+	return true, nil
 }
 
 // RemoveRecoveryFilesForAttempt clears recovery state only when the exact
 // attempt record belongs to jobID. New-format cleanup must use this rather
 // than sweeping every attempt of a reusable job ID.
 func (r *FileSystemRegistry) RemoveRecoveryFilesForAttempt(jobID, attemptID string) error {
-	metadata, err := r.FindAttempt(attemptID)
-	if err != nil {
-		return err
-	}
-	if metadata.JobID != jobID && metadata.SessionID != jobID {
-		return fmt.Errorf("attempt %q belongs to job %q, not %q", attemptID, metadata.JobID, jobID)
-	}
-	return r.RemoveRecoveryFiles(attemptID)
+	_, err := r.removeRecoveryFilesForAttempt(jobID, attemptID, nil)
+	return err
 }
 
 // RemoveRecoveryFilesForAttemptInScope is the scoped-daemon variant.
 func (r *FileSystemRegistry) RemoveRecoveryFilesForAttemptInScope(jobID, attemptID, scope string) error {
+	_, err := r.removeRecoveryFilesForAttempt(jobID, attemptID, &scope)
+	return err
+}
+
+// removeRecoveryFilesForAttempt reports whether recovery state was actually
+// removed. The public methods retain their historical error-only API, while
+// recovery classification uses the transition bit to avoid re-emitting on a
+// record whose pid.lock was already cleared by an earlier sweep.
+func (r *FileSystemRegistry) removeRecoveryFilesForAttempt(jobID, attemptID string, scope *string) (bool, error) {
 	metadata, err := r.FindAttempt(attemptID)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if metadata.Scope != scope {
-		return fmt.Errorf("attempt %q belongs to scope %q, not %q", attemptID, metadata.Scope, scope)
+	if scope != nil && metadata.Scope != *scope {
+		return false, fmt.Errorf("attempt %q belongs to scope %q, not %q", attemptID, metadata.Scope, *scope)
 	}
 	if metadata.JobID != jobID && metadata.SessionID != jobID {
-		return fmt.Errorf("attempt %q belongs to job %q, not %q", attemptID, metadata.JobID, jobID)
+		return false, fmt.Errorf("attempt %q belongs to job %q, not %q", attemptID, metadata.JobID, jobID)
 	}
-	return r.RemoveRecoveryFiles(attemptID)
+	return r.removeRecoveryFiles(attemptID)
 }
 
 // RemoveRecoveryFilesForJob clears crash-recovery state from every registry
@@ -338,11 +356,14 @@ func (r *FileSystemRegistry) removeRecoveryFilesForJob(jobID, nativeID string, s
 		if !matches {
 			continue
 		}
-		if err := r.RemoveRecoveryFiles(entry.Name()); err != nil {
+		changed, err := r.removeRecoveryFiles(entry.Name())
+		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", entry.Name(), err))
 			continue
 		}
-		removed++
+		if changed {
+			removed++
+		}
 	}
 	return removed, errors.Join(errs...)
 }

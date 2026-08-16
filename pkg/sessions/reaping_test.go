@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/grovetools/core/logging"
 )
 
 // deadPID is far above any live process id, so IsProcessAlive reports false
@@ -127,6 +129,76 @@ func TestRecoverSessionsClassifiesMissingAndUnreadablePIDLocks(t *testing.T) {
 		if metadata.Status != want {
 			t.Errorf("%s status = %q, want %q", filepath.Base(dir), metadata.Status, want)
 		}
+	}
+}
+
+func TestRecoverSessionsSecondSweepIsSilentAndDoesNoCleanup(t *testing.T) {
+	root := sessionsRoot(t)
+	logPath := filepath.Join(t.TempDir(), "recovery.jsonl")
+	t.Setenv("GROVE_LOG_FILE", logPath)
+	t.Setenv("GROVE_LOG_LEVEL", "info")
+	logging.Reset()
+	t.Cleanup(logging.Reset)
+
+	legacy := SessionMetadata{
+		SessionID: "legacy-job", JobID: "legacy-job", ClaudeSessionID: "legacy-native", Status: "running",
+	}
+	plantSession(t, root, "legacy-job", 0, legacy)
+	plantSession(t, root, "legacy-native", deadPID, legacy)
+	plantSession(t, root, "attempt-1", deadPID, SessionMetadata{
+		SessionID: "attempt-job", JobID: "attempt-job", AttemptID: "attempt-1", Status: "running",
+	})
+
+	if _, err := RecoverSessions(); err != nil {
+		t.Fatalf("first RecoverSessions: %v", err)
+	}
+	firstLog, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading first-sweep log: %v", err)
+	}
+	if len(firstLog) == 0 {
+		t.Fatal("first sweep emitted no classification records")
+	}
+	metadataAfterFirst := make(map[string]string)
+	for _, name := range []string{"legacy-job", "legacy-native", "attempt-1"} {
+		path := filepath.Join(root, name, "metadata.json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s after first sweep: %v", name, err)
+		}
+		metadataAfterFirst[name] = string(data)
+	}
+
+	if _, err := RecoverSessions(); err != nil {
+		t.Fatalf("second RecoverSessions: %v", err)
+	}
+	secondLog, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading second-sweep log: %v", err)
+	}
+	if len(secondLog) != len(firstLog) {
+		t.Fatalf("second sweep emitted %d additional log bytes, want 0", len(secondLog)-len(firstLog))
+	}
+	for name, want := range metadataAfterFirst {
+		data, err := os.ReadFile(filepath.Join(root, name, "metadata.json"))
+		if err != nil {
+			t.Fatalf("reading %s after second sweep: %v", name, err)
+		}
+		if string(data) != want {
+			t.Errorf("second sweep rewrote metadata for %s", name)
+		}
+	}
+
+	registry, err := NewFileSystemRegistry()
+	if err != nil {
+		t.Fatalf("NewFileSystemRegistry: %v", err)
+	}
+	removed, err := registry.RemoveRecoveryFilesForJob("legacy-job", "legacy-native")
+	if err != nil {
+		t.Fatalf("idempotency cleanup: %v", err)
+	}
+	if removed != 0 {
+		t.Fatalf("cleanup after two sweeps removed %d claims, want 0", removed)
 	}
 }
 
@@ -272,6 +344,13 @@ func TestRemoveRecoveryFilesForJobClearsLegacyAliases(t *testing.T) {
 	if removed != 2 {
 		t.Fatalf("removed = %d, want 2", removed)
 	}
+	removedAgain, err := registry.RemoveRecoveryFilesForJob("job-1", "native-1")
+	if err != nil {
+		t.Fatalf("second RemoveRecoveryFilesForJob: %v", err)
+	}
+	if removedAgain != 0 {
+		t.Fatalf("second removal count = %d, want 0", removedAgain)
+	}
 	for _, dir := range []string{jobDir, nativeDir} {
 		if _, err := os.Stat(filepath.Join(dir, "pid.lock")); !os.IsNotExist(err) {
 			t.Errorf("alias lock should be gone in %s: %v", dir, err)
@@ -303,6 +382,13 @@ func TestRemoveRecoveryFilesForJobInScopePreservesOtherScope(t *testing.T) {
 	}
 	if removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
+	}
+	removedAgain, err := registry.RemoveRecoveryFilesForJobInScope("shared-job", "owned-native", "/owned")
+	if err != nil {
+		t.Fatalf("second RemoveRecoveryFilesForJobInScope: %v", err)
+	}
+	if removedAgain != 0 {
+		t.Fatalf("second scoped removal count = %d, want 0", removedAgain)
 	}
 	if _, err := os.Stat(filepath.Join(owned, "pid.lock")); !os.IsNotExist(err) {
 		t.Fatalf("owned lock should be gone, stat error = %v", err)
