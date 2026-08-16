@@ -86,6 +86,9 @@ func TestFindShadowDaemonsSkipsForeignAndFixtureDaemons(t *testing.T) {
 		{PID: 11, Args: "groved start --socket /other/home/groved.sock --pidfile /other/home/groved.pid"},
 		// Scoped, with no --pidfile: its path needs the process's cwd.
 		{PID: 12, Args: "groved start --scope /w/plan"},
+		// An argument-less fixture derives its scratch namespace from XDG env.
+		// ps cannot expose that env, so it must not be assigned our global path.
+		{PID: 13, Args: "groved start --collectors=workspace"},
 	}
 
 	got := findShadowDaemons(procs, stateDir, globalPid, ownerMap(nil))
@@ -100,7 +103,7 @@ func TestFindShadowDaemonsReportsAnUnownedPidfile(t *testing.T) {
 	stateDir := "/home/u/.local/state/grove"
 	globalPid := filepath.Join(stateDir, "groved.pid")
 
-	procs := []process.Entry{{PID: 77, Args: "groved start"}}
+	procs := []process.Entry{{PID: 77, Args: "groved start --pidfile " + globalPid}}
 
 	got := findShadowDaemons(procs, stateDir, globalPid, ownerMap(nil))
 	if len(got) != 1 {
@@ -121,7 +124,7 @@ func TestFindShadowDaemonsIgnoresANonGrovedOwner(t *testing.T) {
 	stateDir := "/home/u/.local/state/grove"
 	globalPid := filepath.Join(stateDir, "groved.pid")
 
-	procs := []process.Entry{{PID: 77, Args: "groved start"}}
+	procs := []process.Entry{{PID: 77, Args: "groved start --pidfile " + globalPid}}
 
 	got := findShadowDaemons(procs, stateDir, globalPid, ownerMap(map[string]int{globalPid: 555}))
 	if len(got) != 1 || got[0].OwnerPID != 0 {
@@ -173,7 +176,7 @@ func TestFormatShadowDaemons(t *testing.T) {
 		PidPath: "/s/groved.pid", OwnerPID: 25659,
 		Cmdline: "groved start --ready-fd 3",
 	}})
-	for _, want := range []string{"25658", "913", "25659", "groved start --ready-fd 3"} {
+	for _, want := range []string{"25658", "913", "25659", "groved start --ready-fd 3", "independently proving"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("census output missing %q:\n%s", want, out)
 		}

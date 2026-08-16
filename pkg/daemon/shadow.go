@@ -39,8 +39,7 @@ type ShadowDaemon struct {
 	PPID int
 	// Elapsed is how long the process has been running (0 = unknown).
 	Elapsed time.Duration
-	// PidPath is the pidfile this process should own — its --pidfile argument,
-	// or the global pidfile when it passed neither --pidfile nor --scope.
+	// PidPath is the explicit --pidfile this process was asked to own.
 	PidPath string
 	// OwnerPID is who that pidfile actually names: another live daemon, or 0
 	// when the file is absent, empty, or names a dead process.
@@ -70,10 +69,10 @@ func (s ShadowDaemon) Reason() string {
 //     They belong to a test run and have their own census (FindFixtureDaemons).
 //   - daemons whose pidfile is outside our state directory — a different
 //     GROVE_HOME or XDG_STATE_HOME, i.e. not our fleet at all.
-//   - scoped daemons started with --scope but no --pidfile, whose pidfile path
-//     depends on a scope resolution that needs their working directory. In
-//     practice the auto-start factory always passes --pidfile, so this only
-//     skips hand-run invocations.
+//   - any daemon without an explicit --pidfile. Its namespace may come from
+//     GROVE_HOME/XDG environment that ps cannot expose, so assigning this
+//     observer's global pidfile would be an unsafe guess (especially while a
+//     scratch test is running).
 //
 // A `groved upgrade` handoff transiently qualifies: for the moment between the
 // successor taking the pidfile and the predecessor finishing its teardown, the
@@ -91,7 +90,7 @@ func FindShadowDaemons() ([]ShadowDaemon, error) {
 // state directory, global pidfile path and pidfile reader (the test seam).
 func findShadowDaemons(
 	procs []process.Entry,
-	stateDir, globalPidPath string,
+	stateDir, _ string,
 	owner func(pidPath string) (bool, int),
 ) []ShadowDaemon {
 	// Every PID that ps says is a live groved, so a pidfile naming a process
@@ -111,7 +110,6 @@ func findShadowDaemons(
 		}
 		sock := flagValue(p.Args, "--socket")
 		pidPath := flagValue(p.Args, "--pidfile")
-		scope := flagValue(p.Args, "--scope")
 
 		// A sandboxed test daemon is somebody else's business.
 		if FixtureNamespace(sock) != "" || FixtureNamespace(pidPath) != "" {
@@ -119,11 +117,10 @@ func findShadowDaemons(
 		}
 
 		if pidPath == "" {
-			if scope != "" {
-				// Unresolvable without the process's cwd — see the doc comment.
-				continue
-			}
-			pidPath = globalPidPath
+			// An argument-less process may be global, env-derived, or scratch.
+			// Without process environment there is no proof it belongs to this
+			// fleet, so never report (or recommend action against) it.
+			continue
 		}
 		if !withinDir(stateDir, pidPath) {
 			continue
@@ -200,6 +197,6 @@ func FormatShadowDaemons(shadows []ShadowDaemon) string {
 		fmt.Fprintf(&b, "  pid %d (ppid %d, %s) — %s\n", s.PID, s.PPID, age, s.Reason())
 		fmt.Fprintf(&b, "    %s\n", s.Cmdline)
 	}
-	b.WriteString("  → these serve no client and no census can see them; `kill` them after confirming with `ps`\n")
+	b.WriteString("  → investigate these explicit pidfile mismatches; signal a process only after independently proving it is obsolete\n")
 	return b.String()
 }
