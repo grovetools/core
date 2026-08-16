@@ -36,6 +36,7 @@ import (
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/daemon"
 	logskeymap "github.com/grovetools/core/pkg/keymap"
+	"github.com/grovetools/core/pkg/logging/logutil"
 	"github.com/grovetools/core/pkg/models"
 	"github.com/grovetools/core/tui/components/help"
 	"github.com/grovetools/core/tui/components/jsontree"
@@ -401,7 +402,6 @@ type Model struct {
 	followMode     bool
 	filtersEnabled bool
 	eventsOnly     bool
-	filteredCount  int
 	unseenAlerts   int
 	ready          bool
 	focus          paneFocus
@@ -496,6 +496,8 @@ func New(ctx context.Context, cfg Config) *Model {
 	// Store replay in config for connectToDaemon
 	cfg.Replay = replay
 
+	filtersEnabled := cfg.OverrideOpts != nil && len(cfg.OverrideOpts.ShowOnly) > 0
+
 	m := &Model{
 		ctx:                 ctx,
 		cancel:              cancel,
@@ -506,7 +508,7 @@ func New(ctx context.Context, cfg Config) *Model {
 		spinner:             sp,
 		help:                help.New(keys),
 		followMode:          cfg.Follow,
-		filtersEnabled:      false,
+		filtersEnabled:      filtersEnabled,
 		eventsOnly:          cfg.EventsOnly,
 		logConfig:           logCfg,
 		overrideOpts:        cfg.OverrideOpts,
@@ -632,9 +634,11 @@ func (m *Model) connectToDaemon() tea.Cmd {
 	opts := models.LogStreamOptions{
 		Scope:     m.activeScope.scopeToParam(),
 		Workspace: m.activeWorkspacePath,
-		Level:     levelToParam(m.minLevel),
-		System:    m.includeSystem,
-		Replay:    m.cfg.Replay,
+		// Subscribe at the widest level and narrow locally. Level cycling is
+		// therefore instantaneous and never destroys the buffered history.
+		Level:  levelToParam(0),
+		System: m.includeSystem,
+		Replay: m.cfg.Replay,
 	}
 
 	client := m.cfg.DaemonClient
@@ -816,13 +820,13 @@ func levelRank(level string) int {
 
 var levelLabels = [4]string{"DEBUG", "INFO", "WARN", "ERROR"}
 
-// rebuildVisible recomputes m.visible from m.items under the current
-// component filter. Level/scope filtering is done server-side by the
-// daemon; only component visibility filtering happens client-side.
+// rebuildVisible recomputes m.visible from the complete received buffer.
+// Scope filtering remains server-side; level, event, and component filters
+// are local so changing them never destroys buffered entries.
 func (m *Model) rebuildVisible() {
 	m.visible = m.visible[:0]
 	for _, it := range m.items {
-		if !m.matchesComponentFilter(it) || !m.matchesEventsFilter(it) {
+		if !m.matchesLevelFilter(it) || !m.matchesEventsFilter(it) || !m.matchesComponentFilter(it) {
 			continue
 		}
 		if it.repeatExpanded && len(it.repeats) > 0 {
@@ -841,9 +845,12 @@ func (m *Model) rebuildVisible() {
 	m.list.SetItems(m.visible)
 }
 
+func (m *Model) matchesLevelFilter(it logItem) bool {
+	return levelRank(it.level) >= m.minLevel
+}
+
 // matchesComponentFilter returns true when the item passes the client-side
-// component visibility filter. Level and scope filtering is handled by the
-// daemon, so this only checks component visibility.
+// component visibility filter.
 func (m *Model) matchesComponentFilter(it logItem) bool {
 	if m.hiddenComponents[it.component] {
 		return false
@@ -869,10 +876,32 @@ func (m *Model) matchesEventsFilter(it logItem) bool {
 	if m.activeScope == ScopeDaemon {
 		return true
 	}
-	if ev, ok := it.rawData["event"].(string); ok && ev != "" {
-		return true
+	return logutil.PassesEventsFilter(it.rawData["event"], it.level)
+}
+
+// visibilityCounts returns record counts, not rendered row counts. Repeated
+// entries contribute their full repeat count. Hidden categories are mutually
+// exclusive in level → events → component order, so shown plus the breakdown
+// always equals received.
+func (m *Model) visibilityCounts() (shown, received, hiddenLevel, hiddenEvents, hiddenComponent int) {
+	for _, it := range m.items {
+		count := it.repeatCount
+		if count < 1 {
+			count = 1
+		}
+		received += count
+		switch {
+		case !m.matchesLevelFilter(it):
+			hiddenLevel += count
+		case !m.matchesEventsFilter(it):
+			hiddenEvents += count
+		case !m.matchesComponentFilter(it):
+			hiddenComponent += count
+		default:
+			shown += count
+		}
 	}
-	return levelRank(it.level) >= 2
+	return
 }
 
 func (m *Model) clearStatusMessageAfter(d time.Duration) tea.Cmd {
@@ -942,7 +971,11 @@ func (m *Model) openComponentPicker() {
 	counts := make(map[string]int)
 	for _, item := range m.items {
 		if item.component != "" {
-			counts[item.component]++
+			count := item.repeatCount
+			if count < 1 {
+				count = 1
+			}
+			counts[item.component] += count
 		}
 	}
 	m.pickerItems = make([]string, 0, len(counts))
@@ -958,7 +991,11 @@ func (m *Model) componentPickerView() string {
 	counts := make(map[string]int)
 	for _, item := range m.items {
 		if item.component != "" {
-			counts[item.component]++
+			count := item.repeatCount
+			if count < 1 {
+				count = 1
+			}
+			counts[item.component] += count
 		}
 	}
 
@@ -1036,18 +1073,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// If help is showing, handle ESC to close it
+	// The help component owns scrolling, navigation, search, resize, and its
+	// ESC/? close bindings while open. Keep q as the viewer's quit action.
 	if m.help.ShowAll {
-		if kmsg, ok := msg.(tea.KeyMsg); ok {
-			if key.Matches(kmsg, m.keys.Base.Quit) {
-				return m, doneCmd()
-			}
-			if key.Matches(kmsg, m.keys.Clear) || kmsg.String() == "esc" {
-				m.help.Toggle()
-				return m, nil
-			}
+		if kmsg, ok := msg.(tea.KeyMsg); ok && key.Matches(kmsg, m.keys.Base.Quit) {
+			return m, doneCmd()
 		}
-		return m, nil
+		var cmd tea.Cmd
+		m.help, cmd = m.help.Update(msg)
+		return m, cmd
 	}
 
 	// If component picker is showing, handle its input
@@ -1429,10 +1463,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.CycleLevel):
 				m.minLevel = (m.minLevel + 1) % 4
 				m.statusMessage = fmt.Sprintf("Level filter: %s+", levelLabels[m.minLevel])
-				m.items = nil
-				m.visible = m.visible[:0]
-				m.list.SetItems(m.visible)
-				return m, tea.Batch(m.connectToDaemon(), m.clearStatusMessageAfter(2*time.Second))
+				m.rebuildVisible()
+				return m, m.clearStatusMessageAfter(2 * time.Second)
 
 			case key.Matches(msg, m.keys.ComponentSummary):
 				m.openComponentPicker()
@@ -1647,15 +1679,6 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 		m.unseenAlerts++
 	}
 
-	// Component visibility filter (client-side only)
-	if m.filtersEnabled && m.logConfig != nil {
-		visibilityResult := logging.GetComponentVisibility(component, m.logConfig, m.overrideOpts)
-		if !visibilityResult.Visible {
-			m.filteredCount++
-			return nil
-		}
-	}
-
 	var logTime time.Time
 	if parsedTime, err := time.Parse(time.RFC3339, timeStr); err == nil {
 		logTime = parsedTime
@@ -1704,12 +1727,12 @@ func (m *Model) handleNewLog(msg newLogMsg) tea.Cmd {
 		m.rebuildVisible()
 	}
 
-	// Append to visible (daemon already filtered by scope/level). A collapse
-	// updates the existing row's ×N marker, so rebuilding is required.
+	// Append to visible when all local filters pass. A collapse updates the
+	// existing row's ×N marker, so rebuilding is required.
 	if collapsed {
 		m.rebuildVisible()
 	} else if i == len(m.items)-1 {
-		if m.matchesEventsFilter(newItem) {
+		if m.matchesLevelFilter(newItem) && m.matchesEventsFilter(newItem) && m.matchesComponentFilter(newItem) {
 			m.visible = append(m.visible, newItem)
 			m.list.SetItems(m.visible)
 		}
@@ -1843,12 +1866,21 @@ func (m *Model) frameView() string {
 		filtersIndicator = " [Filters:ON]"
 	}
 
-	filteredCountIndicator := ""
+	hidingIndicator := ""
 	hiddenCompCount := len(m.hiddenComponents)
 	if hiddenCompCount > 0 {
-		filteredCountIndicator = fmt.Sprintf(" [hiding: %d components]", hiddenCompCount)
-	} else if m.filteredCount > 0 {
-		filteredCountIndicator = fmt.Sprintf(" [%d hidden]", m.filteredCount)
+		noun := "components"
+		if hiddenCompCount == 1 {
+			noun = "component"
+		}
+		hidingIndicator = fmt.Sprintf(" [hiding: %d %s]", hiddenCompCount, noun)
+	}
+
+	shown, received, hiddenLevel, hiddenEvents, hiddenComponent := m.visibilityCounts()
+	countIndicator := fmt.Sprintf("%d/%d shown/received", shown, received)
+	hiddenIndicator := ""
+	if hiddenLevel+hiddenEvents+hiddenComponent > 0 {
+		hiddenIndicator = fmt.Sprintf(" [hidden: level %d, events %d, component %d]", hiddenLevel, hiddenEvents, hiddenComponent)
 	}
 
 	filterIndicator := ""
@@ -1863,22 +1895,6 @@ func (m *Model) frameView() string {
 	} else if m.list.FilterState() == list.FilterApplied {
 		filterTerm := m.list.FilterValue()
 		filterIndicator = fmt.Sprintf(" [FILTERED: %s]", searchStyle.Render(filterTerm))
-	}
-
-	visibleCount := len(m.list.VisibleItems())
-	currentIndex := m.list.Index()
-	if currentIndex < 0 {
-		currentIndex = 0
-	}
-
-	var position string
-	if visibleCount == 0 {
-		position = "0/0"
-	} else {
-		position = fmt.Sprintf("%d/%d", currentIndex+1, visibleCount)
-		if m.list.FilterState() != list.Unfiltered && visibleCount < len(m.visible) {
-			position = fmt.Sprintf("%d/%d (of %d)", currentIndex+1, visibleCount, len(m.visible))
-		}
 	}
 
 	scopeIndicator := fmt.Sprintf(" [Scope: %s]", m.activeScope)
@@ -1917,8 +1933,8 @@ func (m *Model) frameView() string {
 		modeIndicator = fmt.Sprintf(" [%s]", m.statusMessage)
 	}
 
-	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s%s%s | ? for help | q to quit",
-		position, scopeIndicator, systemIndicator, levelIndicator, eventsIndicator, followIndicator, filtersIndicator, filteredCountIndicator, filterIndicator, connectionIndicator, modeIndicator))
+	status := statusStyle.Render(fmt.Sprintf(" Logs: %s%s%s%s%s%s%s%s%s%s%s%s | ? for help | q to quit",
+		countIndicator, hiddenIndicator, scopeIndicator, systemIndicator, levelIndicator, eventsIndicator, followIndicator, filtersIndicator, hidingIndicator, filterIndicator, connectionIndicator, modeIndicator))
 
 	if m.compact || m.height < 15 {
 		var listView string

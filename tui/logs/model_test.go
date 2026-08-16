@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/grovetools/core/logging"
 )
 
 func eventsFilterFixtures() (eventInfo, plainInfo, plainDebug, warnItem, errItem logItem) {
@@ -60,6 +62,109 @@ func TestMatchesEventsFilterDaemonScope(t *testing.T) {
 	m := &Model{eventsOnly: true, activeScope: ScopeDaemon}
 	if !m.matchesEventsFilter(plainInfo) {
 		t.Error("Daemon-scope info entry should pass the events filter")
+	}
+}
+
+func TestComponentOverrideEnablesFiltersAndKeepsHiddenEntriesBuffered(t *testing.T) {
+	m := New(context.Background(), Config{
+		OverrideOpts: &logging.OverrideOptions{ShowOnly: []string{"wanted"}},
+	})
+	defer m.Close()
+
+	if !m.filtersEnabled {
+		t.Fatal("--component/ShowOnly did not enable component filters")
+	}
+	m.handleNewLog(newLogMsg{data: map[string]interface{}{"level": "info", "component": "other", "msg": "hidden"}})
+	m.handleNewLog(newLogMsg{data: map[string]interface{}{"level": "info", "component": "wanted", "msg": "shown"}})
+	if got := len(m.items); got != 2 {
+		t.Fatalf("received buffer has %d entries, want 2", got)
+	}
+	if got := len(m.visible); got != 1 {
+		t.Fatalf("visible rows = %d, want 1", got)
+	}
+
+	m.filtersEnabled = false
+	m.rebuildVisible()
+	if got := len(m.visible); got != 2 {
+		t.Fatalf("disabling filters did not reveal buffered entry: %d rows", got)
+	}
+}
+
+func TestVisibilityCountsAndPickerHidingAreTruthful(t *testing.T) {
+	m := New(context.Background(), Config{EventsOnly: true, InitialLevel: "info"})
+	defer m.Close()
+	m.Update(tea.WindowSizeMsg{Width: 140, Height: 20})
+	m.hiddenComponents["muted"] = true
+	m.items = []logItem{
+		{level: "debug", component: "keep", rawData: map[string]interface{}{"event": "job.created"}, repeatCount: 1},
+		{level: "info", component: "keep", rawData: map[string]interface{}{}, repeatCount: 1},
+		{level: "warn", component: "muted", rawData: map[string]interface{}{}, repeatCount: 1},
+		{level: "error", component: "keep", rawData: map[string]interface{}{}, repeatCount: 2},
+	}
+	m.rebuildVisible()
+
+	shown, received, byLevel, byEvents, byComponent := m.visibilityCounts()
+	if shown != 2 || received != 5 || byLevel != 1 || byEvents != 1 || byComponent != 1 {
+		t.Fatalf("counts = shown:%d received:%d level:%d events:%d component:%d", shown, received, byLevel, byEvents, byComponent)
+	}
+	view := m.frameView()
+	for _, want := range []string{
+		"2/5 shown/received",
+		"hidden: level 1, events 1, component 1",
+		"Filters:OFF",
+		"hiding: 1 component",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("status missing %q: %q", want, view)
+		}
+	}
+}
+
+func TestLevelCyclePreservesBufferAndFiltersLocally(t *testing.T) {
+	m := New(context.Background(), Config{InitialLevel: "info"})
+	defer m.Close()
+	for _, level := range []string{"debug", "info", "warn", "error"} {
+		m.handleNewLog(newLogMsg{data: map[string]interface{}{"level": level, "msg": level}})
+	}
+	if len(m.items) != 4 || len(m.visible) != 3 {
+		t.Fatalf("initial items/visible = %d/%d, want 4/3", len(m.items), len(m.visible))
+	}
+
+	generation := m.streamGeneration
+	for _, wantVisible := range []int{2, 1, 4} { // warn, error, then debug
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+		if len(m.items) != 4 || len(m.visible) != wantVisible {
+			t.Fatalf("cycled level items/visible = %d/%d, want 4/%d", len(m.items), len(m.visible), wantVisible)
+		}
+		if m.streamGeneration != generation {
+			t.Fatalf("level cycle reconnected stream: generation %d -> %d", generation, m.streamGeneration)
+		}
+	}
+}
+
+func TestHelpOverlayDelegatesNavigationAndQuestionMarkCloses(t *testing.T) {
+	m := New(context.Background(), Config{})
+	defer m.Close()
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 8})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	if !m.help.ShowAll {
+		t.Fatal("? did not open help")
+	}
+	before := m.help.View()
+	m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	after := m.help.View()
+	if after == before {
+		t.Fatal("pgdown was swallowed instead of scrolling the help viewport")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	if m.help.ShowAll {
+		t.Fatal("? did not close help")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.help.ShowAll {
+		t.Fatal("esc did not close help")
 	}
 }
 

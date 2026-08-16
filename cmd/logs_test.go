@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/grovetools/core/pkg/logging/logutil"
+)
 
 func TestResolveMinLevelRank(t *testing.T) {
 	tests := []struct {
@@ -86,8 +90,9 @@ func TestPassesEventsFilter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := passesEventsFilter(tt.logMap); got != tt.want {
-				t.Errorf("passesEventsFilter(%v) = %v, want %v", tt.logMap, got, tt.want)
+			level, _ := tt.logMap["level"].(string)
+			if got := logutil.PassesEventsFilter(tt.logMap["event"], level); got != tt.want {
+				t.Errorf("PassesEventsFilter(%v) = %v, want %v", tt.logMap, got, tt.want)
 			}
 		})
 	}

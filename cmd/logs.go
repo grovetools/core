@@ -112,18 +112,6 @@ func resolveMinLevelRank(level string) (int, error) {
 	return rank, nil
 }
 
-// passesEventsFilter reports whether a parsed log entry passes the --events
-// filter: it carries a non-empty `event` field (lifecycle events such as
-// job.created, plan.finished, note.updated) or is at warn level and above.
-func passesEventsFilter(logMap map[string]interface{}) bool {
-	if ev, ok := logMap["event"].(string); ok && ev != "" {
-		return true
-	}
-	entryLevel, _ := logMap["level"].(string)
-	rank, known := validLevels[strings.ToLower(entryLevel)]
-	return known && rank >= validLevels["warn"]
-}
-
 // filterStats holds counters for logging statistics.
 type filterStats struct {
 	total      int
@@ -348,8 +336,9 @@ func runLogsE(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// Events-only filtering: keep lifecycle events and warn/error
-		if eventsOnly && !passesEventsFilter(logMap) {
+		// Events-only filtering: keep lifecycle events and warn/error.
+		entryLevel, _ := logMap["level"].(string)
+		if eventsOnly && !logutil.PassesEventsFilter(logMap["event"], entryLevel) {
 			continue
 		}
 
